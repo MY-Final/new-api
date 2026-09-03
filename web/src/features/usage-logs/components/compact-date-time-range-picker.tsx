@@ -35,6 +35,7 @@ interface CompactDateTimeRangePickerProps {
   end?: Date
   onChange: (range: { start?: Date; end?: Date }) => void
   className?: string
+  maxRangeDays?: number
 }
 
 function toInputValue(date?: Date): string {
@@ -52,6 +53,7 @@ export function CompactDateTimeRangePicker({
   end,
   onChange,
   className,
+  maxRangeDays,
 }: CompactDateTimeRangePickerProps) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -78,10 +80,17 @@ export function CompactDateTimeRangePicker({
   }
 
   const applyDraft = () => {
-    onChange({
-      start: fromInputValue(draftStart),
-      end: fromInputValue(draftEnd),
-    })
+    const nextStart = fromInputValue(draftStart)
+    const nextEnd = fromInputValue(draftEnd)
+    if (
+      maxRangeDays &&
+      nextStart &&
+      nextEnd &&
+      nextEnd.getTime() - nextStart.getTime() > maxRangeDays * 86400000
+    ) {
+      return
+    }
+    onChange({ start: nextStart, end: nextEnd })
     setOpen(false)
   }
 
@@ -110,11 +119,26 @@ export function CompactDateTimeRangePicker({
       },
     }
     const range = presets[kind]
+    if (
+      maxRangeDays &&
+      range.end.getTime() - range.start.getTime() > maxRangeDays * 86400000
+    ) {
+      return
+    }
     setDraftStart(toInputValue(range.start))
     setDraftEnd(toInputValue(range.end))
     onChange(range)
     setOpen(false)
   }
+
+  const draftStartDate = fromInputValue(draftStart)
+  const draftEndDate = fromInputValue(draftEnd)
+  const draftRangeTooLong = Boolean(
+    maxRangeDays &&
+    draftStartDate &&
+    draftEndDate &&
+    draftEndDate.getTime() - draftStartDate.getTime() > maxRangeDays * 86400000
+  )
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
@@ -167,6 +191,14 @@ export function CompactDateTimeRangePicker({
             </div>
           </div>
 
+          {draftRangeTooLong && maxRangeDays ? (
+            <p className='text-destructive text-xs'>
+              {t('Date range cannot exceed {{days}} days', {
+                days: maxRangeDays,
+              })}
+            </p>
+          ) : null}
+
           <div className='flex flex-wrap gap-1.5'>
             <Button
               type='button'
@@ -216,7 +248,12 @@ export function CompactDateTimeRangePicker({
           </div>
 
           <div className='flex justify-end'>
-            <Button size='sm' className='h-8' onClick={applyDraft}>
+            <Button
+              size='sm'
+              className='h-8'
+              onClick={applyDraft}
+              disabled={draftRangeTooLong}
+            >
               {t('Confirm')}
             </Button>
           </div>

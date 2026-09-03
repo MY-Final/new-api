@@ -106,6 +106,40 @@ export interface GetUsersResponse {
   }
 }
 
+export interface UserUsageUser {
+  id: number
+  username: string
+  display_name: string
+  quota: number
+  used_quota: number
+  request_count: number
+}
+
+export interface UserUsageAggregate {
+  request_count: number
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+  consumed_quota: number
+  refunded_quota: number
+  net_quota: number
+}
+
+export interface UserUsageDaily extends UserUsageAggregate {
+  day: string
+}
+
+export interface UserUsageModel extends UserUsageAggregate {
+  model_name: string
+}
+
+export interface UserUsage {
+  user: UserUsageUser
+  summary: UserUsageAggregate
+  daily: UserUsageDaily[]
+  models: UserUsageModel[]
+}
+
 export interface SearchUsersParams {
   keyword?: string
   group?: string
