@@ -1,0 +1,80 @@
+version: '3.4'
+
+services:
+  new-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: new-api-kuncode2:local
+    container_name: new-api-kuncode2
+    restart: always
+    command: --log-dir /app/logs
+    ports:
+      - "43100:3000"
+    volumes:
+      - /opt/kuncode/data:/data
+      - /opt/kuncode/logs:/app/logs
+    environment:
+      # - HTTP_PROXY=http://192.168.2.15:7890
+      # - HTTPS_PROXY=http://192.168.2.15:7890
+      # - NO_PROXY=localhost,127.0.0.1,new-api,redis,postgres
+      - SQL_DSN=postgresql://root:lxy666666@postgres:5432/new-api
+      - REDIS_CONN_STRING=redis://:lxy666666@redis:6379/0
+      - TZ=Asia/Shanghai
+      - ERROR_LOG_ENABLED=true
+      - BATCH_UPDATE_ENABLED=true
+      - NODE_NAME=new-api-kuncode2
+      - SESSION_SECRET=974d23fe9e1e1a5df8e28c9bdad16cb8cf4fa8e79eec686932f1b6f6de3f540a
+      - SESSION_COOKIE_SECURE=false
+      - DEBUG=true
+      # - LOG_SQL_DSN=postgresql://root:lxy666666@postgres:5432/new-api-log
+      # - STREAMING_TIMEOUT=300
+      # - SYNC_FREQUENCY=60
+
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - new-api-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/api/status | grep -o '\"success\":\\s*true' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis-new-api-kuncode2
+    restart: always
+    command: ["redis-server", "--requirepass", "lxy666666"]
+    networks:
+      - new-api-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "lxy666666", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  postgres:
+    image: postgres:15
+    container_name: postgres-new-api-kuncode2
+    restart: always
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: lxy666666
+      POSTGRES_DB: new-api
+    volumes:
+      - /opt/kuncode/postgres:/var/lib/postgresql/data
+    networks:
+      - new-api-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root -d new-api"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+networks:
+  new-api-network:
+    driver: bridge
