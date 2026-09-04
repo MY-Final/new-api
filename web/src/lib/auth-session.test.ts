@@ -19,10 +19,13 @@ For commercial licensing, please contact support@quantumnous.com
 import { QueryClient } from '@tanstack/react-query'
 import { afterEach, describe, expect, test } from 'vitest'
 
+import { getCanvasStorageKey, STORAGE_KEYS } from '../features/canvas/constants'
 import { useAuthStore, type AuthBundle } from '../stores/auth-store'
 import {
   applyAuthRotation,
+  applyAuthBundle,
   bootstrapAuthentication,
+  clearAuthentication,
   clearAuthenticatedClientState,
   createRefreshRunner,
   isAuthBundle,
@@ -315,5 +318,87 @@ describe('authentication session coordination', () => {
     expect(queryClient.getQueryData(['account', bundle.user.id])).toBe(
       undefined
     )
+  })
+
+  test('sign-out clears Canvas session data for the active user and legacy keys', () => {
+    useAuthStore.getState().auth.setBundle(bundle)
+    sessionStorage.setItem(
+      getCanvasStorageKey(STORAGE_KEYS.API_KEY, bundle.user.id),
+      'canvas-key'
+    )
+    sessionStorage.setItem(
+      getCanvasStorageKey(STORAGE_KEYS.GROUP, bundle.user.id),
+      'default'
+    )
+    sessionStorage.setItem(
+      getCanvasStorageKey(STORAGE_KEYS.RESTORE, bundle.user.id),
+      JSON.stringify({ userId: bundle.user.id, prompt: 'keep me private' })
+    )
+    sessionStorage.setItem(STORAGE_KEYS.API_KEY, 'legacy-key')
+    sessionStorage.setItem(STORAGE_KEYS.GROUP, 'legacy-group')
+    sessionStorage.setItem(STORAGE_KEYS.RESTORE, 'legacy-restore')
+
+    clearAuthentication(false)
+
+    expect(
+      sessionStorage.getItem(
+        getCanvasStorageKey(STORAGE_KEYS.API_KEY, bundle.user.id)
+      )
+    ).toBe(null)
+    expect(
+      sessionStorage.getItem(
+        getCanvasStorageKey(STORAGE_KEYS.GROUP, bundle.user.id)
+      )
+    ).toBe(null)
+    expect(
+      sessionStorage.getItem(
+        getCanvasStorageKey(STORAGE_KEYS.RESTORE, bundle.user.id)
+      )
+    ).toBe(null)
+    expect(sessionStorage.getItem(STORAGE_KEYS.API_KEY)).toBe(null)
+    expect(sessionStorage.getItem(STORAGE_KEYS.GROUP)).toBe(null)
+    expect(sessionStorage.getItem(STORAGE_KEYS.RESTORE)).toBe(null)
+  })
+
+  test('switching accounts clears the previous user Canvas session data', () => {
+    useAuthStore.getState().auth.setBundle(bundle)
+    sessionStorage.setItem(
+      getCanvasStorageKey(STORAGE_KEYS.API_KEY, bundle.user.id),
+      'canvas-key'
+    )
+    sessionStorage.setItem(
+      getCanvasStorageKey(STORAGE_KEYS.GROUP, bundle.user.id),
+      'default'
+    )
+    sessionStorage.setItem(
+      getCanvasStorageKey(STORAGE_KEYS.RESTORE, bundle.user.id),
+      JSON.stringify({ userId: bundle.user.id, prompt: 'private prompt' })
+    )
+
+    applyAuthBundle(
+      {
+        ...bundle,
+        access_token: 'next-user-token',
+        user: { id: 84, username: 'next-user', role: 1 },
+        session: { ...bundle.session, sid: 'session-b' },
+      },
+      false
+    )
+
+    expect(
+      sessionStorage.getItem(
+        getCanvasStorageKey(STORAGE_KEYS.API_KEY, bundle.user.id)
+      )
+    ).toBe(null)
+    expect(
+      sessionStorage.getItem(
+        getCanvasStorageKey(STORAGE_KEYS.GROUP, bundle.user.id)
+      )
+    ).toBe(null)
+    expect(
+      sessionStorage.getItem(
+        getCanvasStorageKey(STORAGE_KEYS.RESTORE, bundle.user.id)
+      )
+    ).toBe(null)
   })
 })

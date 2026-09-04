@@ -21,6 +21,7 @@ export interface ImageGenerationRequest {
   prompt: string
   size?: string
   n?: number
+  response_format?: 'b64_json'
 }
 
 export interface ImageEditRequest {
@@ -29,6 +30,7 @@ export interface ImageEditRequest {
   size?: string
   n?: number
   images: File[]
+  response_format?: 'b64_json'
 }
 
 export interface ImageResponse {

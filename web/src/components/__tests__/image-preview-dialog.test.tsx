@@ -37,4 +37,17 @@ describe('ImagePreviewDialog', () => {
     expect(dialog).toHaveClass('flex', 'h-[85vh]', 'overflow-hidden')
     expect(image).toHaveClass('max-h-full', 'max-w-full', 'object-contain')
   })
+
+  it('uses a concise accessible label when no alt text is provided', () => {
+    render(
+      <ImagePreviewDialog
+        src='data:image/png;base64,large-image-data'
+        onClose={vi.fn()}
+      />
+    )
+
+    expect(
+      screen.getByRole('img', { name: 'Generated image' })
+    ).toBeInTheDocument()
+  })
 })

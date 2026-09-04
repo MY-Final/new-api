@@ -28,9 +28,10 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
-import { Main } from '@/components/layout'
 import { ImagePreviewDialog } from '@/components/image-preview-dialog'
+import { Main } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -42,17 +43,33 @@ import {
 import { ComboboxInput } from '@/components/ui/combobox-input'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { useAuthStore } from '@/stores/auth-store'
 
-import { editImage, generateImages, getAvailableGroups, getAvailableModels } from './api'
-import { DEFAULT_GROUP, DEFAULT_MODEL, IMAGE_SIZES, STORAGE_KEYS } from './constants'
-import { downloadImage, saveHistoryEntry } from './lib/history'
+import {
+  editImage,
+  generateImages,
+  getAvailableGroups,
+  getAvailableModels,
+} from './api'
+import {
+  DEFAULT_GROUP,
+  DEFAULT_MODEL,
+  getCanvasStorageKey,
+  IMAGE_SIZES,
+  STORAGE_KEYS,
+} from './constants'
+import {
+  downloadImage,
+  persistImageSource,
+  saveHistoryEntries,
+} from './lib/history'
 import type { GroupOption, ImageResponse, ModelOption } from './types'
 
 const MAX_REFERENCE_IMAGES = 4
 
 function toImageSrc(item: NonNullable<ImageResponse['data']>[number]): string {
-  if (item.url) return item.url
   if (item.b64_json) return `data:image/png;base64,${item.b64_json}`
+  if (item.url) return item.url
   return ''
 }
 
@@ -66,6 +83,21 @@ function CanvasResults({
   onPreview: (src: string) => void
 }) {
   const { t } = useTranslation()
+  const [downloadingSrc, setDownloadingSrc] = useState<string | null>(null)
+
+  const handleDownload = async (src: string, filename: string) => {
+    if (downloadingSrc) return
+    setDownloadingSrc(src)
+    try {
+      const success = await downloadImage(src, filename)
+      if (!success) {
+        toast.error(t('Download failed. Try opening the original image.'))
+      }
+    } finally {
+      setDownloadingSrc(null)
+    }
+  }
+
   if (loading) {
     return (
       <div className='flex h-full min-h-40 items-center justify-center'>
@@ -87,7 +119,7 @@ function CanvasResults({
           src={results[0]}
           alt={t('Generated image')}
           onClick={() => onPreview(results[0])}
-          className='max-h-full max-w-full cursor-zoom-in rounded-xl border border-transparent object-contain transition hover:border-border'
+          className='hover:border-border max-h-full max-w-full cursor-zoom-in rounded-xl border border-transparent object-contain transition'
         />
       </div>
     )
@@ -108,10 +140,11 @@ function CanvasResults({
           <button
             type='button'
             onClick={() =>
-              void downloadImage(src, `canvas-${Date.now()}-${index + 1}.png`)
+              void handleDownload(src, `canvas-${Date.now()}-${index + 1}.png`)
             }
+            disabled={downloadingSrc !== null}
             aria-label={t('Download')}
-            className='bg-background/80 absolute right-2 top-2 rounded-md p-1.5 opacity-0 transition-opacity group-hover:opacity-100'
+            className='bg-background/80 absolute top-2 right-2 rounded-md p-1.5 opacity-0 transition-opacity group-hover:opacity-100'
           >
             <Download className='h-4 w-4' />
           </button>
@@ -124,7 +157,9 @@ function CanvasResults({
 export function Canvas() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const userId = useAuthStore((state) => state.auth.user?.id)
   const [apiKey, setApiKey] = useState<string | null>(null)
+  const [sessionUserId, setSessionUserId] = useState<number | null>(null)
   const [group, setGroup] = useState(DEFAULT_GROUP)
   const [model, setModel] = useState(DEFAULT_MODEL)
   const [size, setSize] = useState<string>('1024x1024')
@@ -138,43 +173,109 @@ export function Canvas() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [previewSrc, setPreviewSrc] = useState<string | null>(null)
+  const [hasPendingRestore, setHasPendingRestore] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    const key = sessionStorage.getItem(STORAGE_KEYS.API_KEY)
-    const savedGroup = sessionStorage.getItem(STORAGE_KEYS.GROUP)
-    if (key) setApiKey(key)
-    if (savedGroup) setGroup(savedGroup)
-    getAvailableGroups().then(setGroups).catch(() => undefined)
+    setApiKey(null)
+    setSessionUserId(null)
+    setHasPendingRestore(false)
+    setGroup(DEFAULT_GROUP)
+    setModel(DEFAULT_MODEL)
+    setSize('1024x1024')
+    setN(1)
+    setPrompt('')
+    setFiles([])
+    setGroups([])
+    setModels([])
+    setResults([])
+    setError('')
+    setPreviewSrc(null)
 
-    const restore = sessionStorage.getItem(STORAGE_KEYS.RESTORE)
+    let cancelled = false
+    if (!userId) return () => undefined
+
+    let key: string | null = null
+    let savedGroup: string | null = null
+    try {
+      key = sessionStorage.getItem(
+        getCanvasStorageKey(STORAGE_KEYS.API_KEY, userId)
+      )
+      savedGroup = sessionStorage.getItem(
+        getCanvasStorageKey(STORAGE_KEYS.GROUP, userId)
+      )
+    } catch {
+      // Private browsing can block session storage; Canvas remains usable after import.
+    }
+    setApiKey(key)
+    setSessionUserId(userId)
+    if (savedGroup) setGroup(savedGroup)
+    getAvailableGroups()
+      .then((nextGroups) => {
+        if (!cancelled) setGroups(nextGroups)
+      })
+      .catch(() => undefined)
+
+    const restoreKey = getCanvasStorageKey(STORAGE_KEYS.RESTORE, userId)
+    let restore: string | null = null
+    try {
+      restore = sessionStorage.getItem(restoreKey)
+    } catch {
+      restore = null
+    }
     if (restore) {
       try {
         const data = JSON.parse(restore) as {
+          userId?: number
           prompt?: string
           model?: string
           group?: string
           size?: string
           n?: number
         }
-        if (data.prompt) setPrompt(data.prompt)
-        if (data.model) setModel(data.model)
-        if (data.group) setGroup(data.group)
-        if (data.size) setSize(data.size)
-        if (data.n) setN(data.n)
+        if (data.userId !== userId) {
+          sessionStorage.removeItem(restoreKey)
+        } else {
+          if (typeof data.prompt === 'string') setPrompt(data.prompt)
+          if (typeof data.model === 'string') setModel(data.model)
+          if (typeof data.group === 'string') setGroup(data.group)
+          if (typeof data.size === 'string') setSize(data.size)
+          if (
+            typeof data.n === 'number' &&
+            Number.isInteger(data.n) &&
+            data.n >= 1 &&
+            data.n <= 4
+          ) {
+            setN(data.n)
+          }
+          setHasPendingRestore(!key)
+          if (key) sessionStorage.removeItem(restoreKey)
+        }
       } catch {
-        /* ignore malformed restore payload */
+        try {
+          sessionStorage.removeItem(restoreKey)
+        } catch {
+          // Ignore malformed or unavailable restore storage.
+        }
       }
-      sessionStorage.removeItem(STORAGE_KEYS.RESTORE)
     }
-  }, [])
+    return () => {
+      cancelled = true
+    }
+  }, [userId])
 
   useEffect(() => {
-    if (!group) return
+    if (!userId || !group) return () => undefined
+    let cancelled = false
     getAvailableModels(group)
-      .then((list) => setModels(list))
+      .then((list) => {
+        if (!cancelled) setModels(list)
+      })
       .catch(() => undefined)
-  }, [group])
+    return () => {
+      cancelled = true
+    }
+  }, [group, userId])
 
   useEffect(() => {
     const urls = files.map((file) => URL.createObjectURL(file))
@@ -221,7 +322,7 @@ export function Canvas() {
   }
 
   const handleGenerate = async () => {
-    if (!apiKey) {
+    if (!apiKey || !userId || sessionUserId !== userId) {
       setError(t('Please import an API key first.'))
       return
     }
@@ -247,21 +348,34 @@ export function Canvas() {
               { model, prompt: prompt.trim(), size, n },
               apiKey
             )
-      const images = (response.data ?? []).map(toImageSrc).filter(Boolean)
-      setResults(images)
+      const images = await Promise.all(
+        (response.data ?? [])
+          .map(toImageSrc)
+          .filter(Boolean)
+          .map(persistImageSource)
+      )
+      setResults(images.map((item) => item.image))
       const now = Date.now()
-      images.forEach((image, index) => {
-        saveHistoryEntry({
+      const saveResult = await saveHistoryEntries(
+        userId,
+        images.map((item, index) => ({
           id: `${now}-${index}-${Math.random().toString(36).slice(2, 8)}`,
-          image,
+          image: item.image,
+          temporary: item.temporary,
           prompt: prompt.trim(),
           model,
           group,
           size,
           n,
           createdAt: now,
-        })
-      })
+        }))
+      )
+      if (!saveResult.success) {
+        toast.error(t('Image generated, but it could not be saved to history.'))
+      }
+      if (images.some((item) => item.temporary)) {
+        toast.warning(t('This image is temporary and may expire.'))
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     } finally {
@@ -269,16 +383,14 @@ export function Canvas() {
     }
   }
 
-  if (!apiKey) {
+  if (!apiKey || sessionUserId !== userId) {
     return (
       <Main className='p-0'>
         <div className='flex min-h-[60vh] items-center justify-center p-8'>
           <Card className='max-w-md'>
             <CardHeader>
               <CardTitle>{t('Canvas')}</CardTitle>
-              <CardDescription>
-                {t('No API key imported yet.')}
-              </CardDescription>
+              <CardDescription>{t('No API key imported yet.')}</CardDescription>
             </CardHeader>
             <CardContent className='flex flex-col gap-4'>
               <p className='text-muted-foreground text-sm'>
@@ -286,6 +398,13 @@ export function Canvas() {
                   'Import an API key from the API Keys page to start generating images.'
                 )}
               </p>
+              {hasPendingRestore && (
+                <p className='text-muted-foreground text-sm'>
+                  {t(
+                    'Your prompt is ready. Import an API key and it will be restored automatically.'
+                  )}
+                </p>
+              )}
               <Button onClick={() => navigate({ to: '/keys' })}>
                 {t('Go to API Keys')}
               </Button>
@@ -386,7 +505,12 @@ export function Canvas() {
                     max={4}
                     value={n}
                     onChange={(event) =>
-                      setN(Math.max(1, Math.min(4, Number(event.target.value) || 1)))
+                      setN(
+                        Math.max(
+                          1,
+                          Math.min(4, Number(event.target.value) || 1)
+                        )
+                      )
                     }
                   />
                 </div>
@@ -412,9 +536,7 @@ export function Canvas() {
                   className='border-border text-muted-foreground hover:border-primary/60 hover:text-foreground flex min-h-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed p-4 text-center text-xs transition-colors'
                 >
                   <ImagePlus className='h-5 w-5' />
-                  <span>
-                    {t('Click, drop, or paste images here')}
-                  </span>
+                  <span>{t('Click, drop, or paste images here')}</span>
                 </div>
                 <input
                   ref={fileInputRef}
@@ -442,7 +564,7 @@ export function Canvas() {
                             type='button'
                             onClick={() => removeFile(file)}
                             aria-label={t('Remove')}
-                            className='bg-background/80 absolute right-1 top-1 rounded p-0.5 opacity-0 transition-opacity group-hover:opacity-100'
+                            className='bg-background/80 absolute top-1 right-1 rounded p-0.5 opacity-0 transition-opacity group-hover:opacity-100'
                           >
                             <X className='h-3 w-3' />
                           </button>
@@ -468,7 +590,11 @@ export function Canvas() {
                 </div>
               )}
 
-              <Button className='w-full' onClick={handleGenerate} disabled={loading}>
+              <Button
+                className='w-full'
+                onClick={handleGenerate}
+                disabled={loading}
+              >
                 {loading ? (
                   <Loader2 className='h-4 w-4 animate-spin' />
                 ) : (
@@ -494,7 +620,10 @@ export function Canvas() {
           </div>
         </div>
       </div>
-      <ImagePreviewDialog src={previewSrc} onClose={() => setPreviewSrc(null)} />
+      <ImagePreviewDialog
+        src={previewSrc}
+        onClose={() => setPreviewSrc(null)}
+      />
     </Main>
   )
 }

@@ -42,7 +42,7 @@ export function ImagePreviewDialog({
         {src && (
           <img
             src={src}
-            alt={alt ?? src}
+            alt={alt ?? t('Generated image')}
             className='block max-h-full max-w-full object-contain'
           />
         )}

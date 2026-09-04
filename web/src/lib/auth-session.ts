@@ -20,6 +20,7 @@ import type { QueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { t } from 'i18next'
 
+import { clearCanvasSessionData } from '@/features/canvas/constants'
 import { publishAuthSessionEvent } from '@/lib/auth-session-sync'
 import {
   useAuthStore,
@@ -149,7 +150,11 @@ export function applyAuthBundle(
   bundle: AuthBundle,
   synchronizeTabs = true
 ): void {
-  const previousSID = useAuthStore.getState().auth.session?.sid
+  const currentAuth = useAuthStore.getState().auth
+  const previousSID = currentAuth.session?.sid
+  if (currentAuth.user && currentAuth.user.id !== bundle.user.id) {
+    clearCanvasSessionData(currentAuth.user.id)
+  }
   authEpoch += 1
   useAuthStore.getState().auth.setBundle(bundle)
   if (synchronizeTabs && previousSID !== bundle.session.sid) {
@@ -186,8 +191,11 @@ export function clearAuthentication(
   synchronizeTabs = true,
   bootstrapState: AuthBootstrapState = 'complete'
 ): void {
-  const sid = useAuthStore.getState().auth.session?.sid
+  const currentAuth = useAuthStore.getState().auth
+  const sid = currentAuth.session?.sid
+  const userId = currentAuth.user?.id
   authEpoch += 1
+  clearCanvasSessionData(userId)
   useAuthStore.getState().auth.reset(bootstrapState)
   if (synchronizeTabs && sid) {
     publishAuthSessionEvent('signed_out', sid)

@@ -37,3 +37,24 @@ export const STORAGE_KEYS = {
   GROUP: 'canvas_group',
   RESTORE: 'canvas_restore',
 } as const
+
+export function getCanvasStorageKey(key: string, userId: number): string {
+  return `${key}:${userId}`
+}
+
+export function clearCanvasSessionData(userId?: number): void {
+  for (const key of Object.values(STORAGE_KEYS)) {
+    try {
+      sessionStorage.removeItem(key)
+    } catch {
+      // Authentication cleanup must not fail when session storage is blocked.
+    }
+    if (userId !== undefined) {
+      try {
+        sessionStorage.removeItem(getCanvasStorageKey(key, userId))
+      } catch {
+        // Continue clearing the remaining Canvas keys.
+      }
+    }
+  }
+}
