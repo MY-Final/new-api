@@ -164,15 +164,22 @@ func reverseRebateForFinanceTx(tx *gorm.DB, rebate *AffiliateRebate, reason stri
 	}
 	snapshot.InviterBefore = inviter
 	remaining := locked.RebateQuota - locked.ReversedQuota
+	debtOffset := locked.DebtOffsetQuota
+	if debtOffset < 0 {
+		debtOffset = 0
+	}
+	if debtOffset > remaining {
+		debtOffset = remaining
+	}
 	transferred := locked.TransferredQuota
 	if transferred < 0 {
 		transferred = 0
 	}
-	if transferred > remaining {
-		transferred = remaining
+	if transferred > remaining-debtOffset {
+		transferred = remaining - debtOffset
 	}
-	snapshot.MainDebit = transferred
-	snapshot.AffiliateDebit = remaining - transferred
+	snapshot.MainDebit = debtOffset + transferred
+	snapshot.AffiliateDebit = remaining - snapshot.MainDebit
 	if _, err := walletAfterDelta(inviter.Quota, -snapshot.MainDebit); err != nil {
 		return snapshot, err
 	}

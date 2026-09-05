@@ -342,6 +342,7 @@ export interface AffiliateRebate {
   rebate_quota: number
   reversed_quota: number
   transferred_quota: number
+  debt_offset_quota: number
   status: 'settled' | 'reversed'
   created_at: number
   settled_at: number

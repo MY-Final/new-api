@@ -988,6 +988,12 @@ export function Finance({ section: rawSection }: { section: string }) {
                           {t('Base quota')}: {formatQuota(item.base_quota)} ·{' '}
                           {item.rate / 100}% · {getStatusLabel(item.status, t)}
                         </div>
+                        {item.debt_offset_quota > 0 ? (
+                          <div className='text-warning text-xs'>
+                            {t('Debt settled')}:{' '}
+                            {formatQuota(item.debt_offset_quota)}
+                          </div>
+                        ) : null}
                       </div>
                       <div className='flex items-center gap-2'>
                         <span className='font-semibold'>

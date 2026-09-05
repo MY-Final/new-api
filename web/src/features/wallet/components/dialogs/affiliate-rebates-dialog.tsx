@@ -143,6 +143,11 @@ function RebateRow({
             {t('Reversed')}: {formatQuota(rebate.reversed_quota)}
           </span>
         ) : null}
+        {rebate.debt_offset_quota > 0 ? (
+          <span>
+            {t('Debt settled')}: {formatQuota(rebate.debt_offset_quota)}
+          </span>
+        ) : null}
         {isAdmin &&
         (rebate.source_type === 'redemption' ||
           rebate.source_type === 'topup') &&

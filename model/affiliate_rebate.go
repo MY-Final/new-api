@@ -35,6 +35,7 @@ type AffiliateRebate struct {
 	RebateQuota      int    `json:"rebate_quota" gorm:"type:bigint"`
 	ReversedQuota    int    `json:"reversed_quota" gorm:"type:bigint"`
 	TransferredQuota int    `json:"transferred_quota" gorm:"type:bigint"`
+	DebtOffsetQuota  int    `json:"debt_offset_quota" gorm:"type:bigint"`
 	Status           string `json:"status" gorm:"type:varchar(32);index"`
 	CreatedAt        int64  `json:"created_at" gorm:"bigint;autoCreateTime"`
 	SettledAt        int64  `json:"settled_at" gorm:"bigint"`
@@ -102,7 +103,7 @@ func createAffiliateRebateTx(tx *gorm.DB, inviterId int, inviteeId int, sourceTy
 		return nil, false, err
 	}
 	inviter := &User{}
-	if err := lockForUpdate(tx).Unscoped().Select("id").Where("id = ?", inviterId).First(inviter).Error; err != nil {
+	if err := lockForUpdate(tx).Unscoped().Select("id, quota").Where("id = ?", inviterId).First(inviter).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// A hard-deleted inviter has no account to credit, but a soft-deleted
 			// inviter remains part of the permanent referral relationship.
@@ -110,18 +111,27 @@ func createAffiliateRebateTx(tx *gorm.DB, inviterId int, inviteeId int, sourceTy
 		}
 		return nil, false, err
 	}
+	debtOffsetQuota := 0
+	if inviter.Quota < 0 && rebateQuota > 0 {
+		debt := -int64(inviter.Quota)
+		if debt > int64(rebateQuota) {
+			debt = int64(rebateQuota)
+		}
+		debtOffsetQuota = int(debt)
+	}
 	sourceKey := fmt.Sprintf("%s:%s", sourceType, sourceId)
 	rebate := &AffiliateRebate{
-		InviterId:   inviterId,
-		InviteeId:   inviteeId,
-		SourceType:  sourceType,
-		SourceId:    sourceId,
-		SourceKey:   sourceKey,
-		BaseQuota:   baseQuota,
-		Rate:        rate,
-		RebateQuota: rebateQuota,
-		Status:      AffiliateRebateStatusSettled,
-		SettledAt:   common.GetTimestamp(),
+		InviterId:       inviterId,
+		InviteeId:       inviteeId,
+		SourceType:      sourceType,
+		SourceId:        sourceId,
+		SourceKey:       sourceKey,
+		BaseQuota:       baseQuota,
+		Rate:            rate,
+		RebateQuota:     rebateQuota,
+		DebtOffsetQuota: debtOffsetQuota,
+		Status:          AffiliateRebateStatusSettled,
+		SettledAt:       common.GetTimestamp(),
 	}
 	result := tx.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "source_key"}},
@@ -139,10 +149,16 @@ func createAffiliateRebateTx(tx *gorm.DB, inviterId int, inviteeId int, sourceTy
 	}
 
 	if rebateQuota > 0 {
-		if err := tx.Unscoped().Model(&User{}).Where("id = ?", inviterId).Updates(map[string]interface{}{
-			"aff_quota":   gorm.Expr("aff_quota + ?", rebateQuota),
+		updates := map[string]interface{}{
 			"aff_history": gorm.Expr("aff_history + ?", rebateQuota),
-		}).Error; err != nil {
+		}
+		if debtOffsetQuota > 0 {
+			updates["quota"] = gorm.Expr("quota + ?", debtOffsetQuota)
+		}
+		if availableQuota := rebateQuota - debtOffsetQuota; availableQuota > 0 {
+			updates["aff_quota"] = gorm.Expr("aff_quota + ?", availableQuota)
+		}
+		if err := tx.Unscoped().Model(&User{}).Where("id = ?", inviterId).Updates(updates).Error; err != nil {
 			return nil, false, err
 		}
 	}
@@ -153,7 +169,7 @@ func recordSignupAffiliateRebate(inviterId int, inviteeId int) error {
 	if common.QuotaForInviter <= 0 {
 		return nil
 	}
-	return DB.Transaction(func(tx *gorm.DB) error {
+	err := DB.Transaction(func(tx *gorm.DB) error {
 		rebate, created, err := createAffiliateRebateTx(
 			tx,
 			inviterId,
@@ -171,6 +187,33 @@ func recordSignupAffiliateRebate(inviterId int, inviteeId int) error {
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	invalidateAffiliateRebateUserCache(AffiliateRebateSourceSignup, fmt.Sprintf("%d", inviteeId), "signup rebate")
+	return nil
+}
+
+// invalidateAffiliateRebateUserCache runs after the source transaction has
+// committed, so a cached balance cannot hide a debt offset applied in that
+// transaction.
+func invalidateAffiliateRebateUserCache(sourceType string, sourceId string, operation string) {
+	if !common.RedisEnabled || sourceId == "" {
+		return
+	}
+	var rebate AffiliateRebate
+	if err := DB.Select("inviter_id, debt_offset_quota").Where("source_key = ?", fmt.Sprintf("%s:%s", sourceType, sourceId)).First(&rebate).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			common.SysLog(fmt.Sprintf("failed to load %s affiliate rebate cache state: %s", operation, err.Error()))
+		}
+		return
+	}
+	if rebate.DebtOffsetQuota <= 0 {
+		return
+	}
+	if err := invalidateUserCache(rebate.InviterId); err != nil {
+		common.SysLog(fmt.Sprintf("failed to invalidate %s inviter cache: %s", operation, err.Error()))
+	}
 }
 
 func recordAffiliateRebateForTopUpTx(tx *gorm.DB, topUp *TopUp) error {

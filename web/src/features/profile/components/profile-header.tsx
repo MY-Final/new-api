@@ -84,6 +84,8 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
   const avatarFallback = getUserAvatarFallback(avatarName)
   const avatarFallbackStyle = getUserAvatarStyle(avatarName)
   const roleLabel = getRoleLabel(profile.role)
+  const hasDebt = profile.quota < 0
+  const displayedQuota = Math.abs(profile.quota)
   const stats: {
     label: string
     value: string
@@ -92,11 +94,13 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
     tone: IconBadgeTone
   }[] = [
     {
-      label: t('Current Balance'),
-      value: formatQuota(profile.quota),
-      description: t('Remaining quota'),
+      label: hasDebt ? t('Debt') : t('Current Balance'),
+      value: formatQuota(displayedQuota),
+      description: hasDebt
+        ? t('Recharge to settle debt')
+        : t('Remaining quota'),
       icon: WalletCards,
-      tone: 'success',
+      tone: hasDebt ? 'destructive' : 'success',
     },
     {
       label: t('Total Usage'),

@@ -579,7 +579,7 @@ func (user *User) TransferAffQuotaToQuota(quota int) error {
 	}
 	trackedAvailable := 0
 	for i := range rebates {
-		available := rebates[i].RebateQuota - rebates[i].ReversedQuota - rebates[i].TransferredQuota
+		available := rebates[i].RebateQuota - rebates[i].ReversedQuota - rebates[i].TransferredQuota - rebates[i].DebtOffsetQuota
 		if available <= 0 {
 			continue
 		}
@@ -611,7 +611,7 @@ func (user *User) TransferAffQuotaToQuota(quota int) error {
 		if remaining == 0 {
 			break
 		}
-		available := rebates[i].RebateQuota - rebates[i].ReversedQuota - rebates[i].TransferredQuota
+		available := rebates[i].RebateQuota - rebates[i].ReversedQuota - rebates[i].TransferredQuota - rebates[i].DebtOffsetQuota
 		if available <= 0 {
 			continue
 		}

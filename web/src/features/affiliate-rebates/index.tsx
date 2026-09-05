@@ -173,6 +173,12 @@ export function AffiliateRebates() {
                       {t('Transferred')}: {formatQuota(item.transferred_quota)}{' '}
                       · {t('Reversed')}: {formatQuota(item.reversed_quota)}
                     </div>
+                    {item.debt_offset_quota > 0 ? (
+                      <div className='text-warning text-xs'>
+                        {t('Debt settled')}:{' '}
+                        {formatQuota(item.debt_offset_quota)}
+                      </div>
+                    ) : null}
                   </div>
                 </CardContent>
               </Card>

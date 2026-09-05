@@ -46,6 +46,9 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
     )
   }
 
+  const walletQuota = props.user?.quota ?? 0
+  const hasDebt = walletQuota < 0
+  const displayedQuota = Math.abs(walletQuota)
   const stats: {
     label: string
     value: string
@@ -54,11 +57,13 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
     tone: IconBadgeTone
   }[] = [
     {
-      label: t('Current Balance'),
-      value: formatQuota(props.user?.quota ?? 0),
-      description: t('Remaining quota'),
+      label: hasDebt ? t('Debt') : t('Current Balance'),
+      value: formatQuota(displayedQuota),
+      description: hasDebt
+        ? t('Recharge to settle debt')
+        : t('Remaining quota'),
       icon: WalletCards,
-      tone: 'success',
+      tone: hasDebt ? 'destructive' : 'success',
     },
     {
       label: t('Total Usage'),

@@ -43,6 +43,89 @@ func TestSignupAffiliateRebateIsIdempotent(t *testing.T) {
 	assert.Equal(t, 500, got.AffHistoryQuota)
 }
 
+func TestAffiliateRebateOffsetsDebtBeforeTransfer(t *testing.T) {
+	truncateTables(t)
+	inviter, invitee := createAffiliateUsers(t)
+	require.NoError(t, DB.Model(&User{}).Where("id = ?", inviter.Id).Update("quota", -3_000_000).Error)
+
+	originalRate := common.AffiliateTopupRebateRate
+	common.AffiliateTopupRebateRate = 5000
+	t.Cleanup(func() { common.AffiliateTopupRebateRate = originalRate })
+	topUp := &TopUp{
+		UserId:        invitee.Id,
+		TradeNo:       "affiliate-debt-offset",
+		Source:        TopUpSourceTopup,
+		CreditedQuota: 10_000_000,
+		Status:        common.TopUpStatusSuccess,
+	}
+	require.NoError(t, DB.Transaction(func(tx *gorm.DB) error {
+		return recordAffiliateRebateForTopUpTx(tx, topUp)
+	}))
+
+	var afterRebate User
+	require.NoError(t, DB.First(&afterRebate, inviter.Id).Error)
+	assert.Equal(t, 0, afterRebate.Quota)
+	assert.Equal(t, 2_000_000, afterRebate.AffQuota)
+	assert.Equal(t, 5_000_000, afterRebate.AffHistoryQuota)
+
+	var rebate AffiliateRebate
+	require.NoError(t, DB.Where("source_key = ?", "topup:affiliate-debt-offset").First(&rebate).Error)
+	assert.Equal(t, 3_000_000, rebate.DebtOffsetQuota)
+	assert.Equal(t, 5_000_000, rebate.RebateQuota)
+
+	require.NoError(t, afterRebate.TransferAffQuotaToQuota(2_000_000))
+	var afterTransfer User
+	require.NoError(t, DB.First(&afterTransfer, inviter.Id).Error)
+	assert.Equal(t, 2_000_000, afterTransfer.Quota)
+	assert.Zero(t, afterTransfer.AffQuota)
+	require.NoError(t, DB.First(&rebate, rebate.Id).Error)
+	assert.Equal(t, 2_000_000, rebate.TransferredQuota)
+}
+
+func TestAffiliateRebateReversalRestoresFullyOffsetDebt(t *testing.T) {
+	truncateTables(t)
+	inviter, invitee := createAffiliateUsers(t)
+	require.NoError(t, DB.Model(&User{}).Where("id = ?", inviter.Id).Update("quota", -500).Error)
+
+	originalRate := common.AffiliateRedemptionRebateRate
+	common.AffiliateRedemptionRebateRate = 10000
+	t.Cleanup(func() { common.AffiliateRedemptionRebateRate = originalRate })
+	redemption := &Redemption{Id: 901, Type: RedemptionTypePaid, Quota: 300}
+	require.NoError(t, DB.Transaction(func(tx *gorm.DB) error {
+		return recordAffiliateRebateForRedemptionTx(tx, redemption, invitee.Id)
+	}))
+
+	var rebate AffiliateRebate
+	require.NoError(t, DB.Where("source_key = ?", "redemption:901").First(&rebate).Error)
+	assert.Equal(t, 300, rebate.DebtOffsetQuota)
+	var beforeReverse User
+	require.NoError(t, DB.First(&beforeReverse, inviter.Id).Error)
+	assert.Equal(t, -200, beforeReverse.Quota)
+	assert.Zero(t, beforeReverse.AffQuota)
+
+	alreadyReversed, err := ReverseAffiliateRebateByAdmin(rebate.Id, "restore debt balance", 0)
+	require.NoError(t, err)
+	assert.False(t, alreadyReversed)
+	var afterReverse User
+	require.NoError(t, DB.First(&afterReverse, inviter.Id).Error)
+	assert.Equal(t, -500, afterReverse.Quota)
+	assert.Zero(t, afterReverse.AffQuota)
+}
+
+func TestTopUpCreditSettlesNegativeWalletBalance(t *testing.T) {
+	truncateTables(t)
+	user := &User{Username: "debt-repayment-user", AffCode: "debt-repayment-code", Quota: -3_000_000}
+	require.NoError(t, DB.Create(user).Error)
+
+	require.NoError(t, DB.Transaction(func(tx *gorm.DB) error {
+		return creditTopUpQuota(tx, user.Id, 5_000_000, nil)
+	}))
+
+	var got User
+	require.NoError(t, DB.First(&got, user.Id).Error)
+	assert.Equal(t, 2_000_000, got.Quota)
+}
+
 func TestInviterRelationshipIsImmutable(t *testing.T) {
 	truncateTables(t)
 	inviter, invitee := createAffiliateUsers(t)
