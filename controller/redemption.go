@@ -31,8 +31,9 @@ func GetAllRedemptions(c *gin.Context) {
 func SearchRedemptions(c *gin.Context) {
 	keyword := c.Query("keyword")
 	status := c.Query("status")
+	redemptionType := c.Query("type")
 	pageInfo := common.GetPageQuery(c)
-	redemptions, total, err := model.SearchRedemptions(keyword, status, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	redemptions, total, err := model.SearchRedemptions(keyword, status, redemptionType, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 	if err != nil {
 		common.ApiError(c, err)
 		return

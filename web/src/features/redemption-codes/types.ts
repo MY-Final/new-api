@@ -67,6 +67,7 @@ export interface GetRedemptionsResponse {
 export interface SearchRedemptionsParams {
   keyword?: string
   status?: string
+  type?: 'paid' | 'reward'
   p?: number
   page_size?: number
 }

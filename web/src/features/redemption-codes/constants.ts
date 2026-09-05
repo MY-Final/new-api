@@ -83,6 +83,13 @@ export function getRedemptionStatusOptions(t: TFunction) {
   ]
 }
 
+export function getRedemptionTypeOptions(t: TFunction) {
+  return [
+    { label: t('Reward code'), value: 'reward' },
+    { label: t('Paid code'), value: 'paid' },
+  ]
+}
+
 // ============================================================================
 // Validation Constants
 // ============================================================================

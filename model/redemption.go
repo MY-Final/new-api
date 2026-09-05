@@ -76,7 +76,7 @@ func GetAllRedemptions(startIdx int, num int) (redemptions []*Redemption, total 
 	return redemptions, total, nil
 }
 
-func SearchRedemptions(keyword string, status string, startIdx int, num int) (redemptions []*Redemption, total int64, err error) {
+func SearchRedemptions(keyword string, status string, redemptionType string, startIdx int, num int) (redemptions []*Redemption, total int64, err error) {
 	tx := DB.Begin()
 	if tx.Error != nil {
 		return nil, 0, tx.Error
@@ -117,6 +117,10 @@ func SearchRedemptions(keyword string, status string, startIdx int, num int) (re
 		case strconv.Itoa(common.RedemptionCodeStatusUsed):
 			query = query.Where("status = ?", common.RedemptionCodeStatusUsed)
 		}
+	}
+
+	if redemptionType == RedemptionTypePaid || redemptionType == RedemptionTypeReward {
+		query = query.Where("type = ?", redemptionType)
 	}
 
 	// Get total count

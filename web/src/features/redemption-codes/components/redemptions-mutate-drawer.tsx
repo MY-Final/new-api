@@ -338,8 +338,12 @@ export function RedemptionsMutateDrawer({
                         }
                       >
                         <FormControl>
-                          <SelectTrigger>
-                            <SelectValue />
+                          <SelectTrigger className='w-full'>
+                            <SelectValue className='min-w-0 truncate'>
+                              {field.value === 'paid'
+                                ? t('Paid code')
+                                : t('Reward code')}
+                            </SelectValue>
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
