@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import { DataTableServerPagination } from '@/components/data-table'
 import { SectionPageLayout } from '@/components/layout'
+import { PageFooterPortal } from '@/components/layout/components/page-footer'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -166,14 +168,16 @@ function FinanceFiltersBar({
     })
   }
   return (
-    <div className='grid gap-2 sm:grid-cols-2 lg:grid-cols-4'>
+    <div className='flex flex-wrap items-center gap-2'>
       <Input
+        className='w-full sm:w-56'
         value={filters.keyword || ''}
         placeholder={filterPlaceholder(section, t)}
         onChange={(event) => update('keyword', event.target.value)}
       />
       {(section === 'topups' || section === 'redemptions') && (
         <Input
+          className='w-full sm:w-40'
           type='number'
           value={filters.userId || ''}
           placeholder={t('User ID')}
@@ -182,6 +186,7 @@ function FinanceFiltersBar({
       )}
       {(section === 'rebates' || section === 'operations') && (
         <Input
+          className='w-full sm:w-40'
           type='number'
           value={
             (section === 'rebates' ? filters.inviterId : filters.operatorId) ||
@@ -206,7 +211,7 @@ function FinanceFiltersBar({
           })
         }
       >
-        <SelectTrigger>
+        <SelectTrigger className='w-full sm:w-auto'>
           <SelectValue>
             {getStatusLabel(filters.status || 'all', t)}
           </SelectValue>
@@ -232,7 +237,7 @@ function FinanceFiltersBar({
             })
           }
         >
-          <SelectTrigger>
+          <SelectTrigger className='w-full sm:w-auto'>
             <SelectValue>
               {getProviderLabel(filters.provider || 'all', t)}
             </SelectValue>
@@ -257,7 +262,7 @@ function FinanceFiltersBar({
             })
           }
         >
-          <SelectTrigger>
+          <SelectTrigger className='w-full sm:w-auto'>
             <SelectValue>
               {getCodeTypeLabel(filters.sourceType || 'all', t)}
             </SelectValue>
@@ -272,6 +277,7 @@ function FinanceFiltersBar({
       <CompactDateTimeRangePicker
         start={range.start}
         end={range.end}
+        className='w-full sm:w-80'
         onChange={(next) => {
           setRange(next)
           setFilters({
@@ -839,10 +845,6 @@ export function Finance({ section: rawSection }: { section: string }) {
       return getFinancialOperations(filters)
     },
   })
-  const totalPages = Math.max(
-    1,
-    Math.ceil((query.data?.total || 0) / filters.pageSize)
-  )
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['finance'] })
     queryClient.invalidateQueries({ queryKey: ['self'] })
@@ -853,6 +855,13 @@ export function Finance({ section: rawSection }: { section: string }) {
     <>
       <SectionPageLayout>
         <SectionPageLayout.Title>{t('Finance')}</SectionPageLayout.Title>
+        <SectionPageLayout.Actions>
+          {section === 'operations' ? (
+            <Button onClick={() => setAction({ kind: 'penalty' })}>
+              {t('Apply penalty')}
+            </Button>
+          ) : null}
+        </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
           <div className='mx-auto w-full max-w-7xl space-y-4'>
             <div className='flex gap-1 overflow-x-auto border-b'>
@@ -1057,39 +1066,17 @@ export function Finance({ section: rawSection }: { section: string }) {
                   </Card>
                 ))}
             </div>
-            <div className='flex items-center justify-between'>
-              <span className='text-muted-foreground text-sm'>
-                {t('Page {{page}} of {{totalPages}}', {
-                  page: filters.page,
-                  totalPages,
-                })}
-              </span>
-              <div className='flex gap-2'>
-                <Button
-                  variant='outline'
-                  disabled={filters.page <= 1}
-                  onClick={() =>
-                    setFilters({ ...filters, page: filters.page - 1 })
-                  }
-                >
-                  {t('Previous')}
-                </Button>
-                <Button
-                  variant='outline'
-                  disabled={filters.page >= totalPages}
-                  onClick={() =>
-                    setFilters({ ...filters, page: filters.page + 1 })
-                  }
-                >
-                  {t('Next')}
-                </Button>
-                {section === 'operations' ? (
-                  <Button onClick={() => setAction({ kind: 'penalty' })}>
-                    {t('Apply penalty')}
-                  </Button>
-                ) : null}
-              </div>
-            </div>
+            <PageFooterPortal>
+              <DataTableServerPagination
+                page={filters.page}
+                pageSize={filters.pageSize}
+                total={query.data?.total || 0}
+                onPageChange={(page) => setFilters({ ...filters, page })}
+                onPageSizeChange={(pageSize) =>
+                  setFilters({ ...filters, page: 1, pageSize })
+                }
+              />
+            </PageFooterPortal>
           </div>
         </SectionPageLayout.Content>
       </SectionPageLayout>

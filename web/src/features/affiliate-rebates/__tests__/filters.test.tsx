@@ -69,6 +69,7 @@ describe('affiliate rebate filters', () => {
     const comboboxes = screen.getAllByRole('combobox')
     expect(comboboxes[0]).toHaveTextContent('所有来源')
     expect(comboboxes[1]).toHaveTextContent('全部状态')
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     expect(document.body).not.toHaveTextContent(/^all$/im)
   })
 })

@@ -2,9 +2,10 @@ import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { DataTableServerPagination } from '@/components/data-table'
 import { SectionPageLayout } from '@/components/layout'
+import { PageFooterPortal } from '@/components/layout/components/page-footer'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   Select,
@@ -16,8 +17,6 @@ import {
 import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
 import { getAffiliateRebates } from '@/features/wallet/api'
 import { formatQuotaPrecise, formatTimestampToDate } from '@/lib/format'
-
-const pageSize = 20
 
 function sourceLabel(source: string, t: (key: string) => string) {
   if (source === 'all') return t('All sources')
@@ -37,6 +36,7 @@ function statusLabel(status: string, t: (key: string) => string) {
 export function AffiliateRebates() {
   const { t } = useTranslation()
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [sourceType, setSourceType] = useState('all')
   const [status, setStatus] = useState('all')
   const [range, setRange] = useState<{ start?: Date; end?: Date }>({})
@@ -63,8 +63,6 @@ export function AffiliateRebates() {
       }
     },
   })
-  const totalPages = Math.max(1, Math.ceil((data?.total || 0) / pageSize))
-
   return (
     <SectionPageLayout>
       <SectionPageLayout.Title>
@@ -185,27 +183,18 @@ export function AffiliateRebates() {
               </Card>
             ))}
           </div>
-          <div className='flex items-center justify-between'>
-            <span className='text-muted-foreground text-sm'>
-              {t('Page {{page}} of {{totalPages}}', { page, totalPages })}
-            </span>
-            <div className='flex gap-2'>
-              <Button
-                variant='outline'
-                disabled={page <= 1}
-                onClick={() => setPage((value) => value - 1)}
-              >
-                {t('Previous')}
-              </Button>
-              <Button
-                variant='outline'
-                disabled={page >= totalPages}
-                onClick={() => setPage((value) => value + 1)}
-              >
-                {t('Next')}
-              </Button>
-            </div>
-          </div>
+          <PageFooterPortal>
+            <DataTableServerPagination
+              page={page}
+              pageSize={pageSize}
+              total={data?.total || 0}
+              onPageChange={setPage}
+              onPageSizeChange={(value) => {
+                setPageSize(value)
+                setPage(1)
+              }}
+            />
+          </PageFooterPortal>
         </div>
       </SectionPageLayout.Content>
     </SectionPageLayout>

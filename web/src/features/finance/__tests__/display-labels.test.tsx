@@ -134,6 +134,7 @@ describe('finance display labels', () => {
     const comboboxes = screen.getAllByRole('combobox')
     expect(comboboxes[0]).toHaveTextContent('全部状态')
     expect(comboboxes[1]).toHaveTextContent('全部支付平台')
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     expect(document.body).not.toHaveTextContent(/^all$/im)
   })
 
