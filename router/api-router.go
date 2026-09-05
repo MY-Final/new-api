@@ -165,6 +165,20 @@ func SetApiRouter(router *gin.Engine) {
 			affiliateRoute.POST("/rebates/reverse", controller.ReverseAffiliateRebate)
 		}
 
+		financeRoute := apiRouter.Group("/finance")
+		financeRoute.Use(middleware.AdminAuth())
+		{
+			financeRoute.GET("/topups", controller.GetFinanceTopUps)
+			financeRoute.GET("/redemptions", controller.GetFinanceRedemptions)
+			financeRoute.GET("/rebates", controller.GetFinanceRebates)
+			financeRoute.GET("/operations", controller.GetFinancialOperations)
+			financeRoute.POST("/topups/refund", controller.RefundFinanceTopUp)
+			financeRoute.POST("/redemptions/refund", controller.RefundFinanceRedemption)
+			financeRoute.POST("/rebates/reverse", controller.ReverseFinanceRebate)
+			financeRoute.POST("/penalties", controller.ApplyFinancePenalty)
+			financeRoute.POST("/penalties/reverse", controller.ReverseFinancePenalty)
+		}
+
 		// Subscription billing (plans, purchase, admin management)
 		subscriptionRoute := apiRouter.Group("/subscription")
 		subscriptionRoute.Use(middleware.UserAuth())

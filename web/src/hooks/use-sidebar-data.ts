@@ -20,6 +20,7 @@ import {
   Activity,
   Box,
   CreditCard,
+  CircleDollarSign,
   FileText,
   FlaskConical,
   History,
@@ -129,6 +130,11 @@ export function useSidebarData(): SidebarData {
             icon: Wallet,
           },
           {
+            title: t('Affiliate Rebates'),
+            url: '/affiliate-rebates',
+            icon: CircleDollarSign,
+          },
+          {
             title: t('Profile'),
             url: '/profile',
             icon: User,
@@ -171,6 +177,13 @@ export function useSidebarData(): SidebarData {
           {
             title: t('Subscriptions'),
             url: '/subscriptions',
+            icon: CreditCard,
+          },
+          {
+            title: t('Finance'),
+            url: '/finance/topups',
+            activeUrls: ['/finance'],
+            configUrls: ['/finance'],
             icon: CreditCard,
           },
           {

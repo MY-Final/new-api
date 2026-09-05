@@ -185,6 +185,10 @@ func UpdateRedemption(c *gin.Context) {
 		}
 	}
 	if statusOnly != "" {
+		if redemption.Status != common.RedemptionCodeStatusEnabled && redemption.Status != common.RedemptionCodeStatusDisabled {
+			common.ApiError(c, errors.New("invalid redemption status"))
+			return
+		}
 		cleanRedemption.Status = redemption.Status
 	}
 	err = cleanRedemption.Update()

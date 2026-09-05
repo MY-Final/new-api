@@ -40,8 +40,12 @@ type AffiliateRebate struct {
 	SettledAt        int64  `json:"settled_at" gorm:"bigint"`
 	ReversedAt       int64  `json:"reversed_at" gorm:"bigint"`
 	ReverseReason    string `json:"reverse_reason" gorm:"type:varchar(255)"`
+	ReversedBy       int    `json:"reversed_by" gorm:"index"`
 	InviterUsername  string `json:"inviter_username,omitempty" gorm:"->;-:migration"`
 	InviteeUsername  string `json:"invitee_username,omitempty" gorm:"->;-:migration"`
+	InviterQuota     int    `json:"inviter_quota,omitempty" gorm:"->;-:migration"`
+	InviterAffQuota  int    `json:"inviter_aff_quota,omitempty" gorm:"->;-:migration"`
+	InviteeQuota     int    `json:"invitee_quota,omitempty" gorm:"->;-:migration"`
 }
 
 // AffiliateInvitee is the user-facing summary for one direct invitee.
@@ -242,6 +246,11 @@ func GetUserAffiliateRebates(userId int, sourceType string, pageInfo *common.Pag
 	return listAffiliateRebates(userId, sourceType, pageInfo)
 }
 
+func GetUserAffiliateRebatesFiltered(userId int, filters FinanceQuery, pageInfo *common.PageInfo) ([]*AffiliateRebate, int64, error) {
+	filters.InviterId = userId
+	return ListFinanceRebates(filters, pageInfo)
+}
+
 func GetUserAffiliateInviteeCount(userId int) (int64, error) {
 	var total int64
 	if err := DB.Model(&User{}).Where("inviter_id = ?", userId).Count(&total).Error; err != nil {
@@ -304,156 +313,13 @@ func GetAllAffiliateRebates(sourceType string, pageInfo *common.PageInfo) ([]*Af
 	return listAffiliateRebates(0, sourceType, pageInfo)
 }
 
-func reverseAffiliateRebateTx(tx *gorm.DB, rebate *AffiliateRebate, reason string) error {
-	if rebate == nil {
-		return ErrAffiliateRebateNotFound
-	}
-	// Transfers lock the inviter before updating rebate provenance. Keep the
-	// same order here so a concurrent transfer and reversal cannot deadlock.
-	inviter := &User{}
-	if err := lockForUpdate(tx).Unscoped().Where("id = ?", rebate.InviterId).First(inviter).Error; err != nil {
-		return err
-	}
-	lockedRebate := &AffiliateRebate{}
-	if err := lockForUpdate(tx).Where("id = ?", rebate.Id).First(lockedRebate).Error; err != nil {
-		return err
-	}
-	rebate = lockedRebate
-	remaining := rebate.RebateQuota - rebate.ReversedQuota
-	if remaining <= 0 {
-		return ErrAffiliateAlreadyReversed
-	}
-	transferred := rebate.TransferredQuota
-	if transferred < 0 {
-		transferred = 0
-	}
-	if transferred > remaining {
-		transferred = remaining
-	}
-	affiliateAmount := remaining - transferred
-	if err := tx.Unscoped().Model(&User{}).Where("id = ?", rebate.InviterId).Updates(map[string]interface{}{
-		"quota":              gorm.Expr("quota - ?", transferred),
-		"aff_quota":          gorm.Expr("aff_quota - ?", affiliateAmount),
-		"aff_reversed_quota": gorm.Expr("aff_reversed_quota + ?", remaining),
-	}).Error; err != nil {
-		return err
-	}
-	rebate.ReversedQuota += remaining
-	rebate.Status = AffiliateRebateStatusReversed
-	rebate.ReversedAt = common.GetTimestamp()
-	rebate.ReverseReason = reason
-	return tx.Save(rebate).Error
-}
-
-func reverseAffiliateRebateBySourceTx(tx *gorm.DB, sourceType string, sourceId string, reason string) (bool, error) {
-	var rebate AffiliateRebate
-	if err := tx.Where("source_key = ?", sourceType+":"+sourceId).First(&rebate).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return false, nil
-		}
-		return false, err
-	}
-	if rebate.Status == AffiliateRebateStatusReversed || rebate.ReversedQuota >= rebate.RebateQuota {
-		return true, nil
-	}
-	return true, reverseAffiliateRebateTx(tx, &rebate, reason)
-}
-
 func ReverseAffiliateRebate(id int, reason string) error {
-	if id <= 0 {
-		return ErrAffiliateRebateNotFound
-	}
-	return DB.Transaction(func(tx *gorm.DB) error {
-		var rebate AffiliateRebate
-		if err := tx.Where("id = ?", id).First(&rebate).Error; err != nil {
-			return ErrAffiliateRebateNotFound
-		}
-		if rebate.SourceType != AffiliateRebateSourceRedemption {
-			return ErrAffiliateSourceInvalid
-		}
-		if rebate.Status == AffiliateRebateStatusReversed || rebate.ReversedQuota >= rebate.RebateQuota {
-			return nil
-		}
-		return reverseAffiliateRebateTx(tx, &rebate, reason)
-	})
+	_, err := ReverseAffiliateRebateByAdmin(id, reason, 0)
+	return err
 }
 
 // RefundTopUp performs the local full-refund accounting for a direct top-up.
 // It deliberately does not call an external payment provider.
 func RefundTopUp(tradeNo string, reason string) (alreadyRefunded bool, err error) {
-	tradeNo = strings.TrimSpace(tradeNo)
-	if tradeNo == "" {
-		return false, ErrTopUpNotFound
-	}
-	var userId int
-	var creditedQuota int
-	var inviterId int
-	var inviterMainDebit int
-	err = DB.Transaction(func(tx *gorm.DB) error {
-		var topUp TopUp
-		if err := lockForUpdate(tx).Where("trade_no = ?", tradeNo).First(&topUp).Error; err != nil {
-			return ErrTopUpNotFound
-		}
-		if topUp.Status == common.TopUpStatusRefunded {
-			alreadyRefunded = true
-			return nil
-		}
-		if topUp.Status != common.TopUpStatusSuccess || topUp.Source != TopUpSourceTopup || topUp.CreditedQuota <= 0 {
-			return ErrTopUpNotRefundable
-		}
-
-		result := tx.Unscoped().Model(&User{}).Where("id = ?", topUp.UserId).Update("quota", gorm.Expr("quota - ?", topUp.CreditedQuota))
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected == 0 {
-			return gorm.ErrRecordNotFound
-		}
-
-		var rebate AffiliateRebate
-		rebateFound := false
-		if err := tx.Where("source_key = ?", AffiliateRebateSourceTopUp+":"+topUp.TradeNo).First(&rebate).Error; err == nil {
-			rebateFound = true
-			inviterId = rebate.InviterId
-		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-		if _, err := reverseAffiliateRebateBySourceTx(tx, AffiliateRebateSourceTopUp, topUp.TradeNo, reason); err != nil {
-			return err
-		}
-		if rebateFound {
-			var reversedRebate AffiliateRebate
-			if err := tx.Where("id = ?", rebate.Id).First(&reversedRebate).Error; err != nil {
-				return err
-			}
-			inviterMainDebit = reversedRebate.TransferredQuota
-			if inviterMainDebit < 0 {
-				inviterMainDebit = 0
-			}
-		}
-
-		topUp.Status = common.TopUpStatusRefunded
-		topUp.RefundedAt = common.GetTimestamp()
-		topUp.RefundReason = strings.TrimSpace(reason)
-		if err := tx.Save(&topUp).Error; err != nil {
-			return err
-		}
-		userId = topUp.UserId
-		creditedQuota = topUp.CreditedQuota
-		return nil
-	})
-	if err != nil || alreadyRefunded {
-		return alreadyRefunded, err
-	}
-	if creditedQuota > 0 {
-		if err := cacheDecrUserQuota(userId, int64(creditedQuota)); err != nil {
-			common.SysLog("failed to sync refunded top-up quota: " + err.Error())
-		}
-	}
-	if inviterId > 0 && inviterMainDebit > 0 {
-		if err := cacheDecrUserQuota(inviterId, int64(inviterMainDebit)); err != nil {
-			common.SysLog("failed to sync refunded affiliate quota: " + err.Error())
-		}
-	}
-	return false, nil
+	return RefundTopUpByAdmin(tradeNo, reason, 0)
 }

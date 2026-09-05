@@ -12,20 +12,30 @@ import (
 )
 
 type TopUp struct {
-	Id              int     `json:"id"`
-	UserId          int     `json:"user_id" gorm:"index"`
-	Amount          int64   `json:"amount"`
-	Money           float64 `json:"money"`
-	TradeNo         string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
-	PaymentMethod   string  `json:"payment_method" gorm:"type:varchar(50)"`
-	PaymentProvider string  `json:"payment_provider" gorm:"type:varchar(50);default:''"`
-	CreateTime      int64   `json:"create_time"`
-	CompleteTime    int64   `json:"complete_time"`
-	Status          string  `json:"status"`
-	Source          string  `json:"source" gorm:"type:varchar(32);index"`
-	CreditedQuota   int     `json:"credited_quota" gorm:"type:bigint"`
-	RefundedAt      int64   `json:"refunded_at" gorm:"bigint"`
-	RefundReason    string  `json:"refund_reason" gorm:"type:varchar(255)"`
+	Id                     int     `json:"id"`
+	UserId                 int     `json:"user_id" gorm:"index"`
+	Amount                 int64   `json:"amount"`
+	Money                  float64 `json:"money"`
+	TradeNo                string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
+	PaymentMethod          string  `json:"payment_method" gorm:"type:varchar(50)"`
+	PaymentProvider        string  `json:"payment_provider" gorm:"type:varchar(50);default:''"`
+	CreateTime             int64   `json:"create_time"`
+	CompleteTime           int64   `json:"complete_time"`
+	Status                 string  `json:"status"`
+	Source                 string  `json:"source" gorm:"type:varchar(32);index"`
+	CreditedQuota          int     `json:"credited_quota" gorm:"type:bigint"`
+	RefundedAt             int64   `json:"refunded_at" gorm:"bigint"`
+	RefundReason           string  `json:"refund_reason" gorm:"type:varchar(255)"`
+	RefundedBy             int     `json:"refunded_by" gorm:"index"`
+	Username               string  `json:"username,omitempty" gorm:"->;-:migration"`
+	UserQuota              int     `json:"user_quota,omitempty" gorm:"->;-:migration"`
+	RebateQuota            int     `json:"rebate_quota,omitempty" gorm:"->;-:migration"`
+	RebateReversedQuota    int     `json:"rebate_reversed_quota,omitempty" gorm:"->;-:migration"`
+	RebateTransferredQuota int     `json:"rebate_transferred_quota,omitempty" gorm:"->;-:migration"`
+	InviterId              int     `json:"inviter_id,omitempty" gorm:"->;-:migration"`
+	InviterUsername        string  `json:"inviter_username,omitempty" gorm:"->;-:migration"`
+	InviterQuota           int     `json:"inviter_quota,omitempty" gorm:"->;-:migration"`
+	InviterAffQuota        int     `json:"inviter_aff_quota,omitempty" gorm:"->;-:migration"`
 }
 
 const (

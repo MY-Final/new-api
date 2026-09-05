@@ -34,7 +34,8 @@ interface AffiliateRewardsCardProps {
   user: UserWalletData | null
   affiliateLink: string
   onTransfer: () => void
-  onViewLedger: () => void
+  /** Kept for compatibility with older consumers; the ledger moved to its own page. */
+  onViewLedger?: () => void
   onViewInvitees: () => void
   complianceConfirmed?: boolean
   loading?: boolean
@@ -44,7 +45,6 @@ export function AffiliateRewardsCard({
   user,
   affiliateLink,
   onTransfer,
-  onViewLedger,
   onViewInvitees,
   complianceConfirmed = true,
   loading,
@@ -73,7 +73,6 @@ export function AffiliateRewardsCard({
           <div className='space-y-2'>
             <Skeleton className='h-9 w-full rounded-lg' />
             <div className='flex flex-wrap justify-end gap-2'>
-              <Skeleton className='h-9 w-24 rounded-lg' />
               <Skeleton className='h-9 w-28 rounded-lg' />
               <Skeleton className='h-9 w-32 rounded-lg' />
             </div>
@@ -159,14 +158,6 @@ export function AffiliateRewardsCard({
             data-slot='affiliate-rewards-actions'
             className='flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end'
           >
-            <Button
-              variant='outline'
-              onClick={onViewLedger}
-              className='h-9 w-full px-3 sm:w-auto'
-              size='sm'
-            >
-              {t('View Ledger')}
-            </Button>
             <Button
               variant='outline'
               onClick={onViewInvitees}

@@ -518,23 +518,14 @@ func GetUserTopUps(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	keyword := c.Query("keyword")
 
-	var (
-		topups []*model.TopUp
-		total  int64
-		err    error
-	)
-	if keyword != "" {
-		topups, total, err = model.SearchUserTopUps(userId, keyword, pageInfo)
-	} else {
-		topups, total, err = model.GetUserTopUps(userId, pageInfo)
-	}
+	records, total, err := model.GetUserBillingHistory(userId, keyword, pageInfo)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 
 	pageInfo.SetTotal(int(total))
-	pageInfo.SetItems(topups)
+	pageInfo.SetItems(records)
 	common.ApiSuccess(c, pageInfo)
 }
 
@@ -604,7 +595,7 @@ func RefundTopUp(c *gin.Context) {
 		common.ApiErrorMsg(c, "参数错误")
 		return
 	}
-	alreadyRefunded, err := model.RefundTopUp(req.TradeNo, req.Reason)
+	alreadyRefunded, err := model.RefundTopUpByAdmin(req.TradeNo, req.Reason, c.GetInt("id"))
 	if err != nil {
 		common.ApiError(c, err)
 		return

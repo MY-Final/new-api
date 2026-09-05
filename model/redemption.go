@@ -12,19 +12,31 @@ import (
 )
 
 type Redemption struct {
-	Id           int            `json:"id"`
-	UserId       int            `json:"user_id"`
-	Key          string         `json:"key" gorm:"type:char(32);uniqueIndex"`
-	Status       int            `json:"status" gorm:"default:1"`
-	Name         string         `json:"name" gorm:"index"`
-	Quota        int            `json:"quota" gorm:"default:100"`
-	CreatedTime  int64          `json:"created_time" gorm:"bigint"`
-	RedeemedTime int64          `json:"redeemed_time" gorm:"bigint"`
-	Count        int            `json:"count" gorm:"-:all"` // only for api request
-	UsedUserId   int            `json:"used_user_id"`
-	DeletedAt    gorm.DeletedAt `gorm:"index"`
-	ExpiredTime  int64          `json:"expired_time" gorm:"bigint"` // 过期时间，0 表示不过期
-	Type         string         `json:"type" gorm:"type:varchar(16);index"`
+	Id                     int            `json:"id"`
+	UserId                 int            `json:"user_id"`
+	Key                    string         `json:"key" gorm:"type:char(32);uniqueIndex"`
+	Status                 int            `json:"status" gorm:"default:1"`
+	Name                   string         `json:"name" gorm:"index"`
+	Quota                  int            `json:"quota" gorm:"default:100"`
+	CreatedTime            int64          `json:"created_time" gorm:"bigint"`
+	RedeemedTime           int64          `json:"redeemed_time" gorm:"bigint"`
+	Count                  int            `json:"count" gorm:"-:all"` // only for api request
+	UsedUserId             int            `json:"used_user_id"`
+	DeletedAt              gorm.DeletedAt `gorm:"index"`
+	ExpiredTime            int64          `json:"expired_time" gorm:"bigint"` // 过期时间，0 表示不过期
+	Type                   string         `json:"type" gorm:"type:varchar(16);index"`
+	RefundedAt             int64          `json:"refunded_at" gorm:"bigint"`
+	RefundReason           string         `json:"refund_reason" gorm:"type:varchar(255)"`
+	RefundedBy             int            `json:"refunded_by" gorm:"index"`
+	UsedUsername           string         `json:"used_username,omitempty" gorm:"->;-:migration"`
+	UsedUserQuota          int            `json:"used_user_quota,omitempty" gorm:"->;-:migration"`
+	RebateQuota            int            `json:"rebate_quota,omitempty" gorm:"->;-:migration"`
+	RebateReversedQuota    int            `json:"rebate_reversed_quota,omitempty" gorm:"->;-:migration"`
+	RebateTransferredQuota int            `json:"rebate_transferred_quota,omitempty" gorm:"->;-:migration"`
+	InviterId              int            `json:"inviter_id,omitempty" gorm:"->;-:migration"`
+	InviterUsername        string         `json:"inviter_username,omitempty" gorm:"->;-:migration"`
+	InviterQuota           int            `json:"inviter_quota,omitempty" gorm:"->;-:migration"`
+	InviterAffQuota        int            `json:"inviter_aff_quota,omitempty" gorm:"->;-:migration"`
 }
 
 const (
@@ -116,6 +128,8 @@ func SearchRedemptions(keyword string, status string, redemptionType string, sta
 			query = query.Where("status = ?", common.RedemptionCodeStatusDisabled)
 		case strconv.Itoa(common.RedemptionCodeStatusUsed):
 			query = query.Where("status = ?", common.RedemptionCodeStatusUsed)
+		case strconv.Itoa(common.RedemptionCodeStatusRefunded):
+			query = query.Where("status = ?", common.RedemptionCodeStatusRefunded)
 		}
 	}
 
@@ -234,9 +248,23 @@ func (redemption *Redemption) Update() error {
 	if err := common.ValidateWalletQuota(redemption.Quota); err != nil {
 		return err
 	}
-	var err error
-	err = DB.Model(redemption).Select("name", "status", "quota", "redeemed_time", "expired_time", "type").Updates(redemption).Error
-	return err
+	var existing Redemption
+	if err := DB.Select("status").Where("id = ?", redemption.Id).First(&existing).Error; err != nil {
+		return err
+	}
+	if existing.Status == common.RedemptionCodeStatusUsed || existing.Status == common.RedemptionCodeStatusRefunded {
+		return errors.New("used or refunded redemption codes cannot be modified")
+	}
+	result := DB.Model(redemption).
+		Where("id = ? AND status IN ?", redemption.Id, []int{common.RedemptionCodeStatusEnabled, common.RedemptionCodeStatusDisabled}).
+		Select("name", "status", "quota", "redeemed_time", "expired_time", "type").Updates(redemption)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return errors.New("used or refunded redemption codes cannot be modified")
+	}
+	return nil
 }
 
 func (redemption *Redemption) Delete() error {

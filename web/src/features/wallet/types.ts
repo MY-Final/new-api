@@ -261,6 +261,36 @@ export type TopupStatus =
   | 'refunded'
 
 /**
+ * User billing history record. Direct top-ups and redeemed codes share this
+ * response shape so the wallet can display one chronological history.
+ */
+export type BillingRecordType = 'topup' | 'redemption'
+
+export interface BillingRecord {
+  id: number
+  record_type: BillingRecordType
+  user_id: number
+  amount: number
+  money: number
+  trade_no: string
+  payment_method: string
+  payment_provider?: string
+  create_time: number
+  complete_time?: number
+  status: TopupStatus | 'used'
+  source?: 'topup' | 'subscription'
+  credited_quota?: number
+  refunded_at?: number
+  refund_reason?: string
+  redemption_id?: number
+  redemption_name?: string
+  redemption_key?: string
+  redemption_type?: 'paid' | 'reward'
+  redemption_quota?: number
+  redeemed_time?: number
+}
+
+/**
  * Topup billing record
  */
 export interface TopupRecord {
@@ -292,7 +322,7 @@ export interface TopupRecord {
  * Billing history response
  */
 export interface BillingHistoryResponse {
-  items: TopupRecord[]
+  items: BillingRecord[]
   total: number
 }
 

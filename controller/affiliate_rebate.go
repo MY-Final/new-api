@@ -11,7 +11,9 @@ import (
 
 func GetUserAffiliateRebates(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
-	rebates, total, err := model.GetUserAffiliateRebates(c.GetInt("id"), c.Query("source_type"), pageInfo)
+	filters := financeQuery(c)
+	filters.SourceType = c.Query("source_type")
+	rebates, total, err := model.GetUserAffiliateRebatesFiltered(c.GetInt("id"), filters, pageInfo)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -56,9 +58,10 @@ func ReverseAffiliateRebate(c *gin.Context) {
 		common.ApiError(c, errors.New("invalid rebate id"))
 		return
 	}
-	if err := model.ReverseAffiliateRebate(req.RebateId, req.Reason); err != nil {
+	alreadyReversed, err := model.ReverseAffiliateRebateByAdmin(req.RebateId, req.Reason, c.GetInt("id"))
+	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	common.ApiSuccess(c, gin.H{"id": req.RebateId, "status": model.AffiliateRebateStatusReversed})
+	common.ApiSuccess(c, gin.H{"id": req.RebateId, "status": model.AffiliateRebateStatusReversed, "already_reversed": alreadyReversed})
 }

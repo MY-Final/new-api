@@ -132,6 +132,10 @@ export function SidebarModulesSection({
         title: t('Wallet'),
         description: t('Top up balance and view billing history.'),
       },
+      affiliate: {
+        title: t('Affiliate Rebates'),
+        description: t('Review your referral rebate ledger.'),
+      },
       personal: {
         title: t('Profile'),
         description: t('Personal settings and profile management.'),
@@ -161,6 +165,10 @@ export function SidebarModulesSection({
       subscription: {
         title: t('Subscription Management'),
         description: t('Manage subscription plans and pricing.'),
+      },
+      finance: {
+        title: t('Finance'),
+        description: t('Refund, reverse rebates, apply penalties, and audit balances.'),
       },
     },
   }

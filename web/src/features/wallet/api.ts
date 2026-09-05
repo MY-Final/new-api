@@ -207,13 +207,17 @@ export async function transferAffiliateQuota(
 export async function getAffiliateRebates(
   page: number,
   pageSize: number,
-  sourceType?: string
+  sourceType?: string,
+  filters?: { status?: string; startTime?: number; endTime?: number }
 ): Promise<ApiResponse<AffiliateRebatesResponse>> {
   const params = new URLSearchParams({
     p: page.toString(),
     page_size: pageSize.toString(),
   })
   if (sourceType) params.set('source_type', sourceType)
+  if (filters?.status) params.set('status', filters.status)
+  if (filters?.startTime) params.set('start_time', filters.startTime.toString())
+  if (filters?.endTime) params.set('end_time', filters.endTime.toString())
   const res = await api.get(`/api/user/aff/rebates?${params.toString()}`)
   return res.data
 }
