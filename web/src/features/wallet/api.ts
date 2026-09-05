@@ -40,6 +40,7 @@ import type {
   WaffoPancakePaymentRequest,
   WaffoPancakePaymentResponse,
   AffiliateRebatesResponse,
+  AffiliateInviteesResponse,
   AffiliateRebateReverseRequest,
 } from './types'
 
@@ -212,6 +213,18 @@ export async function getAffiliateRebates(
   })
   if (sourceType) params.set('source_type', sourceType)
   const res = await api.get(`/api/user/aff/rebates?${params.toString()}`)
+  return res.data
+}
+
+export async function getAffiliateInvitees(
+  page: number,
+  pageSize: number
+): Promise<ApiResponse<AffiliateInviteesResponse>> {
+  const params = new URLSearchParams({
+    p: page.toString(),
+    page_size: pageSize.toString(),
+  })
+  const res = await api.get(`/api/user/aff/invitees?${params.toString()}`)
   return res.data
 }
 

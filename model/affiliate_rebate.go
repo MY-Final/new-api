@@ -44,6 +44,16 @@ type AffiliateRebate struct {
 	InviteeUsername  string `json:"invitee_username,omitempty" gorm:"->;-:migration"`
 }
 
+// AffiliateInvitee is the user-facing summary for one direct invitee.
+type AffiliateInvitee struct {
+	Id            int    `json:"id"`
+	Username      string `json:"username"`
+	Email         string `json:"email"`
+	CreatedAt     int64  `json:"created_at"`
+	RebateQuota   int    `json:"rebate_quota"`
+	ReversedQuota int    `json:"reversed_quota"`
+}
+
 var (
 	ErrAffiliateRateInvalid     = errors.New("affiliate rebate rate must be between 0 and 10000")
 	ErrAffiliateSourceInvalid   = errors.New("invalid affiliate rebate source")
@@ -230,6 +240,56 @@ func listAffiliateRebates(userId int, sourceType string, pageInfo *common.PageIn
 
 func GetUserAffiliateRebates(userId int, sourceType string, pageInfo *common.PageInfo) ([]*AffiliateRebate, int64, error) {
 	return listAffiliateRebates(userId, sourceType, pageInfo)
+}
+
+func GetUserAffiliateInvitees(userId int, pageInfo *common.PageInfo) ([]*AffiliateInvitee, int64, error) {
+	query := DB.Model(&User{}).
+		Select("id, username, email, created_at").
+		Where("inviter_id = ?", userId)
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var users []User
+	if err := query.Order("created_at DESC, id DESC").
+		Limit(pageInfo.GetPageSize()).
+		Offset(pageInfo.GetStartIdx()).
+		Find(&users).Error; err != nil {
+		return nil, 0, err
+	}
+
+	invitees := make([]*AffiliateInvitee, 0, len(users))
+	inviteeById := make(map[int]*AffiliateInvitee, len(users))
+	ids := make([]int, 0, len(users))
+	for i := range users {
+		invitee := &AffiliateInvitee{
+			Id:        users[i].Id,
+			Username:  users[i].Username,
+			Email:     common.MaskEmail(users[i].Email),
+			CreatedAt: users[i].CreatedAt,
+		}
+		invitees = append(invitees, invitee)
+		inviteeById[invitee.Id] = invitee
+		ids = append(ids, invitee.Id)
+	}
+	if len(ids) == 0 {
+		return invitees, total, nil
+	}
+
+	var rebates []AffiliateRebate
+	if err := DB.Select("invitee_id, rebate_quota, reversed_quota").
+		Where("inviter_id = ? AND invitee_id IN ?", userId, ids).
+		Find(&rebates).Error; err != nil {
+		return nil, 0, err
+	}
+	for _, rebate := range rebates {
+		if invitee, ok := inviteeById[rebate.InviteeId]; ok {
+			invitee.RebateQuota += rebate.RebateQuota
+			invitee.ReversedQuota += rebate.ReversedQuota
+		}
+	}
+	return invitees, total, nil
 }
 
 func GetAllAffiliateRebates(sourceType string, pageInfo *common.PageInfo) ([]*AffiliateRebate, int64, error) {

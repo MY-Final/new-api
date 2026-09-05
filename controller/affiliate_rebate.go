@@ -21,6 +21,18 @@ func GetUserAffiliateRebates(c *gin.Context) {
 	common.ApiSuccess(c, pageInfo)
 }
 
+func GetUserAffiliateInvitees(c *gin.Context) {
+	pageInfo := common.GetPageQuery(c)
+	invitees, total, err := model.GetUserAffiliateInvitees(c.GetInt("id"), pageInfo)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	pageInfo.SetTotal(int(total))
+	pageInfo.SetItems(invitees)
+	common.ApiSuccess(c, pageInfo)
+}
+
 func GetAllAffiliateRebates(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	rebates, total, err := model.GetAllAffiliateRebates(c.Query("source_type"), pageInfo)

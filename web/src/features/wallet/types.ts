@@ -242,6 +242,10 @@ export interface UserWalletData {
   aff_reversed_quota: number
   /** Number of successful affiliate invites */
   aff_count: number
+  /** Current top-up rebate rate in basis points */
+  affiliate_topup_rebate_rate: number
+  /** Current paid redemption-code rebate rate in basis points */
+  affiliate_redemption_rebate_rate: number
   /** User group */
   group: string
 }
@@ -317,6 +321,20 @@ export interface AffiliateRebate {
 
 export interface AffiliateRebatesResponse {
   items: AffiliateRebate[]
+  total: number
+}
+
+export interface AffiliateInvitee {
+  id: number
+  username: string
+  email: string
+  created_at: number
+  rebate_quota: number
+  reversed_quota: number
+}
+
+export interface AffiliateInviteesResponse {
+  items: AffiliateInvitee[]
   total: number
 }
 

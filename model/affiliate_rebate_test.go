@@ -261,6 +261,47 @@ func TestAffiliateRebateListingIncludesUsernames(t *testing.T) {
 	}
 }
 
+func TestAffiliateInviteeListingAggregatesRebatesAndKeepsUsersWithoutRebates(t *testing.T) {
+	truncateTables(t)
+	inviter, firstInvitee := createAffiliateUsers(t)
+	originalRate := common.AffiliateTopupRebateRate
+	common.AffiliateTopupRebateRate = 1000
+	t.Cleanup(func() { common.AffiliateTopupRebateRate = originalRate })
+	firstInvitee.Email = "first@example.com"
+	require.NoError(t, firstInvitee.Update(false))
+	secondInvitee := &User{
+		Username:  "affiliate-second-invitee",
+		Email:     "second@example.com",
+		InviterId: inviter.Id,
+		Status:    common.UserStatusEnabled,
+	}
+	require.NoError(t, DB.Create(secondInvitee).Error)
+
+	topup := &TopUp{
+		UserId:        firstInvitee.Id,
+		TradeNo:       "affiliate-invitee-summary",
+		Source:        TopUpSourceTopup,
+		CreditedQuota: 1000,
+		Status:        common.TopUpStatusSuccess,
+	}
+	require.NoError(t, DB.Transaction(func(tx *gorm.DB) error {
+		return recordAffiliateRebateForTopUpTx(tx, topup)
+	}))
+
+	invitees, total, err := GetUserAffiliateInvitees(inviter.Id, &common.PageInfo{Page: 1, PageSize: 10})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), total)
+	require.Len(t, invitees, 2)
+
+	byUsername := make(map[string]*AffiliateInvitee, len(invitees))
+	for _, invitee := range invitees {
+		byUsername[invitee.Username] = invitee
+	}
+	assert.Equal(t, "***@example.com", byUsername[firstInvitee.Username].Email)
+	assert.Equal(t, 100, byUsername[firstInvitee.Username].RebateQuota)
+	assert.Zero(t, byUsername[secondInvitee.Username].RebateQuota)
+}
+
 func TestPaidRedemptionRebateCanBeReversedIdempotently(t *testing.T) {
 	truncateTables(t)
 	inviter, invitee := createAffiliateUsers(t)

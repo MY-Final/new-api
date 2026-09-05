@@ -16,16 +16,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Share2 } from 'lucide-react'
+import { List, Share2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { CopyButton } from '@/components/copy-button'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { IconBadge } from '@/components/ui/icon-badge'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatQuota } from '@/lib/format'
+import { formatPercent, formatQuota } from '@/lib/format'
 
 import type { UserWalletData } from '../types'
 
@@ -34,6 +35,7 @@ interface AffiliateRewardsCardProps {
   affiliateLink: string
   onTransfer: () => void
   onViewLedger: () => void
+  onViewInvitees: () => void
   complianceConfirmed?: boolean
   loading?: boolean
 }
@@ -43,6 +45,7 @@ export function AffiliateRewardsCard({
   affiliateLink,
   onTransfer,
   onViewLedger,
+  onViewInvitees,
   complianceConfirmed = true,
   loading,
 }: AffiliateRewardsCardProps) {
@@ -72,9 +75,19 @@ export function AffiliateRewardsCard({
             <Share2 />
           </IconBadge>
           <div className='min-w-0'>
-            <h3 className='truncate text-sm font-semibold'>
-              {t('Referral Program')}
-            </h3>
+            <div className='flex flex-wrap items-center gap-1.5'>
+              <h3 className='text-sm font-semibold'>{t('Referral Program')}</h3>
+              <Badge variant='secondary' className='h-5 px-1.5 text-[10px]'>
+                {t('Top-up rebate')}:{' '}
+                {formatPercent((user?.affiliate_topup_rebate_rate ?? 0) / 100)}
+              </Badge>
+              <Badge variant='outline' className='h-5 px-1.5 text-[10px]'>
+                {t('Paid-code rebate')}:{' '}
+                {formatPercent(
+                  (user?.affiliate_redemption_rebate_rate ?? 0) / 100
+                )}
+              </Badge>
+            </div>
             <p className='text-muted-foreground line-clamp-1 text-xs'>
               {t(
                 'Earn rewards when users join through your referral link. Transfer accumulated rewards to your balance anytime.'
@@ -101,7 +114,7 @@ export function AffiliateRewardsCard({
           ))}
         </div>
 
-        <div className='flex items-center gap-2'>
+        <div className='flex min-w-0 flex-wrap items-center gap-2'>
           <Input
             value={affiliateLink}
             readOnly
@@ -122,6 +135,15 @@ export function AffiliateRewardsCard({
             size='sm'
           >
             {t('View Ledger')}
+          </Button>
+          <Button
+            variant='outline'
+            onClick={onViewInvitees}
+            className='h-9 shrink-0 px-3'
+            size='sm'
+          >
+            <List className='mr-1.5 size-3.5' />
+            {t('Invite Details')}
           </Button>
           {hasRewards && (
             <Button
