@@ -34,6 +34,7 @@ const refundFinanceRedemption = vi.hoisted(() => vi.fn())
 const reverseFinanceRebate = vi.hoisted(() => vi.fn())
 const applyFinancePenalty = vi.hoisted(() => vi.fn())
 const reverseFinancePenalty = vi.hoisted(() => vi.fn())
+const searchUsers = vi.hoisted(() => vi.fn())
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children }: { children: ReactNode }) => <a href='#'>{children}</a>,
@@ -52,6 +53,11 @@ vi.mock('../api', () => ({
   reverseFinanceRebate,
 }))
 
+vi.mock('@/features/users/api', async (importOriginal) => ({
+  ...(await importOriginal()),
+  searchUsers,
+}))
+
 const i18n = createInstance()
 await i18n.use(initReactI18next).init({
   lng: 'zh',
@@ -60,26 +66,35 @@ await i18n.use(initReactI18next).init({
       translation: {
         'All providers': '全部支付平台',
         'All statuses': '全部状态',
+        'Custom penalty': '自定义罚款',
+        'Custom penalties do not require a request ID.':
+          '自定义罚款无需填写请求 ID。',
         'Date Range': '时间范围',
         Finance: '财务',
         'Financial Operations': '财务操作',
         'Loading...': '加载中...',
         'No financial records found': '暂无财务记录',
+        'No users found': '未找到用户',
         'Rebate Ledger': '返佣账本',
+        'Request-based penalty': '按请求罚款',
+        'Search by username, name, or ID': '按用户名、名称或 ID 搜索',
+        'Target user': '目标用户',
         'Top-up Orders': '充值订单',
+        'User ID': '用户 ID',
+        'Current balance': '当前余额',
       },
     },
   },
 })
 
-function renderPage() {
+function renderPage(section = 'topups') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
   return render(
     <I18nextProvider i18n={i18n}>
       <QueryClientProvider client={queryClient}>
-        <Finance section='topups' />
+        <Finance section={section} />
       </QueryClientProvider>
     </I18nextProvider>
   )
@@ -98,10 +113,15 @@ describe('finance display labels', () => {
       reverseFinanceRebate,
       applyFinancePenalty,
       reverseFinancePenalty,
+      searchUsers,
     ]) {
       mock.mockReset()
     }
     getFinanceTopups.mockResolvedValue({ items: [], total: 0 })
+    searchUsers.mockResolvedValue({
+      success: true,
+      data: { items: [], total: 0 },
+    })
   })
 
   test('shows translated tabs and filter labels for the default values', async () => {
@@ -160,6 +180,57 @@ describe('finance display labels', () => {
       expect(refundFinanceTopup).toHaveBeenCalledWith(
         'trade-7',
         'Customer request'
+      )
+    )
+  })
+
+  test('selects a penalty target by searching users instead of entering an ID', async () => {
+    getFinancialOperations.mockResolvedValue({ items: [], total: 0 })
+    searchUsers.mockResolvedValue({
+      success: true,
+      data: {
+        items: [
+          {
+            id: 23,
+            username: 'alice',
+            display_name: 'Alice',
+            quota: 1000,
+          },
+        ],
+        total: 1,
+      },
+    })
+    const user = userEvent.setup()
+
+    renderPage('operations')
+
+    await waitFor(() => expect(getFinancialOperations).toHaveBeenCalled())
+    await user.click(screen.getByRole('button', { name: 'Apply penalty' }))
+
+    const userPicker = await screen.findByRole('combobox', {
+      name: '目标用户',
+    })
+    await user.type(userPicker, 'alice')
+    await user.click(await screen.findByRole('option', { name: /alice/ }))
+
+    expect(screen.getByText(/用户 ID: 23/)).toBeInTheDocument()
+    expect(screen.getByText(/当前余额/)).toBeInTheDocument()
+
+    applyFinancePenalty.mockResolvedValue({ success: true })
+    await user.click(screen.getByRole('button', { name: '自定义罚款' }))
+    await user.type(screen.getByRole('spinbutton'), '3')
+    await user.type(
+      screen.getByRole('textbox', { name: 'Reason' }),
+      'Account abuse'
+    )
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+
+    await waitFor(() =>
+      expect(applyFinancePenalty).toHaveBeenCalledWith(
+        23,
+        1_500_000,
+        'Account abuse',
+        expect.stringMatching(/^manual-/)
       )
     )
   })

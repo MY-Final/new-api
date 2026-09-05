@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { ComboboxInput } from '@/components/ui/combobox-input'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -27,7 +28,15 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
-import { formatQuota, formatTimestampToDate } from '@/lib/format'
+import { searchUsers } from '@/features/users/api'
+import type { User } from '@/features/users/types'
+import { useDebounce } from '@/hooks/use-debounce'
+import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
+import {
+  formatQuota,
+  formatTimestampToDate,
+  parseQuotaFromDollars,
+} from '@/lib/format'
 
 import {
   applyFinancePenalty,
@@ -51,6 +60,7 @@ import type {
 } from './types'
 
 type Section = 'topups' | 'redemptions' | 'rebates' | 'operations'
+type PenaltyMode = 'request' | 'custom'
 type Action =
   | { kind: 'topup-refund'; item: FinanceTopup }
   | { kind: 'redemption-refund'; item: FinanceRedemption }
@@ -293,8 +303,78 @@ function FinanceActionDialog({
   const [externalConfirmed, setExternalConfirmed] = useState(false)
   const [quota, setQuota] = useState('')
   const [userId, setUserId] = useState('')
+  const [penaltyMode, setPenaltyMode] = useState<PenaltyMode>('request')
+  const [penaltyUserSearch, setPenaltyUserSearch] = useState('')
+  const [selectedPenaltyUser, setSelectedPenaltyUser] = useState<User | null>(
+    null
+  )
   const [requestId, setRequestId] = useState('')
+  const [customPenaltyRequestId, setCustomPenaltyRequestId] = useState('')
   const [loading, setLoading] = useState(false)
+  const debouncedPenaltyUserSearch = useDebounce(penaltyUserSearch, 250)
+  const { meta: currencyMeta } = getCurrencyDisplay()
+  const currencyLabel = getCurrencyLabel()
+  const tokensOnly = currencyMeta.kind === 'tokens'
+
+  const penaltyUsersQuery = useQuery({
+    queryKey: ['finance-penalty-users', debouncedPenaltyUserSearch],
+    queryFn: async () => {
+      const response = await searchUsers({
+        keyword: debouncedPenaltyUserSearch.trim(),
+        status: '1',
+        p: 1,
+        page_size: 20,
+        sort_by: 'username',
+        sort_order: 'asc',
+      })
+      if (!response.success) {
+        throw new Error(response.message || t('Failed to search users'))
+      }
+      return response.data?.items || []
+    },
+    enabled: action?.kind === 'penalty',
+    staleTime: 30_000,
+  })
+  const penaltyUsers = penaltyUsersQuery.data || []
+  const selectablePenaltyUsers =
+    selectedPenaltyUser &&
+    !penaltyUsers.some((user) => user.id === selectedPenaltyUser.id)
+      ? [selectedPenaltyUser, ...penaltyUsers]
+      : penaltyUsers
+  const penaltyUserOptions = selectablePenaltyUsers.map((user) => ({
+    value: String(user.id),
+    label: `${user.display_name || user.username} (@${user.username}) · ${t('User ID')}: ${user.id}`,
+  }))
+  const penaltyAmount = Number(quota)
+  const penaltyQuota = parseQuotaFromDollars(Math.abs(penaltyAmount))
+  const penaltyRequestId =
+    penaltyMode === 'custom' ? customPenaltyRequestId : requestId.trim()
+  const penaltyFormInvalid =
+    action?.kind === 'penalty' &&
+    (!userId ||
+      !Number.isFinite(penaltyAmount) ||
+      penaltyAmount <= 0 ||
+      penaltyQuota <= 0 ||
+      !penaltyRequestId)
+
+  useEffect(() => {
+    if (action === null) {
+      setReason('')
+      setExternalConfirmed(false)
+      setQuota('')
+      setUserId('')
+      setPenaltyMode('request')
+      setPenaltyUserSearch('')
+      setSelectedPenaltyUser(null)
+      setRequestId('')
+      setCustomPenaltyRequestId('')
+    } else if (action.kind === 'penalty') {
+      setCustomPenaltyRequestId(
+        `manual-${globalThis.crypto?.randomUUID?.() || Date.now()}`
+      )
+    }
+  }, [action])
+
   if (action === null) return null
   let title = t('Reverse penalty')
   if (action?.kind === 'topup-refund') title = t('Refund top-up')
@@ -333,6 +413,7 @@ function FinanceActionDialog({
   const submit = async () => {
     if (
       !reason.trim() ||
+      penaltyFormInvalid ||
       (action.kind.includes('refund') && !externalConfirmed)
     ) {
       return
@@ -351,9 +432,9 @@ function FinanceActionDialog({
       if (action.kind === 'penalty') {
         await applyFinancePenalty(
           Number(userId),
-          Number(quota),
+          penaltyQuota,
           reason,
-          requestId
+          penaltyRequestId
         )
       }
       if (action.kind === 'penalty-reverse') {
@@ -414,29 +495,109 @@ function FinanceActionDialog({
         ) : null}
         {action?.kind === 'penalty' ? (
           <div className='grid gap-3 sm:grid-cols-2'>
-            <div className='space-y-1'>
-              <Label>{t('User ID')}</Label>
-              <Input
-                type='number'
-                value={userId}
-                onChange={(event) => setUserId(event.target.value)}
-              />
-            </div>
-            <div className='space-y-1'>
-              <Label>{t('Quota')}</Label>
-              <Input
-                type='number'
-                value={quota}
-                onChange={(event) => setQuota(event.target.value)}
-              />
+            <div className='space-y-1 sm:col-span-2'>
+              <Label>{t('Mode')}</Label>
+              <div className='flex gap-1'>
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  className={
+                    penaltyMode === 'request'
+                      ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground'
+                      : undefined
+                  }
+                  onClick={() => setPenaltyMode('request')}
+                >
+                  {t('Request-based penalty')}
+                </Button>
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  className={
+                    penaltyMode === 'custom'
+                      ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground'
+                      : undefined
+                  }
+                  onClick={() => setPenaltyMode('custom')}
+                >
+                  {t('Custom penalty')}
+                </Button>
+              </div>
             </div>
             <div className='space-y-1 sm:col-span-2'>
-              <Label>{t('Request ID')}</Label>
+              <Label htmlFor='finance-penalty-user'>{t('Target user')}</Label>
+              <ComboboxInput
+                id='finance-penalty-user'
+                options={penaltyUserOptions}
+                value={userId || penaltyUserSearch}
+                onValueChange={(value) => {
+                  const user = selectablePenaltyUsers.find(
+                    (item) => String(item.id) === value
+                  )
+                  if (!user) return
+                  setSelectedPenaltyUser(user)
+                  setUserId(value)
+                  setPenaltyUserSearch('')
+                }}
+                onSearchChange={setPenaltyUserSearch}
+                placeholder={t('Search by username, name, or ID')}
+                emptyText={
+                  penaltyUsersQuery.isFetching
+                    ? t('Loading...')
+                    : t('No users found')
+                }
+              />
+              {selectedPenaltyUser ? (
+                <div className='bg-muted/50 text-muted-foreground rounded-md px-3 py-2 text-xs'>
+                  {selectedPenaltyUser.display_name ||
+                    selectedPenaltyUser.username}{' '}
+                  · {t('User ID')}: {selectedPenaltyUser.id} ·{' '}
+                  {t('Current balance')}:{' '}
+                  {formatQuota(selectedPenaltyUser.quota)}
+                </div>
+              ) : null}
+            </div>
+            <div className='space-y-1'>
+              <Label htmlFor='finance-penalty-amount'>
+                {t('Amount')} ({currencyLabel})
+              </Label>
               <Input
-                value={requestId}
-                onChange={(event) => setRequestId(event.target.value)}
+                id='finance-penalty-amount'
+                type='number'
+                min='0'
+                step={tokensOnly ? 1 : 0.01}
+                value={quota}
+                onChange={(event) => setQuota(event.target.value)}
+                placeholder={
+                  tokensOnly
+                    ? t('Enter amount in tokens')
+                    : t('Enter amount in {{currency}}', {
+                        currency: currencyLabel,
+                      })
+                }
               />
             </div>
+            {penaltyMode === 'request' ? (
+              <div className='space-y-1'>
+                <Label>{t('Request ID')}</Label>
+                <Input
+                  value={requestId}
+                  onChange={(event) => setRequestId(event.target.value)}
+                />
+              </div>
+            ) : (
+              <div className='text-muted-foreground flex items-end pb-2 text-xs'>
+                {t('Custom penalties do not require a request ID.')}
+              </div>
+            )}
+            {selectedPenaltyUser && penaltyQuota > 0 ? (
+              <div className='text-muted-foreground text-xs sm:col-span-2'>
+                {t('After operation')}:{' '}
+                {formatQuota(selectedPenaltyUser.quota - penaltyQuota)}
+              </div>
+            ) : null}
           </div>
         ) : null}
         <div className='space-y-2'>
@@ -466,6 +627,7 @@ function FinanceActionDialog({
             disabled={
               loading ||
               !reason.trim() ||
+              penaltyFormInvalid ||
               (action?.kind.includes('refund') && !externalConfirmed)
             }
             onClick={submit}
