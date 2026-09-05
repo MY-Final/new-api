@@ -28,7 +28,7 @@ const user = {
   quota: 0,
   used_quota: 0,
   request_count: 0,
-  aff_quota: 500,
+  aff_quota: 499999,
   aff_history_quota: 1000,
   aff_reversed_quota: 0,
   aff_count: 3,
@@ -82,6 +82,7 @@ describe('AffiliateRewardsCard', () => {
 
     expect(view.getByText('Top-up rebate: 10%')).toBeInTheDocument()
     expect(view.getByText('Paid-code rebate: 5%')).toBeInTheDocument()
+    expect(view.getByText('$0.999998')).toBeInTheDocument()
     expect(view.getByText('3')).toBeInTheDocument()
 
     await userEventSetup.click(

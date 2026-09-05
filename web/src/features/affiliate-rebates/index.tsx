@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/select'
 import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
 import { getAffiliateRebates } from '@/features/wallet/api'
-import { formatQuota, formatTimestampToDate } from '@/lib/format'
+import { formatQuotaPrecise, formatTimestampToDate } from '@/lib/format'
 
 const pageSize = 20
 
@@ -163,20 +163,21 @@ export function AffiliateRebates() {
                   </div>
                   <div className='text-left sm:text-right'>
                     <div className='font-semibold tabular-nums'>
-                      +{formatQuota(item.rebate_quota)}
+                      +{formatQuotaPrecise(item.rebate_quota)}
                     </div>
                     <div className='text-muted-foreground text-xs'>
-                      {t('Base quota')}: {formatQuota(item.base_quota)} ·{' '}
+                      {t('Base quota')}: {formatQuotaPrecise(item.base_quota)} ·{' '}
                       {item.rate / 100}%
                     </div>
                     <div className='text-muted-foreground text-xs'>
-                      {t('Transferred')}: {formatQuota(item.transferred_quota)}{' '}
-                      · {t('Reversed')}: {formatQuota(item.reversed_quota)}
+                      {t('Transferred')}:{' '}
+                      {formatQuotaPrecise(item.transferred_quota)} ·{' '}
+                      {t('Reversed')}: {formatQuotaPrecise(item.reversed_quota)}
                     </div>
                     {item.debt_offset_quota > 0 ? (
                       <div className='text-warning text-xs'>
                         {t('Debt settled')}:{' '}
-                        {formatQuota(item.debt_offset_quota)}
+                        {formatQuotaPrecise(item.debt_offset_quota)}
                       </div>
                     ) : null}
                   </div>

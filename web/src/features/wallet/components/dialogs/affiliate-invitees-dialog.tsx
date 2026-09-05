@@ -29,7 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { formatQuota, formatTimestampToDate } from '@/lib/format'
+import { formatQuotaPrecise, formatTimestampToDate } from '@/lib/format'
 import { handleServerError } from '@/lib/handle-server-error'
 
 import { getAffiliateInvitees } from '../../api'
@@ -91,11 +91,11 @@ function InviteeList({
             </TableCell>
             <TableCell className='text-right'>
               <div className='text-success font-medium'>
-                {formatQuota(invitee.rebate_quota)}
+                {formatQuotaPrecise(invitee.rebate_quota)}
               </div>
               {invitee.reversed_quota > 0 ? (
                 <div className='text-muted-foreground text-xs'>
-                  {t('Reversed')}: {formatQuota(invitee.reversed_quota)}
+                  {t('Reversed')}: {formatQuotaPrecise(invitee.reversed_quota)}
                 </div>
               ) : null}
             </TableCell>

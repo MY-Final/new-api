@@ -25,7 +25,11 @@ import { Card, CardContent } from '@/components/ui/card'
 import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
-import { formatCompactNumber, formatQuota } from '@/lib/format'
+import {
+  formatCompactNumber,
+  formatQuota,
+  formatQuotaPrecise,
+} from '@/lib/format'
 import { getRoleLabel } from '@/lib/roles'
 
 import { getDisplayName } from '../lib'
@@ -95,7 +99,7 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
   }[] = [
     {
       label: hasDebt ? t('Debt') : t('Current Balance'),
-      value: formatQuota(displayedQuota),
+      value: formatQuotaPrecise(displayedQuota),
       description: hasDebt
         ? t('Recharge to settle debt')
         : t('Remaining quota'),

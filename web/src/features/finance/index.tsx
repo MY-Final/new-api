@@ -33,6 +33,7 @@ import type { User } from '@/features/users/types'
 import { useDebounce } from '@/hooks/use-debounce'
 import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
 import {
+  formatQuotaPrecise,
   formatQuota,
   formatTimestampToDate,
   parseQuotaFromDollars,
@@ -896,7 +897,8 @@ export function Finance({ section: rawSection }: { section: string }) {
                           {getStatusLabel(item.status, t)}
                         </div>
                         <div className='text-muted-foreground text-xs'>
-                          {t('Rebate')}: {formatQuota(item.rebate_quota || 0)} ·{' '}
+                          {t('Rebate')}:{' '}
+                          {formatQuotaPrecise(item.rebate_quota || 0)} ·{' '}
                           {getProviderLabel(
                             item.payment_provider || item.payment_method,
                             t
@@ -985,19 +987,20 @@ export function Finance({ section: rawSection }: { section: string }) {
                           {formatTimestampToDate(item.created_at)}
                         </div>
                         <div className='text-muted-foreground text-xs'>
-                          {t('Base quota')}: {formatQuota(item.base_quota)} ·{' '}
+                          {t('Base quota')}:{' '}
+                          {formatQuotaPrecise(item.base_quota)} ·{' '}
                           {item.rate / 100}% · {getStatusLabel(item.status, t)}
                         </div>
                         {item.debt_offset_quota > 0 ? (
                           <div className='text-warning text-xs'>
                             {t('Debt settled')}:{' '}
-                            {formatQuota(item.debt_offset_quota)}
+                            {formatQuotaPrecise(item.debt_offset_quota)}
                           </div>
                         ) : null}
                       </div>
                       <div className='flex items-center gap-2'>
                         <span className='font-semibold'>
-                          {formatQuota(item.rebate_quota)}
+                          {formatQuotaPrecise(item.rebate_quota)}
                         </span>
                         {item.status !== 'reversed' &&
                         item.source_type !== 'signup' ? (

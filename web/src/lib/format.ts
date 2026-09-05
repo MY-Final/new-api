@@ -78,6 +78,15 @@ export function formatQuota(quota: number): string {
   })
 }
 
+/** Format quota without rounding fractional currency amounts to whole units. */
+export function formatQuotaPrecise(quota: number): string {
+  return formatQuotaWithCurrency(quota, {
+    digitsLarge: 6,
+    digitsSmall: 8,
+    abbreviate: false,
+  })
+}
+
 /**
  * Parse quota from the current display input back to quota units.
  */

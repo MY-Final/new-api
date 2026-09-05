@@ -29,7 +29,7 @@ import { useSummaryCardsConfig } from '@/features/dashboard/hooks/use-dashboard-
 import type { QuotaDataItem } from '@/features/dashboard/types'
 import { useStatus } from '@/hooks/use-status'
 import { getCurrencyLabel, isCurrencyDisplayEnabled } from '@/lib/currency'
-import { formatNumber, formatQuota } from '@/lib/format'
+import { formatNumber, formatQuota, formatQuotaPrecise } from '@/lib/format'
 import { computeTimeRange } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
@@ -306,7 +306,7 @@ export function SummaryCards() {
             </div>
 
             <div className='font-mono text-xl font-semibold tracking-tight sm:text-2xl'>
-              {formatQuota(Math.abs(remainQuota))}
+              {formatQuotaPrecise(Math.abs(remainQuota))}
             </div>
 
             <div className='grid grid-cols-2 gap-2'>

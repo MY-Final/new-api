@@ -44,10 +44,11 @@ describe('WalletStatsCard balance state', () => {
     expect(screen.getByText('$0.0002')).toBeInTheDocument()
   })
 
-  test('keeps current balance label for a positive balance', () => {
-    render(<WalletStatsCard user={user} />)
+  test('shows fractional currency precisely for a positive balance', () => {
+    render(<WalletStatsCard user={{ ...user, quota: 999999 }} />)
 
     expect(screen.getByText('Current Balance')).toBeInTheDocument()
+    expect(screen.getByText('$1.999998')).toBeInTheDocument()
     expect(screen.queryByText('Debt')).not.toBeInTheDocument()
   })
 })

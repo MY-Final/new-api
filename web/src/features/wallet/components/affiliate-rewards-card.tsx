@@ -26,7 +26,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { IconBadge } from '@/components/ui/icon-badge'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatPercent, formatQuota } from '@/lib/format'
+import { formatPercent, formatQuotaPrecise } from '@/lib/format'
 
 import type { UserWalletData } from '../types'
 
@@ -122,9 +122,12 @@ export function AffiliateRewardsCard({
           className='grid grid-cols-2 gap-x-4 gap-y-3 border-y py-3 text-left sm:grid-cols-4 sm:gap-4 sm:text-center'
         >
           {[
-            [t('Transferable'), formatQuota(user?.aff_quota ?? 0)],
-            [t('Total Earned'), formatQuota(user?.aff_history_quota ?? 0)],
-            [t('Reversed'), formatQuota(user?.aff_reversed_quota ?? 0)],
+            [t('Transferable'), formatQuotaPrecise(user?.aff_quota ?? 0)],
+            [
+              t('Total Earned'),
+              formatQuotaPrecise(user?.aff_history_quota ?? 0),
+            ],
+            [t('Reversed'), formatQuotaPrecise(user?.aff_reversed_quota ?? 0)],
             [t('Invites'), String(user?.aff_count ?? 0)],
           ].map(([label, value]) => (
             <div key={label}>

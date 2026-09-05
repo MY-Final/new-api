@@ -46,7 +46,7 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useIsAdmin } from '@/hooks/use-admin'
-import { formatQuota, formatTimestampToDate } from '@/lib/format'
+import { formatQuotaPrecise, formatTimestampToDate } from '@/lib/format'
 import { handleServerError } from '@/lib/handle-server-error'
 
 import {
@@ -121,12 +121,12 @@ function RebateRow({
         </div>
         <div className='shrink-0 text-right'>
           <div className='text-sm font-semibold tabular-nums'>
-            {formatQuota(rebate.rebate_quota)}
+            {formatQuotaPrecise(rebate.rebate_quota)}
           </div>
           <div className='text-muted-foreground text-xs'>
             {t('{{rate}}% of {{quota}}', {
               rate: rebate.rate / 100,
-              quota: formatQuota(rebate.base_quota),
+              quota: formatQuotaPrecise(rebate.base_quota),
             })}
           </div>
         </div>
@@ -135,17 +135,17 @@ function RebateRow({
         <span>{formatTimestampToDate(rebate.created_at)}</span>
         {rebate.transferred_quota > 0 ? (
           <span>
-            {t('Transferred')}: {formatQuota(rebate.transferred_quota)}
+            {t('Transferred')}: {formatQuotaPrecise(rebate.transferred_quota)}
           </span>
         ) : null}
         {rebate.reversed_quota > 0 ? (
           <span>
-            {t('Reversed')}: {formatQuota(rebate.reversed_quota)}
+            {t('Reversed')}: {formatQuotaPrecise(rebate.reversed_quota)}
           </span>
         ) : null}
         {rebate.debt_offset_quota > 0 ? (
           <span>
-            {t('Debt settled')}: {formatQuota(rebate.debt_offset_quota)}
+            {t('Debt settled')}: {formatQuotaPrecise(rebate.debt_offset_quota)}
           </span>
         ) : null}
         {isAdmin &&
