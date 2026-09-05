@@ -42,6 +42,14 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Sheet,
   SheetClose,
   SheetContent,
@@ -311,6 +319,44 @@ export function RedemptionsMutateDrawer({
                           : t('Enter the quota amount in {{currency}}', {
                               currency: currencyLabel,
                             })}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name='type'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Redemption Code Type')}</FormLabel>
+                      <Select
+                        value={field.value}
+                        onValueChange={(value) =>
+                          field.onChange(value === 'paid' ? 'paid' : 'reward')
+                        }
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectItem value='reward'>
+                              {t('Reward code')}
+                            </SelectItem>
+                            <SelectItem value='paid'>
+                              {t('Paid code')}
+                            </SelectItem>
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>
+                        {t(
+                          'Only paid codes generate referral rebates; reward and raffle codes do not.'
+                        )}
                       </FormDescription>
                       <FormMessage />
                     </FormItem>

@@ -238,6 +238,8 @@ export interface UserWalletData {
   aff_quota: number
   /** Total affiliate quota earned (historical) */
   aff_history_quota: number
+  /** Total affiliate quota reversed */
+  aff_reversed_quota: number
   /** Number of successful affiliate invites */
   aff_count: number
   /** User group */
@@ -247,7 +249,12 @@ export interface UserWalletData {
 /**
  * Topup record status
  */
-export type TopupStatus = 'success' | 'pending' | 'expired'
+export type TopupStatus =
+  | 'success'
+  | 'pending'
+  | 'expired'
+  | 'failed'
+  | 'refunded'
 
 /**
  * Topup billing record
@@ -271,6 +278,10 @@ export interface TopupRecord {
   complete_time?: number
   /** Payment status */
   status: TopupStatus
+  source?: 'topup' | 'subscription'
+  credited_quota?: number
+  refunded_at?: number
+  refund_reason?: string
 }
 
 /**
@@ -279,6 +290,39 @@ export interface TopupRecord {
 export interface BillingHistoryResponse {
   items: TopupRecord[]
   total: number
+}
+
+export type AffiliateRebateSource = 'signup' | 'topup' | 'redemption'
+
+export interface AffiliateRebate {
+  id: number
+  inviter_id: number
+  invitee_id: number
+  inviter_username?: string
+  invitee_username?: string
+  source_type: AffiliateRebateSource
+  source_id: string
+  source_key: string
+  base_quota: number
+  rate: number
+  rebate_quota: number
+  reversed_quota: number
+  transferred_quota: number
+  status: 'settled' | 'reversed'
+  created_at: number
+  settled_at: number
+  reversed_at: number
+  reverse_reason?: string
+}
+
+export interface AffiliateRebatesResponse {
+  items: AffiliateRebate[]
+  total: number
+}
+
+export interface AffiliateRebateReverseRequest {
+  rebate_id: number
+  reason?: string
 }
 
 /**

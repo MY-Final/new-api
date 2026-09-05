@@ -33,6 +33,7 @@ interface AffiliateRewardsCardProps {
   user: UserWalletData | null
   affiliateLink: string
   onTransfer: () => void
+  onViewLedger: () => void
   complianceConfirmed?: boolean
   loading?: boolean
 }
@@ -41,6 +42,7 @@ export function AffiliateRewardsCard({
   user,
   affiliateLink,
   onTransfer,
+  onViewLedger,
   complianceConfirmed = true,
   loading,
 }: AffiliateRewardsCardProps) {
@@ -81,10 +83,11 @@ export function AffiliateRewardsCard({
           </div>
         </div>
 
-        <div className='grid grid-cols-3 gap-1.5 text-center'>
+        <div className='grid grid-cols-4 gap-1.5 text-center'>
           {[
-            [t('Pending'), formatQuota(user?.aff_quota ?? 0)],
+            [t('Transferable'), formatQuota(user?.aff_quota ?? 0)],
             [t('Total Earned'), formatQuota(user?.aff_history_quota ?? 0)],
+            [t('Reversed'), formatQuota(user?.aff_reversed_quota ?? 0)],
             [t('Invites'), String(user?.aff_count ?? 0)],
           ].map(([label, value]) => (
             <div key={label}>
@@ -112,6 +115,14 @@ export function AffiliateRewardsCard({
             tooltip={t('Copy referral link')}
             aria-label={t('Copy referral link')}
           />
+          <Button
+            variant='outline'
+            onClick={onViewLedger}
+            className='h-9 shrink-0 px-3'
+            size='sm'
+          >
+            {t('View Ledger')}
+          </Button>
           {hasRewards && (
             <Button
               onClick={onTransfer}

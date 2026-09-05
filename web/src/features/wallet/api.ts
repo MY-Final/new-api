@@ -39,6 +39,8 @@ import type {
   WaffoPaymentResponse,
   WaffoPancakePaymentRequest,
   WaffoPancakePaymentResponse,
+  AffiliateRebatesResponse,
+  AffiliateRebateReverseRequest,
 } from './types'
 
 // ============================================================================
@@ -196,6 +198,41 @@ export async function transferAffiliateQuota(
   request: AffiliateTransferRequest
 ): Promise<AffiliateTransferResponse> {
   const res = await api.post('/api/user/aff_transfer', request)
+  return res.data
+}
+
+export async function getAffiliateRebates(
+  page: number,
+  pageSize: number,
+  sourceType?: string
+): Promise<ApiResponse<AffiliateRebatesResponse>> {
+  const params = new URLSearchParams({
+    p: page.toString(),
+    page_size: pageSize.toString(),
+  })
+  if (sourceType) params.set('source_type', sourceType)
+  const res = await api.get(`/api/user/aff/rebates?${params.toString()}`)
+  return res.data
+}
+
+export async function getAllAffiliateRebates(
+  page: number,
+  pageSize: number,
+  sourceType?: string
+): Promise<ApiResponse<AffiliateRebatesResponse>> {
+  const params = new URLSearchParams({
+    p: page.toString(),
+    page_size: pageSize.toString(),
+  })
+  if (sourceType) params.set('source_type', sourceType)
+  const res = await api.get(`/api/affiliate/rebates?${params.toString()}`)
+  return res.data
+}
+
+export async function reverseAffiliateRebate(
+  request: AffiliateRebateReverseRequest
+): Promise<ApiResponse<{ id: number; status: string }>> {
+  const res = await api.post('/api/affiliate/rebates/reverse', request)
   return res.data
 }
 

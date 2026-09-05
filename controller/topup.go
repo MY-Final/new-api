@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -583,4 +584,34 @@ func AdminCompleteTopUp(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, nil)
+}
+
+type RefundTopUpRequest struct {
+	TradeNo string `json:"trade_no"`
+	Reason  string `json:"reason"`
+}
+
+// RefundTopUp applies local full-refund accounting after the payment provider
+// has confirmed the refund. It does not call the payment provider.
+func RefundTopUp(c *gin.Context) {
+	var req RefundTopUpRequest
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	req.TradeNo = strings.TrimSpace(req.TradeNo)
+	if req.TradeNo == "" {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	alreadyRefunded, err := model.RefundTopUp(req.TradeNo, req.Reason)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{
+		"trade_no":         req.TradeNo,
+		"status":           common.TopUpStatusRefunded,
+		"already_refunded": alreadyRefunded,
+	})
 }

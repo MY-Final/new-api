@@ -24,6 +24,22 @@ type Redemption struct {
 	UsedUserId   int            `json:"used_user_id"`
 	DeletedAt    gorm.DeletedAt `gorm:"index"`
 	ExpiredTime  int64          `json:"expired_time" gorm:"bigint"` // 过期时间，0 表示不过期
+	Type         string         `json:"type" gorm:"type:varchar(16);index"`
+}
+
+const (
+	RedemptionTypePaid   = "paid"
+	RedemptionTypeReward = "reward"
+)
+
+func (redemption *Redemption) BeforeSave(tx *gorm.DB) error {
+	if redemption.Type == "" {
+		redemption.Type = RedemptionTypeReward
+	}
+	if redemption.Type != RedemptionTypePaid && redemption.Type != RedemptionTypeReward {
+		return errors.New("invalid redemption type")
+	}
+	return nil
 }
 
 func GetAllRedemptions(startIdx int, num int) (redemptions []*Redemption, total int64, err error) {
@@ -175,7 +191,10 @@ func Redeem(key string, userId int) (quota int, err error) {
 		if result.RowsAffected == 0 {
 			return errors.New("该兑换码已被使用")
 		}
-		return creditTopUpQuota(tx, userId, redemption.Quota, nil)
+		if err := creditTopUpQuota(tx, userId, redemption.Quota, nil); err != nil {
+			return err
+		}
+		return recordAffiliateRebateForRedemptionTx(tx, redemption, userId)
 	})
 	if err != nil {
 		common.SysError("redemption failed: " + err.Error())
@@ -212,7 +231,7 @@ func (redemption *Redemption) Update() error {
 		return err
 	}
 	var err error
-	err = DB.Model(redemption).Select("name", "status", "quota", "redeemed_time", "expired_time").Updates(redemption).Error
+	err = DB.Model(redemption).Select("name", "status", "quota", "redeemed_time", "expired_time", "type").Updates(redemption).Error
 	return err
 }
 

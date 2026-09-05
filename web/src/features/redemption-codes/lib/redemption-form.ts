@@ -19,10 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import type { TFunction } from 'i18next'
 import { z } from 'zod'
 
-import {
-  parseQuotaFromDollars,
-  quotaUnitsToEditableAmount,
-} from '@/lib/format'
+import { parseQuotaFromDollars, quotaUnitsToEditableAmount } from '@/lib/format'
 
 import {
   REDEMPTION_VALIDATION,
@@ -42,6 +39,7 @@ export function getRedemptionFormSchema(t: TFunction) {
       .min(REDEMPTION_VALIDATION.NAME_MIN_LENGTH, msg.NAME_LENGTH_INVALID)
       .max(REDEMPTION_VALIDATION.NAME_MAX_LENGTH, msg.NAME_LENGTH_INVALID),
     quota_dollars: z.number().min(0, t('Quota must be a positive number')),
+    type: z.enum(['paid', 'reward']),
     expired_time: z.date().optional(),
     count: z
       .number()
@@ -54,6 +52,7 @@ export function getRedemptionFormSchema(t: TFunction) {
 export type RedemptionFormValues = {
   name: string
   quota_dollars: number
+  type: 'paid' | 'reward'
   expired_time?: Date
   count?: number
 }
@@ -65,6 +64,7 @@ export type RedemptionFormValues = {
 export const REDEMPTION_FORM_DEFAULT_VALUES: RedemptionFormValues = {
   name: '',
   quota_dollars: 10,
+  type: 'reward',
   expired_time: undefined,
   count: 1,
 }
@@ -82,6 +82,7 @@ export function transformFormDataToPayload(
   return {
     name: data.name,
     quota: parseQuotaFromDollars(data.quota_dollars),
+    type: data.type,
     expired_time: data.expired_time
       ? Math.floor(data.expired_time.getTime() / 1000)
       : 0,
@@ -98,6 +99,7 @@ export function transformRedemptionToFormDefaults(
   return {
     name: redemption.name,
     quota_dollars: quotaUnitsToEditableAmount(redemption.quota),
+    type: redemption.type ?? 'reward',
     expired_time:
       redemption.expired_time > 0
         ? new Date(redemption.expired_time * 1000)

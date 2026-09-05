@@ -55,6 +55,8 @@ const quotaSchema = z.object({
   PreConsumedQuota: z.coerce.number().min(0),
   QuotaForInviter: z.coerce.number().min(0),
   QuotaForInvitee: z.coerce.number().min(0),
+  AffiliateTopupRebateRate: z.coerce.number().int().min(0).max(10000),
+  AffiliateRedemptionRebateRate: z.coerce.number().int().min(0).max(10000),
   TopUpLink: z.string(),
   general_setting: z.object({
     docs_link: z.string(),
@@ -69,6 +71,10 @@ type QuotaInputValue = number | ''
 
 function formatQuotaInputValue(value: QuotaInputValue): string {
   return formatQuota(value === '' ? 0 : value)
+}
+
+function formatRebateRate(value: QuotaInputValue): string {
+  return `${(value === '' ? 0 : value) / 100}%`
 }
 
 type QuotaSettingsSectionProps = {
@@ -231,6 +237,65 @@ export function QuotaSettingsSection({
                     {t('Quota given to invited users ({{formattedQuota}})', {
                       formattedQuota: formatQuotaInputValue(field.value),
                     })}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='AffiliateTopupRebateRate'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Top-up Rebate Rate')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type='number'
+                      min='0'
+                      max='10000'
+                      step='1'
+                      value={field.value ?? ''}
+                      onChange={handleNumberChange(field.onChange)}
+                      name={field.name}
+                      onBlur={field.onBlur}
+                      ref={field.ref}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t('Commission for direct top-ups ({{rate}}; 1000 = 10%)', {
+                      rate: formatRebateRate(field.value),
+                    })}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='AffiliateRedemptionRebateRate'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Redemption Rebate Rate')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type='number'
+                      min='0'
+                      max='10000'
+                      step='1'
+                      value={field.value ?? ''}
+                      onChange={handleNumberChange(field.onChange)}
+                      name={field.name}
+                      onBlur={field.onBlur}
+                      ref={field.ref}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t(
+                      'Commission for paid redemption codes ({{rate}}; 1000 = 10%)',
+                      { rate: formatRebateRate(field.value) }
+                    )}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

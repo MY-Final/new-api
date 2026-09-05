@@ -100,6 +100,7 @@ type User struct {
 	AffCount         int                        `json:"aff_count" gorm:"type:int;default:0;column:aff_count"`
 	AffQuota         int                        `json:"aff_quota" gorm:"type:int;default:0;column:aff_quota"`           // 邀请剩余额度
 	AffHistoryQuota  int                        `json:"aff_history_quota" gorm:"type:int;default:0;column:aff_history"` // 邀请历史额度
+	AffReversedQuota int                        `json:"aff_reversed_quota" gorm:"type:bigint;default:0;column:aff_reversed_quota"`
 	InviterId        int                        `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
 	DeletedAt        gorm.DeletedAt             `gorm:"index"`
 	LinuxDOId        string                     `json:"linux_do_id" gorm:"column:linux_do_id;index"`
@@ -529,22 +530,13 @@ func HardDeleteUserById(id int) error {
 	return user.HardDelete()
 }
 
-func inviteUser(inviterId int) error {
-	result := DB.Model(&User{}).Where("id = ?", inviterId).Updates(map[string]interface{}{
-		"aff_count":   gorm.Expr("aff_count + ?", 1),
-		"aff_quota":   gorm.Expr("aff_quota + ?", common.QuotaForInviter),
-		"aff_history": gorm.Expr("aff_history + ?", common.QuotaForInviter),
-	})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
-	}
-	return nil
-}
-
 func (user *User) TransferAffQuotaToQuota(quota int) error {
+	if quota <= 0 {
+		return errors.New("转移额度必须为正数！")
+	}
+	if err := common.ValidateWalletQuota(quota); err != nil {
+		return err
+	}
 	// 检查quota是否小于最小额度
 	if float64(quota) < common.QuotaPerUnit {
 		return fmt.Errorf("转移额度最小为%s！", logger.LogQuota(common.QuotaFromFloat(common.QuotaPerUnit)))
@@ -567,6 +559,33 @@ func (user *User) TransferAffQuotaToQuota(quota int) error {
 	if user.AffQuota < quota {
 		return errors.New("邀请额度不足！")
 	}
+	initialAffQuota := user.AffQuota
+	if quota > common.MaxWalletQuota-user.Quota {
+		return ErrWalletQuotaLimitExceeded
+	}
+
+	// Keep enough provenance to reverse a rebate from the correct wallet. The
+	// aggregate affiliate balance still supports legacy, untracked rewards.
+	var rebates []AffiliateRebate
+	if err := tx.Where(
+		"inviter_id = ? AND status = ? AND rebate_quota > reversed_quota",
+		user.Id,
+		AffiliateRebateStatusSettled,
+	).Order("id ASC").Find(&rebates).Error; err != nil {
+		return err
+	}
+	trackedAvailable := 0
+	for i := range rebates {
+		available := rebates[i].RebateQuota - rebates[i].ReversedQuota - rebates[i].TransferredQuota
+		if available <= 0 {
+			continue
+		}
+		if available > user.AffQuota-trackedAvailable {
+			trackedAvailable = user.AffQuota
+			break
+		}
+		trackedAvailable += available
+	}
 
 	// 更新用户额度
 	user.AffQuota -= quota
@@ -576,9 +595,44 @@ func (user *User) TransferAffQuotaToQuota(quota int) error {
 	if err := tx.Save(user).Error; err != nil {
 		return err
 	}
+	remaining := quota
+	legacyAvailable := initialAffQuota - trackedAvailable
+	if legacyAvailable > 0 {
+		transferred := legacyAvailable
+		if transferred > remaining {
+			transferred = remaining
+		}
+		remaining -= transferred
+	}
+	for i := range rebates {
+		if remaining == 0 {
+			break
+		}
+		available := rebates[i].RebateQuota - rebates[i].ReversedQuota - rebates[i].TransferredQuota
+		if available <= 0 {
+			continue
+		}
+		transferred := available
+		if transferred > remaining {
+			transferred = remaining
+		}
+		if err := tx.Model(&AffiliateRebate{}).Where("id = ?", rebates[i].Id).Update(
+			"transferred_quota", gorm.Expr("transferred_quota + ?", transferred),
+		).Error; err != nil {
+			return err
+		}
+		remaining -= transferred
+		if remaining == 0 {
+			break
+		}
+	}
 
 	// 提交事务
-	return tx.Commit().Error
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+	syncCreditUserQuotaCache(user.Id, quota, "affiliate transfer")
+	return nil
 }
 
 func (user *User) prepareForInsert(tx *gorm.DB) error {
@@ -683,9 +737,10 @@ func (user *User) finishInsert(inviterId int) {
 			RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", logger.LogQuota(common.QuotaForInvitee)))
 		}
 		if common.QuotaForInviter > 0 {
-			//_ = IncreaseUserQuota(inviterId, common.QuotaForInviter)
 			RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("邀请用户赠送 %s", logger.LogQuota(common.QuotaForInviter)))
-			_ = inviteUser(inviterId)
+			if err := recordSignupAffiliateRebate(inviterId, user.Id); err != nil {
+				common.SysError("failed to record signup affiliate rebate: " + err.Error())
+			}
 		}
 	}
 }
@@ -741,7 +796,9 @@ func (user *User) FinalizeOAuthUserCreation(inviterId int) {
 		}
 		if common.QuotaForInviter > 0 {
 			RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("邀请用户赠送 %s", logger.LogQuota(common.QuotaForInviter)))
-			_ = inviteUser(inviterId)
+			if err := recordSignupAffiliateRebate(inviterId, user.Id); err != nil {
+				common.SysError("failed to record signup affiliate rebate: " + err.Error())
+			}
 		}
 	}
 }
@@ -800,6 +857,8 @@ func (user *User) UpdateWithTx(tx *gorm.DB, updatePassword bool) error {
 		"aff_count",
 		"aff_quota",
 		"aff_history",
+		"aff_reversed_quota",
+		"inviter_id",
 		"auth_version",
 	).Updates(newUser).Error; err != nil {
 		return err

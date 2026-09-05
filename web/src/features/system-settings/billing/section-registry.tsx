@@ -63,6 +63,8 @@ const BILLING_SECTIONS = [
           PreConsumedQuota: settings.PreConsumedQuota,
           QuotaForInviter: settings.QuotaForInviter,
           QuotaForInvitee: settings.QuotaForInvitee,
+          AffiliateTopupRebateRate: settings.AffiliateTopupRebateRate,
+          AffiliateRedemptionRebateRate: settings.AffiliateRedemptionRebateRate,
           TopUpLink: settings.TopUpLink,
           general_setting: {
             docs_link: settings['general_setting.docs_link'],

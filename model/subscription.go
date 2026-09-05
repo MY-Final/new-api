@@ -663,6 +663,8 @@ func upsertSubscriptionTopUpTx(tx *gorm.DB, order *SubscriptionOrder) error {
 				CreateTime:    order.CreateTime,
 				CompleteTime:  now,
 				Status:        common.TopUpStatusSuccess,
+				Source:        TopUpSourceSubscription,
+				CreditedQuota: 0,
 			}
 			return tx.Create(&topup).Error
 		}
@@ -679,6 +681,8 @@ func upsertSubscriptionTopUpTx(tx *gorm.DB, order *SubscriptionOrder) error {
 	}
 	topup.CompleteTime = now
 	topup.Status = common.TopUpStatusSuccess
+	topup.Source = TopUpSourceSubscription
+	topup.CreditedQuota = 0
 	return tx.Save(&topup).Error
 }
 

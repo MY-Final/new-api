@@ -268,7 +268,7 @@ func InitLogDB() (err error) {
 	return err
 }
 
-var userQuotaColumns = []string{"quota", "used_quota", "aff_quota", "aff_history"}
+var userQuotaColumns = []string{"quota", "used_quota", "aff_quota", "aff_history", "aff_reversed_quota"}
 
 // ensureUserQuotaColumns rejects a legacy 32-bit wallet schema before any
 // migrations run. The 64-bit-only build intentionally does not auto-upgrade
@@ -343,6 +343,7 @@ func migrateDB() error {
 		&Log{},
 		&Midjourney{},
 		&TopUp{},
+		&AffiliateRebate{},
 		&QuotaData{},
 		&Task{},
 		&TaskPlugin{},
@@ -366,6 +367,11 @@ func migrateDB() error {
 		&AuthzRole{},
 	)
 	if err != nil {
+		return err
+	}
+	if err := DB.Unscoped().Model(&Redemption{}).
+		Where("type IS NULL OR type = ?", "").
+		Update("type", RedemptionTypeReward).Error; err != nil {
 		return err
 	}
 	if err := InitializeUserAuthVersions(); err != nil {
