@@ -165,16 +165,22 @@ describe('finance display labels', () => {
     expect(
       await screen.findByRole('heading', { name: 'Refund top-up' })
     ).toBeInTheDocument()
-    const confirm = screen.getByRole('button', { name: 'Confirm' })
-    expect(confirm).toBeDisabled()
+    const continueButton = screen.getByRole('button', { name: 'Continue' })
+    expect(continueButton).toBeDisabled()
 
     await user.type(
       screen.getByRole('textbox', { name: 'Reason' }),
       'Customer request'
     )
     await user.click(screen.getByRole('checkbox'))
-    expect(confirm).toBeEnabled()
-    await user.click(confirm)
+    expect(continueButton).toBeEnabled()
+    await user.click(continueButton)
+
+    expect(refundFinanceTopup).not.toHaveBeenCalled()
+    expect(
+      screen.getByText('This action cannot be undone.')
+    ).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
 
     await waitFor(() =>
       expect(refundFinanceTopup).toHaveBeenCalledWith(
@@ -223,6 +229,8 @@ describe('finance display labels', () => {
       screen.getByRole('textbox', { name: 'Reason' }),
       'Account abuse'
     )
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(applyFinancePenalty).not.toHaveBeenCalled()
     await user.click(screen.getByRole('button', { name: 'Confirm' }))
 
     await waitFor(() =>

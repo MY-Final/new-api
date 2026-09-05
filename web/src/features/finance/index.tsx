@@ -310,6 +310,7 @@ function FinanceActionDialog({
   )
   const [requestId, setRequestId] = useState('')
   const [customPenaltyRequestId, setCustomPenaltyRequestId] = useState('')
+  const [confirming, setConfirming] = useState(false)
   const [loading, setLoading] = useState(false)
   const debouncedPenaltyUserSearch = useDebounce(penaltyUserSearch, 250)
   const { meta: currencyMeta } = getCurrencyDisplay()
@@ -359,6 +360,7 @@ function FinanceActionDialog({
 
   useEffect(() => {
     if (action === null) {
+      setConfirming(false)
       setReason('')
       setExternalConfirmed(false)
       setQuota('')
@@ -369,9 +371,12 @@ function FinanceActionDialog({
       setRequestId('')
       setCustomPenaltyRequestId('')
     } else if (action.kind === 'penalty') {
+      setConfirming(false)
       setCustomPenaltyRequestId(
         `manual-${globalThis.crypto?.randomUUID?.() || Date.now()}`
       )
+    } else {
+      setConfirming(false)
     }
   }, [action])
 
@@ -410,7 +415,18 @@ function FinanceActionDialog({
     inviterQuota = action.item.inviter_quota
     inviterRebate = action.item.rebate_quota
   }
-  const submit = async () => {
+  const prepareSubmit = () => {
+    if (
+      !reason.trim() ||
+      penaltyFormInvalid ||
+      (action.kind.includes('refund') && !externalConfirmed)
+    ) {
+      return
+    }
+    setConfirming(true)
+  }
+
+  const execute = async () => {
     if (
       !reason.trim() ||
       penaltyFormInvalid ||
@@ -451,188 +467,348 @@ function FinanceActionDialog({
       setLoading(false)
     }
   }
+  let confirmButtonLabel = t('Continue')
+  if (confirming) confirmButtonLabel = t('Confirm')
+  if (loading) confirmButtonLabel = t('Processing...')
+
   return (
     <AlertDialog open onOpenChange={(open) => !open && onClose()}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description}</AlertDialogDescription>
+          <AlertDialogTitle>
+            {confirming ? `${t('Confirm')}: ${title}` : title}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {confirming ? t('This action cannot be undone.') : description}
+          </AlertDialogDescription>
         </AlertDialogHeader>
-        {principal !== undefined ? (
-          <div className='grid grid-cols-2 gap-3 rounded-lg border p-3 text-sm'>
-            <div>
-              <div className='text-muted-foreground'>
-                {t('Current balance')}
-              </div>
-              <div className='font-semibold'>
-                {formatQuota(targetQuota || 0)}
-              </div>
+        {confirming ? (
+          <div className='space-y-3 rounded-lg border p-3 text-sm'>
+            <div className='flex items-start justify-between gap-3'>
+              <span className='text-muted-foreground'>{t('Operation')}</span>
+              <span className='text-right font-medium'>{title}</span>
             </div>
-            <div>
-              <div className='text-muted-foreground'>
-                {t('After operation')}
-              </div>
-              <div className='font-semibold'>
-                {formatQuota((targetQuota || 0) - principal)}
-              </div>
-            </div>
-            <div>
-              <div className='text-muted-foreground'>
-                {t('Principal deduction')}
-              </div>
-              <div className='font-semibold'>{formatQuota(principal)}</div>
-            </div>
-            <div>
-              <div className='text-muted-foreground'>{t('Inviter rebate')}</div>
-              <div className='font-semibold'>
-                {formatQuota(inviterRebate || 0)}
-                {inviterQuota !== undefined
-                  ? ` · ${t('Inviter balance')}: ${formatQuota(inviterQuota)}`
-                  : ''}
-              </div>
-            </div>
-          </div>
-        ) : null}
-        {action?.kind === 'penalty' ? (
-          <div className='grid gap-3 sm:grid-cols-2'>
-            <div className='space-y-1 sm:col-span-2'>
-              <Label>{t('Mode')}</Label>
-              <div className='flex gap-1'>
-                <Button
-                  type='button'
-                  variant='outline'
-                  size='sm'
-                  className={
-                    penaltyMode === 'request'
-                      ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground'
-                      : undefined
-                  }
-                  onClick={() => setPenaltyMode('request')}
-                >
-                  {t('Request-based penalty')}
-                </Button>
-                <Button
-                  type='button'
-                  variant='outline'
-                  size='sm'
-                  className={
-                    penaltyMode === 'custom'
-                      ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground'
-                      : undefined
-                  }
-                  onClick={() => setPenaltyMode('custom')}
-                >
-                  {t('Custom penalty')}
-                </Button>
-              </div>
-            </div>
-            <div className='space-y-1 sm:col-span-2'>
-              <Label htmlFor='finance-penalty-user'>{t('Target user')}</Label>
-              <ComboboxInput
-                id='finance-penalty-user'
-                options={penaltyUserOptions}
-                value={userId || penaltyUserSearch}
-                onValueChange={(value) => {
-                  const user = selectablePenaltyUsers.find(
-                    (item) => String(item.id) === value
-                  )
-                  if (!user) return
-                  setSelectedPenaltyUser(user)
-                  setUserId(value)
-                  setPenaltyUserSearch('')
-                }}
-                onSearchChange={setPenaltyUserSearch}
-                placeholder={t('Search by username, name, or ID')}
-                emptyText={
-                  penaltyUsersQuery.isFetching
-                    ? t('Loading...')
-                    : t('No users found')
-                }
-              />
-              {selectedPenaltyUser ? (
-                <div className='bg-muted/50 text-muted-foreground rounded-md px-3 py-2 text-xs'>
-                  {selectedPenaltyUser.display_name ||
-                    selectedPenaltyUser.username}{' '}
-                  · {t('User ID')}: {selectedPenaltyUser.id} ·{' '}
-                  {t('Current balance')}:{' '}
-                  {formatQuota(selectedPenaltyUser.quota)}
+            {principal !== undefined ? (
+              <>
+                <div className='flex items-start justify-between gap-3'>
+                  <span className='text-muted-foreground'>
+                    {t('Principal deduction')}
+                  </span>
+                  <span className='font-medium'>{formatQuota(principal)}</span>
                 </div>
-              ) : null}
-            </div>
+                <div className='flex items-start justify-between gap-3'>
+                  <span className='text-muted-foreground'>
+                    {t('After operation')}
+                  </span>
+                  <span className='font-medium'>
+                    {formatQuota((targetQuota || 0) - principal)}
+                  </span>
+                </div>
+                <div className='flex items-start justify-between gap-3'>
+                  <span className='text-muted-foreground'>
+                    {t('Inviter rebate')}
+                  </span>
+                  <span className='text-right font-medium'>
+                    {formatQuota(inviterRebate || 0)}
+                    {inviterQuota !== undefined
+                      ? ` · ${t('Inviter balance')}: ${formatQuota(inviterQuota)}`
+                      : ''}
+                  </span>
+                </div>
+              </>
+            ) : null}
+            {action.kind === 'penalty' ? (
+              <>
+                <div className='flex items-start justify-between gap-3'>
+                  <span className='text-muted-foreground'>
+                    {t('Target user')}
+                  </span>
+                  <span className='text-right font-medium'>
+                    {selectedPenaltyUser?.display_name ||
+                      selectedPenaltyUser?.username}{' '}
+                    · {t('User ID')}: {userId}
+                  </span>
+                </div>
+                <div className='flex items-start justify-between gap-3'>
+                  <span className='text-muted-foreground'>{t('Amount')}</span>
+                  <span className='font-medium'>
+                    {quota} {currencyLabel}
+                  </span>
+                </div>
+                <div className='flex items-start justify-between gap-3'>
+                  <span className='text-muted-foreground'>
+                    {t('After operation')}
+                  </span>
+                  <span className='font-medium'>
+                    {formatQuota(
+                      (selectedPenaltyUser?.quota || 0) - penaltyQuota
+                    )}
+                  </span>
+                </div>
+                <div className='flex items-start justify-between gap-3'>
+                  <span className='text-muted-foreground'>
+                    {t('Request ID')}
+                  </span>
+                  <span className='max-w-[65%] text-right font-medium break-all'>
+                    {penaltyRequestId}
+                  </span>
+                </div>
+              </>
+            ) : null}
+            {action.kind === 'penalty-reverse' ? (
+              <>
+                <div className='flex items-start justify-between gap-3'>
+                  <span className='text-muted-foreground'>
+                    {t('Target user')}
+                  </span>
+                  <span className='text-right font-medium'>
+                    {action.item.target_username} · {t('User ID')}:{' '}
+                    {action.item.target_user_id}
+                  </span>
+                </div>
+                <div className='flex items-start justify-between gap-3'>
+                  <span className='text-muted-foreground'>{t('Amount')}</span>
+                  <span className='font-medium'>
+                    {formatQuota(action.item.principal_quota)}
+                  </span>
+                </div>
+                <div className='flex items-start justify-between gap-3'>
+                  <span className='text-muted-foreground'>
+                    {t('After operation')}
+                  </span>
+                  <span className='font-medium'>
+                    {formatQuota(action.item.target_main_after)}
+                  </span>
+                </div>
+              </>
+            ) : null}
+            {action.kind === 'rebate-reverse' ? (
+              <>
+                <div className='flex items-start justify-between gap-3'>
+                  <span className='text-muted-foreground'>{t('Rebate')}</span>
+                  <span className='font-medium'>
+                    {formatQuota(inviterRebate || 0)}
+                  </span>
+                </div>
+                <div className='flex items-start justify-between gap-3'>
+                  <span className='text-muted-foreground'>
+                    {t('Inviter balance')}
+                  </span>
+                  <span className='font-medium'>
+                    {formatQuota(inviterQuota || 0)}
+                  </span>
+                </div>
+                <div className='text-muted-foreground'>
+                  {t('The invited user balance will not change.')}
+                </div>
+              </>
+            ) : null}
             <div className='space-y-1'>
-              <Label htmlFor='finance-penalty-amount'>
-                {t('Amount')} ({currencyLabel})
-              </Label>
-              <Input
-                id='finance-penalty-amount'
-                type='number'
-                min='0'
-                step={tokensOnly ? 1 : 0.01}
-                value={quota}
-                onChange={(event) => setQuota(event.target.value)}
-                placeholder={
-                  tokensOnly
-                    ? t('Enter amount in tokens')
-                    : t('Enter amount in {{currency}}', {
-                        currency: currencyLabel,
-                      })
-                }
-              />
+              <div className='text-muted-foreground'>{t('Reason')}</div>
+              <div className='font-medium break-words'>{reason}</div>
             </div>
-            {penaltyMode === 'request' ? (
-              <div className='space-y-1'>
-                <Label>{t('Request ID')}</Label>
-                <Input
-                  value={requestId}
-                  onChange={(event) => setRequestId(event.target.value)}
-                />
-              </div>
-            ) : (
-              <div className='text-muted-foreground flex items-end pb-2 text-xs'>
-                {t('Custom penalties do not require a request ID.')}
-              </div>
-            )}
-            {selectedPenaltyUser && penaltyQuota > 0 ? (
-              <div className='text-muted-foreground text-xs sm:col-span-2'>
-                {t('After operation')}:{' '}
-                {formatQuota(selectedPenaltyUser.quota - penaltyQuota)}
+            {action.kind.includes('refund') ? (
+              <div className='text-muted-foreground'>
+                {t('I confirm the external refund has been completed')}
               </div>
             ) : null}
           </div>
-        ) : null}
-        <div className='space-y-2'>
-          <Label htmlFor='finance-action-reason'>{t('Reason')}</Label>
-          <Input
-            id='finance-action-reason'
-            value={reason}
-            maxLength={255}
-            onChange={(event) => setReason(event.target.value)}
-          />
-        </div>
-        {action?.kind.includes('refund') ? (
-          <label className='flex items-center gap-2 text-sm'>
-            <input
-              type='checkbox'
-              checked={externalConfirmed}
-              onChange={(event) => setExternalConfirmed(event.target.checked)}
-            />
-            {t('I confirm the external refund has been completed')}
-          </label>
-        ) : null}
+        ) : (
+          <>
+            {principal !== undefined ? (
+              <div className='grid grid-cols-2 gap-3 rounded-lg border p-3 text-sm'>
+                <div>
+                  <div className='text-muted-foreground'>
+                    {t('Current balance')}
+                  </div>
+                  <div className='font-semibold'>
+                    {formatQuota(targetQuota || 0)}
+                  </div>
+                </div>
+                <div>
+                  <div className='text-muted-foreground'>
+                    {t('After operation')}
+                  </div>
+                  <div className='font-semibold'>
+                    {formatQuota((targetQuota || 0) - principal)}
+                  </div>
+                </div>
+                <div>
+                  <div className='text-muted-foreground'>
+                    {t('Principal deduction')}
+                  </div>
+                  <div className='font-semibold'>{formatQuota(principal)}</div>
+                </div>
+                <div>
+                  <div className='text-muted-foreground'>
+                    {t('Inviter rebate')}
+                  </div>
+                  <div className='font-semibold'>
+                    {formatQuota(inviterRebate || 0)}
+                    {inviterQuota !== undefined
+                      ? ` · ${t('Inviter balance')}: ${formatQuota(inviterQuota)}`
+                      : ''}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            {action?.kind === 'penalty' ? (
+              <div className='grid gap-3 sm:grid-cols-2'>
+                <div className='space-y-1 sm:col-span-2'>
+                  <Label>{t('Mode')}</Label>
+                  <div className='flex gap-1'>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      size='sm'
+                      className={
+                        penaltyMode === 'request'
+                          ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground'
+                          : undefined
+                      }
+                      onClick={() => setPenaltyMode('request')}
+                    >
+                      {t('Request-based penalty')}
+                    </Button>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      size='sm'
+                      className={
+                        penaltyMode === 'custom'
+                          ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground'
+                          : undefined
+                      }
+                      onClick={() => setPenaltyMode('custom')}
+                    >
+                      {t('Custom penalty')}
+                    </Button>
+                  </div>
+                </div>
+                <div className='space-y-1 sm:col-span-2'>
+                  <Label htmlFor='finance-penalty-user'>
+                    {t('Target user')}
+                  </Label>
+                  <ComboboxInput
+                    id='finance-penalty-user'
+                    options={penaltyUserOptions}
+                    value={userId || penaltyUserSearch}
+                    onValueChange={(value) => {
+                      const user = selectablePenaltyUsers.find(
+                        (item) => String(item.id) === value
+                      )
+                      if (!user) return
+                      setSelectedPenaltyUser(user)
+                      setUserId(value)
+                      setPenaltyUserSearch('')
+                    }}
+                    onSearchChange={setPenaltyUserSearch}
+                    placeholder={t('Search by username, name, or ID')}
+                    emptyText={
+                      penaltyUsersQuery.isFetching
+                        ? t('Loading...')
+                        : t('No users found')
+                    }
+                  />
+                  {selectedPenaltyUser ? (
+                    <div className='bg-muted/50 text-muted-foreground rounded-md px-3 py-2 text-xs'>
+                      {selectedPenaltyUser.display_name ||
+                        selectedPenaltyUser.username}{' '}
+                      · {t('User ID')}: {selectedPenaltyUser.id} ·{' '}
+                      {t('Current balance')}:{' '}
+                      {formatQuota(selectedPenaltyUser.quota)}
+                    </div>
+                  ) : null}
+                </div>
+                <div className='space-y-1'>
+                  <Label htmlFor='finance-penalty-amount'>
+                    {t('Amount')} ({currencyLabel})
+                  </Label>
+                  <Input
+                    id='finance-penalty-amount'
+                    type='number'
+                    min='0'
+                    step={tokensOnly ? 1 : 0.01}
+                    value={quota}
+                    onChange={(event) => setQuota(event.target.value)}
+                    placeholder={
+                      tokensOnly
+                        ? t('Enter amount in tokens')
+                        : t('Enter amount in {{currency}}', {
+                            currency: currencyLabel,
+                          })
+                    }
+                  />
+                </div>
+                {penaltyMode === 'request' ? (
+                  <div className='space-y-1'>
+                    <Label>{t('Request ID')}</Label>
+                    <Input
+                      value={requestId}
+                      onChange={(event) => setRequestId(event.target.value)}
+                    />
+                  </div>
+                ) : (
+                  <div className='text-muted-foreground flex items-end pb-2 text-xs'>
+                    {t('Custom penalties do not require a request ID.')}
+                  </div>
+                )}
+                {selectedPenaltyUser && penaltyQuota > 0 ? (
+                  <div className='text-muted-foreground text-xs sm:col-span-2'>
+                    {t('After operation')}:{' '}
+                    {formatQuota(selectedPenaltyUser.quota - penaltyQuota)}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            <div className='space-y-2'>
+              <Label htmlFor='finance-action-reason'>{t('Reason')}</Label>
+              <Input
+                id='finance-action-reason'
+                value={reason}
+                maxLength={255}
+                onChange={(event) => setReason(event.target.value)}
+              />
+            </div>
+            {action?.kind.includes('refund') ? (
+              <label className='flex items-center gap-2 text-sm'>
+                <input
+                  type='checkbox'
+                  checked={externalConfirmed}
+                  onChange={(event) =>
+                    setExternalConfirmed(event.target.checked)
+                  }
+                />
+                {t('I confirm the external refund has been completed')}
+              </label>
+            ) : null}
+          </>
+        )}
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={loading}>
-            {t('Cancel')}
-          </AlertDialogCancel>
+          {confirming ? (
+            <Button
+              variant='outline'
+              disabled={loading}
+              onClick={() => setConfirming(false)}
+            >
+              {t('Back')}
+            </Button>
+          ) : (
+            <AlertDialogCancel disabled={loading}>
+              {t('Cancel')}
+            </AlertDialogCancel>
+          )}
           <AlertDialogAction
             disabled={
               loading ||
-              !reason.trim() ||
-              penaltyFormInvalid ||
-              (action?.kind.includes('refund') && !externalConfirmed)
+              (!confirming &&
+                (!reason.trim() ||
+                  penaltyFormInvalid ||
+                  (action?.kind.includes('refund') && !externalConfirmed)))
             }
-            onClick={submit}
+            onClick={confirming ? execute : prepareSubmit}
           >
-            {loading ? t('Processing...') : t('Confirm')}
+            {confirmButtonLabel}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
