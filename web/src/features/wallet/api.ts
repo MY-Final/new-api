@@ -42,6 +42,8 @@ import type {
   AffiliateRebatesResponse,
   AffiliateInviteesResponse,
   AffiliateRebateReverseRequest,
+  TopupRefundRequest,
+  TopupRefundResponse,
 } from './types'
 
 // ============================================================================
@@ -246,6 +248,13 @@ export async function reverseAffiliateRebate(
   request: AffiliateRebateReverseRequest
 ): Promise<ApiResponse<{ id: number; status: string }>> {
   const res = await api.post('/api/affiliate/rebates/reverse', request)
+  return res.data
+}
+
+export async function refundTopUp(
+  request: TopupRefundRequest
+): Promise<ApiResponse<TopupRefundResponse>> {
+  const res = await api.post('/api/user/topup/refund', request)
   return res.data
 }
 

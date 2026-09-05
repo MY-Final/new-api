@@ -25,12 +25,17 @@ import { AffiliateRebatesDialog } from '../affiliate-rebates-dialog'
 const getAffiliateRebates = vi.hoisted(() => vi.fn())
 const getAllAffiliateRebates = vi.hoisted(() => vi.fn())
 const isApiSuccess = vi.hoisted(() => vi.fn())
+const isAdmin = vi.hoisted(() => vi.fn(() => false))
+const refundTopUp = vi.hoisted(() => vi.fn())
 const reverseAffiliateRebate = vi.hoisted(() => vi.fn())
+
+vi.mock('@/hooks/use-admin', () => ({ useIsAdmin: isAdmin }))
 
 vi.mock('../../../api', () => ({
   getAffiliateRebates,
   getAllAffiliateRebates,
   isApiSuccess,
+  refundTopUp,
   reverseAffiliateRebate,
 }))
 
@@ -74,5 +79,54 @@ describe('AffiliateRebatesDialog', () => {
     await waitFor(() => {
       expect(getAffiliateRebates).toHaveBeenLastCalledWith(1, 10, 'topup')
     })
+  })
+
+  test('lets an admin reverse a top-up rebate through the refund flow', async () => {
+    isAdmin.mockReturnValue(true)
+    const rebate = {
+      id: 7,
+      inviter_id: 1,
+      invitee_id: 2,
+      inviter_username: 'inviter',
+      invitee_username: 'invitee',
+      source_type: 'topup' as const,
+      source_id: 'trade-7',
+      source_key: 'topup:trade-7',
+      base_quota: 1000,
+      rate: 1000,
+      rebate_quota: 100,
+      reversed_quota: 0,
+      transferred_quota: 0,
+      status: 'settled' as const,
+      created_at: 1,
+      settled_at: 1,
+      reversed_at: 0,
+    }
+    getAllAffiliateRebates.mockResolvedValue({
+      data: { items: [rebate], total: 1 },
+    })
+    refundTopUp.mockResolvedValue({ success: true })
+    isApiSuccess.mockReturnValue(true)
+    const user = userEvent.setup()
+
+    render(
+      <I18nextProvider i18n={i18next}>
+        <AffiliateRebatesDialog open onOpenChange={vi.fn()} />
+      </I18nextProvider>
+    )
+
+    await waitFor(() => {
+      expect(getAllAffiliateRebates).toHaveBeenCalledWith(1, 10, undefined)
+    })
+    await user.click(screen.getByRole('button', { name: 'Reverse' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+
+    await waitFor(() => {
+      expect(refundTopUp).toHaveBeenCalledWith({
+        trade_no: 'trade-7',
+        reason: '',
+      })
+    })
+    expect(reverseAffiliateRebate).not.toHaveBeenCalled()
   })
 })

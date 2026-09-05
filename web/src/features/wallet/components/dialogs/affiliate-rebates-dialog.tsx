@@ -53,6 +53,7 @@ import {
   getAffiliateRebates,
   getAllAffiliateRebates,
   isApiSuccess,
+  refundTopUp,
   reverseAffiliateRebate,
 } from '../../api'
 import type { AffiliateRebate, AffiliateRebateSource } from '../../types'
@@ -143,7 +144,8 @@ function RebateRow({
           </span>
         ) : null}
         {isAdmin &&
-        rebate.source_type === 'redemption' &&
+        (rebate.source_type === 'redemption' ||
+          rebate.source_type === 'topup') &&
         rebate.status === 'settled' ? (
           <Button
             variant='ghost'
@@ -255,10 +257,16 @@ export function AffiliateRebatesDialog({
     if (!reverseTarget) return
     setReversing(true)
     try {
-      const response = await reverseAffiliateRebate({
-        rebate_id: reverseTarget.id,
-        reason: reverseReason.trim(),
-      })
+      const response =
+        reverseTarget.source_type === 'topup'
+          ? await refundTopUp({
+              trade_no: reverseTarget.source_id,
+              reason: reverseReason.trim(),
+            })
+          : await reverseAffiliateRebate({
+              rebate_id: reverseTarget.id,
+              reason: reverseReason.trim(),
+            })
       if (!isApiSuccess(response)) {
         toast.error(response.message || t('Failed to reverse referral rebate'))
         return
@@ -295,7 +303,7 @@ export function AffiliateRebatesDialog({
       title={t('Referral Rebate Ledger')}
       description={t(
         isAdmin
-          ? 'Review all referral rebates and reverse paid-code rebates when refunds are confirmed.'
+          ? 'Review all referral rebates and reverse eligible rebates after refunds are confirmed.'
           : 'Review your referral rebate sources and settlement status.'
       )}
       contentClassName='max-h-[calc(100dvh-2rem)] max-sm:w-screen max-sm:max-w-none max-sm:rounded-none max-sm:p-4 sm:max-w-2xl'
@@ -374,7 +382,9 @@ export function AffiliateRebatesDialog({
             <AlertDialogTitle>{t('Reverse referral rebate?')}</AlertDialogTitle>
             <AlertDialogDescription>
               {t(
-                "This will reverse the selected paid-code rebate and debit the inviter's wallet."
+                reverseTarget?.source_type === 'topup'
+                  ? 'This will refund the selected top-up locally and reverse its referral rebate. Confirm the payment provider refund first.'
+                  : "This will reverse the selected paid-code rebate and debit the inviter's wallet."
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>

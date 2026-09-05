@@ -349,3 +349,14 @@ export interface AffiliateRebateReverseRequest {
 export interface CompleteOrderRequest {
   trade_no: string
 }
+
+export interface TopupRefundRequest {
+  trade_no: string
+  reason?: string
+}
+
+export interface TopupRefundResponse {
+  trade_no: string
+  status: string
+  already_refunded: boolean
+}
