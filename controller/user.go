@@ -517,6 +517,12 @@ func GetSelf(c *gin.Context) {
 		return
 	}
 	responseData := buildSelfUserData(user)
+	if affCount, err := model.GetUserAffiliateInviteeCount(id); err != nil {
+		common.ApiError(c, err)
+		return
+	} else {
+		responseData["aff_count"] = affCount
+	}
 	// The authenticated role is loaded from GetUserCache. It should equal the
 	// row role, but use it for capabilities so GetSelf and login/refresh remain
 	// consistent with the authorization decision made for this request.

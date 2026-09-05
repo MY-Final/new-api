@@ -300,6 +300,9 @@ func TestAffiliateInviteeListingAggregatesRebatesAndKeepsUsersWithoutRebates(t *
 	assert.Equal(t, "***@example.com", byUsername[firstInvitee.Username].Email)
 	assert.Equal(t, 100, byUsername[firstInvitee.Username].RebateQuota)
 	assert.Zero(t, byUsername[secondInvitee.Username].RebateQuota)
+	affiliateCount, err := GetUserAffiliateInviteeCount(inviter.Id)
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), affiliateCount)
 }
 
 func TestPaidRedemptionRebateCanBeReversedIdempotently(t *testing.T) {

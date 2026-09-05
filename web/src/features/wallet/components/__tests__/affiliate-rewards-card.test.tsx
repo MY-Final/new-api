@@ -38,6 +38,33 @@ const user = {
 }
 
 describe('AffiliateRewardsCard', () => {
+  test('separates stats and actions for responsive layout', () => {
+    const view = render(
+      <I18nextProvider i18n={i18next}>
+        <AffiliateRewardsCard
+          user={user}
+          affiliateLink='https://example.com/register?aff=code'
+          onTransfer={vi.fn()}
+          onViewLedger={vi.fn()}
+          onViewInvitees={vi.fn()}
+        />
+      </I18nextProvider>
+    )
+
+    const stats = view.container.querySelector(
+      '[data-slot="affiliate-rewards-stats"]'
+    )
+    const actions = view.container.querySelector(
+      '[data-slot="affiliate-rewards-actions"]'
+    )
+
+    expect(stats).toHaveClass('grid-cols-2', 'sm:grid-cols-4')
+    expect(actions).toHaveClass('flex-col', 'sm:flex-row')
+    expect(
+      screen.getByDisplayValue('https://example.com/register?aff=code')
+    ).toHaveClass('text-center')
+  })
+
   test('shows both rebate rates and opens invite details', async () => {
     const onViewInvitees = vi.fn()
     const view = render(

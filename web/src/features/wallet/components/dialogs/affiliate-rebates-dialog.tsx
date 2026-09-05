@@ -307,7 +307,11 @@ export function AffiliateRebatesDialog({
         </Label>
         <Select value={sourceFilter} onValueChange={handleSourceFilterChange}>
           <SelectTrigger id='affiliate-rebate-source' className='h-9 w-44'>
-            <SelectValue />
+            <SelectValue>
+              {sourceFilter === 'all'
+                ? t('All sources')
+                : t(sourceLabels[sourceFilter])}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>

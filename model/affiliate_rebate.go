@@ -242,6 +242,14 @@ func GetUserAffiliateRebates(userId int, sourceType string, pageInfo *common.Pag
 	return listAffiliateRebates(userId, sourceType, pageInfo)
 }
 
+func GetUserAffiliateInviteeCount(userId int) (int64, error) {
+	var total int64
+	if err := DB.Model(&User{}).Where("inviter_id = ?", userId).Count(&total).Error; err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
 func GetUserAffiliateInvitees(userId int, pageInfo *common.PageInfo) ([]*AffiliateInvitee, int64, error) {
 	query := DB.Model(&User{}).
 		Select("id, username, email, created_at").

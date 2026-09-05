@@ -53,13 +53,31 @@ export function AffiliateRewardsCard({
   if (loading) {
     return (
       <Card data-card-hover='false' className='bg-muted/20 py-0'>
-        <CardContent className='grid gap-4 p-3 sm:p-4 lg:grid-cols-[minmax(220px,1fr)_minmax(220px,0.72fr)_minmax(320px,1.15fr)] lg:items-center'>
-          <div>
-            <Skeleton className='h-5 w-32' />
-            <Skeleton className='mt-2 h-4 w-48' />
+        <CardContent className='space-y-4 p-3 sm:p-5'>
+          <div className='flex items-start gap-3'>
+            <Skeleton className='size-10 shrink-0 rounded-lg' />
+            <div className='min-w-0 flex-1'>
+              <div className='flex flex-wrap gap-2'>
+                <Skeleton className='h-5 w-32' />
+                <Skeleton className='h-5 w-28 rounded-md' />
+                <Skeleton className='h-5 w-32 rounded-md' />
+              </div>
+              <Skeleton className='mt-2 h-4 w-full max-w-2xl' />
+            </div>
           </div>
-          <Skeleton className='h-14 rounded-lg' />
-          <Skeleton className='h-10 rounded-lg' />
+          <div className='grid grid-cols-2 gap-3 border-y py-3 sm:grid-cols-4 sm:gap-4'>
+            {['one', 'two', 'three', 'four'].map((key) => (
+              <Skeleton key={key} className='h-10 rounded-lg' />
+            ))}
+          </div>
+          <div className='space-y-2'>
+            <Skeleton className='h-9 w-full rounded-lg' />
+            <div className='flex flex-wrap justify-end gap-2'>
+              <Skeleton className='h-9 w-24 rounded-lg' />
+              <Skeleton className='h-9 w-28 rounded-lg' />
+              <Skeleton className='h-9 w-32 rounded-lg' />
+            </div>
+          </div>
         </CardContent>
       </Card>
     )
@@ -69,26 +87,30 @@ export function AffiliateRewardsCard({
 
   return (
     <Card data-card-hover='false' className='bg-muted/20 py-0'>
-      <CardContent className='grid gap-3 p-3 sm:gap-4 sm:p-4 lg:grid-cols-[minmax(200px,1fr)_minmax(180px,0.65fr)_minmax(280px,1fr)] lg:items-center'>
-        <div className='flex min-w-0 items-center gap-2.5'>
+      <CardContent className='space-y-4 p-3 sm:p-5'>
+        <div className='flex items-start gap-3'>
           <IconBadge tone='chart-3'>
             <Share2 />
           </IconBadge>
-          <div className='min-w-0'>
-            <div className='flex flex-wrap items-center gap-1.5'>
+          <div className='min-w-0 flex-1'>
+            <div className='flex flex-wrap items-center gap-x-2 gap-y-1.5'>
               <h3 className='text-sm font-semibold'>{t('Referral Program')}</h3>
-              <Badge variant='secondary' className='h-5 px-1.5 text-[10px]'>
-                {t('Top-up rebate')}:{' '}
-                {formatPercent((user?.affiliate_topup_rebate_rate ?? 0) / 100)}
-              </Badge>
-              <Badge variant='outline' className='h-5 px-1.5 text-[10px]'>
-                {t('Paid-code rebate')}:{' '}
-                {formatPercent(
-                  (user?.affiliate_redemption_rebate_rate ?? 0) / 100
-                )}
-              </Badge>
+              <div className='flex flex-wrap gap-1.5'>
+                <Badge variant='secondary' className='h-5 px-1.5 text-[10px]'>
+                  {t('Top-up rebate')}:{' '}
+                  {formatPercent(
+                    (user?.affiliate_topup_rebate_rate ?? 0) / 100
+                  )}
+                </Badge>
+                <Badge variant='outline' className='h-5 px-1.5 text-[10px]'>
+                  {t('Paid-code rebate')}:{' '}
+                  {formatPercent(
+                    (user?.affiliate_redemption_rebate_rate ?? 0) / 100
+                  )}
+                </Badge>
+              </div>
             </div>
-            <p className='text-muted-foreground line-clamp-1 text-xs'>
+            <p className='text-muted-foreground mt-1 text-xs'>
               {t(
                 'Earn rewards when users join through your referral link. Transfer accumulated rewards to your balance anytime.'
               )}
@@ -96,7 +118,10 @@ export function AffiliateRewardsCard({
           </div>
         </div>
 
-        <div className='grid grid-cols-4 gap-1.5 text-center'>
+        <div
+          data-slot='affiliate-rewards-stats'
+          className='grid grid-cols-2 gap-x-4 gap-y-3 border-y py-3 text-left sm:grid-cols-4 sm:gap-4 sm:text-center'
+        >
           {[
             [t('Transferable'), formatQuota(user?.aff_quota ?? 0)],
             [t('Total Earned'), formatQuota(user?.aff_history_quota ?? 0)],
@@ -114,50 +139,57 @@ export function AffiliateRewardsCard({
           ))}
         </div>
 
-        <div className='flex min-w-0 flex-wrap items-center gap-2'>
-          <Input
-            value={affiliateLink}
-            readOnly
-            className='border-muted bg-background/70 h-9 min-w-0 flex-1 font-mono text-xs'
-          />
-          <CopyButton
-            value={affiliateLink}
-            variant='outline'
-            className='bg-background size-9 shrink-0'
-            iconClassName='size-4'
-            tooltip={t('Copy referral link')}
-            aria-label={t('Copy referral link')}
-          />
-          <Button
-            variant='outline'
-            onClick={onViewLedger}
-            className='h-9 shrink-0 px-3'
-            size='sm'
+        <div className='space-y-2'>
+          <div className='flex min-w-0 gap-2'>
+            <Input
+              value={affiliateLink}
+              readOnly
+              className='border-muted bg-background/70 h-9 min-w-0 flex-1 text-center font-mono text-xs'
+            />
+            <CopyButton
+              value={affiliateLink}
+              variant='outline'
+              className='bg-background size-9 shrink-0'
+              iconClassName='size-4'
+              tooltip={t('Copy referral link')}
+              aria-label={t('Copy referral link')}
+            />
+          </div>
+          <div
+            data-slot='affiliate-rewards-actions'
+            className='flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end'
           >
-            {t('View Ledger')}
-          </Button>
-          <Button
-            variant='outline'
-            onClick={onViewInvitees}
-            className='h-9 shrink-0 px-3'
-            size='sm'
-          >
-            <List className='mr-1.5 size-3.5' />
-            {t('Invite Details')}
-          </Button>
-          {hasRewards && (
             <Button
-              onClick={onTransfer}
-              disabled={!complianceConfirmed}
-              className='h-9 shrink-0 px-3'
+              variant='outline'
+              onClick={onViewLedger}
+              className='h-9 w-full px-3 sm:w-auto'
               size='sm'
             >
-              {t('Transfer to Balance')}
+              {t('View Ledger')}
             </Button>
-          )}
+            <Button
+              variant='outline'
+              onClick={onViewInvitees}
+              className='h-9 w-full px-3 sm:w-auto'
+              size='sm'
+            >
+              <List className='mr-1.5 size-3.5' />
+              {t('Invite Details')}
+            </Button>
+            {hasRewards && (
+              <Button
+                onClick={onTransfer}
+                disabled={!complianceConfirmed}
+                className='h-9 w-full px-3 sm:w-auto'
+                size='sm'
+              >
+                {t('Transfer to Balance')}
+              </Button>
+            )}
+          </div>
         </div>
         {!complianceConfirmed ? (
-          <p className='text-muted-foreground text-xs lg:col-span-3'>
+          <p className='text-muted-foreground border-t pt-3 text-xs'>
             {t(
               'Referral reward transfer is disabled until the administrator confirms compliance terms.'
             )}
