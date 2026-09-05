@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { Link } from '@tanstack/react-router'
 import { Menu } from 'lucide-react'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -27,9 +27,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { ContactDialog } from '@/features/contact/contact-dialog'
 import { cn } from '@/lib/utils'
 
-import { type TopNavLink } from '../types'
+import type { TopNavLink } from '../types'
 
 type TopNavProps = React.HTMLAttributes<HTMLElement> & {
   links: TopNavLink[]
@@ -40,6 +41,8 @@ type TopNavProps = React.HTMLAttributes<HTMLElement> & {
  * 在大屏幕显示水平导航，在小屏幕显示下拉菜单
  */
 export function TopNav({ className, links, ...props }: TopNavProps) {
+  const [contactOpen, setContactOpen] = useState(false)
+
   // 规范化链接，确保所有可选属性都有默认值
   const normalizedLinks = useMemo(
     () =>
@@ -82,12 +85,17 @@ export function TopNav({ className, links, ...props }: TopNavProps) {
                         to={href}
                         className={!isActive ? 'text-muted-foreground' : ''}
                         disabled={disabled}
+                        onClick={(event) => {
+                          if (href !== '/contact') return
+                          event.preventDefault()
+                          setContactOpen(true)
+                        }}
                       >
                         {title}
                       </Link>
                     )
                   }
-                ></DropdownMenuItem>
+                />
               )
             )}
           </DropdownMenuContent>
@@ -118,6 +126,11 @@ export function TopNav({ className, links, ...props }: TopNavProps) {
               key={`${title}-${href}`}
               to={href}
               disabled={disabled}
+              onClick={(event) => {
+                if (href !== '/contact') return
+                event.preventDefault()
+                setContactOpen(true)
+              }}
               className={`hover:text-primary text-sm font-medium transition-colors ${isActive ? '' : 'text-muted-foreground'}`}
             >
               {title}
@@ -125,6 +138,8 @@ export function TopNav({ className, links, ...props }: TopNavProps) {
           )
         )}
       </nav>
+
+      <ContactDialog open={contactOpen} onOpenChange={setContactOpen} />
     </>
   )
 }

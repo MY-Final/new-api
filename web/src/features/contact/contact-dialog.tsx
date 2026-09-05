@@ -18,29 +18,28 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useTranslation } from 'react-i18next'
 
-import { PublicLayout } from '@/components/layout'
+import { Dialog } from '@/components/dialog'
 
 import { ContactDetails } from './contact-details'
 
-export function Contact() {
+type ContactDialogProps = {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+
+export function ContactDialog({ open, onOpenChange }: ContactDialogProps) {
   const { t } = useTranslation()
 
   return (
-    <PublicLayout>
-      <div className='mx-auto max-w-3xl'>
-        <div className='mb-8 text-center'>
-          <h1 className='text-3xl font-bold tracking-tight'>
-            {t('Contact Us')}
-          </h1>
-          <p className='text-muted-foreground mt-2 text-sm'>
-            {t('Questions, announcements and communication are welcome.')}
-          </p>
-        </div>
-
-        <div className='border-border bg-card rounded-2xl border p-5 shadow-sm sm:p-8'>
-          <ContactDetails />
-        </div>
-      </div>
-    </PublicLayout>
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={t('Contact Us')}
+      description={t('Questions, announcements and communication are welcome.')}
+      contentClassName='sm:max-w-md'
+      contentHeight='auto'
+    >
+      <ContactDetails />
+    </Dialog>
   )
 }
