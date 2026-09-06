@@ -318,7 +318,16 @@ export function AffiliateRebatesDialog({
         <Label htmlFor='affiliate-rebate-source' className='shrink-0 text-xs'>
           {t('Source')}
         </Label>
-        <Select value={sourceFilter} onValueChange={handleSourceFilterChange}>
+        <Select
+          items={[
+            { value: 'all', label: t('All sources') },
+            { value: 'signup', label: t('Registration') },
+            { value: 'topup', label: t('Top-up') },
+            { value: 'redemption', label: t('Redemption code') },
+          ]}
+          value={sourceFilter}
+          onValueChange={handleSourceFilterChange}
+        >
           <SelectTrigger id='affiliate-rebate-source' className='h-9 w-44'>
             <SelectValue>
               {sourceFilter === 'all'
@@ -326,7 +335,7 @@ export function AffiliateRebatesDialog({
                 : t(sourceLabels[sourceFilter])}
             </SelectValue>
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent alignItemWithTrigger={false}>
             <SelectGroup>
               <SelectItem value='all'>{t('All sources')}</SelectItem>
               <SelectItem value='signup'>{t('Registration')}</SelectItem>

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -42,6 +44,13 @@ type Redemption struct {
 const (
 	RedemptionTypePaid   = "paid"
 	RedemptionTypeReward = "reward"
+	maxBatchRedemptions  = 100
+)
+
+var (
+	ErrBatchRedemptionEmpty   = errors.New("at least one redemption code is required")
+	ErrBatchRedemptionTooMany = errors.New("too many redemption codes in one batch")
+	ErrBatchRedemptionNoop    = errors.New("at least one field must be updated")
 )
 
 func (redemption *Redemption) BeforeSave(tx *gorm.DB) error {
@@ -266,6 +275,125 @@ func (redemption *Redemption) Update() error {
 		return errors.New("used or refunded redemption codes cannot be modified")
 	}
 	return nil
+}
+
+func normalizeRedemptionIDs(ids []int) ([]int, error) {
+	unique := make([]int, 0, len(ids))
+	seen := make(map[int]struct{}, len(ids))
+	for _, id := range ids {
+		if id <= 0 {
+			return nil, errors.New("redemption id must be positive")
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		unique = append(unique, id)
+	}
+	if len(unique) == 0 {
+		return nil, ErrBatchRedemptionEmpty
+	}
+	if len(unique) > maxBatchRedemptions {
+		return nil, ErrBatchRedemptionTooMany
+	}
+	return unique, nil
+}
+
+func BatchUpdateRedemptions(ids []int, name *string, redemptionType *string, quota *int, status *int) (int, error) {
+	ids, err := normalizeRedemptionIDs(ids)
+	if err != nil {
+		return 0, err
+	}
+	if name == nil && redemptionType == nil && quota == nil && status == nil {
+		return 0, ErrBatchRedemptionNoop
+	}
+
+	var normalizedName string
+	if name != nil {
+		normalizedName = strings.TrimSpace(*name)
+		if utf8.RuneCountInString(normalizedName) == 0 || utf8.RuneCountInString(normalizedName) > 20 {
+			return 0, errors.New("redemption name must contain 1 to 20 characters")
+		}
+	}
+	if redemptionType != nil && *redemptionType != RedemptionTypePaid && *redemptionType != RedemptionTypeReward {
+		return 0, errors.New("invalid redemption type")
+	}
+	if quota != nil {
+		if *quota <= 0 {
+			return 0, errors.New("redemption quota must be positive")
+		}
+		if err := common.ValidateWalletQuota(*quota); err != nil {
+			return 0, err
+		}
+	}
+	if status != nil && *status != common.RedemptionCodeStatusEnabled && *status != common.RedemptionCodeStatusDisabled {
+		return 0, errors.New("invalid redemption status")
+	}
+
+	updated := 0
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		for _, id := range ids {
+			var redemption Redemption
+			if err := lockForUpdate(tx).Where("id = ?", id).First(&redemption).Error; err != nil {
+				return err
+			}
+			if redemption.Status == common.RedemptionCodeStatusUsed || redemption.Status == common.RedemptionCodeStatusRefunded {
+				return fmt.Errorf("redemption %d is already used or refunded", id)
+			}
+
+			changes := make(map[string]interface{})
+			if name != nil {
+				changes["name"] = normalizedName
+			}
+			if redemptionType != nil {
+				changes["type"] = *redemptionType
+			}
+			if quota != nil {
+				changes["quota"] = *quota
+			}
+			if status != nil {
+				changes["status"] = *status
+			}
+			if err := tx.Model(&redemption).Updates(changes).Error; err != nil {
+				return err
+			}
+			updated++
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return updated, nil
+}
+
+func BatchDeleteRedemptions(ids []int) (int, error) {
+	ids, err := normalizeRedemptionIDs(ids)
+	if err != nil {
+		return 0, err
+	}
+
+	deleted := 0
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		for _, id := range ids {
+			var redemption Redemption
+			if err := lockForUpdate(tx).Where("id = ?", id).First(&redemption).Error; err != nil {
+				return err
+			}
+			if redemption.Status == common.RedemptionCodeStatusUsed || redemption.Status == common.RedemptionCodeStatusRefunded {
+				return fmt.Errorf("redemption %d is already used or refunded", id)
+			}
+			if err := tx.Delete(&redemption).Error; err != nil {
+				return err
+			}
+			deleted++
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return deleted, nil
 }
 
 func (redemption *Redemption) Delete() error {

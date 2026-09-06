@@ -25,6 +25,7 @@ import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -106,6 +107,10 @@ function getStatusLabel(status: string, t: (key: string) => string) {
     pending: 'Pending',
     used: 'Used',
     refunded: 'Refunded',
+    '1': 'Unused',
+    '2': 'Disabled',
+    '3': 'Used',
+    '4': 'Refunded',
     settled: 'Settled',
     reversed: 'Reversed',
     expired: 'Expired',
@@ -147,6 +152,37 @@ function getOperationTypeLabel(type: string, t: (key: string) => string) {
     penalty_reversal: 'Reverse penalty',
   }
   return labels[type] ? t(labels[type]) : type
+}
+
+function getStatusOptions(
+  section: Section,
+  t: (key: string) => string
+): { value: string; label: string }[] {
+  if (section === 'topups') {
+    return [
+      { value: 'all', label: t('All statuses') },
+      { value: 'success', label: t('Success') },
+      { value: 'pending', label: t('Pending') },
+      { value: 'failed', label: t('Failed') },
+      { value: 'refunded', label: t('Refunded') },
+    ]
+  }
+
+  if (section === 'redemptions') {
+    return [
+      { value: 'all', label: t('All statuses') },
+      { value: '1', label: t('Unused') },
+      { value: '2', label: t('Disabled') },
+      { value: '3', label: t('Used') },
+      { value: '4', label: t('Refunded') },
+    ]
+  }
+
+  return [
+    { value: 'all', label: t('All statuses') },
+    { value: 'settled', label: t('Settled') },
+    { value: 'reversed', label: t('Reversed') },
+  ]
 }
 
 function FinanceFiltersBar({
@@ -201,33 +237,104 @@ function FinanceFiltersBar({
           }
         />
       )}
-      <Select
-        value={filters.status || 'all'}
-        onValueChange={(value) =>
-          setFilters({
-            ...filters,
-            page: 1,
-            status: value === 'all' ? undefined : value || undefined,
-          })
-        }
-      >
-        <SelectTrigger className='w-full sm:w-auto'>
-          <SelectValue>
-            {getStatusLabel(filters.status || 'all', t)}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value='all'>{t('All statuses')}</SelectItem>
-          <SelectItem value='success'>{t('Success')}</SelectItem>
-          <SelectItem value='pending'>{t('Pending')}</SelectItem>
-          <SelectItem value='used'>{t('Used')}</SelectItem>
-          <SelectItem value='refunded'>{t('Refunded')}</SelectItem>
-          <SelectItem value='settled'>{t('Settled')}</SelectItem>
-          <SelectItem value='reversed'>{t('Reversed')}</SelectItem>
-        </SelectContent>
-      </Select>
+      {section === 'operations' ? (
+        <Select
+          items={[
+            { value: 'all', label: t('All operation types') },
+            { value: 'topup_refund', label: t('Refund top-up') },
+            { value: 'redemption_refund', label: t('Refund redemption') },
+            { value: 'rebate_reversal', label: t('Reverse rebate') },
+            { value: 'penalty', label: t('Apply penalty') },
+            { value: 'penalty_reversal', label: t('Reverse penalty') },
+          ]}
+          value={filters.operationType || 'all'}
+          onValueChange={(value) =>
+            setFilters({
+              ...filters,
+              page: 1,
+              operationType: value === 'all' ? undefined : value || undefined,
+            })
+          }
+        >
+          <SelectTrigger className='w-full sm:w-auto'>
+            <SelectValue>
+              {filters.operationType
+                ? getOperationTypeLabel(filters.operationType, t)
+                : t('All operation types')}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent alignItemWithTrigger={false}>
+            <SelectGroup>
+              <SelectItem value='all'>{t('All operation types')}</SelectItem>
+              <SelectItem value='topup_refund'>{t('Refund top-up')}</SelectItem>
+              <SelectItem value='redemption_refund'>
+                {t('Refund redemption')}
+              </SelectItem>
+              <SelectItem value='rebate_reversal'>
+                {t('Reverse rebate')}
+              </SelectItem>
+              <SelectItem value='penalty'>{t('Apply penalty')}</SelectItem>
+              <SelectItem value='penalty_reversal'>
+                {t('Reverse penalty')}
+              </SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      ) : (
+        <Select
+          items={getStatusOptions(section, t)}
+          value={filters.status || 'all'}
+          onValueChange={(value) =>
+            setFilters({
+              ...filters,
+              page: 1,
+              status: value === 'all' ? undefined : value || undefined,
+            })
+          }
+        >
+          <SelectTrigger className='w-full sm:w-auto'>
+            <SelectValue>
+              {getStatusLabel(filters.status || 'all', t)}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent alignItemWithTrigger={false}>
+            <SelectGroup>
+              <SelectItem value='all'>{t('All statuses')}</SelectItem>
+              {section === 'topups' && (
+                <>
+                  <SelectItem value='success'>{t('Success')}</SelectItem>
+                  <SelectItem value='pending'>{t('Pending')}</SelectItem>
+                  <SelectItem value='failed'>{t('Failed')}</SelectItem>
+                  <SelectItem value='refunded'>{t('Refunded')}</SelectItem>
+                </>
+              )}
+              {section === 'redemptions' && (
+                <>
+                  <SelectItem value='1'>{t('Unused')}</SelectItem>
+                  <SelectItem value='2'>{t('Disabled')}</SelectItem>
+                  <SelectItem value='3'>{t('Used')}</SelectItem>
+                  <SelectItem value='4'>{t('Refunded')}</SelectItem>
+                </>
+              )}
+              {section === 'rebates' && (
+                <>
+                  <SelectItem value='settled'>{t('Settled')}</SelectItem>
+                  <SelectItem value='reversed'>{t('Reversed')}</SelectItem>
+                </>
+              )}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      )}
       {section === 'topups' && (
         <Select
+          items={[
+            { value: 'all', label: t('All providers') },
+            { value: 'epay', label: 'Epay' },
+            { value: 'stripe', label: 'Stripe' },
+            { value: 'creem', label: 'Creem' },
+            { value: 'waffo', label: 'Waffo' },
+          ]}
           value={filters.provider || 'all'}
           onValueChange={(value) =>
             setFilters({
@@ -242,17 +349,24 @@ function FinanceFiltersBar({
               {getProviderLabel(filters.provider || 'all', t)}
             </SelectValue>
           </SelectTrigger>
-          <SelectContent>
-            <SelectItem value='all'>{t('All providers')}</SelectItem>
-            <SelectItem value='epay'>Epay</SelectItem>
-            <SelectItem value='stripe'>Stripe</SelectItem>
-            <SelectItem value='creem'>Creem</SelectItem>
-            <SelectItem value='waffo'>Waffo</SelectItem>
+          <SelectContent alignItemWithTrigger={false}>
+            <SelectGroup>
+              <SelectItem value='all'>{t('All providers')}</SelectItem>
+              <SelectItem value='epay'>Epay</SelectItem>
+              <SelectItem value='stripe'>Stripe</SelectItem>
+              <SelectItem value='creem'>Creem</SelectItem>
+              <SelectItem value='waffo'>Waffo</SelectItem>
+            </SelectGroup>
           </SelectContent>
         </Select>
       )}
       {section === 'redemptions' && (
         <Select
+          items={[
+            { value: 'all', label: t('All types') },
+            { value: 'paid', label: t('Paid code') },
+            { value: 'reward', label: t('Reward code') },
+          ]}
           value={filters.sourceType || 'all'}
           onValueChange={(value) =>
             setFilters({
@@ -267,10 +381,12 @@ function FinanceFiltersBar({
               {getCodeTypeLabel(filters.sourceType || 'all', t)}
             </SelectValue>
           </SelectTrigger>
-          <SelectContent>
-            <SelectItem value='all'>{t('All types')}</SelectItem>
-            <SelectItem value='paid'>{t('Paid code')}</SelectItem>
-            <SelectItem value='reward'>{t('Reward code')}</SelectItem>
+          <SelectContent alignItemWithTrigger={false}>
+            <SelectGroup>
+              <SelectItem value='all'>{t('All types')}</SelectItem>
+              <SelectItem value='paid'>{t('Paid code')}</SelectItem>
+              <SelectItem value='reward'>{t('Reward code')}</SelectItem>
+            </SelectGroup>
           </SelectContent>
         </Select>
       )}

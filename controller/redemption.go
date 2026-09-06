@@ -204,6 +204,44 @@ func UpdateRedemption(c *gin.Context) {
 	return
 }
 
+type batchRedemptionRequest struct {
+	IDs       []int   `json:"ids"`
+	Operation string  `json:"operation"`
+	Name      *string `json:"name"`
+	Type      *string `json:"type"`
+	Quota     *int    `json:"quota"`
+	Status    *int    `json:"status"`
+}
+
+func BatchRedemptionOperation(c *gin.Context) {
+	var req batchRedemptionRequest
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	var count int
+	var err error
+	switch req.Operation {
+	case "update":
+		count, err = model.BatchUpdateRedemptions(req.IDs, req.Name, req.Type, req.Quota, req.Status)
+	case "delete":
+		count, err = model.BatchDeleteRedemptions(req.IDs)
+	default:
+		err = errors.New("invalid batch redemption operation")
+	}
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	recordManageAudit(c, "redemption.batch_"+req.Operation, map[string]interface{}{
+		"ids":   req.IDs,
+		"count": count,
+	})
+	common.ApiSuccess(c, gin.H{"operation": req.Operation, "count": count})
+}
+
 func DeleteInvalidRedemption(c *gin.Context) {
 	rows, err := model.DeleteInvalidRedemptions()
 	if err != nil {

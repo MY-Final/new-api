@@ -25,6 +25,8 @@ import type {
   GetRedemptionsResponse,
   SearchRedemptionsParams,
   RedemptionFormData,
+  BatchRedemptionOperationRequest,
+  BatchRedemptionOperationResult,
 } from './types'
 
 // ============================================================================
@@ -85,6 +87,13 @@ export async function updateRedemptionStatus(
   status: number
 ): Promise<ApiResponse<Redemption>> {
   const res = await api.put('/api/redemption/?status_only=true', { id, status })
+  return res.data
+}
+
+export async function batchRedemptionOperation(
+  data: BatchRedemptionOperationRequest
+): Promise<ApiResponse<BatchRedemptionOperationResult>> {
+  const res = await api.post('/api/redemption/batch', data)
   return res.data
 }
 

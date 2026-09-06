@@ -223,3 +223,58 @@ func TestRedeemConcurrentSingleSuccess(t *testing.T) {
 	require.NoError(t, DB.First(&user, "id = ?", userId).Error)
 	assert.Equal(t, 300, user.Quota, "quota must be credited exactly once")
 }
+
+func TestBatchRedemptionOperationsProtectUsedCodesAndDeduplicate(t *testing.T) {
+	truncateTables(t)
+
+	available := &Redemption{
+		Name:   "available",
+		Key:    "batch-available-code",
+		Quota:  100,
+		Status: common.RedemptionCodeStatusEnabled,
+		Type:   RedemptionTypeReward,
+	}
+	used := &Redemption{
+		Name:   "used",
+		Key:    "batch-used-code",
+		Quota:  200,
+		Status: common.RedemptionCodeStatusUsed,
+		Type:   RedemptionTypePaid,
+	}
+	require.NoError(t, DB.Create(available).Error)
+	require.NoError(t, DB.Create(used).Error)
+
+	name := "renamed"
+	redemptionType := RedemptionTypePaid
+	quota := 500
+	status := common.RedemptionCodeStatusDisabled
+	count, err := BatchUpdateRedemptions(
+		[]int{available.Id, available.Id},
+		&name,
+		&redemptionType,
+		&quota,
+		&status,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	var updated Redemption
+	require.NoError(t, DB.First(&updated, available.Id).Error)
+	assert.Equal(t, name, updated.Name)
+	assert.Equal(t, redemptionType, updated.Type)
+	assert.Equal(t, quota, updated.Quota)
+	assert.Equal(t, status, updated.Status)
+
+	failedName := "should-not-apply"
+	_, err = BatchUpdateRedemptions([]int{available.Id, used.Id}, &failedName, nil, nil, nil)
+	require.Error(t, err)
+	require.NoError(t, DB.First(&updated, available.Id).Error)
+	assert.Equal(t, name, updated.Name)
+
+	deleted, err := BatchDeleteRedemptions([]int{available.Id, available.Id})
+	require.NoError(t, err)
+	assert.Equal(t, 1, deleted)
+
+	_, err = BatchDeleteRedemptions([]int{used.Id})
+	require.Error(t, err)
+}

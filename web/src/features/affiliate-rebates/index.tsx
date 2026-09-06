@@ -10,6 +10,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -72,6 +73,12 @@ export function AffiliateRebates() {
         <div className='mx-auto w-full max-w-7xl space-y-4'>
           <div className='flex flex-col gap-2 sm:flex-row sm:flex-wrap'>
             <Select
+              items={[
+                { value: 'all', label: t('All sources') },
+                { value: 'signup', label: t('Registration') },
+                { value: 'topup', label: t('Top-up') },
+                { value: 'redemption', label: t('Redemption code') },
+              ]}
               value={sourceType}
               onValueChange={(value) => {
                 setSourceType(value || 'all')
@@ -81,16 +88,23 @@ export function AffiliateRebates() {
               <SelectTrigger className='w-full sm:w-44'>
                 <SelectValue>{sourceLabel(sourceType, t)}</SelectValue>
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value='all'>{t('All sources')}</SelectItem>
-                <SelectItem value='signup'>{t('Registration')}</SelectItem>
-                <SelectItem value='topup'>{t('Top-up')}</SelectItem>
-                <SelectItem value='redemption'>
-                  {t('Redemption code')}
-                </SelectItem>
+              <SelectContent alignItemWithTrigger={false}>
+                <SelectGroup>
+                  <SelectItem value='all'>{t('All sources')}</SelectItem>
+                  <SelectItem value='signup'>{t('Registration')}</SelectItem>
+                  <SelectItem value='topup'>{t('Top-up')}</SelectItem>
+                  <SelectItem value='redemption'>
+                    {t('Redemption code')}
+                  </SelectItem>
+                </SelectGroup>
               </SelectContent>
             </Select>
             <Select
+              items={[
+                { value: 'all', label: t('All statuses') },
+                { value: 'settled', label: t('Settled') },
+                { value: 'reversed', label: t('Reversed') },
+              ]}
               value={status}
               onValueChange={(value) => {
                 setStatus(value || 'all')
@@ -100,10 +114,12 @@ export function AffiliateRebates() {
               <SelectTrigger className='w-full sm:w-40'>
                 <SelectValue>{statusLabel(status, t)}</SelectValue>
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value='all'>{t('All statuses')}</SelectItem>
-                <SelectItem value='settled'>{t('Settled')}</SelectItem>
-                <SelectItem value='reversed'>{t('Reversed')}</SelectItem>
+              <SelectContent alignItemWithTrigger={false}>
+                <SelectGroup>
+                  <SelectItem value='all'>{t('All statuses')}</SelectItem>
+                  <SelectItem value='settled'>{t('Settled')}</SelectItem>
+                  <SelectItem value='reversed'>{t('Reversed')}</SelectItem>
+                </SelectGroup>
               </SelectContent>
             </Select>
             <CompactDateTimeRangePicker

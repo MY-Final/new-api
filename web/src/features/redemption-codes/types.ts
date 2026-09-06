@@ -82,6 +82,20 @@ export interface RedemptionFormData {
   type?: 'paid' | 'reward'
 }
 
+export interface BatchRedemptionOperationRequest {
+  ids: number[]
+  operation: 'update' | 'delete'
+  name?: string
+  quota?: number
+  status?: number
+  type?: 'paid' | 'reward'
+}
+
+export interface BatchRedemptionOperationResult {
+  operation: 'update' | 'delete'
+  count: number
+}
+
 // ============================================================================
 // Dialog Types
 // ============================================================================

@@ -332,6 +332,10 @@ export function RedemptionsMutateDrawer({
                     <FormItem>
                       <FormLabel>{t('Redemption Code Type')}</FormLabel>
                       <Select
+                        items={[
+                          { value: 'reward', label: t('Reward code') },
+                          { value: 'paid', label: t('Paid code') },
+                        ]}
                         value={field.value}
                         onValueChange={(value) =>
                           field.onChange(value === 'paid' ? 'paid' : 'reward')
@@ -346,7 +350,7 @@ export function RedemptionsMutateDrawer({
                             </SelectValue>
                           </SelectTrigger>
                         </FormControl>
-                        <SelectContent>
+                        <SelectContent alignItemWithTrigger={false}>
                           <SelectGroup>
                             <SelectItem value='reward'>
                               {t('Reward code')}
