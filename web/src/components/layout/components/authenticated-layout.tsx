@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils'
 
 import { AppHeader } from './app-header'
 import { AppSidebar } from './app-sidebar'
+import { BalanceWarningBanner } from './balance-warning-banner'
 
 type AuthenticatedLayoutProps = {
   children?: React.ReactNode
@@ -50,6 +51,7 @@ export function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
                 'peer-data-[variant=inset]:h-[calc(100svh-var(--app-header-height,0px)-(var(--spacing)*4))]'
               )}
             >
+              <BalanceWarningBanner />
               {props.children ?? <AnimatedOutlet />}
             </SidebarInset>
           </div>

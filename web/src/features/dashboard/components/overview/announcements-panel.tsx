@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Megaphone } from 'lucide-react'
+import { Megaphone, Pin } from 'lucide-react'
 import { memo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -24,10 +24,12 @@ import { IconBadge } from '@/components/ui/icon-badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useAnnouncements } from '@/features/dashboard/hooks/use-status-data'
 import { getPreviewText } from '@/features/dashboard/lib'
+import { getAnnouncementKey } from '@/features/dashboard/lib/announcements'
 import type { AnnouncementItem } from '@/features/dashboard/types'
 import { getAnnouncementColorClass } from '@/lib/colors'
 import { formatDateTimeObject } from '@/lib/time'
 import { cn } from '@/lib/utils'
+import { useNotificationStore } from '@/stores/notification-store'
 
 import { PanelWrapper } from '../ui/panel-wrapper'
 import { AnnouncementDetailModal } from './announcement-detail-dialog'
@@ -48,11 +50,18 @@ const AnnouncementStatusDot = memo(function AnnouncementStatusDot(props: {
 export function AnnouncementsPanel() {
   const { t } = useTranslation()
   const { items: list, loading } = useAnnouncements()
+  const markAnnouncementRead = useNotificationStore(
+    (state) => state.markAnnouncementRead
+  )
+  const readAnnouncementKeys = useNotificationStore(
+    (state) => state.readAnnouncementKeys
+  )
   const [selectedAnnouncement, setSelectedAnnouncement] =
     useState<AnnouncementItem | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
 
   const handleAnnouncementClick = (item: AnnouncementItem) => {
+    markAnnouncementRead(getAnnouncementKey(item))
     setSelectedAnnouncement(item)
     setIsDialogOpen(true)
   }
@@ -78,6 +87,8 @@ export function AnnouncementsPanel() {
         <div>
           {list.map((item: AnnouncementItem, idx: number) => {
             const key = item.id ?? `announcement-${idx}`
+            const announcementKey = getAnnouncementKey(item)
+            const read = readAnnouncementKeys.includes(announcementKey)
             return (
               <button
                 key={key}
@@ -91,9 +102,29 @@ export function AnnouncementsPanel() {
                 <div className='flex items-start gap-2.5'>
                   <AnnouncementStatusDot type={item.type} />
                   <div className='flex min-w-0 flex-1 flex-col gap-1'>
-                    <p className='line-clamp-1 text-sm font-medium'>
-                      {getPreviewText(item.content)}
-                    </p>
+                    <div className='flex min-w-0 items-center gap-2'>
+                      {item.pinned ? (
+                        <span title={t('Pinned')}>
+                          <Pin
+                            className='text-warning size-3.5 shrink-0'
+                            aria-hidden='true'
+                          />
+                        </span>
+                      ) : null}
+                      {!read ? (
+                        <span className='bg-primary size-1.5 shrink-0 rounded-full'>
+                          <span className='sr-only'>{t('Unread')}</span>
+                        </span>
+                      ) : null}
+                      <p
+                        className={cn(
+                          'line-clamp-1 text-sm',
+                          !read && 'font-medium'
+                        )}
+                      >
+                        {getPreviewText(item.content)}
+                      </p>
+                    </div>
                     <div className='flex items-center justify-between'>
                       {item.publishDate && (
                         <time className='text-muted-foreground/60 text-xs'>
