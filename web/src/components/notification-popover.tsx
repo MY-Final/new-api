@@ -39,10 +39,10 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AnnouncementDetailModal } from '@/features/dashboard/components/overview/announcement-detail-dialog'
 import { getAnnouncementKey } from '@/features/dashboard/lib/announcements'
+import { getPreviewText } from '@/features/dashboard/lib'
 import type { AnnouncementItem } from '@/features/dashboard/types'
 import { getAnnouncementColorClass } from '@/lib/colors'
 import { formatDateTimeObject } from '@/lib/time'
@@ -128,12 +128,14 @@ function getRelativeTime(publishDate: string | Date, t: TFunction): string {
  */
 function AnnouncementDot({ type }: { type?: string }) {
   return (
-    <span
-      className={cn(
-        'mt-1.5 inline-block size-2 shrink-0 rounded-full',
-        getAnnouncementColorClass(type)
-      )}
-    />
+    <span className='relative flex w-3 shrink-0 justify-center'>
+      <span
+        className={cn(
+          'mt-[5px] inline-block size-2.5 shrink-0 rounded-full',
+          getAnnouncementColorClass(type)
+        )}
+      />
+    </span>
   )
 }
 
@@ -244,64 +246,78 @@ function AnnouncementsContent({
           const absoluteTime = publishDate
             ? formatDateTimeObject(publishDate)
             : ''
+          const isLast = idx === announcements.length - 1
+          let railClassName = ''
+          if (idx === 0) {
+            railClassName = 'bottom-0 top-[22px]'
+          } else if (isLast) {
+            railClassName = 'top-0 h-[22px]'
+          } else {
+            railClassName = 'bottom-0 top-0'
+          }
 
           return (
-            <div key={announcementKey}>
-              <div
-                role='button'
-                tabIndex={0}
-                aria-pressed={read}
-                aria-label={item.content || t('System Announcements')}
-                onClick={() => onAnnouncementRead(item)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault()
-                    onAnnouncementRead(item)
-                  }
-                }}
-                className={cn(
-                  'hover:bg-muted/40 focus-visible:ring-ring -mx-1 rounded-md px-1 py-3 outline-none focus-visible:ring-2',
-                  !read && 'bg-muted/20'
-                )}
-              >
-                <div className='flex items-start gap-3'>
-                  <AnnouncementDot type={item.type} />
-                  <div className='flex min-w-0 flex-1 flex-col gap-2'>
-                    <div className='flex items-start gap-2 text-sm'>
-                      {item.pinned ? (
-                        <span title={t('Pinned')}>
-                          <Pin
-                            className='text-warning mt-0.5 size-3.5 shrink-0'
-                            aria-hidden='true'
-                          />
-                        </span>
-                      ) : null}
-                      {!read ? (
-                        <span className='bg-primary mt-1.5 size-1.5 shrink-0 rounded-full'>
-                          <span className='sr-only'>{t('Unread')}</span>
-                        </span>
-                      ) : null}
-                      <div className={cn(!read && 'font-medium')}>
-                        <RichContent breaks content={item.content || ''} />
-                      </div>
-                    </div>
-
-                    {item.extra ? (
-                      <div className='text-muted-foreground text-xs'>
-                        <RichContent breaks content={item.extra} />
-                      </div>
-                    ) : null}
-
-                    {absoluteTime ? (
-                      <div className='text-muted-foreground text-xs'>
-                        {relativeTime ? `${relativeTime} • ` : null}
-                        {absoluteTime}
-                      </div>
-                    ) : null}
-                  </div>
+            <div
+              key={announcementKey}
+              role='button'
+              tabIndex={0}
+              aria-pressed={read}
+              aria-label={item.content || t('System Announcements')}
+              onClick={() => onAnnouncementRead(item)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  onAnnouncementRead(item)
+                }
+              }}
+              className='group hover:bg-muted/40 focus-visible:ring-ring relative -mx-1 flex w-full gap-3 rounded-md px-1 py-3 text-left outline-none focus-visible:ring-2'
+            >
+              {announcements.length > 1 && (
+                <span
+                  aria-hidden='true'
+                  className={cn(
+                    'absolute left-[10px] w-px bg-border',
+                    railClassName
+                  )}
+                />
+              )}
+              <AnnouncementDot type={item.type} />
+              <div className='flex min-w-0 flex-1 flex-col gap-1'>
+                <div className='flex min-w-0 items-start gap-1.5'>
+                  {item.pinned ? (
+                    <span title={t('Pinned')} className='mt-0.5 shrink-0'>
+                      <Pin
+                        className='text-warning size-3.5'
+                        aria-hidden='true'
+                      />
+                    </span>
+                  ) : null}
+                  {!read ? (
+                    <span className='bg-primary mt-[7px] size-1.5 shrink-0 rounded-full'>
+                      <span className='sr-only'>{t('Unread')}</span>
+                    </span>
+                  ) : null}
+                  <p
+                    className={cn(
+                      'line-clamp-2 text-sm leading-5',
+                      !read && 'font-medium'
+                    )}
+                  >
+                    {getPreviewText(item.content || '', 120)}
+                  </p>
                 </div>
+                {absoluteTime ? (
+                  <div className='flex items-center justify-between'>
+                    <time className='text-muted-foreground/60 text-xs'>
+                      {relativeTime ? `${relativeTime} • ` : null}
+                      {absoluteTime}
+                    </time>
+                    <span className='text-muted-foreground/40 text-xs opacity-0 transition-opacity group-hover:opacity-100'>
+                      {t('Click for details')}
+                    </span>
+                  </div>
+                ) : null}
               </div>
-              {idx < announcements.length - 1 ? <Separator /> : null}
             </div>
           )
         })}
