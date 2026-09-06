@@ -26,7 +26,10 @@ import { useAnnouncements } from '@/features/dashboard/hooks/use-status-data'
 import { getPreviewText } from '@/features/dashboard/lib'
 import { getAnnouncementKey } from '@/features/dashboard/lib/announcements'
 import type { AnnouncementItem } from '@/features/dashboard/types'
-import { getAnnouncementColorClass } from '@/lib/colors'
+import {
+  getAnnouncementColorClass,
+  type AnnouncementType,
+} from '@/lib/colors'
 import { formatDateTimeObject } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { useNotificationStore } from '@/stores/notification-store'
@@ -38,12 +41,14 @@ const AnnouncementStatusDot = memo(function AnnouncementStatusDot(props: {
   type?: string
 }) {
   return (
-    <span
-      className={cn(
-        'mt-1.5 inline-block size-2 shrink-0 rounded-full',
-        getAnnouncementColorClass(props.type)
-      )}
-    />
+    <span className='relative flex w-3 shrink-0 justify-center'>
+      <span
+        className={cn(
+          'mt-[5px] inline-block size-2.5 shrink-0 rounded-full',
+          getAnnouncementColorClass(props.type)
+        )}
+      />
+    </span>
   )
 })
 
@@ -59,6 +64,14 @@ export function AnnouncementsPanel() {
   const [selectedAnnouncement, setSelectedAnnouncement] =
     useState<AnnouncementItem | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+
+  const statusLegend: { type: AnnouncementType; label: string }[] = [
+    { type: 'default', label: t('Default') },
+    { type: 'ongoing', label: t('In Progress') },
+    { type: 'success', label: t('Success') },
+    { type: 'warning', label: t('Warning') },
+    { type: 'error', label: t('Error') },
+  ]
 
   const handleAnnouncementClick = (item: AnnouncementItem) => {
     markAnnouncementRead(getAnnouncementKey(item))
@@ -82,6 +95,24 @@ export function AnnouncementsPanel() {
       emptyMessage={t('No announcements at this time')}
       height='h-72'
       contentClassName='p-0'
+      headerActions={
+        <div className='flex max-w-[55%] flex-wrap items-center justify-end gap-x-3 gap-y-1'>
+          {statusLegend.map((status) => (
+            <span
+              key={status.type}
+              className='text-muted-foreground flex items-center gap-1.5 text-xs'
+            >
+              <span
+                className={cn(
+                  'size-2 rounded-full',
+                  getAnnouncementColorClass(status.type)
+                )}
+              />
+              {status.label}
+            </span>
+          ))}
+        </div>
+      }
     >
       <ScrollArea className='h-72'>
         <div>
@@ -89,52 +120,68 @@ export function AnnouncementsPanel() {
             const key = item.id ?? `announcement-${idx}`
             const announcementKey = getAnnouncementKey(item)
             const read = readAnnouncementKeys.includes(announcementKey)
+            const isLast = idx === list.length - 1
+            let railClassName = ''
+            if (idx === 0) {
+              railClassName = 'bottom-0 top-[22px] sm:top-[24px]'
+            } else if (isLast) {
+              railClassName = 'top-0 h-[22px] sm:h-[24px]'
+            } else {
+              railClassName = 'bottom-0 top-0'
+            }
             return (
               <button
                 key={key}
                 type='button'
                 onClick={() => handleAnnouncementClick(item)}
-                className={cn(
-                  'group hover:bg-muted/40 w-full px-3 py-3 text-left transition-colors sm:px-5 sm:py-3.5',
-                  idx < list.length - 1 && 'border-border/60 border-b'
-                )}
+                className='group hover:bg-muted/40 relative flex w-full gap-3 px-4 py-3 text-left transition-colors sm:px-5'
               >
-                <div className='flex items-start gap-2.5'>
-                  <AnnouncementStatusDot type={item.type} />
-                  <div className='flex min-w-0 flex-1 flex-col gap-1'>
-                    <div className='flex min-w-0 items-center gap-2'>
-                      {item.pinned ? (
-                        <span title={t('Pinned')}>
-                          <Pin
-                            className='text-warning size-3.5 shrink-0'
-                            aria-hidden='true'
-                          />
-                        </span>
-                      ) : null}
-                      {!read ? (
-                        <span className='bg-primary size-1.5 shrink-0 rounded-full'>
-                          <span className='sr-only'>{t('Unread')}</span>
-                        </span>
-                      ) : null}
-                      <p
-                        className={cn(
-                          'line-clamp-1 text-sm',
-                          !read && 'font-medium'
-                        )}
+                {list.length > 1 && (
+                  <span
+                    aria-hidden='true'
+                    className={cn(
+                      'absolute left-[22px] w-px bg-border sm:left-[26px]',
+                      railClassName
+                    )}
+                  />
+                )}
+                <AnnouncementStatusDot type={item.type} />
+                <div className='flex min-w-0 flex-1 flex-col gap-1'>
+                  <div className='flex min-w-0 items-start gap-1.5'>
+                    {item.pinned ? (
+                      <span
+                        title={t('Pinned')}
+                        className='mt-0.5 shrink-0'
                       >
-                        {getPreviewText(item.content)}
-                      </p>
-                    </div>
-                    <div className='flex items-center justify-between'>
-                      {item.publishDate && (
-                        <time className='text-muted-foreground/60 text-xs'>
-                          {formatDateTimeObject(new Date(item.publishDate))}
-                        </time>
-                      )}
-                      <span className='text-muted-foreground/40 text-xs opacity-0 transition-opacity group-hover:opacity-100'>
-                        {t('Click for details')}
+                        <Pin
+                          className='text-warning size-3.5'
+                          aria-hidden='true'
+                        />
                       </span>
-                    </div>
+                    ) : null}
+                    {!read ? (
+                      <span className='bg-primary mt-[7px] size-1.5 shrink-0 rounded-full'>
+                        <span className='sr-only'>{t('Unread')}</span>
+                      </span>
+                    ) : null}
+                    <p
+                      className={cn(
+                        'line-clamp-2 text-sm leading-5',
+                        !read && 'font-medium'
+                      )}
+                    >
+                      {getPreviewText(item.content, 120)}
+                    </p>
+                  </div>
+                  <div className='flex items-center justify-between'>
+                    {item.publishDate && (
+                      <time className='text-muted-foreground/60 text-xs'>
+                        {formatDateTimeObject(new Date(item.publishDate))}
+                      </time>
+                    )}
+                    <span className='text-muted-foreground/40 text-xs opacity-0 transition-opacity group-hover:opacity-100'>
+                      {t('Click for details')}
+                    </span>
                   </div>
                 </div>
               </button>
