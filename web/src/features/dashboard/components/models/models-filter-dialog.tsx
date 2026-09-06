@@ -78,6 +78,18 @@ function detectQuickRangeDays(
   const start = filters?.start_timestamp
   const end = filters?.end_timestamp
   if (!start || !end) return null
+  // "Today" spans from local midnight, which the day-count math below cannot
+  // detect: its length varies with the current clock time.
+  const startOfDay = new Date(start)
+  startOfDay.setHours(0, 0, 0, 0)
+  const endOfStartDay = new Date(startOfDay)
+  endOfStartDay.setDate(endOfStartDay.getDate() + 1)
+  if (
+    start.getTime() === startOfDay.getTime() &&
+    end.getTime() <= endOfStartDay.getTime()
+  ) {
+    return 0
+  }
   const days = Math.round((end.getTime() - start.getTime()) / 86_400_000)
   return TIME_RANGE_PRESETS.some((preset) => preset.days === days) ? days : null
 }
@@ -150,8 +162,9 @@ export function ModelsFilter(props: ModelsFilterProps) {
     value: Date | string | undefined
   ) => {
     setFilters((prev) => ({ ...prev, [field]: value }))
-    if (field === 'start_timestamp' || field === 'end_timestamp')
+    if (field === 'start_timestamp' || field === 'end_timestamp') {
       setSelectedRange(null)
+    }
   }
 
   const handleQuickRange = (days: number) => {
@@ -257,12 +270,10 @@ export function ModelsFilter(props: ModelsFilterProps) {
           <div className='grid gap-2'>
             <Label htmlFor='time_granularity'>{t('Time Granularity')}</Label>
             <Select
-              items={[
-                ...TIME_GRANULARITY_OPTIONS.map((option) => ({
-                  value: option.value,
-                  label: t(option.label),
-                })),
-              ]}
+              items={TIME_GRANULARITY_OPTIONS.map((option) => ({
+                value: option.value,
+                label: t(option.label),
+              }))}
               value={filters.time_granularity}
               onValueChange={(value) =>
                 handleChange('time_granularity', value as TimeGranularity)
