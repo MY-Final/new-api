@@ -173,12 +173,21 @@ export function RedemptionsMutateDrawer({
       const basePayload = transformFormDataToPayload(data)
 
       if (isUpdate && currentRow && loadedRedemption) {
-        const quota = form.getFieldState('quota_dollars').isDirty
-          ? basePayload.quota
-          : loadedRedemption.quota
+        const paidQuota =
+          loadedRedemption.paid_quota ??
+          (loadedRedemption.type === 'paid' ? loadedRedemption.quota : 0)
+        const bonusQuota =
+          loadedRedemption.bonus_quota ??
+          (loadedRedemption.type === 'paid' ? 0 : loadedRedemption.quota)
+        if (!form.getFieldState('paid_quota_dollars').isDirty) {
+          basePayload.paid_quota = paidQuota
+        }
+        if (!form.getFieldState('bonus_quota_dollars').isDirty) {
+          basePayload.bonus_quota = bonusQuota
+        }
+        basePayload.quota = basePayload.paid_quota + basePayload.bonus_quota
         const result = await updateRedemption({
           ...basePayload,
-          quota,
           id: currentRow.id,
         })
         if (result.success) {
@@ -211,7 +220,10 @@ export function RedemptionsMutateDrawer({
     if (!isUpdate) {
       const name = form.getValues('name')
       if (!name?.trim()) {
-        const quota = parseQuotaFromDollars(form.getValues('quota_dollars'))
+        const quota = parseQuotaFromDollars(
+          form.getValues('paid_quota_dollars') +
+            form.getValues('bonus_quota_dollars')
+        )
         form.setValue('name', formatQuota(quota), { shouldValidate: true })
       }
     }
@@ -228,10 +240,18 @@ export function RedemptionsMutateDrawer({
   const currencyLabel = getCurrencyLabel()
   const tokensOnly = currencyMeta.kind === 'tokens'
   const quotaStep = getEditableQuotaStep()
-  const quotaLabel = t('Quota ({{currency}})', { currency: currencyLabel })
+  const paidQuotaLabel = t('Paid quota ({{currency}})', {
+    currency: currencyLabel,
+  })
+  const bonusQuotaLabel = t('Bonus quota ({{currency}})', {
+    currency: currencyLabel,
+  })
   const quotaPlaceholder = tokensOnly
     ? t('Enter quota in tokens')
     : t('Enter quota in {{currency}}', { currency: currencyLabel })
+  const paidQuota = form.watch('paid_quota_dollars') || 0
+  const bonusQuota = form.watch('bonus_quota_dollars') || 0
+  const selectedType = form.watch('type')
   let submitButtonLabel = t('Save changes')
   if (isLoadingRedemption) {
     submitButtonLabel = t('Loading...')
@@ -294,36 +314,69 @@ export function RedemptionsMutateDrawer({
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name='quota_dollars'
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{quotaLabel}</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          type='number'
-                          step={quotaStep}
-                          placeholder={quotaPlaceholder}
-                          onChange={(e) =>
-                            field.onChange(
-                              Number.parseFloat(e.target.value) || 0
-                            )
-                          }
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        {tokensOnly
-                          ? t('Enter the quota amount in tokens')
-                          : t('Enter the quota amount in {{currency}}', {
-                              currency: currencyLabel,
-                            })}
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className='grid gap-4 sm:grid-cols-2'>
+                  <FormField
+                    control={form.control}
+                    name='paid_quota_dollars'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{paidQuotaLabel}</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            type='number'
+                            min='0'
+                            step={quotaStep}
+                            disabled={selectedType === 'reward'}
+                            placeholder={quotaPlaceholder}
+                            onChange={(e) =>
+                              field.onChange(
+                                Number.parseFloat(e.target.value) || 0
+                              )
+                            }
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          {t('Paid portion of the code balance')}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name='bonus_quota_dollars'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{bonusQuotaLabel}</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            type='number'
+                            min='0'
+                            step={quotaStep}
+                            placeholder={quotaPlaceholder}
+                            onChange={(e) =>
+                              field.onChange(
+                                Number.parseFloat(e.target.value) || 0
+                              )
+                            }
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          {t('Bonus portion of the code balance')}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormDescription>
+                  {t('Total quota')}:{' '}
+                  {formatQuota(parseQuotaFromDollars(paidQuota + bonusQuota))}
+                </FormDescription>
 
                 <FormField
                   control={form.control}
@@ -337,9 +390,20 @@ export function RedemptionsMutateDrawer({
                           { value: 'paid', label: t('Paid code') },
                         ]}
                         value={field.value}
-                        onValueChange={(value) =>
-                          field.onChange(value === 'paid' ? 'paid' : 'reward')
-                        }
+                        onValueChange={(value) => {
+                          const nextType = value === 'paid' ? 'paid' : 'reward'
+                          if (nextType === 'reward') {
+                            form.setValue(
+                              'bonus_quota_dollars',
+                              paidQuota + bonusQuota,
+                              { shouldValidate: true }
+                            )
+                            form.setValue('paid_quota_dollars', 0, {
+                              shouldValidate: true,
+                            })
+                          }
+                          field.onChange(nextType)
+                        }}
                       >
                         <FormControl>
                           <SelectTrigger className='w-full'>

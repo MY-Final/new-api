@@ -412,6 +412,21 @@ func CreditUserQuota(id int, quota int, source QuotaSource, db bool) error {
 	} else if source != QuotaSourceBonus {
 		return errors.New("invalid quota source")
 	}
+	return CreditUserQuotaAllocation(id, allocation, db)
+}
+
+func CreditUserQuotaAllocation(id int, allocation QuotaAllocation, db bool) error {
+	if allocation.Bonus < 0 || allocation.Paid < 0 {
+		return errors.New("quota allocation must not be negative")
+	}
+	total64 := int64(allocation.Bonus) + int64(allocation.Paid)
+	if total64 > int64(common.MaxWalletQuota) {
+		return ErrWalletQuotaLimitExceeded
+	}
+	total := int(total64)
+	if total == 0 {
+		return nil
+	}
 	if !db && common.BatchUpdateEnabled {
 		addUserQuotaSourceRecord(id, allocation)
 		go func() {
@@ -424,8 +439,8 @@ func CreditUserQuota(id int, quota int, source QuotaSource, db bool) error {
 	if err := normalizeUserQuotaSources(id); err != nil {
 		return err
 	}
-	result := DB.Model(&User{}).Where("id = ? AND quota <= ?", id, common.MaxWalletQuota-quota).Updates(map[string]interface{}{
-		"quota":       gorm.Expr("quota + ?", quota),
+	result := DB.Model(&User{}).Where("id = ? AND quota <= ?", id, common.MaxWalletQuota-total).Updates(map[string]interface{}{
+		"quota":       gorm.Expr("quota + ?", total),
 		"bonus_quota": gorm.Expr("bonus_quota + ?", allocation.Bonus),
 		"paid_quota":  gorm.Expr("paid_quota + ?", allocation.Paid),
 	})

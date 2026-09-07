@@ -20,6 +20,8 @@ type Redemption struct {
 	Status                 int            `json:"status" gorm:"default:1"`
 	Name                   string         `json:"name" gorm:"index"`
 	Quota                  int            `json:"quota" gorm:"default:100"`
+	PaidQuota              int            `json:"paid_quota" gorm:"type:bigint;default:0;column:paid_quota"`
+	BonusQuota             int            `json:"bonus_quota" gorm:"type:bigint;default:0;column:bonus_quota"`
 	CreatedTime            int64          `json:"created_time" gorm:"bigint"`
 	RedeemedTime           int64          `json:"redeemed_time" gorm:"bigint"`
 	Count                  int            `json:"count" gorm:"-:all"` // only for api request
@@ -54,13 +56,48 @@ var (
 )
 
 func (redemption *Redemption) BeforeSave(tx *gorm.DB) error {
+	if redemption.Quota == 0 && redemption.PaidQuota == 0 && redemption.BonusQuota == 0 {
+		return nil
+	}
+	return redemption.normalizeQuotaSources()
+}
+
+func (redemption *Redemption) normalizeQuotaSources() error {
 	if redemption.Type == "" {
 		redemption.Type = RedemptionTypeReward
 	}
 	if redemption.Type != RedemptionTypePaid && redemption.Type != RedemptionTypeReward {
 		return errors.New("invalid redemption type")
 	}
+	if redemption.PaidQuota < 0 || redemption.BonusQuota < 0 {
+		return errors.New("redemption quota sources must not be negative")
+	}
+	if redemption.PaidQuota == 0 && redemption.BonusQuota == 0 && redemption.Quota > 0 {
+		if redemption.Type == RedemptionTypePaid {
+			redemption.PaidQuota = redemption.Quota
+		} else {
+			redemption.BonusQuota = redemption.Quota
+		}
+	}
+	if redemption.Type == RedemptionTypeReward {
+		redemption.BonusQuota += redemption.PaidQuota
+		redemption.PaidQuota = 0
+	}
+	total := int64(redemption.PaidQuota) + int64(redemption.BonusQuota)
+	if total <= 0 || total > int64(common.MaxWalletQuota) {
+		return errors.New("redemption quota must be positive and within wallet limit")
+	}
+	redemption.PaidQuota = int(total - int64(redemption.BonusQuota))
+	redemption.Quota = int(total)
 	return nil
+}
+
+func (redemption *Redemption) quotaAllocation() (QuotaAllocation, error) {
+	normalized := *redemption
+	if err := normalized.normalizeQuotaSources(); err != nil {
+		return QuotaAllocation{}, err
+	}
+	return QuotaAllocation{Bonus: normalized.BonusQuota, Paid: normalized.PaidQuota}, nil
 }
 
 func GetAllRedemptions(startIdx int, num int) (redemptions []*Redemption, total int64, err error) {
@@ -191,9 +228,9 @@ func Redeem(key string, userId int) (quota int, err error) {
 		keyCol = `"key"`
 	}
 	common.RandomSleep()
+	var allocation QuotaAllocation
 	err = DB.Transaction(func(tx *gorm.DB) error {
-		err := lockForUpdate(tx).Where(keyCol+" = ?", key).First(redemption).Error
-		if err != nil {
+		if err := lockForUpdate(tx).Where(keyCol+" = ?", key).First(redemption).Error; err != nil {
 			return errors.New("无效的兑换码")
 		}
 		if redemption.Status != common.RedemptionCodeStatusEnabled {
@@ -218,11 +255,12 @@ func Redeem(key string, userId int) (quota int, err error) {
 		if result.RowsAffected == 0 {
 			return errors.New("该兑换码已被使用")
 		}
-		source := QuotaSourcePaid
-		if redemption.Type == RedemptionTypeReward {
-			source = QuotaSourceBonus
+		var err error
+		allocation, err = redemption.quotaAllocation()
+		if err != nil {
+			return err
 		}
-		if err := creditTopUpQuotaWithSource(tx, userId, redemption.Quota, source, nil); err != nil {
+		if err := creditTopUpQuotaWithAllocation(tx, userId, allocation, nil); err != nil {
 			return err
 		}
 		return recordAffiliateRebateForRedemptionTx(tx, redemption, userId)
@@ -231,21 +269,16 @@ func Redeem(key string, userId int) (quota int, err error) {
 		common.SysError("redemption failed: " + err.Error())
 		return 0, ErrRedeemFailed
 	}
-	source := QuotaSourcePaid
-	if redemption.Type == RedemptionTypeReward {
-		source = QuotaSourceBonus
+	if _, err := cacheApplyUserQuotaSourceDelta(userId, allocation); err != nil {
+		common.SysLog(fmt.Sprintf("failed to sync redemption quota sources: %s", err.Error()))
 	}
-	syncCreditUserQuotaCacheForSource(userId, redemption.Quota, source, "redemption")
 	invalidateAffiliateRebateUserCache(AffiliateRebateSourceRedemption, fmt.Sprintf("%d", redemption.Id), "redemption rebate")
 	RecordLog(userId, LogTypeTopup, fmt.Sprintf("通过兑换码充值 %s，兑换码ID %d", logger.LogQuota(redemption.Quota), redemption.Id))
 	return redemption.Quota, nil
 }
 
 func (redemption *Redemption) Insert() error {
-	if redemption.Quota <= 0 {
-		return errors.New("redemption quota must be positive")
-	}
-	if err := common.ValidateWalletQuota(redemption.Quota); err != nil {
+	if err := redemption.normalizeQuotaSources(); err != nil {
 		return err
 	}
 	var err error
@@ -260,10 +293,7 @@ func (redemption *Redemption) SelectUpdate() error {
 
 // Update Make sure your token's fields is completed, because this will update non-zero values
 func (redemption *Redemption) Update() error {
-	if redemption.Quota <= 0 {
-		return errors.New("redemption quota must be positive")
-	}
-	if err := common.ValidateWalletQuota(redemption.Quota); err != nil {
+	if err := redemption.normalizeQuotaSources(); err != nil {
 		return err
 	}
 	var existing Redemption
@@ -275,7 +305,7 @@ func (redemption *Redemption) Update() error {
 	}
 	result := DB.Model(redemption).
 		Where("id = ? AND status IN ?", redemption.Id, []int{common.RedemptionCodeStatusEnabled, common.RedemptionCodeStatusDisabled}).
-		Select("name", "status", "quota", "redeemed_time", "expired_time", "type").Updates(redemption)
+		Select("name", "status", "quota", "paid_quota", "bonus_quota", "redeemed_time", "expired_time", "type").Updates(redemption)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -308,11 +338,15 @@ func normalizeRedemptionIDs(ids []int) ([]int, error) {
 }
 
 func BatchUpdateRedemptions(ids []int, name *string, redemptionType *string, quota *int, status *int) (int, error) {
+	return BatchUpdateRedemptionsWithSources(ids, name, redemptionType, quota, nil, nil, status)
+}
+
+func BatchUpdateRedemptionsWithSources(ids []int, name *string, redemptionType *string, quota *int, paidQuota *int, bonusQuota *int, status *int) (int, error) {
 	ids, err := normalizeRedemptionIDs(ids)
 	if err != nil {
 		return 0, err
 	}
-	if name == nil && redemptionType == nil && quota == nil && status == nil {
+	if name == nil && redemptionType == nil && quota == nil && paidQuota == nil && bonusQuota == nil && status == nil {
 		return 0, ErrBatchRedemptionNoop
 	}
 
@@ -326,12 +360,31 @@ func BatchUpdateRedemptions(ids []int, name *string, redemptionType *string, quo
 	if redemptionType != nil && *redemptionType != RedemptionTypePaid && *redemptionType != RedemptionTypeReward {
 		return 0, errors.New("invalid redemption type")
 	}
-	if quota != nil {
+	if quota != nil && paidQuota == nil && bonusQuota == nil {
 		if *quota <= 0 {
 			return 0, errors.New("redemption quota must be positive")
 		}
 		if err := common.ValidateWalletQuota(*quota); err != nil {
 			return 0, err
+		}
+	}
+	if paidQuota != nil && *paidQuota < 0 {
+		return 0, errors.New("paid quota must not be negative")
+	}
+	if bonusQuota != nil && *bonusQuota < 0 {
+		return 0, errors.New("bonus quota must not be negative")
+	}
+	if paidQuota != nil || bonusQuota != nil {
+		paid := 0
+		bonus := 0
+		if paidQuota != nil {
+			paid = *paidQuota
+		}
+		if bonusQuota != nil {
+			bonus = *bonusQuota
+		}
+		if int64(paid)+int64(bonus) <= 0 || int64(paid)+int64(bonus) > int64(common.MaxWalletQuota) {
+			return 0, errors.New("redemption quota must be positive and within wallet limit")
 		}
 	}
 	if status != nil && *status != common.RedemptionCodeStatusEnabled && *status != common.RedemptionCodeStatusDisabled {
@@ -345,6 +398,9 @@ func BatchUpdateRedemptions(ids []int, name *string, redemptionType *string, quo
 			if err := lockForUpdate(tx).Where("id = ?", id).First(&redemption).Error; err != nil {
 				return err
 			}
+			if err := redemption.normalizeQuotaSources(); err != nil {
+				return err
+			}
 			if redemption.Status == common.RedemptionCodeStatusUsed || redemption.Status == common.RedemptionCodeStatusRefunded {
 				return fmt.Errorf("redemption %d is already used or refunded", id)
 			}
@@ -356,8 +412,28 @@ func BatchUpdateRedemptions(ids []int, name *string, redemptionType *string, quo
 			if redemptionType != nil {
 				changes["type"] = *redemptionType
 			}
-			if quota != nil {
-				changes["quota"] = *quota
+			if paidQuota != nil || bonusQuota != nil || quota != nil || redemptionType != nil {
+				if quota != nil && paidQuota == nil && bonusQuota == nil {
+					redemption.PaidQuota = 0
+					redemption.BonusQuota = 0
+					redemption.Quota = *quota
+				} else {
+					if paidQuota != nil {
+						redemption.PaidQuota = *paidQuota
+					}
+					if bonusQuota != nil {
+						redemption.BonusQuota = *bonusQuota
+					}
+				}
+				if redemptionType != nil {
+					redemption.Type = *redemptionType
+				}
+				if err := redemption.normalizeQuotaSources(); err != nil {
+					return err
+				}
+				changes["quota"] = redemption.Quota
+				changes["paid_quota"] = redemption.PaidQuota
+				changes["bonus_quota"] = redemption.BonusQuota
 			}
 			if status != nil {
 				changes["status"] = *status

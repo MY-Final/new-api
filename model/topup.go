@@ -109,21 +109,36 @@ func creditTopUpQuota(tx *gorm.DB, userId int, creditedQuota int, updates map[st
 }
 
 func creditTopUpQuotaWithSource(tx *gorm.DB, userId int, creditedQuota int, source QuotaSource, updates map[string]interface{}) error {
+	if creditedQuota <= 0 {
+		return ErrInvalidTopUpQuota
+	}
+	allocation := QuotaAllocation{Bonus: creditedQuota}
+	if source == QuotaSourcePaid {
+		allocation = QuotaAllocation{Paid: creditedQuota}
+	} else if source != QuotaSourceBonus {
+		return errors.New("invalid quota source")
+	}
+	return creditTopUpQuotaWithAllocation(tx, userId, allocation, updates)
+}
+
+func creditTopUpQuotaWithAllocation(tx *gorm.DB, userId int, allocation QuotaAllocation, updates map[string]interface{}) error {
+	total64 := int64(allocation.Bonus) + int64(allocation.Paid)
+	if allocation.Bonus < 0 || allocation.Paid < 0 || total64 <= 0 || total64 > int64(common.MaxWalletQuota) {
+		return ErrInvalidTopUpQuota
+	}
+	creditedQuota := int(total64)
 	maxCurrentQuota, err := topUpQuotaMaxCurrent(creditedQuota)
 	if err != nil {
 		return err
 	}
 
-	updateFields := make(map[string]interface{}, len(updates)+1)
+	updateFields := make(map[string]interface{}, len(updates)+3)
 	for key, value := range updates {
 		updateFields[key] = value
 	}
 	updateFields["quota"] = gorm.Expr("quota + ?", creditedQuota)
-	if source == QuotaSourceBonus {
-		updateFields["bonus_quota"] = gorm.Expr("bonus_quota + ?", creditedQuota)
-	} else {
-		updateFields["paid_quota"] = gorm.Expr("paid_quota + ?", creditedQuota)
-	}
+	updateFields["bonus_quota"] = gorm.Expr("bonus_quota + ?", allocation.Bonus)
+	updateFields["paid_quota"] = gorm.Expr("paid_quota + ?", allocation.Paid)
 	if err := tx.Model(&User{}).
 		Where("id = ? AND bonus_quota = 0 AND paid_quota = 0 AND quota <> 0", userId).
 		Update("paid_quota", gorm.Expr("quota")).Error; err != nil {

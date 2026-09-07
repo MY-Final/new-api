@@ -249,6 +249,13 @@ func recordAffiliateRebateForRedemptionTx(tx *gorm.DB, redemption *Redemption, u
 	if redemption == nil || redemption.Type != RedemptionTypePaid {
 		return nil
 	}
+	allocation, err := redemption.quotaAllocation()
+	if err != nil {
+		return err
+	}
+	if allocation.Paid == 0 {
+		return nil
+	}
 	var invitee User
 	if err := tx.Select("id, inviter_id").Where("id = ?", userId).First(&invitee).Error; err != nil {
 		return err
@@ -256,13 +263,13 @@ func recordAffiliateRebateForRedemptionTx(tx *gorm.DB, redemption *Redemption, u
 	if invitee.InviterId <= 0 {
 		return nil
 	}
-	_, _, err := createAffiliateRebateTx(
+	_, _, err = createAffiliateRebateTx(
 		tx,
 		invitee.InviterId,
 		invitee.Id,
 		AffiliateRebateSourceRedemption,
 		fmt.Sprintf("%d", redemption.Id),
-		redemption.Quota,
+		allocation.Paid,
 		common.AffiliateRedemptionRebateRate,
 	)
 	return err

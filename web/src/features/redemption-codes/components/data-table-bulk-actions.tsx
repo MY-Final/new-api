@@ -88,12 +88,14 @@ export function DataTableBulkActions<TData>({
   const [fields, setFields] = useState({
     name: false,
     type: false,
-    quota: false,
+    paidQuota: false,
+    bonusQuota: false,
     status: false,
   })
   const [name, setName] = useState('')
   const [type, setType] = useState<'paid' | 'reward'>('reward')
-  const [quota, setQuota] = useState('')
+  const [paidQuota, setPaidQuota] = useState('')
+  const [bonusQuota, setBonusQuota] = useState('')
   const [status, setStatus] = useState('1')
   const { meta: currencyMeta } = getCurrencyDisplay()
   const currencyLabel = getCurrencyLabel()
@@ -112,10 +114,17 @@ export function DataTableBulkActions<TData>({
   }, [selectedRows])
 
   const resetEditor = () => {
-    setFields({ name: false, type: false, quota: false, status: false })
+    setFields({
+      name: false,
+      type: false,
+      paidQuota: false,
+      bonusQuota: false,
+      status: false,
+    })
     setName('')
     setType('reward')
-    setQuota('')
+    setPaidQuota('')
+    setBonusQuota('')
     setStatus('1')
   }
 
@@ -132,16 +141,34 @@ export function DataTableBulkActions<TData>({
       data.name = name.trim()
     }
     if (fields.type) data.type = type
-    if (fields.quota) {
-      const parsedQuota = parseQuotaFromDollars(Number.parseFloat(quota))
-      if (parsedQuota <= 0) {
-        toast.error(t('Quota must be positive'))
+    if (fields.paidQuota) {
+      const parsedPaidQuota = parseQuotaFromDollars(
+        Number.parseFloat(paidQuota)
+      )
+      if (parsedPaidQuota < 0) {
+        toast.error(t('Quota must not be negative'))
         return
       }
-      data.quota = parsedQuota
+      data.paid_quota = parsedPaidQuota
+    }
+    if (fields.bonusQuota) {
+      const parsedBonusQuota = parseQuotaFromDollars(
+        Number.parseFloat(bonusQuota)
+      )
+      if (parsedBonusQuota < 0) {
+        toast.error(t('Quota must not be negative'))
+        return
+      }
+      data.bonus_quota = parsedBonusQuota
     }
     if (fields.status) data.status = Number(status)
-    if (!fields.name && !fields.type && !fields.quota && !fields.status) {
+    if (
+      !fields.name &&
+      !fields.type &&
+      !fields.paidQuota &&
+      !fields.bonusQuota &&
+      !fields.status
+    ) {
       toast.error(t('Select at least one field to update'))
       return
     }
@@ -343,29 +370,67 @@ export function DataTableBulkActions<TData>({
             <div className='space-y-2'>
               <div className='flex items-center gap-3'>
                 <Checkbox
-                  id='bulk-change-quota-enabled'
-                  checked={fields.quota}
+                  id='bulk-change-paid-quota-enabled'
+                  checked={fields.paidQuota}
                   onCheckedChange={(checked) =>
-                    setFields((current) => ({ ...current, quota: !!checked }))
+                    setFields((current) => ({
+                      ...current,
+                      paidQuota: !!checked,
+                    }))
                   }
                 />
-                <Label htmlFor='bulk-change-quota-enabled'>
-                  {t('Change quota')}
+                <Label htmlFor='bulk-change-paid-quota-enabled'>
+                  {t('Change paid quota')}
                 </Label>
               </div>
               <div className='pl-7'>
                 <Input
-                  aria-label={t('Change quota')}
+                  aria-label={t('Change paid quota')}
                   type='number'
                   min='0'
                   step={quotaStep}
-                  value={quota}
-                  onChange={(event) => setQuota(event.target.value)}
-                  disabled={!fields.quota}
+                  value={paidQuota}
+                  onChange={(event) => setPaidQuota(event.target.value)}
+                  disabled={!fields.paidQuota}
                   placeholder={
                     tokensOnly
-                      ? t('Enter quota in tokens')
-                      : t('Enter quota in {{currency}}', {
+                      ? t('Enter paid quota in tokens')
+                      : t('Enter paid quota in {{currency}}', {
+                          currency: currencyLabel,
+                        })
+                  }
+                />
+              </div>
+            </div>
+            <div className='space-y-2'>
+              <div className='flex items-center gap-3'>
+                <Checkbox
+                  id='bulk-change-bonus-quota-enabled'
+                  checked={fields.bonusQuota}
+                  onCheckedChange={(checked) =>
+                    setFields((current) => ({
+                      ...current,
+                      bonusQuota: !!checked,
+                    }))
+                  }
+                />
+                <Label htmlFor='bulk-change-bonus-quota-enabled'>
+                  {t('Change bonus quota')}
+                </Label>
+              </div>
+              <div className='pl-7'>
+                <Input
+                  aria-label={t('Change bonus quota')}
+                  type='number'
+                  min='0'
+                  step={quotaStep}
+                  value={bonusQuota}
+                  onChange={(event) => setBonusQuota(event.target.value)}
+                  disabled={!fields.bonusQuota}
+                  placeholder={
+                    tokensOnly
+                      ? t('Enter bonus quota in tokens')
+                      : t('Enter bonus quota in {{currency}}', {
                           currency: currencyLabel,
                         })
                   }

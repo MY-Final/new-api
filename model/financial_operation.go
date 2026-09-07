@@ -335,6 +335,7 @@ func RefundRedemptionByAdmin(redemptionId int, reason string, operatorId int) (a
 		return false, err
 	}
 	var targetId, relatedId, targetDebit, relatedMainDebit int
+	var targetRefundAllocation QuotaAllocation
 	var relatedAllocation QuotaAllocation
 	err = DB.Transaction(func(tx *gorm.DB) error {
 		var redemption Redemption
@@ -355,14 +356,30 @@ func RefundRedemptionByAdmin(redemptionId int, reason string, operatorId int) (a
 		if target.BonusQuota == 0 && target.PaidQuota == 0 && target.Quota != 0 {
 			target.PaidQuota = target.Quota
 		}
-		targetAfter, err := walletAfterDelta(target.Quota, -redemption.Quota)
+		redemptionAllocation, err := redemption.quotaAllocation()
+		if err != nil {
+			return ErrRedemptionNotRefundable
+		}
+		bonusRefund := redemptionAllocation.Bonus
+		if bonusRefund > target.BonusQuota {
+			bonusRefund = target.BonusQuota
+		}
+		if bonusRefund < 0 {
+			bonusRefund = 0
+		}
+		paidRefund := redemptionAllocation.Paid + redemptionAllocation.Bonus - bonusRefund
+		if paidRefund < 0 {
+			return ErrRedemptionNotRefundable
+		}
+		targetAfter, err := walletAfterDelta(target.Quota, -redemptionAllocation.Total())
 		if err != nil {
 			return err
 		}
-		paidAfter, err := walletAfterDelta(target.PaidQuota, -redemption.Quota)
+		paidAfter, err := walletAfterDelta(target.PaidQuota, -paidRefund)
 		if err != nil {
 			return err
 		}
+		bonusAfter := target.BonusQuota - bonusRefund
 		result := tx.Model(&Redemption{}).Where("id = ? AND status = ?", redemption.Id, common.RedemptionCodeStatusUsed).Updates(map[string]interface{}{
 			"status": common.RedemptionCodeStatusRefunded, "refunded_at": common.GetTimestamp(), "refund_reason": reason, "refunded_by": operatorId,
 		})
@@ -374,7 +391,7 @@ func RefundRedemptionByAdmin(redemptionId int, reason string, operatorId int) (a
 			return nil
 		}
 		if err := tx.Unscoped().Model(&User{}).Where("id = ?", target.Id).Updates(map[string]interface{}{
-			"quota": targetAfter, "paid_quota": paidAfter, "bonus_quota": target.BonusQuota,
+			"quota": targetAfter, "paid_quota": paidAfter, "bonus_quota": bonusAfter,
 		}).Error; err != nil {
 			return err
 		}
@@ -399,7 +416,8 @@ func RefundRedemptionByAdmin(redemptionId int, reason string, operatorId int) (a
 			TargetUserId: target.Id, TargetUsername: target.Username,
 			SourceType: AffiliateRebateSourceRedemption, SourceId: strconv.Itoa(redemption.Id),
 			PrincipalQuota: redemption.Quota, TargetMainDelta: -redemption.Quota,
-			TargetMainBefore: target.Quota, TargetMainAfter: targetAfter, Reason: reason,
+			TargetMainBefore: target.Quota, TargetMainAfter: targetAfter,
+			TargetBonusDelta: -bonusRefund, TargetPaidDelta: -paidRefund, Reason: reason,
 		}
 		if reversal.Changed {
 			op.RelatedUserId = reversal.InviterBefore.Id
@@ -417,6 +435,7 @@ func RefundRedemptionByAdmin(redemptionId int, reason string, operatorId int) (a
 		}
 		targetId, relatedId = target.Id, op.RelatedUserId
 		targetDebit, relatedMainDebit = redemption.Quota, reversal.MainDebit
+		targetRefundAllocation = QuotaAllocation{Bonus: bonusRefund, Paid: paidRefund}
 		relatedAllocation = QuotaAllocation{Bonus: reversal.BonusDebit, Paid: reversal.PaidDebit}
 		return nil
 	})
@@ -424,7 +443,10 @@ func RefundRedemptionByAdmin(redemptionId int, reason string, operatorId int) (a
 		return alreadyRefunded, err
 	}
 	if targetDebit > 0 {
-		_, _ = cacheApplyUserQuotaSourceDelta(targetId, QuotaAllocation{Paid: -targetDebit})
+		_, _ = cacheApplyUserQuotaSourceDelta(targetId, QuotaAllocation{
+			Bonus: -targetRefundAllocation.Bonus,
+			Paid:  -targetRefundAllocation.Paid,
+		})
 	}
 	if relatedMainDebit > 0 {
 		_, _ = cacheApplyUserQuotaSourceDelta(relatedId, QuotaAllocation{Bonus: -relatedAllocation.Bonus, Paid: -relatedAllocation.Paid})

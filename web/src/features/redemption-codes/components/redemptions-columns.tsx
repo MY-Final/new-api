@@ -173,17 +173,29 @@ export function useRedemptionsColumns(): ColumnDef<Redemption>[] {
       accessorKey: 'quota',
       header: t('Quota'),
       cell: ({ row }) => {
-        const quota = row.getValue('quota') as number
+        const redemption = row.original
+        const paidQuota =
+          redemption.paid_quota ??
+          (redemption.type === 'paid' ? redemption.quota : 0)
+        const bonusQuota =
+          redemption.bonus_quota ??
+          (redemption.type === 'paid' ? 0 : redemption.quota)
         return (
-          <StatusBadge
-            label={formatQuota(quota)}
-            variant='neutral'
-            copyable={false}
-            className='-ml-1.5'
-          />
+          <div className='flex flex-col items-start gap-1'>
+            <StatusBadge
+              label={formatQuota(redemption.quota)}
+              variant='neutral'
+              copyable={false}
+              className='-ml-1.5'
+            />
+            <span className='text-muted-foreground text-xs'>
+              {t('Paid quota')}: {formatQuota(paidQuota)} · {t('Bonus quota')}:{' '}
+              {formatQuota(bonusQuota)}
+            </span>
+          </div>
         )
       },
-      size: 120,
+      size: 240,
     },
     {
       accessorKey: 'created_time',

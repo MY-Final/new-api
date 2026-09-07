@@ -382,6 +382,9 @@ func migrateDB() error {
 		Update("type", RedemptionTypeReward).Error; err != nil {
 		return err
 	}
+	if err := migrateRedemptionQuotaSources(); err != nil {
+		return err
+	}
 	if err := InitializeUserAuthVersions(); err != nil {
 		return err
 	}
@@ -407,6 +410,17 @@ func migrateUserQuotaSources() error {
 	return DB.Model(&User{}).
 		Where("bonus_quota = 0 AND paid_quota = 0 AND quota <> 0").
 		Update("paid_quota", gorm.Expr("quota")).Error
+}
+
+func migrateRedemptionQuotaSources() error {
+	if err := DB.Model(&Redemption{}).
+		Where("paid_quota = 0 AND bonus_quota = 0 AND quota <> 0 AND type = ?", RedemptionTypePaid).
+		Update("paid_quota", gorm.Expr("quota")).Error; err != nil {
+		return err
+	}
+	return DB.Model(&Redemption{}).
+		Where("paid_quota = 0 AND bonus_quota = 0 AND quota <> 0 AND type = ?", RedemptionTypeReward).
+		Update("bonus_quota", gorm.Expr("quota")).Error
 }
 
 func migrateLOGDB() error {
