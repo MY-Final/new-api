@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import {
   Activity,
   Box,
+  ClipboardList,
   CreditCard,
   CircleDollarSign,
   FileText,
@@ -34,6 +35,7 @@ import {
   ServerCog,
   Settings,
   Store,
+  ShieldCheck,
   Ticket,
   User,
   Users,
@@ -112,6 +114,11 @@ export function useSidebarData(): SidebarData {
             icon: FileText,
           },
           {
+            title: t('Audit Logs'),
+            url: '/usage-logs/audit',
+            icon: ClipboardList,
+          },
+          {
             title: t('Task Logs'),
             url: '/usage-logs/task',
             activeUrls: ['/usage-logs/drawing'],
@@ -148,6 +155,11 @@ export function useSidebarData(): SidebarData {
                 },
               ]
             : []),
+          {
+            title: t('Security & Access'),
+            url: '/security',
+            icon: ShieldCheck,
+          },
         ],
       },
       {

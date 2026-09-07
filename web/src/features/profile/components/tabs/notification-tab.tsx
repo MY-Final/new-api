@@ -36,29 +36,15 @@ import {
 import { ROLE } from '@/lib/roles'
 
 import { updateUserSettings } from '../../api'
-import {
-  DEFAULT_QUOTA_WARNING_THRESHOLD,
-  NOTIFICATION_METHODS,
-} from '../../constants'
-import { parseUserSettings } from '../../lib'
-import type { UserProfile, UserSettings, NotifyType } from '../../types'
+import { NOTIFICATION_METHODS } from '../../constants'
+import { normalizeUserSettings } from '../../lib/user-settings'
+import type { UserProfile, NotifyType } from '../../types'
 
 const NOTIFICATION_ICONS: Record<NotifyType, typeof Mail> = {
   email: Mail,
   webhook: Webhook,
   bark: Bell,
   gotify: Server,
-}
-
-const NOTIFICATION_VALUES = new Set<NotifyType>(
-  NOTIFICATION_METHODS.map((method) => method.value)
-)
-
-function normalizeNotifyType(value: unknown): NotifyType {
-  return typeof value === 'string' &&
-    NOTIFICATION_VALUES.has(value as NotifyType)
-    ? (value as NotifyType)
-    : 'email'
 }
 
 // ============================================================================
@@ -74,27 +60,17 @@ export function NotificationTab({ profile, onUpdate }: NotificationTabProps) {
   const { t } = useTranslation()
   const isAdmin = (profile?.role ?? 0) >= ROLE.ADMIN
   const [loading, setLoading] = useState(false)
+  const [settings, setSettings] = useState(() => normalizeUserSettings())
   const [thresholdAmount, setThresholdAmount] = useState<number | ''>(() =>
-    quotaUnitsToEditableAmount(DEFAULT_QUOTA_WARNING_THRESHOLD)
+    quotaUnitsToEditableAmount(normalizeUserSettings().quota_warning_threshold)
   )
-  const [settings, setSettings] = useState<UserSettings>({
-    notify_type: 'email',
-    quota_warning_threshold: DEFAULT_QUOTA_WARNING_THRESHOLD,
-    notification_email: '',
-    webhook_url: '',
-    webhook_secret: '',
-    bark_url: '',
-    gotify_url: '',
-    gotify_token: '',
-    gotify_priority: 5,
-    accept_unset_model_ratio_model: false,
-    record_ip_log: false,
-    upstream_model_update_notify_enabled: false,
-  })
 
   // Update form field helper
   const updateField = useCallback(
-    <K extends keyof UserSettings>(field: K, value: UserSettings[K]) => {
+    <K extends keyof typeof settings>(
+      field: K,
+      value: (typeof settings)[K]
+    ) => {
       setSettings((prev) => ({ ...prev, [field]: value }))
     },
     []
@@ -102,33 +78,19 @@ export function NotificationTab({ profile, onUpdate }: NotificationTabProps) {
 
   useEffect(() => {
     if (profile?.setting) {
-      const parsed = parseUserSettings(profile.setting)
-      const thresholdQuota =
-        parsed.quota_warning_threshold ?? DEFAULT_QUOTA_WARNING_THRESHOLD
-      setSettings({
-        notify_type: normalizeNotifyType(parsed.notify_type),
-        quota_warning_threshold: thresholdQuota,
-        notification_email: parsed.notification_email ?? '',
-        webhook_url: parsed.webhook_url ?? '',
-        webhook_secret: parsed.webhook_secret ?? '',
-        bark_url: parsed.bark_url ?? '',
-        gotify_url: parsed.gotify_url ?? '',
-        gotify_token: parsed.gotify_token ?? '',
-        gotify_priority: parsed.gotify_priority ?? 5,
-        accept_unset_model_ratio_model:
-          parsed.accept_unset_model_ratio_model || false,
-        record_ip_log: parsed.record_ip_log || false,
-        upstream_model_update_notify_enabled:
-          parsed.upstream_model_update_notify_enabled || false,
-      })
-      setThresholdAmount(quotaUnitsToEditableAmount(thresholdQuota))
+      const normalized = normalizeUserSettings(profile.setting)
+      setSettings(normalized)
+      setThresholdAmount(
+        quotaUnitsToEditableAmount(normalized.quota_warning_threshold)
+      )
     }
   }, [profile])
 
   const handleSave = async () => {
     try {
       setLoading(true)
-      const response = await updateUserSettings(settings)
+      const { record_ip_log: _recordIpLog, ...notificationSettings } = settings
+      const response = await updateUserSettings(notificationSettings)
 
       if (response.success) {
         toast.success(t('Settings updated successfully'))
@@ -143,7 +105,7 @@ export function NotificationTab({ profile, onUpdate }: NotificationTabProps) {
     }
   }
 
-  const notifyType = normalizeNotifyType(settings.notify_type)
+  const notifyType = settings.notify_type
   const { meta: currencyMeta } = getCurrencyDisplay()
   const currencyLabel = getCurrencyLabel()
   const tokensOnly = currencyMeta.kind === 'tokens'
@@ -157,9 +119,7 @@ export function NotificationTab({ profile, onUpdate }: NotificationTabProps) {
           value={[notifyType]}
           onValueChange={(value) => {
             const nextValue = value.find((item) => item !== notifyType)
-            if (nextValue) {
-              updateField('notify_type', normalizeNotifyType(nextValue))
-            }
+            if (nextValue) updateField('notify_type', nextValue as NotifyType)
           }}
           aria-label={t('Notification Method')}
           variant='outline'
@@ -403,22 +363,6 @@ export function NotificationTab({ profile, onUpdate }: NotificationTabProps) {
             onCheckedChange={(checked) =>
               updateField('accept_unset_model_ratio_model', checked)
             }
-          />
-        </div>
-
-        {/* Record IP Log */}
-        <div className='flex items-start justify-between gap-3 rounded-lg border p-3 sm:items-center sm:p-4'>
-          <div className='space-y-0.5'>
-            <Label htmlFor='recordIp'>{t('Record IP Address')}</Label>
-            <p className='text-muted-foreground text-xs sm:text-sm'>
-              {t('Log IP address for usage and error logs')}
-            </p>
-          </div>
-          <Switch
-            id='recordIp'
-            className='shrink-0'
-            checked={settings.record_ip_log}
-            onCheckedChange={(checked) => updateField('record_ip_log', checked)}
           />
         </div>
       </div>
