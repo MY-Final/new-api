@@ -54,7 +54,13 @@ const usageData = {
     request_count: 2,
     prompt_tokens: 300,
     completion_tokens: 150,
+    input_tokens: 300,
+    output_tokens: 150,
+    cache_read_tokens: 0,
+    cache_write_tokens: 0,
+    reasoning_tokens: 0,
     total_tokens: 450,
+    user_cost: 350,
     consumed_quota: 400,
     refunded_quota: 50,
     net_quota: 350,
@@ -65,7 +71,13 @@ const usageData = {
       request_count: 2,
       prompt_tokens: 300,
       completion_tokens: 150,
+      input_tokens: 300,
+      output_tokens: 150,
+      cache_read_tokens: 0,
+      cache_write_tokens: 0,
+      reasoning_tokens: 0,
       total_tokens: 450,
+      user_cost: 350,
       consumed_quota: 400,
       refunded_quota: 50,
       net_quota: 350,
@@ -77,7 +89,13 @@ const usageData = {
       request_count: 2,
       prompt_tokens: 300,
       completion_tokens: 150,
+      input_tokens: 300,
+      output_tokens: 150,
+      cache_read_tokens: 0,
+      cache_write_tokens: 0,
+      reasoning_tokens: 0,
       total_tokens: 450,
+      user_cost: 350,
       consumed_quota: 400,
       refunded_quota: 50,
       net_quota: 350,
@@ -123,13 +141,12 @@ afterAll(() => {
 describe('UserUsageDialog', () => {
   test('requests the selected user and renders usage aggregates', async () => {
     getUserUsageMock.mockResolvedValue({ success: true, data: usageData })
-
     renderDialog()
 
     expect(await screen.findByText('model-a')).toBeInTheDocument()
     expect(screen.getByText('Period Summary')).toBeInTheDocument()
-    expect(screen.getAllByText('Prompt Tokens').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Refunded Quota').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Input Tokens').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('User Cost').length).toBeGreaterThan(0)
     expect(getUserUsageMock).toHaveBeenCalledWith(
       7,
       expect.any(Number),
@@ -139,7 +156,6 @@ describe('UserUsageDialog', () => {
 
   test('requeries after changing the date range and blocks ranges over 31 days', async () => {
     getUserUsageMock.mockResolvedValue({ success: true, data: usageData })
-
     renderDialog()
     await screen.findByText('model-a')
     const initialCallCount = getUserUsageMock.mock.calls.length

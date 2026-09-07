@@ -42,6 +42,8 @@ type textQuotaSummary struct {
 	PromptTokens           int
 	CompletionTokens       int
 	TotalTokens            int
+	InputTokens            int
+	ReasoningTokens        int
 	CacheTokens            int
 	CacheCreationTokens    int
 	CacheCreationTokens5m  int
@@ -257,6 +259,20 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 	summary.PromptTokens = usage.PromptTokens
 	summary.CompletionTokens = usage.CompletionTokens
 	summary.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+	summary.InputTokens = usage.InputTokens
+	if summary.InputTokens <= 0 {
+		if summary.IsClaudeUsageSemantic {
+			cacheWriteTokens := usage.PromptTokensDetails.CacheCreationTokensTotal()
+			claudeCacheWriteTokens := usage.ClaudeCacheCreation5mTokens + usage.ClaudeCacheCreation1hTokens
+			if claudeCacheWriteTokens > cacheWriteTokens {
+				cacheWriteTokens = claudeCacheWriteTokens
+			}
+			summary.InputTokens = usage.PromptTokens + usage.PromptTokensDetails.CachedTokens + cacheWriteTokens
+		} else {
+			summary.InputTokens = usage.PromptTokens
+		}
+	}
+	summary.ReasoningTokens = usage.CompletionTokenDetails.ReasoningTokens
 	summary.CacheTokens = usage.PromptTokensDetails.CachedTokens
 	summary.CacheCreationTokens = usage.PromptTokensDetails.CacheCreationTokensTotal()
 	summary.CacheCreationTokens5m = usage.ClaudeCacheCreation5mTokens
@@ -510,12 +526,13 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		// to cache_creation_tokens.
 		other.SetPublic("cache_write_tokens", cacheWriteTokens)
 	}
-	if relayInfo.GetFinalRequestRelayFormat() != types.RelayFormatClaude && billingUsage != nil && billingUsage.UsageSource != "" && billingUsage.InputTokens > 0 {
+	if summary.InputTokens > 0 {
 		// input_tokens_total: explicit normalized total input used by the usage log UI.
-		// Only write this field when upstream/current conversion has already provided a
-		// reliable total input value and tagged the usage source. Do not infer it from
-		// prompt/cache fields here, otherwise old upstream payloads may be double-counted.
-		other.SetPublic("input_tokens_total", billingUsage.InputTokens)
+		// The value is normalized before logging so cache fields are not added twice.
+		other.SetPublic("input_tokens_total", summary.InputTokens)
+	}
+	if summary.ReasoningTokens > 0 {
+		other.SetPublic("reasoning_tokens", summary.ReasoningTokens)
 	}
 	if tieredBillingApplied {
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)

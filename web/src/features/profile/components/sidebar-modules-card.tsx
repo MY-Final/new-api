@@ -121,6 +121,11 @@ export function SidebarModulesCard() {
           description: t('Balance and top-up management'),
         },
         {
+          key: 'usage',
+          title: t('Usage Statistics'),
+          description: t('View your token usage and cost history'),
+        },
+        {
           key: 'personal',
           title: t('Personal Settings'),
           description: t('Personal info settings'),

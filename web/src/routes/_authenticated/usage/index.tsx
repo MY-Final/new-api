@@ -16,19 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { UserChartsFilters } from '@/features/dashboard/types'
-import { AdminUsageAnalytics } from '@/features/usage-statistics/components/admin-usage-analytics'
+import { createFileRoute } from '@tanstack/react-router'
 
-interface UserChartsProps {
-  filters: UserChartsFilters
-  onFiltersChange: (filters: UserChartsFilters) => void
-}
+import { UsageStatistics } from '@/features/usage-statistics'
 
-export function UserCharts(props: UserChartsProps) {
-  return (
-    <AdminUsageAnalytics
-      filters={props.filters}
-      onFiltersChange={props.onFiltersChange}
-    />
-  )
-}
+export const Route = createFileRoute('/_authenticated/usage/')({
+  component: UsageStatistics,
+})

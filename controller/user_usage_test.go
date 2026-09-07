@@ -37,7 +37,7 @@ func TestGetUserUsageAllowsAdminToQueryCommonUser(t *testing.T) {
 	db := setupManageUserTestDB(t)
 	user := model.User{Username: "usage-controller-user", Password: "password123", Role: common.RoleCommonUser}
 	require.NoError(t, db.Create(&user).Error)
-	require.NoError(t, db.Create(&model.Log{
+	require.NoError(t, model.LOG_DB.Create(&model.Log{
 		UserId: user.Id, CreatedAt: 1500, Type: model.LogTypeConsume, PromptTokens: 8,
 		CompletionTokens: 2, Quota: 30, ModelName: "controller-model",
 	}).Error)
@@ -70,4 +70,38 @@ func TestGetUserUsageRejectsRangesOverThirtyOneDays(t *testing.T) {
 
 	response := performUserUsageRequest(t, common.RoleAdminUser, user.Id, "start_timestamp=1000&end_timestamp=2679401")
 	require.False(t, response.Success)
+}
+
+func TestGetMyUsageIgnoresUserIDQueryParameter(t *testing.T) {
+	db := setupManageUserTestDB(t)
+	user := model.User{Username: "usage-self-user", Password: "password123", Role: common.RoleCommonUser, AffCode: "usage-self-user-aff"}
+	otherUser := model.User{Username: "usage-self-other", Password: "password123", Role: common.RoleCommonUser, AffCode: "usage-self-other-aff"}
+	require.NoError(t, db.Create(&user).Error)
+	require.NoError(t, db.Create(&otherUser).Error)
+	require.NoError(t, model.LOG_DB.Create(&model.Log{
+		UserId: user.Id, CreatedAt: 1500, Type: model.LogTypeConsume, PromptTokens: 8,
+		CompletionTokens: 2, Quota: 30, ModelName: "self-model",
+	}).Error)
+	require.NoError(t, model.LOG_DB.Create(&model.Log{
+		UserId: otherUser.Id, CreatedAt: 1500, Type: model.LogTypeConsume, PromptTokens: 80,
+		CompletionTokens: 20, Quota: 300, ModelName: "other-model",
+	}).Error)
+
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Set("id", user.Id)
+	context.Request = httptest.NewRequest(
+		http.MethodGet,
+		"/api/statistics/my?start_timestamp=1000&end_timestamp=2000&user_id="+fmt.Sprintf("%d", otherUser.Id),
+		nil,
+	)
+
+	GetMyUsageStatistics(context)
+	var response userUsageResponse
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	require.True(t, response.Success, response.Message)
+	require.NotNil(t, response.Data)
+	require.Equal(t, user.Id, response.Data.User.Id)
+	require.Equal(t, int64(1), response.Data.Summary.RequestCount)
+	require.Equal(t, int64(30), response.Data.Summary.UserCost)
 }

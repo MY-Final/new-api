@@ -122,10 +122,16 @@ export interface UserUsageAggregate {
   request_count: number
   prompt_tokens: number
   completion_tokens: number
+  input_tokens: number
+  output_tokens: number
+  cache_read_tokens: number
+  cache_write_tokens: number
+  reasoning_tokens: number
   total_tokens: number
   consumed_quota: number
   refunded_quota: number
   net_quota: number
+  user_cost: number
 }
 
 export interface UserUsageDaily extends UserUsageAggregate {
@@ -141,6 +147,29 @@ export interface UserUsage {
   summary: UserUsageAggregate
   daily: UserUsageDaily[]
   models: UserUsageModel[]
+}
+
+export interface UserUsageRequest {
+  created_at: number
+  request_id: string
+  model_name: string
+  channel_id: number
+  channel_name?: string
+  success: boolean
+  input_tokens: number
+  output_tokens: number
+  cache_read_tokens: number
+  cache_write_tokens: number
+  reasoning_tokens: number
+  total_tokens: number
+  user_cost: number
+}
+
+export interface UserUsageRequests {
+  items: UserUsageRequest[]
+  total: number
+  page: number
+  page_size: number
 }
 
 export interface SearchUsersParams {
