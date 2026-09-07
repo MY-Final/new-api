@@ -90,6 +90,8 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
   const roleLabel = getRoleLabel(profile.role)
   const hasDebt = profile.quota < 0
   const displayedQuota = Math.abs(profile.quota)
+  const bonusQuota = Math.max(profile.bonus_quota ?? 0, 0)
+  const paidQuota = profile.paid_quota ?? 0
   const stats: {
     label: string
     value: string
@@ -102,7 +104,7 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
       value: formatQuotaPrecise(displayedQuota),
       description: hasDebt
         ? t('Recharge to settle debt')
-        : t('Remaining quota'),
+        : `${t('Bonus Balance')}: ${formatQuotaPrecise(bonusQuota)} · ${t('Paid Balance')}: ${formatQuotaPrecise(paidQuota)}`,
       icon: WalletCards,
       tone: hasDebt ? 'destructive' : 'success',
     },

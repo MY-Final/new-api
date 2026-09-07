@@ -49,6 +49,8 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
   const walletQuota = props.user?.quota ?? 0
   const hasDebt = walletQuota < 0
   const displayedQuota = Math.abs(walletQuota)
+  const bonusQuota = Math.max(props.user?.bonus_quota ?? 0, 0)
+  const paidQuota = props.user?.paid_quota ?? 0
   const stats: {
     label: string
     value: string
@@ -61,7 +63,7 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
       value: formatQuotaPrecise(displayedQuota),
       description: hasDebt
         ? t('Recharge to settle debt')
-        : t('Remaining quota'),
+        : `${t('Bonus Balance')}: ${formatQuotaPrecise(bonusQuota)} · ${t('Paid Balance')}: ${formatQuotaPrecise(paidQuota)}`,
       icon: WalletCards,
       tone: hasDebt ? 'destructive' : 'success',
     },

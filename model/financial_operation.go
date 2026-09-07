@@ -47,6 +47,8 @@ type FinancialOperation struct {
 	RelatedAffiliateDelta  int    `json:"related_affiliate_delta" gorm:"type:bigint"`
 	TargetMainBefore       int    `json:"target_main_before" gorm:"type:bigint"`
 	TargetMainAfter        int    `json:"target_main_after" gorm:"type:bigint"`
+	TargetBonusDelta       int    `json:"target_bonus_delta" gorm:"type:bigint"`
+	TargetPaidDelta        int    `json:"target_paid_delta" gorm:"type:bigint"`
 	RelatedMainBefore      int    `json:"related_main_before" gorm:"type:bigint"`
 	RelatedMainAfter       int    `json:"related_main_after" gorm:"type:bigint"`
 	RelatedAffiliateBefore int    `json:"related_affiliate_before" gorm:"type:bigint"`
@@ -74,6 +76,8 @@ type rebateReversalSnapshot struct {
 	InviterBefore  User
 	InviterAfter   User
 	MainDebit      int
+	BonusDebit     int
+	PaidDebit      int
 	AffiliateDebit int
 	Changed        bool
 }
@@ -179,6 +183,8 @@ func reverseRebateForFinanceTx(tx *gorm.DB, rebate *AffiliateRebate, reason stri
 		transferred = remaining - debtOffset
 	}
 	snapshot.MainDebit = debtOffset + transferred
+	snapshot.PaidDebit = debtOffset
+	snapshot.BonusDebit = transferred
 	snapshot.AffiliateDebit = remaining - snapshot.MainDebit
 	if _, err := walletAfterDelta(inviter.Quota, -snapshot.MainDebit); err != nil {
 		return snapshot, err
@@ -188,6 +194,8 @@ func reverseRebateForFinanceTx(tx *gorm.DB, rebate *AffiliateRebate, reason stri
 	}
 	if err := tx.Unscoped().Model(&User{}).Where("id = ?", locked.InviterId).Updates(map[string]interface{}{
 		"quota":              gorm.Expr("quota - ?", snapshot.MainDebit),
+		"paid_quota":         gorm.Expr("paid_quota - ?", debtOffset),
+		"bonus_quota":        gorm.Expr("bonus_quota - ?", transferred),
 		"aff_quota":          gorm.Expr("aff_quota - ?", snapshot.AffiliateDebit),
 		"aff_reversed_quota": gorm.Expr("aff_reversed_quota + ?", remaining),
 	}).Error; err != nil {
@@ -221,6 +229,7 @@ func RefundTopUpByAdmin(tradeNo string, reason string, operatorId int) (alreadyR
 		return false, err
 	}
 	var targetId, relatedId, targetDebit, relatedMainDebit int
+	var relatedAllocation QuotaAllocation
 	err = DB.Transaction(func(tx *gorm.DB) error {
 		var topUp TopUp
 		if err := lockForUpdate(tx).Where("trade_no = ?", tradeNo).First(&topUp).Error; err != nil {
@@ -237,7 +246,14 @@ func RefundTopUpByAdmin(tradeNo string, reason string, operatorId int) (alreadyR
 		if err != nil {
 			return err
 		}
+		if target.BonusQuota == 0 && target.PaidQuota == 0 && target.Quota != 0 {
+			target.PaidQuota = target.Quota
+		}
 		targetAfter, err := walletAfterDelta(target.Quota, -topUp.CreditedQuota)
+		if err != nil {
+			return err
+		}
+		paidAfter, err := walletAfterDelta(target.PaidQuota, -topUp.CreditedQuota)
 		if err != nil {
 			return err
 		}
@@ -251,7 +267,9 @@ func RefundTopUpByAdmin(tradeNo string, reason string, operatorId int) (alreadyR
 			alreadyRefunded = true
 			return nil
 		}
-		if err := tx.Unscoped().Model(&User{}).Where("id = ?", target.Id).Update("quota", targetAfter).Error; err != nil {
+		if err := tx.Unscoped().Model(&User{}).Where("id = ?", target.Id).Updates(map[string]interface{}{
+			"quota": targetAfter, "paid_quota": paidAfter, "bonus_quota": target.BonusQuota,
+		}).Error; err != nil {
 			return err
 		}
 
@@ -293,16 +311,17 @@ func RefundTopUpByAdmin(tradeNo string, reason string, operatorId int) (alreadyR
 		}
 		targetId, relatedId = target.Id, op.RelatedUserId
 		targetDebit, relatedMainDebit = topUp.CreditedQuota, reversal.MainDebit
+		relatedAllocation = QuotaAllocation{Bonus: reversal.BonusDebit, Paid: reversal.PaidDebit}
 		return nil
 	})
 	if err != nil || alreadyRefunded {
 		return alreadyRefunded, err
 	}
 	if targetDebit > 0 {
-		_ = cacheDecrUserQuota(targetId, int64(targetDebit))
+		_, _ = cacheApplyUserQuotaSourceDelta(targetId, QuotaAllocation{Paid: -targetDebit})
 	}
 	if relatedMainDebit > 0 {
-		_ = cacheDecrUserQuota(relatedId, int64(relatedMainDebit))
+		_, _ = cacheApplyUserQuotaSourceDelta(relatedId, QuotaAllocation{Bonus: -relatedAllocation.Bonus, Paid: -relatedAllocation.Paid})
 	}
 	return false, nil
 }
@@ -316,6 +335,7 @@ func RefundRedemptionByAdmin(redemptionId int, reason string, operatorId int) (a
 		return false, err
 	}
 	var targetId, relatedId, targetDebit, relatedMainDebit int
+	var relatedAllocation QuotaAllocation
 	err = DB.Transaction(func(tx *gorm.DB) error {
 		var redemption Redemption
 		if err := lockForUpdate(tx).Where("id = ?", redemptionId).First(&redemption).Error; err != nil {
@@ -332,7 +352,14 @@ func RefundRedemptionByAdmin(redemptionId int, reason string, operatorId int) (a
 		if err != nil {
 			return err
 		}
+		if target.BonusQuota == 0 && target.PaidQuota == 0 && target.Quota != 0 {
+			target.PaidQuota = target.Quota
+		}
 		targetAfter, err := walletAfterDelta(target.Quota, -redemption.Quota)
+		if err != nil {
+			return err
+		}
+		paidAfter, err := walletAfterDelta(target.PaidQuota, -redemption.Quota)
 		if err != nil {
 			return err
 		}
@@ -346,7 +373,9 @@ func RefundRedemptionByAdmin(redemptionId int, reason string, operatorId int) (a
 			alreadyRefunded = true
 			return nil
 		}
-		if err := tx.Unscoped().Model(&User{}).Where("id = ?", target.Id).Update("quota", targetAfter).Error; err != nil {
+		if err := tx.Unscoped().Model(&User{}).Where("id = ?", target.Id).Updates(map[string]interface{}{
+			"quota": targetAfter, "paid_quota": paidAfter, "bonus_quota": target.BonusQuota,
+		}).Error; err != nil {
 			return err
 		}
 
@@ -388,16 +417,17 @@ func RefundRedemptionByAdmin(redemptionId int, reason string, operatorId int) (a
 		}
 		targetId, relatedId = target.Id, op.RelatedUserId
 		targetDebit, relatedMainDebit = redemption.Quota, reversal.MainDebit
+		relatedAllocation = QuotaAllocation{Bonus: reversal.BonusDebit, Paid: reversal.PaidDebit}
 		return nil
 	})
 	if err != nil || alreadyRefunded {
 		return alreadyRefunded, err
 	}
 	if targetDebit > 0 {
-		_ = cacheDecrUserQuota(targetId, int64(targetDebit))
+		_, _ = cacheApplyUserQuotaSourceDelta(targetId, QuotaAllocation{Paid: -targetDebit})
 	}
 	if relatedMainDebit > 0 {
-		_ = cacheDecrUserQuota(relatedId, int64(relatedMainDebit))
+		_, _ = cacheApplyUserQuotaSourceDelta(relatedId, QuotaAllocation{Bonus: -relatedAllocation.Bonus, Paid: -relatedAllocation.Paid})
 	}
 	return false, nil
 }
@@ -411,6 +441,7 @@ func ReverseAffiliateRebateByAdmin(rebateId int, reason string, operatorId int) 
 		return false, err
 	}
 	var inviterId, mainDebit int
+	var allocation QuotaAllocation
 	err = DB.Transaction(func(tx *gorm.DB) error {
 		var rebate AffiliateRebate
 		if err := lockForUpdate(tx).Where("id = ?", rebateId).First(&rebate).Error; err != nil {
@@ -452,10 +483,11 @@ func ReverseAffiliateRebateByAdmin(rebateId int, reason string, operatorId int) 
 			return err
 		}
 		inviterId, mainDebit = rebate.InviterId, reversal.MainDebit
+		allocation = QuotaAllocation{Bonus: reversal.BonusDebit, Paid: reversal.PaidDebit}
 		return nil
 	})
 	if err == nil && !alreadyReversed && mainDebit > 0 {
-		_ = cacheDecrUserQuota(inviterId, int64(mainDebit))
+		_, _ = cacheApplyUserQuotaSourceDelta(inviterId, QuotaAllocation{Bonus: -allocation.Bonus, Paid: -allocation.Paid})
 	}
 	return alreadyReversed, err
 }
@@ -489,6 +521,17 @@ func ApplyFinancialPenalty(targetUserId int, quota int, reason string, requestId
 		if operatorRole != common.RoleRootUser && target.Role >= operatorRole {
 			return ErrFinancialRoleForbidden
 		}
+		if target.BonusQuota == 0 && target.PaidQuota == 0 && target.Quota != 0 {
+			target.PaidQuota = target.Quota
+		}
+		bonus := target.BonusQuota
+		if bonus < 0 {
+			bonus = 0
+		}
+		if bonus > quota {
+			bonus = quota
+		}
+		allocation := QuotaAllocation{Bonus: bonus, Paid: quota - bonus}
 		after, err := walletAfterDelta(target.Quota, -quota)
 		if err != nil {
 			return err
@@ -503,14 +546,18 @@ func ApplyFinancialPenalty(targetUserId int, quota int, reason string, requestId
 			TargetUserId: target.Id, TargetUsername: target.Username,
 			SourceType: "user", SourceId: strconv.Itoa(target.Id), PrincipalQuota: quota,
 			TargetMainDelta: -quota, TargetMainBefore: target.Quota, TargetMainAfter: after, Reason: reason,
+			TargetBonusDelta: -allocation.Bonus, TargetPaidDelta: -allocation.Paid,
 		}
-		if err := tx.Unscoped().Model(&User{}).Where("id = ?", target.Id).Update("quota", after).Error; err != nil {
+		if err := tx.Unscoped().Model(&User{}).Where("id = ?", target.Id).Updates(map[string]interface{}{
+			"quota": after, "bonus_quota": gorm.Expr("bonus_quota - ?", allocation.Bonus),
+			"paid_quota": gorm.Expr("paid_quota - ?", allocation.Paid),
+		}).Error; err != nil {
 			return err
 		}
 		return tx.Create(&operation).Error
 	})
 	if err == nil && !alreadyDone {
-		_ = cacheDecrUserQuota(targetUserId, int64(quota))
+		_, _ = cacheApplyUserQuotaSourceDelta(targetUserId, QuotaAllocation{Bonus: operation.TargetBonusDelta, Paid: operation.TargetPaidDelta})
 	}
 	return operation, alreadyDone, err
 }
@@ -544,6 +591,10 @@ func ReverseFinancialPenalty(penaltyId int, reason string, operatorId int, opera
 		if operatorRole != common.RoleRootUser && target.Role >= operatorRole {
 			return ErrFinancialRoleForbidden
 		}
+		allocation := QuotaAllocation{Bonus: -penalty.TargetBonusDelta, Paid: -penalty.TargetPaidDelta}
+		if allocation.Total() == 0 {
+			allocation.Paid = penalty.PrincipalQuota
+		}
 		after, err := walletAfterDelta(target.Quota, penalty.PrincipalQuota)
 		if err != nil {
 			return err
@@ -558,14 +609,18 @@ func ReverseFinancialPenalty(penaltyId int, reason string, operatorId int, opera
 			TargetUserId: target.Id, TargetUsername: target.Username,
 			SourceType: "penalty", SourceId: strconv.Itoa(penalty.Id), PrincipalQuota: penalty.PrincipalQuota,
 			TargetMainDelta: penalty.PrincipalQuota, TargetMainBefore: target.Quota, TargetMainAfter: after, Reason: reason,
+			TargetBonusDelta: allocation.Bonus, TargetPaidDelta: allocation.Paid,
 		}
-		if err := tx.Unscoped().Model(&User{}).Where("id = ?", target.Id).Update("quota", after).Error; err != nil {
+		if err := tx.Unscoped().Model(&User{}).Where("id = ?", target.Id).Updates(map[string]interface{}{
+			"quota": after, "bonus_quota": gorm.Expr("bonus_quota + ?", allocation.Bonus),
+			"paid_quota": gorm.Expr("paid_quota + ?", allocation.Paid),
+		}).Error; err != nil {
 			return err
 		}
 		return tx.Create(&reversal).Error
 	})
 	if err == nil && !alreadyDone {
-		syncCreditUserQuotaCache(reversal.TargetUserId, reversal.PrincipalQuota, "penalty reversal")
+		_, _ = cacheApplyUserQuotaSourceDelta(reversal.TargetUserId, QuotaAllocation{Bonus: reversal.TargetBonusDelta, Paid: reversal.TargetPaidDelta})
 	}
 	return reversal, alreadyDone, err
 }

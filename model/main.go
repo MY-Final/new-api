@@ -84,6 +84,7 @@ func createRootAccountIfNeed() error {
 			DisplayName: "Root User",
 			AccessToken: nil,
 			Quota:       100000000,
+			PaidQuota:   100000000,
 		}
 		DB.Create(&rootUser)
 	}
@@ -271,7 +272,7 @@ func InitLogDB() (err error) {
 	return err
 }
 
-var userQuotaColumns = []string{"quota", "used_quota", "aff_quota", "aff_history", "aff_reversed_quota"}
+var userQuotaColumns = []string{"quota", "bonus_quota", "paid_quota", "used_quota", "aff_quota", "aff_history", "aff_reversed_quota"}
 
 // ensureUserQuotaColumns rejects a legacy 32-bit wallet schema before any
 // migrations run. The 64-bit-only build intentionally does not auto-upgrade
@@ -373,6 +374,9 @@ func migrateDB() error {
 	if err != nil {
 		return err
 	}
+	if err := migrateUserQuotaSources(); err != nil {
+		return err
+	}
 	if err := DB.Unscoped().Model(&Redemption{}).
 		Where("type IS NULL OR type = ?", "").
 		Update("type", RedemptionTypeReward).Error; err != nil {
@@ -394,6 +398,15 @@ func migrateDB() error {
 		}
 	}
 	return nil
+}
+
+// migrateUserQuotaSources assigns all pre-existing wallet balances to the
+// paid bucket. The predicate makes the data migration restart-safe and leaves
+// already split wallets untouched.
+func migrateUserQuotaSources() error {
+	return DB.Model(&User{}).
+		Where("bonus_quota = 0 AND paid_quota = 0 AND quota <> 0").
+		Update("paid_quota", gorm.Expr("quota")).Error
 }
 
 func migrateLOGDB() error {

@@ -19,6 +19,8 @@ const (
 	BatchUpdateTypeUsedQuota
 	BatchUpdateTypeChannelUsedQuota
 	BatchUpdateTypeRequestCount
+	BatchUpdateTypeUserBonusQuota
+	BatchUpdateTypeUserPaidQuota
 	BatchUpdateTypeCount // if you add a new type, you need to add a new map and a new lock
 )
 
@@ -62,6 +64,12 @@ func addNewRecord(type_ int, id int, value int) {
 	batchUpdateStores[type_][id] = sum
 }
 
+func addUserQuotaSourceRecord(id int, allocation QuotaAllocation) {
+	addNewRecord(BatchUpdateTypeUserQuota, id, allocation.Total())
+	addNewRecord(BatchUpdateTypeUserBonusQuota, id, allocation.Bonus)
+	addNewRecord(BatchUpdateTypeUserPaidQuota, id, allocation.Paid)
+}
+
 func batchUpdate() {
 	// check if there's any data to update
 	hasData := false
@@ -89,7 +97,7 @@ func batchUpdate() {
 	}
 
 	for i, store := range stores {
-		if i == BatchUpdateTypeUserQuota || i == BatchUpdateTypeUsedQuota || i == BatchUpdateTypeRequestCount {
+		if i == BatchUpdateTypeUserQuota || i == BatchUpdateTypeUsedQuota || i == BatchUpdateTypeRequestCount || i == BatchUpdateTypeUserBonusQuota || i == BatchUpdateTypeUserPaidQuota {
 			continue
 		}
 		for key, value := range store {
@@ -108,8 +116,10 @@ func batchUpdate() {
 	userQuotaStore := stores[BatchUpdateTypeUserQuota]
 	usedQuotaStore := stores[BatchUpdateTypeUsedQuota]
 	requestCountStore := stores[BatchUpdateTypeRequestCount]
+	bonusQuotaStore := stores[BatchUpdateTypeUserBonusQuota]
+	paidQuotaStore := stores[BatchUpdateTypeUserPaidQuota]
 
-	userIDs := make(map[int]struct{}, len(userQuotaStore)+len(usedQuotaStore)+len(requestCountStore))
+	userIDs := make(map[int]struct{}, len(userQuotaStore)+len(usedQuotaStore)+len(requestCountStore)+len(bonusQuotaStore)+len(paidQuotaStore))
 	for key := range userQuotaStore {
 		userIDs[key] = struct{}{}
 	}
@@ -119,8 +129,14 @@ func batchUpdate() {
 	for key := range requestCountStore {
 		userIDs[key] = struct{}{}
 	}
+	for key := range bonusQuotaStore {
+		userIDs[key] = struct{}{}
+	}
+	for key := range paidQuotaStore {
+		userIDs[key] = struct{}{}
+	}
 	for key := range userIDs {
-		updateUserQuotaUsedQuotaAndRequestCount(key, userQuotaStore[key], usedQuotaStore[key], requestCountStore[key])
+		updateUserQuotaUsedQuotaAndRequestCount(key, userQuotaStore[key], bonusQuotaStore[key], paidQuotaStore[key], usedQuotaStore[key], requestCountStore[key])
 	}
 	common.SysLog("batch update finished")
 }

@@ -31,6 +31,8 @@ import { cn } from '@/lib/utils'
 type UserQuotaCellProps = {
   used: number
   remaining: number
+  bonus?: number
+  paid?: number
 }
 
 function getQuotaProgressColor(percentage: number): string {
@@ -87,6 +89,12 @@ export function UserQuotaCell(props: UserQuotaCellProps) {
           </div>
           <div>
             {t('Total:')} {formattedTotal}
+          </div>
+          <div>
+            {t('Bonus Balance')}: {formatQuota(props.bonus ?? 0)}
+          </div>
+          <div>
+            {t('Paid Balance')}: {formatQuota(props.paid ?? 0)}
           </div>
           <div>
             {t('Percentage:')} {percentage.toFixed(1)}%

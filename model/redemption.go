@@ -218,7 +218,11 @@ func Redeem(key string, userId int) (quota int, err error) {
 		if result.RowsAffected == 0 {
 			return errors.New("该兑换码已被使用")
 		}
-		if err := creditTopUpQuota(tx, userId, redemption.Quota, nil); err != nil {
+		source := QuotaSourcePaid
+		if redemption.Type == RedemptionTypeReward {
+			source = QuotaSourceBonus
+		}
+		if err := creditTopUpQuotaWithSource(tx, userId, redemption.Quota, source, nil); err != nil {
 			return err
 		}
 		return recordAffiliateRebateForRedemptionTx(tx, redemption, userId)
@@ -227,7 +231,11 @@ func Redeem(key string, userId int) (quota int, err error) {
 		common.SysError("redemption failed: " + err.Error())
 		return 0, ErrRedeemFailed
 	}
-	syncCreditUserQuotaCache(userId, redemption.Quota, "redemption")
+	source := QuotaSourcePaid
+	if redemption.Type == RedemptionTypeReward {
+		source = QuotaSourceBonus
+	}
+	syncCreditUserQuotaCacheForSource(userId, redemption.Quota, source, "redemption")
 	invalidateAffiliateRebateUserCache(AffiliateRebateSourceRedemption, fmt.Sprintf("%d", redemption.Id), "redemption rebate")
 	RecordLog(userId, LogTypeTopup, fmt.Sprintf("通过兑换码充值 %s，兑换码ID %d", logger.LogQuota(redemption.Quota), redemption.Id))
 	return redemption.Quota, nil

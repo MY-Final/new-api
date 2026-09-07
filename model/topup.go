@@ -105,6 +105,10 @@ func ValidateTopUpQuotaCapacity(userId int, creditedQuota int) error {
 // Keeping the predicate and increment in one UPDATE prevents two
 // concurrent callbacks from both passing a separate read/check.
 func creditTopUpQuota(tx *gorm.DB, userId int, creditedQuota int, updates map[string]interface{}) error {
+	return creditTopUpQuotaWithSource(tx, userId, creditedQuota, QuotaSourcePaid, updates)
+}
+
+func creditTopUpQuotaWithSource(tx *gorm.DB, userId int, creditedQuota int, source QuotaSource, updates map[string]interface{}) error {
 	maxCurrentQuota, err := topUpQuotaMaxCurrent(creditedQuota)
 	if err != nil {
 		return err
@@ -115,6 +119,16 @@ func creditTopUpQuota(tx *gorm.DB, userId int, creditedQuota int, updates map[st
 		updateFields[key] = value
 	}
 	updateFields["quota"] = gorm.Expr("quota + ?", creditedQuota)
+	if source == QuotaSourceBonus {
+		updateFields["bonus_quota"] = gorm.Expr("bonus_quota + ?", creditedQuota)
+	} else {
+		updateFields["paid_quota"] = gorm.Expr("paid_quota + ?", creditedQuota)
+	}
+	if err := tx.Model(&User{}).
+		Where("id = ? AND bonus_quota = 0 AND paid_quota = 0 AND quota <> 0", userId).
+		Update("paid_quota", gorm.Expr("quota")).Error; err != nil {
+		return err
+	}
 
 	result := tx.Model(&User{}).
 		Where("id = ? AND quota <= ?", userId, maxCurrentQuota).
@@ -250,7 +264,7 @@ func RechargeEpay(tradeNo string, actualPaymentMethod string, callerIp string) (
 	if alreadyDone {
 		return true, nil
 	}
-	syncCreditUserQuotaCache(topUp.UserId, quotaToAdd, "epay topup")
+	syncCreditUserQuotaCacheForSource(topUp.UserId, quotaToAdd, QuotaSourcePaid, "epay topup")
 	invalidateAffiliateRebateUserCache(AffiliateRebateSourceTopUp, topUp.TradeNo, "epay topup rebate")
 
 	common.SysLog(fmt.Sprintf("易支付充值成功 trade_no=%s user_id=%d quota_to_add=%d money=%.2f", topUp.TradeNo, topUp.UserId, quotaToAdd, topUp.Money))
@@ -310,7 +324,7 @@ func Recharge(referenceId string, customerId string, callerIp string) (err error
 		common.SysError("topup failed: " + err.Error())
 		return errors.New("充值失败，请稍后重试")
 	}
-	syncCreditUserQuotaCache(topUp.UserId, quota, "stripe topup")
+	syncCreditUserQuotaCacheForSource(topUp.UserId, quota, QuotaSourcePaid, "stripe topup")
 	invalidateAffiliateRebateUserCache(AffiliateRebateSourceTopUp, topUp.TradeNo, "stripe topup rebate")
 
 	RecordTopupLog(topUp.UserId, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%d", logger.FormatQuota(quota), topUp.Amount), callerIp, topUp.PaymentMethod, PaymentMethodStripe)
@@ -552,7 +566,7 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 	}
 
 	// 事务外记录日志，避免阻塞
-	syncCreditUserQuotaCache(userId, quotaToAdd, "manual topup")
+	syncCreditUserQuotaCacheForSource(userId, quotaToAdd, QuotaSourcePaid, "manual topup")
 	invalidateAffiliateRebateUserCache(AffiliateRebateSourceTopUp, tradeNo, "manual topup rebate")
 	RecordTopupLog(userId, fmt.Sprintf("管理员补单成功，充值金额: %v，支付金额：%f", logger.FormatQuota(quotaToAdd), payMoney), callerIp, paymentMethod, "admin")
 	return nil
@@ -625,7 +639,7 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 		common.SysError("creem topup failed: " + err.Error())
 		return errors.New("充值失败，请稍后重试")
 	}
-	syncCreditUserQuotaCache(topUp.UserId, quota, "creem topup")
+	syncCreditUserQuotaCacheForSource(topUp.UserId, quota, QuotaSourcePaid, "creem topup")
 	invalidateAffiliateRebateUserCache(AffiliateRebateSourceTopUp, topUp.TradeNo, "creem topup rebate")
 
 	RecordTopupLog(topUp.UserId, fmt.Sprintf("使用Creem充值成功，充值额度: %v，支付金额：%.2f", quota, topUp.Money), callerIp, topUp.PaymentMethod, PaymentMethodCreem)
@@ -689,7 +703,7 @@ func RechargeWaffo(tradeNo string, callerIp string) (err error) {
 		common.SysError("waffo topup failed: " + err.Error())
 		return errors.New("充值失败，请稍后重试")
 	}
-	syncCreditUserQuotaCache(topUp.UserId, quotaToAdd, "waffo topup")
+	syncCreditUserQuotaCacheForSource(topUp.UserId, quotaToAdd, QuotaSourcePaid, "waffo topup")
 	invalidateAffiliateRebateUserCache(AffiliateRebateSourceTopUp, topUp.TradeNo, "waffo topup rebate")
 
 	if quotaToAdd > 0 {
@@ -755,7 +769,7 @@ func RechargeWaffoPancake(tradeNo string) (err error) {
 		common.SysError("waffo pancake topup failed: " + err.Error())
 		return errors.New("充值失败，请稍后重试")
 	}
-	syncCreditUserQuotaCache(topUp.UserId, quotaToAdd, "waffo pancake topup")
+	syncCreditUserQuotaCacheForSource(topUp.UserId, quotaToAdd, QuotaSourcePaid, "waffo pancake topup")
 	invalidateAffiliateRebateUserCache(AffiliateRebateSourceTopUp, topUp.TradeNo, "waffo pancake topup rebate")
 
 	if quotaToAdd > 0 {

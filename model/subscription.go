@@ -765,6 +765,7 @@ func PurchaseSubscriptionWithBalance(userId int, planId int) error {
 	var logPlanTitle string
 	var logMoney float64
 	var chargedQuota int
+	var chargedAllocation QuotaAllocation
 	var upgradeGroup string
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		plan, err := getSubscriptionPlanByIdTx(tx, planId)
@@ -790,12 +791,27 @@ func PurchaseSubscriptionWithBalance(userId int, planId int) error {
 		if err := lockForUpdate(tx).Where("id = ?", userId).First(&user).Error; err != nil {
 			return err
 		}
+		if user.BonusQuota == 0 && user.PaidQuota == 0 && user.Quota != 0 {
+			user.PaidQuota = user.Quota
+		}
 		if requiredQuota > 0 && user.Quota < requiredQuota {
 			return errors.New("余额不足")
 		}
 		if requiredQuota > 0 {
+			bonus := user.BonusQuota
+			if bonus < 0 {
+				bonus = 0
+			}
+			if bonus > requiredQuota {
+				bonus = requiredQuota
+			}
+			chargedAllocation = QuotaAllocation{Bonus: bonus, Paid: requiredQuota - bonus}
 			if err := tx.Model(&User{}).Where("id = ?", userId).
-				Update("quota", gorm.Expr("quota - ?", requiredQuota)).Error; err != nil {
+				Updates(map[string]interface{}{
+					"quota":       gorm.Expr("quota - ?", requiredQuota),
+					"bonus_quota": gorm.Expr("bonus_quota - ?", chargedAllocation.Bonus),
+					"paid_quota":  gorm.Expr("paid_quota - ?", chargedAllocation.Paid),
+				}).Error; err != nil {
 				return err
 			}
 		}
@@ -836,7 +852,7 @@ func PurchaseSubscriptionWithBalance(userId int, planId int) error {
 	}
 
 	if chargedQuota > 0 {
-		if err := cacheDecrUserQuota(userId, int64(chargedQuota)); err != nil {
+		if _, err := cacheApplyUserQuotaSourceDelta(userId, QuotaAllocation{Bonus: -chargedAllocation.Bonus, Paid: -chargedAllocation.Paid}); err != nil {
 			common.SysLog("failed to decrease user quota cache after subscription balance purchase: " + err.Error())
 		}
 	}

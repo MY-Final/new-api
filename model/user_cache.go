@@ -11,13 +11,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const userCacheSchemaVersion = 2
+const userCacheSchemaVersion = 3
 
 type UserBase struct {
 	Id          int    `json:"id"`
 	Group       string `json:"group"`
 	Email       string `json:"email"`
 	Quota       int    `json:"quota"`
+	BonusQuota  int    `json:"bonus_quota"`
+	PaidQuota   int    `json:"paid_quota"`
 	Status      int    `json:"status"`
 	Role        int    `json:"role"`
 	Username    string `json:"username"`
@@ -144,7 +146,7 @@ func cacheIncrUserQuota(userId int, delta int64) error {
 	if !common.RedisEnabled {
 		return nil
 	}
-	_, err := cacheApplyUserQuotaDelta(userId, delta)
+	_, err := cacheApplyUserQuotaSourceDelta(userId, QuotaAllocation{Bonus: int(delta)})
 	return err
 }
 
@@ -156,10 +158,18 @@ func cacheDecrUserQuota(userId int, delta int64) error {
 // 余额。预扣以缓存值为准（存在期间），授信不能绕过它，否则新到账的额度在
 // 缓存过期前不可用；缓存未命中无需处理，下次读取会从已提交的数据库余额水合。
 func syncCreditUserQuotaCache(userId int, quota int, operation string) {
-	if quota <= 0 {
+	syncCreditUserQuotaCacheForSource(userId, quota, QuotaSourceBonus, operation)
+}
+
+func syncCreditUserQuotaCacheForSource(userId int, quota int, source QuotaSource, operation string) {
+	if quota <= 0 || !common.RedisEnabled || common.RDB == nil {
 		return
 	}
-	if err := cacheIncrUserQuota(userId, int64(quota)); err != nil {
+	allocation := QuotaAllocation{Bonus: quota}
+	if source == QuotaSourcePaid {
+		allocation = QuotaAllocation{Paid: quota}
+	}
+	if _, err := cacheApplyUserQuotaSourceDelta(userId, allocation); err != nil {
 		common.SysLog(fmt.Sprintf("failed to sync %s credit to user quota cache: %s", operation, err.Error()))
 	}
 }

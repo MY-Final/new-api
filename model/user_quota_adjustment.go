@@ -21,6 +21,7 @@ type UserQuotaAdjustment struct {
 	Username string
 	Before   int
 	After    int
+	Delta    QuotaAllocation
 }
 
 func AdjustUserQuota(userID, operatorRole int, mode string, value int) (*UserQuotaAdjustment, error) {
@@ -39,6 +40,9 @@ func AdjustUserQuota(userID, operatorRole int, mode string, value int) (*UserQuo
 		var user User
 		if err := lockForUpdate(tx).First(&user, userID).Error; err != nil {
 			return err
+		}
+		if user.BonusQuota == 0 && user.PaidQuota == 0 && user.Quota != 0 {
+			user.PaidQuota = user.Quota
 		}
 		if operatorRole != common.RoleRootUser && operatorRole <= user.Role {
 			return ErrUserQuotaPermission
@@ -60,7 +64,26 @@ func AdjustUserQuota(userID, operatorRole int, mode string, value int) (*UserQuo
 		// An unchanged override is a successful operation, including on MySQL
 		// configurations that count only changed rows in RowsAffected.
 		if after != user.Quota {
-			result := tx.Model(&User{}).Where("id = ?", userID).Update("quota", after)
+			delta := after - user.Quota
+			allocation := QuotaAllocation{}
+			if delta > 0 {
+				allocation.Paid = delta
+			} else {
+				amount := -delta
+				allocation.Bonus = user.BonusQuota
+				if allocation.Bonus < 0 {
+					allocation.Bonus = 0
+				}
+				if allocation.Bonus > amount {
+					allocation.Bonus = amount
+				}
+				allocation.Paid = amount - allocation.Bonus
+			}
+			result := tx.Model(&User{}).Where("id = ?", userID).Updates(map[string]interface{}{
+				"quota":       gorm.Expr("quota + ?", delta),
+				"bonus_quota": gorm.Expr("bonus_quota - ?", allocation.Bonus),
+				"paid_quota":  gorm.Expr("paid_quota + ?", delta-allocation.Bonus),
+			})
 			if result.Error != nil {
 				return result.Error
 			}
@@ -69,6 +92,24 @@ func AdjustUserQuota(userID, operatorRole int, mode string, value int) (*UserQuo
 			}
 		}
 		adjustment = UserQuotaAdjustment{UserID: user.Id, Username: user.Username, Before: user.Quota, After: after}
+		if after != user.Quota {
+			delta := after - user.Quota
+			if delta > 0 {
+				adjustment.Delta = QuotaAllocation{Paid: delta}
+			} else {
+				amount := -delta
+				bonus := user.BonusQuota
+				if bonus < 0 {
+					bonus = 0
+				}
+				if bonus > amount {
+					bonus = amount
+				}
+				adjustment.Delta = QuotaAllocation{Bonus: bonus, Paid: amount - bonus}
+				adjustment.Delta.Bonus = -adjustment.Delta.Bonus
+				adjustment.Delta.Paid = -adjustment.Delta.Paid
+			}
+		}
 		return nil
 	})
 	if err != nil {
@@ -79,7 +120,7 @@ func AdjustUserQuota(userID, operatorRole int, mode string, value int) (*UserQuo
 	// Both balances are bounded above, so their difference fits in int64.
 	delta := int64(adjustment.After) - int64(adjustment.Before)
 	if delta != 0 {
-		if err := cacheIncrUserQuota(userID, delta); err != nil {
+		if _, err := cacheApplyUserQuotaSourceDelta(userID, adjustment.Delta); err != nil {
 			common.SysError(fmt.Sprintf("failed to sync manual quota adjustment for user %d: %s", userID, err))
 		}
 	}

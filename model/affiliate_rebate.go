@@ -149,11 +149,17 @@ func createAffiliateRebateTx(tx *gorm.DB, inviterId int, inviteeId int, sourceTy
 	}
 
 	if rebateQuota > 0 {
+		if err := tx.Model(&User{}).
+			Where("id = ? AND bonus_quota = 0 AND paid_quota = 0 AND quota <> 0", inviterId).
+			Update("paid_quota", gorm.Expr("quota")).Error; err != nil {
+			return nil, false, err
+		}
 		updates := map[string]interface{}{
 			"aff_history": gorm.Expr("aff_history + ?", rebateQuota),
 		}
 		if debtOffsetQuota > 0 {
 			updates["quota"] = gorm.Expr("quota + ?", debtOffsetQuota)
+			updates["paid_quota"] = gorm.Expr("paid_quota + ?", debtOffsetQuota)
 		}
 		if availableQuota := rebateQuota - debtOffsetQuota; availableQuota > 0 {
 			updates["aff_quota"] = gorm.Expr("aff_quota + ?", availableQuota)
