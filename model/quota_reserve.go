@@ -18,6 +18,9 @@ type QuotaAllocation struct {
 	Paid  int
 }
 
+// TODO: Persist per-request quota allocations in usage history so later views
+// can show how much of each request used bonus versus paid quota.
+
 func (a QuotaAllocation) Total() int { return a.Bonus + a.Paid }
 
 const (

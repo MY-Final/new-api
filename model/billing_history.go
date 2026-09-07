@@ -33,12 +33,14 @@ type BillingRecord struct {
 	RefundedAt      int64   `json:"refunded_at"`
 	RefundReason    string  `json:"refund_reason"`
 
-	RedemptionId    int    `json:"redemption_id,omitempty"`
-	RedemptionName  string `json:"redemption_name,omitempty"`
-	RedemptionKey   string `json:"redemption_key,omitempty"`
-	RedemptionType  string `json:"redemption_type,omitempty"`
-	RedemptionQuota int    `json:"redemption_quota,omitempty"`
-	RedeemedTime    int64  `json:"redeemed_time,omitempty"`
+	RedemptionId         int    `json:"redemption_id,omitempty"`
+	RedemptionName       string `json:"redemption_name,omitempty"`
+	RedemptionKey        string `json:"redemption_key,omitempty"`
+	RedemptionType       string `json:"redemption_type,omitempty"`
+	RedemptionQuota      int    `json:"redemption_quota,omitempty"`
+	RedemptionPaidQuota  int    `json:"redemption_paid_quota,omitempty"`
+	RedemptionBonusQuota int    `json:"redemption_bonus_quota,omitempty"`
+	RedeemedTime         int64  `json:"redeemed_time,omitempty"`
 }
 
 func (record *BillingRecord) sortTime() int64 {
@@ -134,20 +136,26 @@ func GetUserBillingHistory(userId int, keyword string, pageInfo *common.PageInfo
 		})
 	}
 	for _, redemption := range redemptions {
+		paidQuota, bonusQuota := redemption.PaidQuota, redemption.BonusQuota
+		if allocation, allocationErr := redemption.quotaAllocation(); allocationErr == nil {
+			paidQuota, bonusQuota = allocation.Paid, allocation.Bonus
+		}
 		records = append(records, &BillingRecord{
-			Id:              redemption.Id,
-			RecordType:      BillingRecordTypeRedemption,
-			UserId:          redemption.UsedUserId,
-			CreateTime:      redemption.RedeemedTime,
-			Status:          redemptionStatus(redemption.Status),
-			RedemptionId:    redemption.Id,
-			RedemptionName:  redemption.Name,
-			RedemptionKey:   redemption.Key,
-			RedemptionType:  redemption.Type,
-			RedemptionQuota: redemption.Quota,
-			RedeemedTime:    redemption.RedeemedTime,
-			RefundedAt:      redemption.RefundedAt,
-			RefundReason:    redemption.RefundReason,
+			Id:                   redemption.Id,
+			RecordType:           BillingRecordTypeRedemption,
+			UserId:               redemption.UsedUserId,
+			CreateTime:           redemption.RedeemedTime,
+			Status:               redemptionStatus(redemption.Status),
+			RedemptionId:         redemption.Id,
+			RedemptionName:       redemption.Name,
+			RedemptionKey:        redemption.Key,
+			RedemptionType:       redemption.Type,
+			RedemptionQuota:      redemption.Quota,
+			RedemptionPaidQuota:  paidQuota,
+			RedemptionBonusQuota: bonusQuota,
+			RedeemedTime:         redemption.RedeemedTime,
+			RefundedAt:           redemption.RefundedAt,
+			RefundReason:         redemption.RefundReason,
 		})
 	}
 

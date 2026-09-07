@@ -250,6 +250,22 @@ export function BillingHistoryDialog({
                             {formatQuota(record.redemption_quota || 0)}
                           </div>
                         </div>
+                        <div className='space-y-1'>
+                          <Label className='text-muted-foreground text-xs'>
+                            {t('Paid quota')}
+                          </Label>
+                          <div className='text-sm font-semibold'>
+                            {formatQuota(record.redemption_paid_quota || 0)}
+                          </div>
+                        </div>
+                        <div className='space-y-1'>
+                          <Label className='text-muted-foreground text-xs'>
+                            {t('Bonus quota')}
+                          </Label>
+                          <div className='text-sm font-semibold'>
+                            {formatQuota(record.redemption_bonus_quota || 0)}
+                          </div>
+                        </div>
                       </div>
                     ) : (
                       <div className='mt-3 grid grid-cols-2 gap-3 sm:mt-4 sm:grid-cols-3 sm:gap-4'>

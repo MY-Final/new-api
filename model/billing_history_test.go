@@ -30,7 +30,8 @@ func TestGetUserBillingHistoryMergesTopupsAndRedemptions(t *testing.T) {
 		Name:         "billing-redemption",
 		Status:       common.RedemptionCodeStatusUsed,
 		Type:         RedemptionTypePaid,
-		Quota:        2000,
+		PaidQuota:    1500,
+		BonusQuota:   500,
 		RedeemedTime: now - 5,
 		UsedUserId:   user.Id,
 	}).Error)
@@ -41,6 +42,9 @@ func TestGetUserBillingHistoryMergesTopupsAndRedemptions(t *testing.T) {
 	require.Len(t, records, 2)
 	assert.Equal(t, BillingRecordTypeRedemption, records[0].RecordType)
 	assert.Equal(t, "billing-redemption-key", records[0].RedemptionKey)
+	assert.Equal(t, 2000, records[0].RedemptionQuota)
+	assert.Equal(t, 1500, records[0].RedemptionPaidQuota)
+	assert.Equal(t, 500, records[0].RedemptionBonusQuota)
 	assert.Equal(t, BillingRecordTypeTopup, records[1].RecordType)
 }
 
@@ -81,4 +85,6 @@ func TestGetUserBillingHistorySearchesRedemptionCode(t *testing.T) {
 	assert.Equal(t, int64(1), total)
 	require.Len(t, records, 1)
 	assert.Equal(t, BillingRecordTypeRedemption, records[0].RecordType)
+	assert.Zero(t, records[0].RedemptionPaidQuota)
+	assert.Equal(t, 500, records[0].RedemptionBonusQuota)
 }

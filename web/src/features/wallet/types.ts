@@ -291,6 +291,8 @@ export interface BillingRecord {
   redemption_key?: string
   redemption_type?: 'paid' | 'reward'
   redemption_quota?: number
+  redemption_paid_quota?: number
+  redemption_bonus_quota?: number
   redeemed_time?: number
 }
 
