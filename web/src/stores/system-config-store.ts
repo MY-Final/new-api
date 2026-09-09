@@ -52,7 +52,7 @@ export const DEFAULT_CURRENCY_CONFIG: CurrencyConfig = {
   quotaDisplayType: 'CUSTOM',
   quotaPerUnit: 500000,
   usdExchangeRate: 1,
-  customCurrencySymbol: '坤币',
+  customCurrencySymbol: '🥚',
   customCurrencyExchangeRate: 1,
 }
 

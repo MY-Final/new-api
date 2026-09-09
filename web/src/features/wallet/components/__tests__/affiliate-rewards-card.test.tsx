@@ -82,7 +82,7 @@ describe('AffiliateRewardsCard', () => {
 
     expect(view.getByText('Top-up rebate: 10%')).toBeInTheDocument()
     expect(view.getByText('Paid-code rebate: 5%')).toBeInTheDocument()
-    expect(view.getByText('坤币 0.999998')).toBeInTheDocument()
+    expect(view.getByText('🥚 0.999998')).toBeInTheDocument()
     expect(view.getByText('3')).toBeInTheDocument()
 
     await userEventSetup.click(

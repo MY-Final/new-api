@@ -27,8 +27,7 @@ var generalSetting = GeneralSetting{
 	DocsLink:                   "https://docs.newapi.pro",
 	PingIntervalEnabled:        false,
 	PingIntervalSeconds:        60,
-	QuotaDisplayType:           QuotaDisplayTypeCustom,
-	CustomCurrencySymbol:       "坤币",
+	CustomCurrencySymbol:       "🥚",
 	CustomCurrencyExchangeRate: 1.0,
 }
 
