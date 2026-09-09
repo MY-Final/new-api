@@ -49,10 +49,10 @@ export interface SystemConfig {
 
 export const DEFAULT_CURRENCY_CONFIG: CurrencyConfig = {
   displayInCurrency: true,
-  quotaDisplayType: 'USD',
+  quotaDisplayType: 'CUSTOM',
   quotaPerUnit: 500000,
   usdExchangeRate: 1,
-  customCurrencySymbol: '¤',
+  customCurrencySymbol: '坤币',
   customCurrencyExchangeRate: 1,
 }
 

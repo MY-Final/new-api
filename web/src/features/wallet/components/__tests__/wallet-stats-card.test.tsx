@@ -15,7 +15,12 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 import { render, screen } from '@testing-library/react'
-import { describe, expect, test } from 'vitest'
+import { beforeEach, describe, expect, test } from 'vitest'
+
+import {
+  DEFAULT_CURRENCY_CONFIG,
+  useSystemConfigStore,
+} from '@/stores/system-config-store'
 
 import type { UserWalletData } from '../../types'
 import { WalletStatsCard } from '../wallet-stats-card'
@@ -36,19 +41,25 @@ const user: UserWalletData = {
 }
 
 describe('WalletStatsCard balance state', () => {
+  beforeEach(() => {
+    useSystemConfigStore.getState().setConfig({
+      currency: { ...DEFAULT_CURRENCY_CONFIG },
+    })
+  })
+
   test('shows debt label and absolute debt amount for a negative balance', () => {
     render(<WalletStatsCard user={{ ...user, quota: -100 }} />)
 
     expect(screen.getByText('Debt')).toBeInTheDocument()
     expect(screen.getByText('Recharge to settle debt')).toBeInTheDocument()
-    expect(screen.getByText('$0.0002')).toBeInTheDocument()
+    expect(screen.getByText('坤币 0.0002')).toBeInTheDocument()
   })
 
   test('shows fractional currency precisely for a positive balance', () => {
     render(<WalletStatsCard user={{ ...user, quota: 999999 }} />)
 
     expect(screen.getByText('Current Balance')).toBeInTheDocument()
-    expect(screen.getByText('$1.999998')).toBeInTheDocument()
+    expect(screen.getByText('坤币 1.999998')).toBeInTheDocument()
     expect(screen.queryByText('Debt')).not.toBeInTheDocument()
   })
 })
