@@ -20,9 +20,6 @@ services:
       - /opt/kuncode/data:/data
       - /opt/kuncode/logs:/app/logs
     environment:
-      - HTTP_PROXY=http://192.168.2.15:7890
-      - HTTPS_PROXY=http://192.168.2.15:7890
-      - NO_PROXY=localhost,127.0.0.1,new-api,redis,postgres,goproxy.cn
       - SQL_DSN=postgresql://root:lxy666666@postgres:5432/new-api
       - REDIS_CONN_STRING=redis://:lxy666666@redis:6379/0
       - TZ=Asia/Shanghai
