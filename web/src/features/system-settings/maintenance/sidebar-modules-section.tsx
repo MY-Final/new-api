@@ -94,7 +94,9 @@ export function SidebarModulesSection({
       },
       canvas: {
         title: t('Canvas'),
-        description: t('Image generation workspace with text and reference images.'),
+        description: t(
+          'Image generation workspace with text and reference images.'
+        ),
       },
       history: {
         title: t('Drawing Records'),
@@ -129,6 +131,10 @@ export function SidebarModulesSection({
       task: {
         title: t('Task logs'),
         description: t('Background job tracker for queued work.'),
+      },
+      relayPulse: {
+        title: t('KunCodeRelayPulse'),
+        description: t('Embedded service monitoring and availability matrix.'),
       },
     },
     personal: {
@@ -176,7 +182,9 @@ export function SidebarModulesSection({
       },
       finance: {
         title: t('Finance'),
-        description: t('Refund, reverse rebates, apply penalties, and audit balances.'),
+        description: t(
+          'Refund, reverse rebates, apply penalties, and audit balances.'
+        ),
       },
     },
   }

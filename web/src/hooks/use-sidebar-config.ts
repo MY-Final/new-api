@@ -52,6 +52,7 @@ const DEFAULT_SIDEBAR_MODULES: SidebarModulesAdminConfig = {
     audit: true,
     midjourney: true,
     task: true,
+    relayPulse: true,
   },
   personal: {
     enabled: true,
@@ -115,6 +116,7 @@ const URL_TO_CONFIG_MAP: Record<string, { section: string; module: string }> = {
   '/usage-logs/audit': { section: 'console', module: 'audit' },
   '/usage-logs/drawing': { section: 'console', module: 'midjourney' },
   '/usage-logs/task': { section: 'console', module: 'task' },
+  '/kun-code-relay-pulse': { section: 'console', module: 'relayPulse' },
   '/wallet': { section: 'personal', module: 'topup' },
   '/usage': { section: 'personal', module: 'usage' },
   '/affiliate-rebates': { section: 'personal', module: 'affiliate' },

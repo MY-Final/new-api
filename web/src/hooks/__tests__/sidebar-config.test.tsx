@@ -45,12 +45,18 @@ afterEach(() => {
   useAuthStore.getState().auth.reset()
 })
 
-function sidebarFor(admin?: object, user?: object, canConfigure = true) {
+function sidebarFor(
+  admin?: object,
+  user?: object,
+  canConfigure = true,
+  relayPulseUrl = ''
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
   client.setQueryData(['status'], {
     SidebarModulesAdmin: admin ? JSON.stringify(admin) : '',
+    kuncode_relay_pulse_url: relayPulseUrl,
   })
   useAuthStore.getState().auth.setUser({
     id: 1,
@@ -184,5 +190,40 @@ describe('audit log sidebar entry', () => {
       .map((item) => item.title)
     expect(titles).not.toContain('Usage Logs')
     expect(titles).toContain('Audit Logs')
+  })
+})
+
+describe('KunCodeRelayPulse sidebar entry', () => {
+  it('shows only when an embed URL is configured', () => {
+    const configured = sidebarFor(
+      undefined,
+      undefined,
+      true,
+      'https://pulse.example.com'
+    )
+    expect(
+      configured.result.current
+        .flatMap((group) => group.items)
+        .some((item) => item.title === 'KunCodeRelayPulse')
+    ).toBe(true)
+
+    const hidden = sidebarFor()
+    expect(
+      hidden.result.current
+        .flatMap((group) => group.items)
+        .some((item) => item.title === 'KunCodeRelayPulse')
+    ).toBe(false)
+
+    const disabled = sidebarFor(
+      { console: { enabled: true, relayPulse: false } },
+      undefined,
+      true,
+      'https://pulse.example.com'
+    )
+    expect(
+      disabled.result.current
+        .flatMap((group) => group.items)
+        .some((item) => item.title === 'KunCodeRelayPulse')
+    ).toBe(false)
   })
 })

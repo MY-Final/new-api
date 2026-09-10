@@ -135,6 +135,7 @@ export interface SystemStatus {
     password_login_encryption_enabled?: boolean
     password_register_enabled?: boolean
     custom_oauth_providers?: CustomOAuthProviderInfo[]
+    kuncode_relay_pulse_url?: string
     [key: string]: unknown
   }
   // Allow direct access to common properties
@@ -182,6 +183,7 @@ export interface SystemStatus {
   password_login_encryption_enabled?: boolean
   password_register_enabled?: boolean
   custom_oauth_providers?: CustomOAuthProviderInfo[]
+  kuncode_relay_pulse_url?: string
   [key: string]: unknown
 }
 

@@ -43,6 +43,7 @@ const SITE_SECTIONS = [
           HomePageContent: settings.HomePageContent,
           ServerAddress: settings.ServerAddress,
           TaskPublicAddress: settings.TaskPublicAddress,
+          KunCodeRelayPulseUrl: settings.KunCodeRelayPulseUrl,
           legal: {
             user_agreement: settings['legal.user_agreement'],
             privacy_policy: settings['legal.privacy_policy'],

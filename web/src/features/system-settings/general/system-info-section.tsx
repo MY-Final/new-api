@@ -50,6 +50,11 @@ const _systemInfoSchema = z.object({
   SystemName: z.string().min(1),
   ServerAddress: z.string().optional(),
   TaskPublicAddress: z.string().refine(isValidTaskPublicAddress),
+  KunCodeRelayPulseUrl: z.string().refine((value) => {
+    const trimmed = value.trim()
+    if (!trimmed) return true
+    return /^https?:\/\//.test(trimmed)
+  }),
   Logo: z.string().url().optional().or(z.literal('')),
   Footer: z.string().optional(),
   About: z.string().optional(),
@@ -79,6 +84,7 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
     SystemName: normalizeValue(defaultValues.SystemName),
     ServerAddress: normalizeValue(defaultValues.ServerAddress),
     TaskPublicAddress: normalizeValue(defaultValues.TaskPublicAddress),
+    KunCodeRelayPulseUrl: normalizeValue(defaultValues.KunCodeRelayPulseUrl),
     Logo: normalizeValue(defaultValues.Logo),
     Footer: normalizeValue(defaultValues.Footer),
     About: normalizeValue(defaultValues.About),
@@ -100,6 +106,11 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
           'Enter an absolute HTTP(S) URL without credentials, query parameters, or fragments'
         ),
     }),
+    KunCodeRelayPulseUrl: z
+      .string()
+      .refine((value) => !value.trim() || /^https?:\/\//.test(value.trim()), {
+        error: () => t('Provide a valid URL starting with http:// or https://'),
+      }),
     Logo: z.string().url().optional().or(z.literal('')),
     Footer: z.string().optional(),
     About: z.string().optional(),
@@ -121,7 +132,11 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
       onSubmit: async (_data, changedFields) => {
         for (const [key, value] of Object.entries(changedFields)) {
           let v = normalizeValue(value)
-          if (key === 'ServerAddress' || key === 'TaskPublicAddress') {
+          if (
+            key === 'ServerAddress' ||
+            key === 'TaskPublicAddress' ||
+            key === 'KunCodeRelayPulseUrl'
+          ) {
             v = v.replace(/\/+$/, '')
           }
           await updateOption.mutateAsync({
@@ -198,6 +213,29 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                     <FormDescription>
                       {t(
                         'Public base URL for async task media. Supports a dedicated media domain, port, or Nginx path prefix; falls back to Server Address when empty.'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='KunCodeRelayPulseUrl'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('KunCodeRelayPulse URL')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        type='url'
+                        placeholder='https://relaypulse.example.com'
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'URL for the KunCodeRelayPulse page. It is embedded in the sidebar. Leave empty to hide it.'
                       )}
                     </FormDescription>
                     <FormMessage />

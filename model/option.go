@@ -89,6 +89,7 @@ func InitOptionMap() {
 	common.OptionMap["PayAddress"] = ""
 	common.OptionMap["CustomCallbackAddress"] = ""
 	common.OptionMap["LiandongShopUrl"] = "https://pay.ldxp.cn/shop/Q2JDSIRE"
+	common.OptionMap["KunCodeRelayPulseUrl"] = ""
 	common.OptionMap["EpayId"] = ""
 	common.OptionMap["EpayKey"] = ""
 	common.OptionMap["Price"] = strconv.FormatFloat(operation_setting.Price, 'f', -1, 64)
@@ -226,13 +227,16 @@ func validateOptionValue(key string, value string) error {
 	if key == "MaxTokenAutoGroups" {
 		return setting.ValidateMaxTokenAutoGroups(value)
 	}
-	if key == "LiandongShopUrl" {
+	if key == "LiandongShopUrl" || key == "KunCodeRelayPulseUrl" {
 		trimmed := strings.TrimSpace(value)
 		if trimmed == "" {
 			return nil
 		}
 		if !strings.HasPrefix(trimmed, "http://") && !strings.HasPrefix(trimmed, "https://") {
-			return fmt.Errorf("LiandongShopUrl must start with http:// or https://")
+			if key == "LiandongShopUrl" {
+				return fmt.Errorf("LiandongShopUrl must start with http:// or https://")
+			}
+			return fmt.Errorf("KunCodeRelayPulseUrl must start with http:// or https://")
 		}
 	}
 	if key == "AffiliateTopupRebateRate" || key == "AffiliateRedemptionRebateRate" {

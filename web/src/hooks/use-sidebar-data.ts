@@ -61,6 +61,10 @@ export function useSidebarData(): SidebarData {
     typeof status?.liandong_shop_url === 'string'
       ? status.liandong_shop_url.trim()
       : ''
+  const relayPulseUrl =
+    typeof status?.kuncode_relay_pulse_url === 'string'
+      ? status.kuncode_relay_pulse_url.trim()
+      : ''
 
   return {
     navGroups: [
@@ -114,6 +118,15 @@ export function useSidebarData(): SidebarData {
             url: '/usage-logs/common',
             icon: FileText,
           },
+          ...(relayPulseUrl
+            ? [
+                {
+                  title: t('KunCodeRelayPulse'),
+                  url: '/kun-code-relay-pulse',
+                  icon: Activity,
+                },
+              ]
+            : []),
           {
             title: t('Audit Logs'),
             url: '/usage-logs/audit',

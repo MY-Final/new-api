@@ -33,6 +33,7 @@ const defaultSiteSettings: SiteSettings = {
   HomePageContent: '',
   ServerAddress: '',
   TaskPublicAddress: '',
+  KunCodeRelayPulseUrl: '',
   'legal.user_agreement': '',
   'legal.privacy_policy': '',
   HeaderNavModules: '',

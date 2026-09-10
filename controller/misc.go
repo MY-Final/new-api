@@ -108,9 +108,10 @@ func GetStatus(c *gin.Context) {
 		"faq_enabled":           cs.FAQEnabled,
 
 		// 模块管理配置
-		"HeaderNavModules":    common.OptionMap["HeaderNavModules"],
-		"SidebarModulesAdmin": common.OptionMap["SidebarModulesAdmin"],
-		"liandong_shop_url":   common.OptionMap["LiandongShopUrl"],
+		"HeaderNavModules":        common.OptionMap["HeaderNavModules"],
+		"SidebarModulesAdmin":     common.OptionMap["SidebarModulesAdmin"],
+		"liandong_shop_url":       common.OptionMap["LiandongShopUrl"],
+		"kuncode_relay_pulse_url": common.OptionMap["KunCodeRelayPulseUrl"],
 
 		"oidc_enabled":                system_setting.GetOIDCSettings().Enabled,
 		"oidc_client_id":              system_setting.GetOIDCSettings().ClientId,
