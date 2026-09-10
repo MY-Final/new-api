@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { AnimatedOutlet } from '@/components/page-transition'
 import { SkipToMain } from '@/components/skip-to-main'
+import { AnnouncementPopup } from '@/components/announcement-popup'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { LayoutProvider } from '@/context/layout-provider'
 import { SearchProvider } from '@/context/search-provider'
@@ -26,6 +27,7 @@ import { cn } from '@/lib/utils'
 
 import { AppHeader } from './app-header'
 import { AppSidebar } from './app-sidebar'
+import { BalanceWarningBanner } from './balance-warning-banner'
 
 type AuthenticatedLayoutProps = {
   children?: React.ReactNode
@@ -50,10 +52,12 @@ export function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
                 'peer-data-[variant=inset]:h-[calc(100svh-var(--app-header-height,0px)-(var(--spacing)*4))]'
               )}
             >
+              <BalanceWarningBanner />
               {props.children ?? <AnimatedOutlet />}
             </SidebarInset>
           </div>
         </SidebarProvider>
+        <AnnouncementPopup />
       </SearchProvider>
     </LayoutProvider>
   )

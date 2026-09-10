@@ -30,6 +30,7 @@ import type {
   ManageUserAction,
   ManageUserQuotaPayload,
   ApiResponse,
+  UserUsage,
 } from './types'
 
 // ============================================================================
@@ -88,6 +89,23 @@ export async function searchUsers(
  */
 export async function getUser(id: number): Promise<ApiResponse<User>> {
   const res = await api.get(`/api/user/${id}`)
+  return res.data
+}
+
+/**
+ * Get aggregated usage for a user over a bounded time range.
+ */
+export async function getUserUsage(
+  id: number,
+  startTimestamp: number,
+  endTimestamp: number
+): Promise<ApiResponse<UserUsage>> {
+  const res = await api.get(`/api/user/${id}/usage`, {
+    params: {
+      start_timestamp: startTimestamp,
+      end_timestamp: endTimestamp,
+    },
+  })
   return res.data
 }
 

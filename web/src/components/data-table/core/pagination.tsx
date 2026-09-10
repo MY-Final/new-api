@@ -47,6 +47,144 @@ const PAGE_SIZE_SELECT_ITEMS = PAGE_SIZE_OPTIONS.map((pageSize) => ({
   label: pageSize,
 }))
 
+type PaginationControlsProps = {
+  currentPage: number
+  pageSize: number
+  totalPages: number
+  totalRows: number
+  onPageChange: (page: number) => void
+  onPageSizeChange: (pageSize: number) => void
+}
+
+function PaginationControls(props: PaginationControlsProps) {
+  const { t } = useTranslation()
+  const pageNumbers = getPageNumbers(
+    props.currentPage,
+    props.totalPages
+  ).reduce<{ value: number | string; key: string }[]>((items, value) => {
+    const duplicateCount = items.filter((item) => item.value === value).length
+    return [...items, { value, key: `${value}-${duplicateCount}` }]
+  }, [])
+  const canPreviousPage = props.currentPage > 1
+  const canNextPage = props.currentPage < props.totalPages
+
+  return (
+    <div
+      className={cn(
+        '@container/pagination flex min-w-0 items-center justify-end overflow-clip'
+      )}
+      style={{ overflowClipMargin: 1 }}
+    >
+      <div className='flex min-w-0 shrink-0 items-center gap-2 @xl/pagination:gap-3'>
+        <div className='flex shrink-0 items-baseline gap-1.5 text-xs font-medium whitespace-nowrap sm:text-sm'>
+          <span className='text-muted-foreground/80'>{t('Total:')}</span>
+          <span className='text-foreground tabular-nums'>
+            {props.totalRows.toLocaleString()}
+          </span>
+        </div>
+
+        <div className='flex shrink-0 items-center gap-1.5 @lg/pagination:gap-2'>
+          <p className='text-muted-foreground/80 hidden text-sm font-medium whitespace-nowrap @2xl/pagination:block'>
+            {t('Rows per page')}
+          </p>
+          <Select
+            items={PAGE_SIZE_SELECT_ITEMS}
+            value={`${props.pageSize}`}
+            onValueChange={(value) => {
+              props.onPageSizeChange(Number(value))
+            }}
+          >
+            <SelectTrigger className='text-foreground h-8 w-[64px] font-medium tabular-nums sm:w-[70px]'>
+              <SelectValue placeholder={props.pageSize} />
+            </SelectTrigger>
+            <SelectContent side='top' alignItemWithTrigger={false}>
+              <SelectGroup>
+                {PAGE_SIZE_OPTIONS.map((pageSize) => (
+                  <SelectItem key={pageSize} value={`${pageSize}`}>
+                    {pageSize}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className='flex min-w-0 shrink-0 items-center gap-1 @lg/pagination:gap-1.5 @xl/pagination:gap-2'>
+          <Button
+            variant='outline'
+            className='text-muted-foreground hover:text-foreground disabled:text-muted-foreground/50 size-8 p-0 @max-lg/pagination:hidden'
+            onClick={() => props.onPageChange(1)}
+            disabled={!canPreviousPage}
+          >
+            <span className='sr-only'>{t('Go to first page')}</span>
+            <DoubleArrowLeftIcon className='h-4 w-4' />
+          </Button>
+          <Button
+            variant='outline'
+            className='text-muted-foreground hover:text-foreground disabled:text-muted-foreground/50 size-8 p-0'
+            onClick={() => props.onPageChange(props.currentPage - 1)}
+            disabled={!canPreviousPage}
+          >
+            <span className='sr-only'>{t('Go to previous page')}</span>
+            <ChevronLeftIcon className='h-4 w-4' />
+          </Button>
+
+          {pageNumbers.map(({ value: pageNumber, key }) => (
+            <div key={key} className='flex items-center'>
+              {pageNumber === '...' ? (
+                <span className='text-muted-foreground/60 px-0.5 text-sm @lg/pagination:px-1'>
+                  ...
+                </span>
+              ) : (
+                <Button
+                  variant={
+                    props.currentPage === pageNumber ? 'default' : 'outline'
+                  }
+                  className={cn(
+                    'h-8 min-w-8 px-2 tabular-nums',
+                    props.currentPage === pageNumber
+                      ? 'font-semibold'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                  aria-current={
+                    props.currentPage === pageNumber ? 'page' : undefined
+                  }
+                  aria-label={t('Go to page {{page}}', { page: pageNumber })}
+                  onClick={() => props.onPageChange(pageNumber as number)}
+                >
+                  <span className='sr-only'>
+                    {t('Go to page {{page}}', { page: pageNumber })}
+                  </span>
+                  {pageNumber}
+                </Button>
+              )}
+            </div>
+          ))}
+
+          <Button
+            variant='outline'
+            className='text-muted-foreground hover:text-foreground disabled:text-muted-foreground/50 size-8 p-0'
+            onClick={() => props.onPageChange(props.currentPage + 1)}
+            disabled={!canNextPage}
+          >
+            <span className='sr-only'>{t('Go to next page')}</span>
+            <ChevronRightIcon className='h-4 w-4' />
+          </Button>
+          <Button
+            variant='outline'
+            className='text-muted-foreground hover:text-foreground disabled:text-muted-foreground/50 size-8 p-0 @max-lg/pagination:hidden'
+            onClick={() => props.onPageChange(props.totalPages)}
+            disabled={!canNextPage}
+          >
+            <span className='sr-only'>{t('Go to last page')}</span>
+            <DoubleArrowRightIcon className='h-4 w-4' />
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function DataTablePagination<TData>({
   table,
   compact = false,
@@ -54,14 +192,8 @@ export function DataTablePagination<TData>({
   const { t } = useTranslation()
   const pagination = table.getState().pagination
   const currentPage = pagination.pageIndex + 1
-  const pageSize = pagination.pageSize
   const totalPages = table.getPageCount()
   const totalRows = table.getRowCount()
-  const pageNumbers = getPageNumbers(currentPage, totalPages)
-  const pageItems = pageNumbers.map((page, index) => ({
-    page,
-    key: page === '...' ? `gap-after-${pageNumbers[index - 1]}` : String(page),
-  }))
 
   if (compact) {
     return (
@@ -102,112 +234,40 @@ export function DataTablePagination<TData>({
   }
 
   return (
-    <div
-      className={cn(
-        '@container/pagination flex min-w-0 items-center justify-end overflow-clip'
-      )}
-      style={{ overflowClipMargin: 1 }}
-    >
-      <div className='flex min-w-0 shrink-0 items-center gap-2 @xl/pagination:gap-3'>
-        <div className='flex shrink-0 items-baseline gap-1.5 text-xs font-medium whitespace-nowrap sm:text-sm'>
-          <span className='text-muted-foreground/80'>{t('Total:')}</span>
-          <span className='text-foreground tabular-nums'>
-            {totalRows.toLocaleString()}
-          </span>
-        </div>
+    <PaginationControls
+      currentPage={pagination.pageIndex + 1}
+      pageSize={pagination.pageSize}
+      totalPages={table.getPageCount()}
+      totalRows={table.getRowCount()}
+      onPageChange={(page) => table.setPageIndex(page - 1)}
+      onPageSizeChange={(pageSize) => table.setPageSize(pageSize)}
+    />
+  )
+}
 
-        <div className='flex shrink-0 items-center gap-1.5 @lg/pagination:gap-2'>
-          <p className='text-muted-foreground/80 hidden text-sm font-medium whitespace-nowrap @2xl/pagination:block'>
-            {t('Rows per page')}
-          </p>
-          <Select
-            items={PAGE_SIZE_SELECT_ITEMS}
-            value={`${pageSize}`}
-            onValueChange={(value) => {
-              table.setPageSize(Number(value))
-            }}
-          >
-            <SelectTrigger className='text-foreground h-8 w-[64px] font-medium tabular-nums sm:w-[70px]'>
-              <SelectValue placeholder={pageSize} />
-            </SelectTrigger>
-            <SelectContent side='top' alignItemWithTrigger={false}>
-              <SelectGroup>
-                {PAGE_SIZE_OPTIONS.map((pageSize) => (
-                  <SelectItem key={pageSize} value={`${pageSize}`}>
-                    {pageSize}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </div>
+type DataTableServerPaginationProps = {
+  page: number
+  pageSize: number
+  total: number
+  onPageChange: (page: number) => void
+  onPageSizeChange: (pageSize: number) => void
+}
 
-        <div className='flex min-w-0 shrink-0 items-center gap-1 @lg/pagination:gap-1.5 @xl/pagination:gap-2'>
-          <Button
-            variant='outline'
-            className='text-muted-foreground hover:text-foreground disabled:text-muted-foreground/50 size-8 p-0 @max-lg/pagination:hidden'
-            onClick={() => table.setPageIndex(0)}
-            disabled={!table.getCanPreviousPage()}
-          >
-            <span className='sr-only'>{t('Go to first page')}</span>
-            <DoubleArrowLeftIcon className='h-4 w-4' />
-          </Button>
-          <Button
-            variant='outline'
-            className='text-muted-foreground hover:text-foreground disabled:text-muted-foreground/50 size-8 p-0'
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-          >
-            <span className='sr-only'>{t('Go to previous page')}</span>
-            <ChevronLeftIcon className='h-4 w-4' />
-          </Button>
+export function DataTableServerPagination(
+  props: DataTableServerPaginationProps
+) {
+  const totalPages = Math.ceil(Math.max(0, props.total) / props.pageSize)
+  const currentPage =
+    totalPages === 0 ? 1 : Math.min(Math.max(props.page, 1), totalPages)
 
-          {pageItems.map(({ page: pageNumber, key }) => (
-            <div key={key} className='flex items-center'>
-              {pageNumber === '...' ? (
-                <span className='text-muted-foreground/60 px-0.5 text-sm @lg/pagination:px-1'>
-                  ...
-                </span>
-              ) : (
-                <Button
-                  variant={currentPage === pageNumber ? 'default' : 'outline'}
-                  className={cn(
-                    'h-8 min-w-8 px-2 tabular-nums',
-                    currentPage === pageNumber
-                      ? 'font-semibold'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                  onClick={() => table.setPageIndex((pageNumber as number) - 1)}
-                >
-                  <span className='sr-only'>
-                    {t('Go to page {{page}}', { page: pageNumber })}
-                  </span>
-                  {pageNumber}
-                </Button>
-              )}
-            </div>
-          ))}
-
-          <Button
-            variant='outline'
-            className='text-muted-foreground hover:text-foreground disabled:text-muted-foreground/50 size-8 p-0'
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-          >
-            <span className='sr-only'>{t('Go to next page')}</span>
-            <ChevronRightIcon className='h-4 w-4' />
-          </Button>
-          <Button
-            variant='outline'
-            className='text-muted-foreground hover:text-foreground disabled:text-muted-foreground/50 size-8 p-0 @max-lg/pagination:hidden'
-            onClick={() => table.setPageIndex(table.getPageCount() - 1)}
-            disabled={!table.getCanNextPage()}
-          >
-            <span className='sr-only'>{t('Go to last page')}</span>
-            <DoubleArrowRightIcon className='h-4 w-4' />
-          </Button>
-        </div>
-      </div>
-    </div>
+  return (
+    <PaginationControls
+      currentPage={currentPage}
+      pageSize={props.pageSize}
+      totalPages={totalPages}
+      totalRows={props.total}
+      onPageChange={props.onPageChange}
+      onPageSizeChange={props.onPageSizeChange}
+    />
   )
 }

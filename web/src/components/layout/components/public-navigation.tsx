@@ -17,7 +17,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Link } from '@tanstack/react-router'
+import { useState } from 'react'
 
+import { ContactDialog } from '@/features/contact/contact-dialog'
 import { useTopNavLinks } from '@/hooks/use-top-nav-links'
 import { cn } from '@/lib/utils'
 
@@ -44,6 +46,8 @@ export function PublicNavigation({
   links: providedLinks,
   className,
 }: PublicNavigationProps = {}) {
+  const [contactOpen, setContactOpen] = useState(false)
+
   // Use the same logic as AppHeader: prioritize dynamic links from backend
   const dynamicLinks = useTopNavLinks()
   const defaultLinks = providedLinks || defaultTopNavLinks
@@ -51,12 +55,13 @@ export function PublicNavigation({
 
   return (
     <nav className={cn('hidden items-center gap-1 md:flex', className)}>
-      {links.map((link, index) => {
+      {links.map((link) => {
+        const key = `${link.title}-${link.href}`
         // Handle external links
         if (link.external) {
           return (
             <a
-              key={index}
+              key={key}
               href={link.href}
               target='_blank'
               rel='noopener noreferrer'
@@ -72,8 +77,13 @@ export function PublicNavigation({
         // Handle internal links
         return (
           <Link
-            key={index}
+            key={key}
             to={link.href}
+            onClick={(event) => {
+              if (link.href !== '/contact') return
+              event.preventDefault()
+              setContactOpen(true)
+            }}
             className={cn(
               'text-muted-foreground hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground inline-flex h-9 w-max items-center justify-center rounded-md bg-transparent px-4 py-2 text-sm font-medium transition-colors focus:outline-none',
               link.disabled && 'pointer-events-none opacity-50'
@@ -83,6 +93,7 @@ export function PublicNavigation({
           </Link>
         )
       })}
+      <ContactDialog open={contactOpen} onOpenChange={setContactOpen} />
     </nav>
   )
 }

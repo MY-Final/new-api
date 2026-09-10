@@ -17,7 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { TFunction } from 'i18next'
-import { Bell, Megaphone } from 'lucide-react'
+import { Bell, CheckCheck, Megaphone, Pin } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { RichContent } from '@/components/rich-content'
@@ -38,19 +39,14 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { AnnouncementDetailModal } from '@/features/dashboard/components/overview/announcement-detail-dialog'
+import { getAnnouncementKey } from '@/features/dashboard/lib/announcements'
+import { getPreviewText } from '@/features/dashboard/lib'
+import type { AnnouncementItem } from '@/features/dashboard/types'
 import { getAnnouncementColorClass } from '@/lib/colors'
 import { formatDateTimeObject } from '@/lib/time'
 import { cn } from '@/lib/utils'
-
-interface AnnouncementItem {
-  id?: number | string
-  type?: string
-  content?: string
-  extra?: string
-  publishDate?: string | Date
-}
 
 interface NotificationPopoverProps {
   open: boolean
@@ -60,6 +56,10 @@ interface NotificationPopoverProps {
   onTabChange: (tab: 'notice' | 'announcements') => void
   notice: string
   announcements: AnnouncementItem[]
+  unreadAnnouncementsCount: number
+  isAnnouncementRead: (item: AnnouncementItem) => boolean
+  onAnnouncementRead: (item: AnnouncementItem) => void
+  onMarkAllAnnouncementsRead: () => void
   loading: boolean
   className?: string
 }
@@ -128,26 +128,15 @@ function getRelativeTime(publishDate: string | Date, t: TFunction): string {
  */
 function AnnouncementDot({ type }: { type?: string }) {
   return (
-    <span
-      className={cn(
-        'mt-1.5 inline-block size-2 shrink-0 rounded-full',
-        getAnnouncementColorClass(type)
-      )}
-    />
+    <span className='relative flex w-3 shrink-0 justify-center'>
+      <span
+        className={cn(
+          'mt-[5px] inline-block size-2.5 shrink-0 rounded-full',
+          getAnnouncementColorClass(type)
+        )}
+      />
+    </span>
   )
-}
-
-function getAnnouncementRenderKey(announcement: AnnouncementItem): string {
-  if (announcement.id !== undefined && announcement.id !== null) {
-    return `id:${announcement.id}`
-  }
-
-  return JSON.stringify({
-    content: announcement.content ?? '',
-    extra: announcement.extra ?? '',
-    publishDate: announcement.publishDate ?? '',
-    type: announcement.type ?? '',
-  })
 }
 
 /**
@@ -215,10 +204,14 @@ function NoticeContent({
  */
 function AnnouncementsContent({
   announcements,
+  isAnnouncementRead,
+  onAnnouncementRead,
   loading,
   t,
 }: {
   announcements: AnnouncementItem[]
+  isAnnouncementRead: (item: AnnouncementItem) => boolean
+  onAnnouncementRead: (item: AnnouncementItem) => void
   loading: boolean
   t: TFunction
 }) {
@@ -242,7 +235,8 @@ function AnnouncementsContent({
     <ScrollArea className='h-[min(52vh,28rem)] pr-3'>
       <div className='flex flex-col'>
         {announcements.map((item, idx) => {
-          const announcementKey = getAnnouncementRenderKey(item)
+          const announcementKey = getAnnouncementKey(item)
+          const read = isAnnouncementRead(item)
           const publishDate = item.publishDate
             ? new Date(item.publishDate)
             : null
@@ -252,33 +246,78 @@ function AnnouncementsContent({
           const absoluteTime = publishDate
             ? formatDateTimeObject(publishDate)
             : ''
+          const isLast = idx === announcements.length - 1
+          let railClassName = ''
+          if (idx === 0) {
+            railClassName = 'bottom-0 top-[22px]'
+          } else if (isLast) {
+            railClassName = 'top-0 h-[22px]'
+          } else {
+            railClassName = 'bottom-0 top-0'
+          }
 
           return (
-            <div key={announcementKey}>
-              <div className='py-3'>
-                <div className='flex items-start gap-3'>
-                  <AnnouncementDot type={item.type} />
-                  <div className='flex min-w-0 flex-1 flex-col gap-2'>
-                    <div className='text-sm'>
-                      <RichContent breaks content={item.content || ''} />
-                    </div>
-
-                    {item.extra ? (
-                      <div className='text-muted-foreground text-xs'>
-                        <RichContent breaks content={item.extra} />
-                      </div>
-                    ) : null}
-
-                    {absoluteTime ? (
-                      <div className='text-muted-foreground text-xs'>
-                        {relativeTime ? `${relativeTime} • ` : null}
-                        {absoluteTime}
-                      </div>
-                    ) : null}
-                  </div>
+            <div
+              key={announcementKey}
+              role='button'
+              tabIndex={0}
+              aria-pressed={read}
+              aria-label={item.content || t('System Announcements')}
+              onClick={() => onAnnouncementRead(item)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  onAnnouncementRead(item)
+                }
+              }}
+              className='group hover:bg-muted/40 focus-visible:ring-ring relative -mx-1 flex w-full gap-3 rounded-md px-1 py-3 text-left outline-none focus-visible:ring-2'
+            >
+              {announcements.length > 1 && (
+                <span
+                  aria-hidden='true'
+                  className={cn(
+                    'absolute left-[10px] w-px bg-border',
+                    railClassName
+                  )}
+                />
+              )}
+              <AnnouncementDot type={item.type} />
+              <div className='flex min-w-0 flex-1 flex-col gap-1'>
+                <div className='flex min-w-0 items-start gap-1.5'>
+                  {item.pinned ? (
+                    <span title={t('Pinned')} className='mt-0.5 shrink-0'>
+                      <Pin
+                        className='text-warning size-3.5'
+                        aria-hidden='true'
+                      />
+                    </span>
+                  ) : null}
+                  {!read ? (
+                    <span className='bg-primary mt-[7px] size-1.5 shrink-0 rounded-full'>
+                      <span className='sr-only'>{t('Unread')}</span>
+                    </span>
+                  ) : null}
+                  <p
+                    className={cn(
+                      'line-clamp-2 text-sm leading-5',
+                      !read && 'font-medium'
+                    )}
+                  >
+                    {getPreviewText(item.content || '', 120)}
+                  </p>
                 </div>
+                {absoluteTime ? (
+                  <div className='flex items-center justify-between'>
+                    <time className='text-muted-foreground/60 text-xs'>
+                      {relativeTime ? `${relativeTime} • ` : null}
+                      {absoluteTime}
+                    </time>
+                    <span className='text-muted-foreground/40 text-xs opacity-0 transition-opacity group-hover:opacity-100'>
+                      {t('Click for details')}
+                    </span>
+                  </div>
+                ) : null}
               </div>
-              {idx < announcements.length - 1 ? <Separator /> : null}
             </div>
           )
         })}
@@ -298,79 +337,116 @@ export function NotificationPopover({
   onTabChange,
   notice,
   announcements,
+  unreadAnnouncementsCount,
+  isAnnouncementRead,
+  onAnnouncementRead,
+  onMarkAllAnnouncementsRead,
   loading,
   className,
 }: NotificationPopoverProps) {
   const { t } = useTranslation()
+  const [selectedAnnouncement, setSelectedAnnouncement] =
+    useState<AnnouncementItem | null>(null)
+
+  const handleAnnouncementClick = (item: AnnouncementItem) => {
+    onAnnouncementRead(item)
+    setSelectedAnnouncement(item)
+    onOpenChange(false)
+  }
+
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger
-        render={
-          <Button
-            variant='ghost'
-            size='icon'
-            className={cn('relative size-9', className)}
-            aria-label={t('Notifications')}
-          />
-        }
-      >
-        <Bell className='size-[1.2rem]' />
-        {unreadCount > 0 ? (
-          <Badge
-            variant='destructive'
-            className='absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center px-1 text-[10px] font-semibold tabular-nums'
-          >
-            {unreadCount > 99 ? '99+' : unreadCount}
-          </Badge>
-        ) : null}
-      </PopoverTrigger>
-
-      <PopoverContent
-        align='end'
-        sideOffset={8}
-        className='w-[min(26rem,calc(100vw-1rem))] gap-3 p-3'
-      >
-        <PopoverHeader className='gap-1 px-1'>
-          <PopoverTitle>{t('System Announcements')}</PopoverTitle>
-          <p className='text-muted-foreground text-xs'>
-            {t('Latest platform updates and notices')}
-          </p>
-        </PopoverHeader>
-
-        <Tabs
-          value={activeTab}
-          onValueChange={onTabChange as (value: string) => void}
-        >
-          <TabsList className='grid w-full grid-cols-2'>
-            <TabsTrigger value='notice' className='gap-1.5'>
-              <Bell className='size-3.5' />
-              {t('Notice')}
-            </TabsTrigger>
-            <TabsTrigger value='announcements' className='gap-1.5'>
-              <Megaphone className='size-3.5' />
-              {t('Timeline')}
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value='notice' className='mt-2'>
-            <NoticeContent notice={notice} loading={loading} t={t} />
-          </TabsContent>
-
-          <TabsContent value='announcements' className='mt-2'>
-            <AnnouncementsContent
-              announcements={announcements}
-              loading={loading}
-              t={t}
+    <>
+      <Popover open={open} onOpenChange={onOpenChange}>
+        <PopoverTrigger
+          render={
+            <Button
+              variant='ghost'
+              size='icon'
+              className={cn('relative size-9', className)}
+              aria-label={t('Notifications')}
             />
-          </TabsContent>
-        </Tabs>
+          }
+        >
+          <Bell className='size-[1.2rem]' />
+          {unreadCount > 0 ? (
+            <Badge
+              variant='destructive'
+              className='absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center px-1 text-[10px] font-semibold tabular-nums'
+            >
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </Badge>
+          ) : null}
+        </PopoverTrigger>
 
-        <div className='flex justify-end'>
-          <Button size='sm' onClick={() => onOpenChange(false)}>
-            {t('Close')}
-          </Button>
-        </div>
-      </PopoverContent>
-    </Popover>
+        <PopoverContent
+          align='end'
+          sideOffset={8}
+          className='w-[min(26rem,calc(100vw-1rem))] gap-3 p-3'
+        >
+          <PopoverHeader className='gap-1 px-1'>
+            <PopoverTitle>{t('System Announcements')}</PopoverTitle>
+            <p className='text-muted-foreground text-xs'>
+              {t('Latest platform updates and notices')}
+            </p>
+          </PopoverHeader>
+
+          <Tabs
+            value={activeTab}
+            onValueChange={onTabChange as (value: string) => void}
+          >
+            <TabsList className='grid w-full grid-cols-2'>
+              <TabsTrigger value='notice' className='gap-1.5'>
+                <Bell className='size-3.5' />
+                {t('Notice')}
+              </TabsTrigger>
+              <TabsTrigger value='announcements' className='gap-1.5'>
+                <Megaphone className='size-3.5' />
+                {t('Timeline')}
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value='notice' className='mt-2'>
+              <NoticeContent notice={notice} loading={loading} t={t} />
+            </TabsContent>
+
+            <TabsContent value='announcements' className='mt-2'>
+              <AnnouncementsContent
+                announcements={announcements}
+                isAnnouncementRead={isAnnouncementRead}
+                onAnnouncementRead={handleAnnouncementClick}
+                loading={loading}
+                t={t}
+              />
+            </TabsContent>
+          </Tabs>
+
+          <div className='flex items-center justify-between gap-2'>
+            {activeTab === 'announcements' && unreadAnnouncementsCount > 0 ? (
+              <Button
+                size='sm'
+                variant='ghost'
+                onClick={onMarkAllAnnouncementsRead}
+              >
+                <CheckCheck className='size-3.5' />
+                {t('Mark all as read')}
+              </Button>
+            ) : (
+              <span />
+            )}
+            <Button size='sm' onClick={() => onOpenChange(false)}>
+              {t('Close')}
+            </Button>
+          </div>
+        </PopoverContent>
+      </Popover>
+
+      <AnnouncementDetailModal
+        open={selectedAnnouncement !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setSelectedAnnouncement(null)
+        }}
+        announcement={selectedAnnouncement}
+      />
+    </>
   )
 }

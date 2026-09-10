@@ -18,11 +18,15 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import {
   Activity,
+  BarChart3,
   Box,
   ClipboardList,
   CreditCard,
+  CircleDollarSign,
   FileText,
   FlaskConical,
+  History,
+  Image as ImageIcon,
   Key,
   LayoutDashboard,
   ListTodo,
@@ -31,6 +35,7 @@ import {
   Radio,
   ServerCog,
   Settings,
+  Store,
   ShieldCheck,
   Ticket,
   User,
@@ -40,6 +45,7 @@ import {
 import { useTranslation } from 'react-i18next'
 
 import type { SidebarData } from '@/components/layout/types'
+import { useStatus } from '@/hooks/use-status'
 import { ROLE } from '@/lib/roles'
 
 /**
@@ -50,6 +56,11 @@ import { ROLE } from '@/lib/roles'
  */
 export function useSidebarData(): SidebarData {
   const { t } = useTranslation()
+  const { status } = useStatus()
+  const shopUrl =
+    typeof status?.liandong_shop_url === 'string'
+      ? status.liandong_shop_url.trim()
+      : ''
 
   return {
     navGroups: [
@@ -61,6 +72,16 @@ export function useSidebarData(): SidebarData {
             title: t('Playground'),
             url: '/playground',
             icon: FlaskConical,
+          },
+          {
+            title: t('Canvas'),
+            url: '/canvas',
+            icon: ImageIcon,
+          },
+          {
+            title: t('Drawing Records'),
+            url: '/canvas-history',
+            icon: History,
           },
           {
             title: t('Chat'),
@@ -117,10 +138,29 @@ export function useSidebarData(): SidebarData {
             icon: Wallet,
           },
           {
+            title: t('Usage Statistics'),
+            url: '/usage',
+            icon: BarChart3,
+          },
+          {
+            title: t('Affiliate Rebates'),
+            url: '/affiliate-rebates',
+            icon: CircleDollarSign,
+          },
+          {
             title: t('Profile'),
             url: '/profile',
             icon: User,
           },
+          ...(shopUrl
+            ? [
+                {
+                  title: t('Shop'),
+                  url: '/shop',
+                  icon: Store,
+                },
+              ]
+            : []),
           {
             title: t('Security & Access'),
             url: '/security',
@@ -155,6 +195,13 @@ export function useSidebarData(): SidebarData {
           {
             title: t('Subscriptions'),
             url: '/subscriptions',
+            icon: CreditCard,
+          },
+          {
+            title: t('Finance'),
+            url: '/finance/topups',
+            activeUrls: ['/finance'],
+            configUrls: ['/finance'],
             icon: CreditCard,
           },
           {

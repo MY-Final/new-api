@@ -43,6 +43,8 @@ export const userSchema = z.object({
   telegram_id: z.string().optional(),
   email: z.string().optional(),
   quota: z.number(),
+  bonus_quota: z.number().optional(),
+  paid_quota: z.number().optional(),
   used_quota: z.number(),
   request_count: z.number(),
   group: z.string(),
@@ -50,6 +52,7 @@ export const userSchema = z.object({
   aff_count: z.number().optional(),
   aff_quota: z.number().optional(),
   aff_history_quota: z.number().optional(),
+  aff_reversed_quota: z.number().optional(),
   inviter_id: z.number().optional(),
   linux_do_id: z.string().optional(),
   status: userStatusSchema,
@@ -104,6 +107,69 @@ export interface GetUsersResponse {
     page: number
     page_size: number
   }
+}
+
+export interface UserUsageUser {
+  id: number
+  username: string
+  display_name: string
+  quota: number
+  used_quota: number
+  request_count: number
+}
+
+export interface UserUsageAggregate {
+  request_count: number
+  prompt_tokens: number
+  completion_tokens: number
+  input_tokens: number
+  output_tokens: number
+  cache_read_tokens: number
+  cache_write_tokens: number
+  reasoning_tokens: number
+  total_tokens: number
+  consumed_quota: number
+  refunded_quota: number
+  net_quota: number
+  user_cost: number
+}
+
+export interface UserUsageDaily extends UserUsageAggregate {
+  day: string
+}
+
+export interface UserUsageModel extends UserUsageAggregate {
+  model_name: string
+}
+
+export interface UserUsage {
+  user: UserUsageUser
+  summary: UserUsageAggregate
+  daily: UserUsageDaily[]
+  models: UserUsageModel[]
+}
+
+export interface UserUsageRequest {
+  created_at: number
+  request_id: string
+  model_name: string
+  channel_id: number
+  channel_name?: string
+  success: boolean
+  input_tokens: number
+  output_tokens: number
+  cache_read_tokens: number
+  cache_write_tokens: number
+  reasoning_tokens: number
+  total_tokens: number
+  user_cost: number
+}
+
+export interface UserUsageRequests {
+  items: UserUsageRequest[]
+  total: number
+  page: number
+  page_size: number
 }
 
 export interface SearchUsersParams {

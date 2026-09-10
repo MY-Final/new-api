@@ -40,6 +40,8 @@ const DEFAULT_SIDEBAR_MODULES: SidebarModulesAdminConfig = {
   chat: {
     enabled: true,
     playground: true,
+    canvas: true,
+    history: true,
     chat: true,
   },
   console: {
@@ -54,6 +56,8 @@ const DEFAULT_SIDEBAR_MODULES: SidebarModulesAdminConfig = {
   personal: {
     enabled: true,
     topup: true,
+    usage: true,
+    affiliate: true,
     personal: true,
     security: true,
   },
@@ -65,6 +69,7 @@ const DEFAULT_SIDEBAR_MODULES: SidebarModulesAdminConfig = {
     user: true,
     setting: true,
     subscription: true,
+    finance: true,
   },
 }
 
@@ -98,6 +103,8 @@ const mergeWithDefaultSidebarModules = (
  */
 const URL_TO_CONFIG_MAP: Record<string, { section: string; module: string }> = {
   '/playground': { section: 'chat', module: 'playground' },
+  '/canvas': { section: 'chat', module: 'canvas' },
+  '/canvas-history': { section: 'chat', module: 'history' },
   '/dashboard': { section: 'console', module: 'detail' },
   '/dashboard/overview': { section: 'console', module: 'detail' },
   '/dashboard/models': { section: 'console', module: 'detail' },
@@ -109,6 +116,8 @@ const URL_TO_CONFIG_MAP: Record<string, { section: string; module: string }> = {
   '/usage-logs/drawing': { section: 'console', module: 'midjourney' },
   '/usage-logs/task': { section: 'console', module: 'task' },
   '/wallet': { section: 'personal', module: 'topup' },
+  '/usage': { section: 'personal', module: 'usage' },
+  '/affiliate-rebates': { section: 'personal', module: 'affiliate' },
   '/profile': { section: 'personal', module: 'personal' },
   '/security': { section: 'personal', module: 'security' },
   '/channels': { section: 'admin', module: 'channel' },
@@ -118,6 +127,7 @@ const URL_TO_CONFIG_MAP: Record<string, { section: string; module: string }> = {
   '/users': { section: 'admin', module: 'user' },
   '/redemption-codes': { section: 'admin', module: 'redemption' },
   '/subscriptions': { section: 'admin', module: 'subscription' },
+  '/finance': { section: 'admin', module: 'finance' },
   '/system-settings': { section: 'admin', module: 'setting' },
   '/system-settings/site': { section: 'admin', module: 'setting' },
 }

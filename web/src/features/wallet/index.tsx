@@ -25,6 +25,7 @@ import { useSystemConfig } from '@/hooks/use-system-config'
 import { getSelf } from '@/lib/api'
 
 import { AffiliateRewardsCard } from './components/affiliate-rewards-card'
+import { AffiliateInviteesDialog } from './components/dialogs/affiliate-invitees-dialog'
 import { BillingHistoryDialog } from './components/dialogs/billing-history-dialog'
 import { CreemConfirmDialog } from './components/dialogs/creem-confirm-dialog'
 import { PaymentConfirmDialog } from './components/dialogs/payment-confirm-dialog'
@@ -74,6 +75,7 @@ export function Wallet(props: WalletProps) {
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
   const [transferDialogOpen, setTransferDialogOpen] = useState(false)
   const [billingDialogOpen, setBillingDialogOpen] = useState(false)
+  const [inviteesDialogOpen, setInviteesDialogOpen] = useState(false)
   const [redemptionCode, setRedemptionCode] = useState('')
   const [creemDialogOpen, setCreemDialogOpen] = useState(false)
   const [selectedCreemProduct, setSelectedCreemProduct] =
@@ -126,11 +128,13 @@ export function Wallet(props: WalletProps) {
   }, [])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchUser()
   }, [fetchUser])
 
   useEffect(() => {
     if (props.initialShowHistory) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setBillingDialogOpen(true)
       window.history.replaceState({}, '', window.location.pathname)
     }
@@ -343,6 +347,7 @@ export function Wallet(props: WalletProps) {
               user={user}
               affiliateLink={affiliateLink}
               onTransfer={() => setTransferDialogOpen(true)}
+              onViewInvitees={() => setInviteesDialogOpen(true)}
               complianceConfirmed={
                 topupInfo?.payment_compliance_confirmed !== false
               }
@@ -376,6 +381,11 @@ export function Wallet(props: WalletProps) {
       <BillingHistoryDialog
         open={billingDialogOpen}
         onOpenChange={setBillingDialogOpen}
+      />
+
+      <AffiliateInviteesDialog
+        open={inviteesDialogOpen}
+        onOpenChange={setInviteesDialogOpen}
       />
 
       <CreemConfirmDialog

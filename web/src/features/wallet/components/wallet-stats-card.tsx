@@ -21,7 +21,7 @@ import { useTranslation } from 'react-i18next'
 
 import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatQuota } from '@/lib/format'
+import { formatQuota, formatQuotaPrecise } from '@/lib/format'
 
 import type { UserWalletData } from '../types'
 
@@ -46,6 +46,11 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
     )
   }
 
+  const walletQuota = props.user?.quota ?? 0
+  const hasDebt = walletQuota < 0
+  const displayedQuota = Math.abs(walletQuota)
+  const bonusQuota = Math.max(props.user?.bonus_quota ?? 0, 0)
+  const paidQuota = props.user?.paid_quota ?? 0
   const stats: {
     label: string
     value: string
@@ -54,11 +59,13 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
     tone: IconBadgeTone
   }[] = [
     {
-      label: t('Current Balance'),
-      value: formatQuota(props.user?.quota ?? 0),
-      description: t('Remaining quota'),
+      label: hasDebt ? t('Debt') : t('Current Balance'),
+      value: formatQuotaPrecise(displayedQuota),
+      description: hasDebt
+        ? t('Recharge to settle debt')
+        : `${t('Bonus Balance')}: ${formatQuotaPrecise(bonusQuota)} · ${t('Paid Balance')}: ${formatQuotaPrecise(paidQuota)}`,
       icon: WalletCards,
-      tone: 'success',
+      tone: hasDebt ? 'destructive' : 'success',
     },
     {
       label: t('Total Usage'),

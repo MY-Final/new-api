@@ -92,6 +92,14 @@ export function SidebarModulesSection({
         title: t('Playground'),
         description: t('Experiment with prompts and models in real time.'),
       },
+      canvas: {
+        title: t('Canvas'),
+        description: t('Image generation workspace with text and reference images.'),
+      },
+      history: {
+        title: t('Drawing Records'),
+        description: t('Saved images and prompts from the Canvas.'),
+      },
       chat: {
         title: t('Chat'),
         description: t('Access previous conversations and start new ones.'),
@@ -128,6 +136,10 @@ export function SidebarModulesSection({
         title: t('Wallet'),
         description: t('Top up balance and view billing history.'),
       },
+      affiliate: {
+        title: t('Affiliate Rebates'),
+        description: t('Review your referral rebate ledger.'),
+      },
       personal: {
         title: t('Profile'),
         description: t('Personal settings and profile management.'),
@@ -161,6 +173,10 @@ export function SidebarModulesSection({
       subscription: {
         title: t('Subscription Management'),
         description: t('Manage subscription plans and pricing.'),
+      },
+      finance: {
+        title: t('Finance'),
+        description: t('Refund, reverse rebates, apply penalties, and audit balances.'),
       },
     },
   }

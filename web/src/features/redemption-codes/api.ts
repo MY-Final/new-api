@@ -25,6 +25,8 @@ import type {
   GetRedemptionsResponse,
   SearchRedemptionsParams,
   RedemptionFormData,
+  BatchRedemptionOperationRequest,
+  BatchRedemptionOperationResult,
 } from './types'
 
 // ============================================================================
@@ -44,10 +46,11 @@ export async function getRedemptions(
 export async function searchRedemptions(
   params: SearchRedemptionsParams
 ): Promise<GetRedemptionsResponse> {
-  const { keyword = '', status = '', p = 1, page_size = 10 } = params
+  const { keyword = '', status = '', type = '', p = 1, page_size = 10 } = params
   const queryParams = new URLSearchParams()
   queryParams.set('keyword', keyword)
   if (status) queryParams.set('status', status)
+  if (type) queryParams.set('type', type)
   queryParams.set('p', String(p))
   queryParams.set('page_size', String(page_size))
   const res = await api.get(`/api/redemption/search?${queryParams.toString()}`)
@@ -84,6 +87,13 @@ export async function updateRedemptionStatus(
   status: number
 ): Promise<ApiResponse<Redemption>> {
   const res = await api.put('/api/redemption/?status_only=true', { id, status })
+  return res.data
+}
+
+export async function batchRedemptionOperation(
+  data: BatchRedemptionOperationRequest
+): Promise<ApiResponse<BatchRedemptionOperationResult>> {
+  const res = await api.post('/api/redemption/batch', data)
   return res.data
 }
 

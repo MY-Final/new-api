@@ -29,10 +29,13 @@ export const redemptionSchema = z.object({
   key: z.string(),
   status: z.number(), // 1: enabled, 2: disabled, 3: used
   quota: z.number(),
+  paid_quota: z.number().optional(),
+  bonus_quota: z.number().optional(),
   created_time: z.number(),
   redeemed_time: z.number(),
   expired_time: z.number(), // 0 for never expires
   used_user_id: z.number(),
+  type: z.enum(['paid', 'reward']).optional(),
 })
 
 export type Redemption = z.infer<typeof redemptionSchema>
@@ -66,6 +69,7 @@ export interface GetRedemptionsResponse {
 export interface SearchRedemptionsParams {
   keyword?: string
   status?: string
+  type?: 'paid' | 'reward'
   p?: number
   page_size?: number
 }
@@ -74,9 +78,28 @@ export interface RedemptionFormData {
   id?: number
   name: string
   quota: number
+  paid_quota: number
+  bonus_quota: number
   expired_time: number
   count?: number // Only for create
   status?: number // Only for status update
+  type?: 'paid' | 'reward'
+}
+
+export interface BatchRedemptionOperationRequest {
+  ids: number[]
+  operation: 'update' | 'delete'
+  name?: string
+  quota?: number
+  paid_quota?: number
+  bonus_quota?: number
+  status?: number
+  type?: 'paid' | 'reward'
+}
+
+export interface BatchRedemptionOperationResult {
+  operation: 'update' | 'delete'
+  count: number
 }
 
 // ============================================================================

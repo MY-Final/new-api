@@ -29,8 +29,8 @@ import { useSummaryCardsConfig } from '@/features/dashboard/hooks/use-dashboard-
 import type { QuotaDataItem } from '@/features/dashboard/types'
 import { useStatus } from '@/hooks/use-status'
 import { getCurrencyLabel, isCurrencyDisplayEnabled } from '@/lib/currency'
-import { formatNumber, formatQuota } from '@/lib/format'
 import { requireServerSuccess } from '@/lib/server-error-message'
+import { formatNumber, formatQuota, formatQuotaPrecise } from '@/lib/format'
 import { computeTimeRange } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
@@ -144,6 +144,7 @@ export function SummaryCards() {
 
   const summaryTimeRange = useMemo(() => computeTimeRange(1), [])
   const remainQuota = Number(user?.quota ?? 0)
+  const hasDebt = remainQuota < 0
   const usedQuota = Number(user?.used_quota ?? 0)
   const requestCount = Number(user?.request_count ?? 0)
 
@@ -223,7 +224,9 @@ export function SummaryCards() {
     } else {
       runwayDisplay = `~${formatNumber(Math.floor(runwayDays))} ${t('days')}`
     }
-  } else if (remainQuota <= 0) {
+  } else if (hasDebt) {
+    runwayDisplay = t('Recharge to settle debt')
+  } else if (remainQuota === 0) {
     runwayDisplay = t('Balance depleted')
   } else {
     runwayDisplay = t('No recent usage')
@@ -292,7 +295,7 @@ export function SummaryCards() {
           <div className='flex flex-col gap-2 sm:gap-3'>
             <div className='flex items-center justify-between'>
               <span className='text-muted-foreground text-xs font-medium'>
-                {t('Credit remaining')}
+                {hasDebt ? t('Debt') : t('Credit remaining')}
               </span>
               <span className='flex items-center gap-1.5'>
                 <span
@@ -306,7 +309,7 @@ export function SummaryCards() {
             </div>
 
             <div className='font-mono text-xl font-semibold tracking-tight sm:text-2xl'>
-              {formatQuota(remainQuota)}
+              {formatQuotaPrecise(Math.abs(remainQuota))}
             </div>
 
             <div className='grid grid-cols-2 gap-2'>

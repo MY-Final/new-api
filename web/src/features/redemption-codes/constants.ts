@@ -28,6 +28,7 @@ export const REDEMPTION_STATUS = {
   ENABLED: 1,
   DISABLED: 2,
   USED: 3,
+  REFUNDED: 4,
 } as const
 
 export const REDEMPTION_STATUS_VALUES = Object.values(REDEMPTION_STATUS).map(
@@ -57,6 +58,11 @@ export const REDEMPTION_STATUSES: Record<
     variant: 'neutral',
     value: REDEMPTION_STATUS.USED,
   },
+  [REDEMPTION_STATUS.REFUNDED]: {
+    labelKey: 'Refunded',
+    variant: 'danger',
+    value: REDEMPTION_STATUS.REFUNDED,
+  },
 } as const
 
 // Virtual status filter value for expired redemption codes
@@ -67,6 +73,7 @@ export const REDEMPTION_FILTER_VALUES = [
   String(REDEMPTION_STATUS.ENABLED),
   String(REDEMPTION_STATUS.DISABLED),
   String(REDEMPTION_STATUS.USED),
+  String(REDEMPTION_STATUS.REFUNDED),
   REDEMPTION_FILTER_EXPIRED,
 ] as const
 
@@ -80,6 +87,13 @@ export function getRedemptionStatusOptions(t: TFunction) {
       label: t('Expired'),
       value: REDEMPTION_FILTER_EXPIRED,
     },
+  ]
+}
+
+export function getRedemptionTypeOptions(t: TFunction) {
+  return [
+    { label: t('Reward code'), value: 'reward' },
+    { label: t('Paid code'), value: 'paid' },
   ]
 }
 

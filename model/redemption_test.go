@@ -19,22 +19,23 @@ func TestSearchRedemptionsFiltersAndPaginates(t *testing.T) {
 
 	now := common.GetTimestamp()
 	redemptions := []Redemption{
-		{Id: 1, Name: "alpha-active", Key: "00000000000000000000000000000001", Status: common.RedemptionCodeStatusEnabled, ExpiredTime: 0},
-		{Id: 2, Name: "alpha-future", Key: "00000000000000000000000000000002", Status: common.RedemptionCodeStatusEnabled, ExpiredTime: now + 3600},
-		{Id: 3, Name: "alpha-expired", Key: "00000000000000000000000000000003", Status: common.RedemptionCodeStatusEnabled, ExpiredTime: now - 10},
-		{Id: 4, Name: "beta-disabled", Key: "00000000000000000000000000000004", Status: common.RedemptionCodeStatusDisabled, ExpiredTime: 0},
-		{Id: 5, Name: "beta-used", Key: "00000000000000000000000000000005", Status: common.RedemptionCodeStatusUsed, ExpiredTime: 0},
+		{Id: 1, Name: "alpha-active", Key: "00000000000000000000000000000001", Status: common.RedemptionCodeStatusEnabled, ExpiredTime: 0, Type: RedemptionTypeReward},
+		{Id: 2, Name: "alpha-future", Key: "00000000000000000000000000000002", Status: common.RedemptionCodeStatusEnabled, ExpiredTime: now + 3600, Type: RedemptionTypePaid},
+		{Id: 3, Name: "alpha-expired", Key: "00000000000000000000000000000003", Status: common.RedemptionCodeStatusEnabled, ExpiredTime: now - 10, Type: RedemptionTypeReward},
+		{Id: 4, Name: "beta-disabled", Key: "00000000000000000000000000000004", Status: common.RedemptionCodeStatusDisabled, ExpiredTime: 0, Type: RedemptionTypePaid},
+		{Id: 5, Name: "beta-used", Key: "00000000000000000000000000000005", Status: common.RedemptionCodeStatusUsed, ExpiredTime: 0, Type: RedemptionTypeReward},
 	}
 	require.NoError(t, DB.Create(&redemptions).Error)
 
 	tests := []struct {
-		name      string
-		keyword   string
-		status    string
-		startIdx  int
-		num       int
-		wantTotal int64
-		wantIds   []int
+		name           string
+		keyword        string
+		status         string
+		redemptionType string
+		startIdx       int
+		num            int
+		wantTotal      int64
+		wantIds        []int
 	}{
 		{
 			name:      "no filters returns all rows",
@@ -78,6 +79,20 @@ func TestSearchRedemptionsFiltersAndPaginates(t *testing.T) {
 			wantIds:   []int{5},
 		},
 		{
+			name:           "paid type",
+			redemptionType: RedemptionTypePaid,
+			num:            10,
+			wantTotal:      2,
+			wantIds:        []int{4, 2},
+		},
+		{
+			name:           "reward type",
+			redemptionType: RedemptionTypeReward,
+			num:            10,
+			wantTotal:      3,
+			wantIds:        []int{5, 3, 1},
+		},
+		{
 			name:      "pagination keeps unpaged total",
 			startIdx:  1,
 			num:       2,
@@ -88,7 +103,7 @@ func TestSearchRedemptionsFiltersAndPaginates(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rows, total, err := SearchRedemptions(tt.keyword, tt.status, tt.startIdx, tt.num)
+			rows, total, err := SearchRedemptions(tt.keyword, tt.status, tt.redemptionType, tt.startIdx, tt.num)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantTotal, total)
 			gotIds := make([]int, 0, len(rows))
@@ -217,4 +232,59 @@ func TestRedeemConcurrentSingleSuccess(t *testing.T) {
 	var user User
 	require.NoError(t, DB.First(&user, "id = ?", userId).Error)
 	assert.Equal(t, 300, user.Quota, "quota must be credited exactly once")
+}
+
+func TestBatchRedemptionOperationsProtectUsedCodesAndDeduplicate(t *testing.T) {
+	truncateTables(t)
+
+	available := &Redemption{
+		Name:   "available",
+		Key:    "batch-available-code",
+		Quota:  100,
+		Status: common.RedemptionCodeStatusEnabled,
+		Type:   RedemptionTypeReward,
+	}
+	used := &Redemption{
+		Name:   "used",
+		Key:    "batch-used-code",
+		Quota:  200,
+		Status: common.RedemptionCodeStatusUsed,
+		Type:   RedemptionTypePaid,
+	}
+	require.NoError(t, DB.Create(available).Error)
+	require.NoError(t, DB.Create(used).Error)
+
+	name := "renamed"
+	redemptionType := RedemptionTypePaid
+	quota := 500
+	status := common.RedemptionCodeStatusDisabled
+	count, err := BatchUpdateRedemptions(
+		[]int{available.Id, available.Id},
+		&name,
+		&redemptionType,
+		&quota,
+		&status,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	var updated Redemption
+	require.NoError(t, DB.First(&updated, available.Id).Error)
+	assert.Equal(t, name, updated.Name)
+	assert.Equal(t, redemptionType, updated.Type)
+	assert.Equal(t, quota, updated.Quota)
+	assert.Equal(t, status, updated.Status)
+
+	failedName := "should-not-apply"
+	_, err = BatchUpdateRedemptions([]int{available.Id, used.Id}, &failedName, nil, nil, nil)
+	require.Error(t, err)
+	require.NoError(t, DB.First(&updated, available.Id).Error)
+	assert.Equal(t, name, updated.Name)
+
+	deleted, err := BatchDeleteRedemptions([]int{available.Id, available.Id})
+	require.NoError(t, err)
+	assert.Equal(t, 1, deleted)
+
+	_, err = BatchDeleteRedemptions([]int{used.Id})
+	require.Error(t, err)
 }

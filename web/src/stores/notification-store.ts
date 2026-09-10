@@ -29,6 +29,7 @@ interface NotificationState {
 
   // Actions
   markNoticeRead: (noticeContent: string) => void
+  markAnnouncementRead: (key: string) => void
   markAnnouncementsRead: (keys: string[]) => void
   setClosedUntilDate: (date: string | null) => void
   isAnnouncementRead: (key: string) => boolean
@@ -50,6 +51,15 @@ export const useNotificationStore = create<NotificationState>()(
         // Persist the full trimmed content so edits beyond 100 chars register
         const normalizedContent = noticeContent.trim()
         set({ lastReadNotice: normalizedContent })
+      },
+
+      markAnnouncementRead: (key: string) => {
+        if (!key) return
+        set((state) => ({
+          readAnnouncementKeys: state.readAnnouncementKeys.includes(key)
+            ? state.readAnnouncementKeys
+            : [...state.readAnnouncementKeys, key],
+        }))
       },
 
       markAnnouncementsRead: (keys: string[]) => {

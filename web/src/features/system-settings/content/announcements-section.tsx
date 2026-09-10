@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Trash2, Save } from 'lucide-react'
+import { Pin, Plus, Trash2, Save } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
@@ -60,6 +60,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { sortAnnouncements } from '@/features/dashboard/lib/announcements'
 import dayjs from '@/lib/dayjs'
 import { handleServerError } from '@/lib/handle-server-error'
 
@@ -73,6 +74,7 @@ type Announcement = {
   publishDate: string
   type: 'default' | 'ongoing' | 'success' | 'warning' | 'error'
   extra?: string
+  pinned: boolean
 }
 
 type AnnouncementsSectionProps = {
@@ -91,6 +93,7 @@ const announcementSchema = z.object({
     .string()
     .max(100, 'Extra must be less than 100 characters')
     .optional(),
+  pinned: z.boolean(),
 })
 
 type AnnouncementFormValues = z.infer<typeof announcementSchema>
@@ -153,6 +156,7 @@ export function AnnouncementsSection({
       publishDate: new Date().toISOString(),
       type: 'default',
       extra: '',
+      pinned: false,
     },
   })
 
@@ -164,6 +168,7 @@ export function AnnouncementsSection({
           parsed.map((item, idx) => ({
             ...item,
             id: item.id || idx + 1,
+            pinned: item.pinned === true,
           }))
         )
       }
@@ -196,6 +201,7 @@ export function AnnouncementsSection({
       publishDate: new Date().toISOString(),
       type: 'default',
       extra: '',
+      pinned: false,
     })
     setShowDialog(true)
   }
@@ -207,6 +213,7 @@ export function AnnouncementsSection({
       publishDate: announcement.publishDate,
       type: announcement.type,
       extra: announcement.extra || '',
+      pinned: announcement.pinned,
     })
     setShowDialog(true)
   }
@@ -290,11 +297,7 @@ export function AnnouncementsSection({
   }
 
   const sortedAnnouncements = useMemo(() => {
-    return [...announcements].sort((a, b) => {
-      return (
-        new Date(b.publishDate).getTime() - new Date(a.publishDate).getTime()
-      )
-    })
+    return sortAnnouncements(announcements)
   }, [announcements])
 
   const getRelativeTime = (date: string) => {
@@ -419,6 +422,21 @@ export function AnnouncementsSection({
               header: t('Extra'),
               cellClassName: 'text-muted-foreground max-w-xs truncate',
               cell: (announcement) => announcement.extra || '-',
+            },
+            {
+              id: 'pinned',
+              header: t('Pinned'),
+              cell: (announcement) =>
+                announcement.pinned ? (
+                  <StatusBadge
+                    label={t('Pinned')}
+                    variant='warning'
+                    icon={Pin}
+                    copyable={false}
+                  />
+                ) : (
+                  '-'
+                ),
             },
             {
               id: 'actions',
@@ -581,6 +599,26 @@ export function AnnouncementsSection({
                     )}
                   </FormDescription>
                   <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='pinned'
+              render={({ field }) => (
+                <FormItem className='flex items-start gap-3 rounded-lg border p-3'>
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <div className='space-y-1'>
+                    <FormLabel>{t('Pin announcement')}</FormLabel>
+                    <FormDescription>
+                      {t('Pinned announcements appear first')}
+                    </FormDescription>
+                  </div>
                 </FormItem>
               )}
             />

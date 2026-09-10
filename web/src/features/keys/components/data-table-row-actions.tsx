@@ -25,6 +25,7 @@ import {
   ExternalLink,
   ArrowRightLeft,
   Copy,
+  ImagePlus,
   Link,
   Loader2,
 } from 'lucide-react'
@@ -47,12 +48,14 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { getCanvasStorageKey, STORAGE_KEYS } from '@/features/canvas/constants'
 import { useChatPresets } from '@/features/chat/hooks/use-chat-presets'
 import { resolveChatUrl, type ChatPreset } from '@/features/chat/lib/chat-links'
 import { sendToFluent } from '@/features/chat/lib/send-to-fluent'
 import { encodeChannelConnectionInfo } from '@/lib/channel-connection-info'
 import { copyToClipboard } from '@/lib/copy-to-clipboard'
 import { handleServerError } from '@/lib/handle-server-error'
+import { useAuthStore } from '@/stores/auth-store'
 
 import { updateApiKeyStatus } from '../api'
 import { API_KEY_STATUS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
@@ -91,6 +94,7 @@ export function DataTableRowActions<TData>({
   } = useApiKeys()
   const isEnabled = apiKey.status === API_KEY_STATUS.ENABLED
   const { chatPresets, serverAddress } = useChatPresets()
+  const userId = useAuthStore((state) => state.auth.user?.id)
   const [isTogglingStatus, setIsTogglingStatus] = useState(false)
   const isRealKeyLoading = Boolean(loadingKeys[apiKey.id])
 
@@ -265,6 +269,36 @@ export function DataTableRowActions<TData>({
           {t('CC Switch')}
           <DropdownMenuShortcut>
             <ArrowRightLeft size={16} />
+          </DropdownMenuShortcut>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={async () => {
+            const realKey = await resolveRealKey(apiKey.id)
+            if (!realKey) return
+            if (!userId) {
+              toast.error(t('Please sign in before importing an API key.'))
+              return
+            }
+            try {
+              sessionStorage.setItem(
+                getCanvasStorageKey(STORAGE_KEYS.API_KEY, userId),
+                realKey
+              )
+              sessionStorage.setItem(
+                getCanvasStorageKey(STORAGE_KEYS.GROUP, userId),
+                apiKey.group || ''
+              )
+            } catch {
+              toast.error(t('Unable to import the API key to Canvas.'))
+              return
+            }
+            toast.success(t('Imported to Canvas'))
+            window.location.assign('/canvas')
+          }}
+        >
+          {t('Import to Canvas')}
+          <DropdownMenuShortcut>
+            <ImagePlus size={16} />
           </DropdownMenuShortcut>
         </DropdownMenuItem>
         {hasChatPresets && (

@@ -35,6 +35,7 @@ interface ComboboxInputProps {
   options: readonly ComboboxInputOption[]
   value?: string
   onValueChange: (value: string) => void
+  onSearchChange?: (value: string) => void
   placeholder?: string
   emptyText?: string
   className?: string
@@ -51,6 +52,7 @@ export function ComboboxInput({
   options,
   value = '',
   onValueChange,
+  onSearchChange,
   placeholder = 'Select or type...',
   emptyText = 'No option found.',
   className,
@@ -113,6 +115,7 @@ export function ComboboxInput({
 
   const handleSelect = (selectedValue: string) => {
     onValueChange(selectedValue)
+    onSearchChange?.('')
     setOpen(false)
     setSearchValue('')
     inputRef.current?.focus()
@@ -204,6 +207,7 @@ export function ComboboxInput({
           const nextValue = e.target.value
           setSearchValue(nextValue)
           setSearchChanged(true)
+          onSearchChange?.(nextValue)
           if (allowCustomValue) {
             onValueChange(nextValue)
           }

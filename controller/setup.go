@@ -110,6 +110,7 @@ func PostSetup(c *gin.Context) {
 			DisplayName: "Root User",
 			AccessToken: nil,
 			Quota:       100000000,
+			PaidQuota:   100000000,
 		}
 		err = model.DB.Create(&rootUser).Error
 		if err != nil {

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -517,23 +518,14 @@ func GetUserTopUps(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	keyword := c.Query("keyword")
 
-	var (
-		topups []*model.TopUp
-		total  int64
-		err    error
-	)
-	if keyword != "" {
-		topups, total, err = model.SearchUserTopUps(userId, keyword, pageInfo)
-	} else {
-		topups, total, err = model.GetUserTopUps(userId, pageInfo)
-	}
+	records, total, err := model.GetUserBillingHistory(userId, keyword, pageInfo)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 
 	pageInfo.SetTotal(int(total))
-	pageInfo.SetItems(topups)
+	pageInfo.SetItems(records)
 	common.ApiSuccess(c, pageInfo)
 }
 
@@ -583,4 +575,34 @@ func AdminCompleteTopUp(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, nil)
+}
+
+type RefundTopUpRequest struct {
+	TradeNo string `json:"trade_no"`
+	Reason  string `json:"reason"`
+}
+
+// RefundTopUp applies local full-refund accounting after the payment provider
+// has confirmed the refund. It does not call the payment provider.
+func RefundTopUp(c *gin.Context) {
+	var req RefundTopUpRequest
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	req.TradeNo = strings.TrimSpace(req.TradeNo)
+	if req.TradeNo == "" {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	alreadyRefunded, err := model.RefundTopUpByAdmin(req.TradeNo, req.Reason, c.GetInt("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{
+		"trade_no":         req.TradeNo,
+		"status":           common.TopUpStatusRefunded,
+		"already_refunded": alreadyRefunded,
+	})
 }

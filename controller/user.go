@@ -468,6 +468,12 @@ func GetSelf(c *gin.Context) {
 		return
 	}
 	responseData := buildSelfUserData(user)
+	if affCount, err := model.GetUserAffiliateInviteeCount(id); err != nil {
+		common.ApiError(c, err)
+		return
+	} else {
+		responseData["aff_count"] = affCount
+	}
 	// The authenticated role is loaded from GetUserCache. It should equal the
 	// row role, but use it for capabilities so GetSelf and login/refresh remain
 	// consistent with the authorization decision made for this request.
@@ -491,32 +497,37 @@ func buildSelfUserData(user *model.User) map[string]any {
 	permissions := calculateUserPermissions(user.Role)
 	permissions["admin_permissions"] = authz.Capabilities(user.Id, user.Role)
 	return map[string]any{
-		"id":                user.Id,
-		"username":          user.Username,
-		"display_name":      user.DisplayName,
-		"has_password":      user.HasPassword,
-		"role":              user.Role,
-		"status":            user.Status,
-		"email":             user.Email,
-		"github_id":         user.GitHubId,
-		"discord_id":        user.DiscordId,
-		"oidc_id":           user.OidcId,
-		"wechat_id":         user.WeChatId,
-		"telegram_id":       user.TelegramId,
-		"group":             user.Group,
-		"quota":             user.Quota,
-		"used_quota":        user.UsedQuota,
-		"request_count":     user.RequestCount,
-		"aff_code":          user.AffCode,
-		"aff_count":         user.AffCount,
-		"aff_quota":         user.AffQuota,
-		"aff_history_quota": user.AffHistoryQuota,
-		"inviter_id":        user.InviterId,
-		"linux_do_id":       user.LinuxDOId,
-		"setting":           user.Setting,
-		"stripe_customer":   user.StripeCustomer,
-		"sidebar_modules":   userSetting.SidebarModules, // 正确提取sidebar_modules字段
-		"permissions":       permissions,
+		"id":                               user.Id,
+		"username":                         user.Username,
+		"display_name":                     user.DisplayName,
+		"has_password":                     user.HasPassword,
+		"role":                             user.Role,
+		"status":                           user.Status,
+		"email":                            user.Email,
+		"github_id":                        user.GitHubId,
+		"discord_id":                       user.DiscordId,
+		"oidc_id":                          user.OidcId,
+		"wechat_id":                        user.WeChatId,
+		"telegram_id":                      user.TelegramId,
+		"group":                            user.Group,
+		"quota":                            user.Quota,
+		"bonus_quota":                      user.BonusQuota,
+		"paid_quota":                       user.PaidQuota,
+		"used_quota":                       user.UsedQuota,
+		"request_count":                    user.RequestCount,
+		"aff_code":                         user.AffCode,
+		"aff_count":                        user.AffCount,
+		"aff_quota":                        user.AffQuota,
+		"aff_history_quota":                user.AffHistoryQuota,
+		"aff_reversed_quota":               user.AffReversedQuota,
+		"affiliate_topup_rebate_rate":      common.AffiliateTopupRebateRate,
+		"affiliate_redemption_rebate_rate": common.AffiliateRedemptionRebateRate,
+		"inviter_id":                       user.InviterId,
+		"linux_do_id":                      user.LinuxDOId,
+		"setting":                          user.Setting,
+		"stripe_customer":                  user.StripeCustomer,
+		"sidebar_modules":                  userSetting.SidebarModules, // 正确提取sidebar_modules字段
+		"permissions":                      permissions,
 	}
 }
 
@@ -571,9 +582,10 @@ func generateDefaultSidebarConfig(userRole int) string {
 
 	// 个人中心区域 - 所有用户都可以访问
 	defaultConfig["personal"] = map[string]any{
-		"enabled":  true,
-		"topup":    true,
-		"personal": true,
+		"enabled":   true,
+		"topup":     true,
+		"affiliate": true,
+		"personal":  true,
 	}
 
 	// 管理员区域 - 根据角色决定
@@ -585,6 +597,7 @@ func generateDefaultSidebarConfig(userRole int) string {
 			"models":     true,
 			"redemption": true,
 			"user":       true,
+			"finance":    true,
 			"setting":    false, // 管理员不能访问系统设置
 		}
 	} else if userRole == common.RoleRootUser {
@@ -595,6 +608,7 @@ func generateDefaultSidebarConfig(userRole int) string {
 			"models":     true,
 			"redemption": true,
 			"user":       true,
+			"finance":    true,
 			"setting":    true,
 		}
 	}

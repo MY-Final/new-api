@@ -25,7 +25,11 @@ import { Card, CardContent } from '@/components/ui/card'
 import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
-import { formatCompactNumber, formatQuota } from '@/lib/format'
+import {
+  formatCompactNumber,
+  formatQuota,
+  formatQuotaPrecise,
+} from '@/lib/format'
 import { getRoleLabel } from '@/lib/roles'
 
 import { getDisplayName } from '../lib'
@@ -84,6 +88,10 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
   const avatarFallback = getUserAvatarFallback(avatarName)
   const avatarFallbackStyle = getUserAvatarStyle(avatarName)
   const roleLabel = getRoleLabel(profile.role)
+  const hasDebt = profile.quota < 0
+  const displayedQuota = Math.abs(profile.quota)
+  const bonusQuota = Math.max(profile.bonus_quota ?? 0, 0)
+  const paidQuota = profile.paid_quota ?? 0
   const stats: {
     label: string
     value: string
@@ -92,11 +100,13 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
     tone: IconBadgeTone
   }[] = [
     {
-      label: t('Current Balance'),
-      value: formatQuota(profile.quota),
-      description: t('Remaining quota'),
+      label: hasDebt ? t('Debt') : t('Current Balance'),
+      value: formatQuotaPrecise(displayedQuota),
+      description: hasDebt
+        ? t('Recharge to settle debt')
+        : `${t('Bonus Balance')}: ${formatQuotaPrecise(bonusQuota)} · ${t('Paid Balance')}: ${formatQuotaPrecise(paidQuota)}`,
       icon: WalletCards,
-      tone: 'success',
+      tone: hasDebt ? 'destructive' : 'success',
     },
     {
       label: t('Total Usage'),

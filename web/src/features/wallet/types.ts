@@ -228,8 +228,12 @@ export interface UserWalletData {
   id: number
   /** Username */
   username: string
-  /** Current quota balance */
-  quota: number
+	/** Current quota balance */
+	quota: number
+	/** Balance from non-paid rewards */
+	bonus_quota?: number
+	/** Balance from paid top-ups and paid codes */
+	paid_quota?: number
   /** Total used quota */
   used_quota: number
   /** Total request count */
@@ -238,8 +242,14 @@ export interface UserWalletData {
   aff_quota: number
   /** Total affiliate quota earned (historical) */
   aff_history_quota: number
+  /** Total affiliate quota reversed */
+  aff_reversed_quota: number
   /** Number of successful affiliate invites */
   aff_count: number
+  /** Current top-up rebate rate in basis points */
+  affiliate_topup_rebate_rate: number
+  /** Current paid redemption-code rebate rate in basis points */
+  affiliate_redemption_rebate_rate: number
   /** User group */
   group: string
 }
@@ -247,7 +257,44 @@ export interface UserWalletData {
 /**
  * Topup record status
  */
-export type TopupStatus = 'success' | 'pending' | 'expired'
+export type TopupStatus =
+  | 'success'
+  | 'pending'
+  | 'expired'
+  | 'failed'
+  | 'refunded'
+
+/**
+ * User billing history record. Direct top-ups and redeemed codes share this
+ * response shape so the wallet can display one chronological history.
+ */
+export type BillingRecordType = 'topup' | 'redemption'
+
+export interface BillingRecord {
+  id: number
+  record_type: BillingRecordType
+  user_id: number
+  amount: number
+  money: number
+  trade_no: string
+  payment_method: string
+  payment_provider?: string
+  create_time: number
+  complete_time?: number
+  status: TopupStatus | 'used'
+  source?: 'topup' | 'subscription'
+  credited_quota?: number
+  refunded_at?: number
+  refund_reason?: string
+  redemption_id?: number
+  redemption_name?: string
+  redemption_key?: string
+  redemption_type?: 'paid' | 'reward'
+  redemption_quota?: number
+  redemption_paid_quota?: number
+  redemption_bonus_quota?: number
+  redeemed_time?: number
+}
 
 /**
  * Topup billing record
@@ -271,14 +318,66 @@ export interface TopupRecord {
   complete_time?: number
   /** Payment status */
   status: TopupStatus
+  source?: 'topup' | 'subscription'
+  credited_quota?: number
+  refunded_at?: number
+  refund_reason?: string
 }
 
 /**
  * Billing history response
  */
 export interface BillingHistoryResponse {
-  items: TopupRecord[]
+  items: BillingRecord[]
   total: number
+}
+
+export type AffiliateRebateSource = 'signup' | 'topup' | 'redemption'
+
+export interface AffiliateRebate {
+  id: number
+  inviter_id: number
+  invitee_id: number
+  inviter_username?: string
+  invitee_username?: string
+  source_type: AffiliateRebateSource
+  source_id: string
+  source_key: string
+  base_quota: number
+  rate: number
+  rebate_quota: number
+  reversed_quota: number
+  transferred_quota: number
+  debt_offset_quota: number
+  status: 'settled' | 'reversed'
+  created_at: number
+  settled_at: number
+  reversed_at: number
+  reverse_reason?: string
+}
+
+export interface AffiliateRebatesResponse {
+  items: AffiliateRebate[]
+  total: number
+}
+
+export interface AffiliateInvitee {
+  id: number
+  username: string
+  email: string
+  created_at: number
+  rebate_quota: number
+  reversed_quota: number
+}
+
+export interface AffiliateInviteesResponse {
+  items: AffiliateInvitee[]
+  total: number
+}
+
+export interface AffiliateRebateReverseRequest {
+  rebate_id: number
+  reason?: string
 }
 
 /**
@@ -286,4 +385,15 @@ export interface BillingHistoryResponse {
  */
 export interface CompleteOrderRequest {
   trade_no: string
+}
+
+export interface TopupRefundRequest {
+  trade_no: string
+  reason?: string
+}
+
+export interface TopupRefundResponse {
+  trade_no: string
+  status: string
+  already_refunded: boolean
 }

@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useStatus } from '@/hooks/use-status'
 
+import { sortAnnouncements } from '../lib/announcements'
 import type { AnnouncementItem, ApiInfoItem, FAQItem } from '../types'
 
 /**
@@ -45,10 +46,13 @@ export function useApiInfo() {
  * Get announcements list
  */
 export function useAnnouncements() {
-  return useStatusData<AnnouncementItem>(
-    'announcements_enabled',
-    'announcements'
-  )
+  const { status, loading } = useStatus()
+  const enabled = Boolean(status) && status?.announcements_enabled !== false
+  const announcements = enabled
+    ? ((status?.announcements || []) as AnnouncementItem[])
+    : []
+
+  return { items: sortAnnouncements(announcements), loading }
 }
 
 /**

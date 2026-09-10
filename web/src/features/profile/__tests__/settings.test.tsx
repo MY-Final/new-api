@@ -38,6 +38,7 @@ const profile: UserProfile = {
   aff_count: 0,
   aff_quota: 0,
   aff_history_quota: 0,
+  aff_reversed_quota: 0,
   created_time: 0,
 }
 const settings = {
@@ -180,8 +181,8 @@ describe('user settings saves across profile and security', () => {
       screen.queryByRole('switch', { name: 'Record IP Address' })
     ).not.toBeInTheDocument()
     fireEvent.change(
-      screen.getByRole('spinbutton', { name: 'Quota Warning Threshold' }),
-      { target: { value: '2700' } }
+      screen.getByRole('spinbutton', { name: /Balance Warning Threshold/ }),
+      { target: { value: '0.0054' } }
     )
     fireEvent.click(screen.getByRole('button', { name: 'Save Settings' }))
     await waitFor(() => expect(onUpdate).toHaveBeenCalled())

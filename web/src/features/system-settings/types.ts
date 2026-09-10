@@ -258,6 +258,8 @@ export type BillingSettings = {
   PreConsumedQuota: number
   QuotaForInviter: number
   QuotaForInvitee: number
+  AffiliateTopupRebateRate: number
+  AffiliateRedemptionRebateRate: number
   TopUpLink: string
   'general_setting.docs_link': string
   'quota_setting.enable_free_model_pre_consume': boolean
@@ -293,6 +295,7 @@ export type BillingSettings = {
   EpayKey: string
   Price: number
   MinTopUp: number
+  LiandongShopUrl: string
   CustomCallbackAddress: string
   PayMethods: string
   'payment_setting.amount_options': string

@@ -25,7 +25,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
-  formatQuota,
+  formatQuotaPrecise,
   parseQuotaFromDollars,
   quotaUnitsToDollars,
 } from '@/lib/format'
@@ -59,11 +59,13 @@ export function TransferDialog({
   const minimumAmount = quotaUnitsToDollars(minimumQuota)
   const maximumAmount = quotaUnitsToDollars(availableQuota)
   const [amount, setAmount] = useState(minimumAmount)
-  const transferQuota = parseQuotaFromDollars(amount)
+  const requestedQuota = parseQuotaFromDollars(amount)
+  const transferQuota = Math.min(requestedQuota, availableQuota)
   const canTransfer =
     Number.isFinite(amount) &&
+    Number.isFinite(requestedQuota) &&
     transferQuota >= minimumQuota &&
-    transferQuota <= availableQuota
+    availableQuota >= minimumQuota
 
   useEffect(() => {
     if (open) {
@@ -117,7 +119,7 @@ export function TransferDialog({
             {t('Available Rewards')}
           </Label>
           <div className='text-2xl font-semibold'>
-            {formatQuota(availableQuota)}
+            {formatQuotaPrecise(availableQuota)}
           </div>
         </div>
 
@@ -139,7 +141,7 @@ export function TransferDialog({
             className='font-mono text-lg'
           />
           <p className='text-muted-foreground text-xs'>
-            {t('Minimum:')} {formatQuota(minimumQuota)}
+            {t('Minimum:')} {formatQuotaPrecise(minimumQuota)}
           </p>
         </div>
       </div>

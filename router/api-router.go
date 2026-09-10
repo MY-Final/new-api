@@ -110,6 +110,8 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.POST("/passkey/verify/finish", middleware.UserCriticalRateLimit("security-verification"), middleware.DisableCache(), controller.PasskeyVerifyFinish)
 				selfRoute.DELETE("/passkey", middleware.DisableCache(), controller.PasskeyDelete)
 				selfRoute.GET("/aff", controller.GetAffCode)
+				selfRoute.GET("/aff/rebates", controller.GetUserAffiliateRebates)
+				selfRoute.GET("/aff/invitees", controller.GetUserAffiliateInvitees)
 				selfRoute.GET("/topup/info", controller.GetTopUpInfo)
 				selfRoute.GET("/topup/self", controller.GetUserTopUps)
 				selfRoute.POST("/topup", middleware.CriticalRateLimit(), controller.TopUp)
@@ -147,7 +149,9 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.GET("/", controller.GetAllUsers)
 				adminRoute.GET("/topup", controller.GetAllTopUps)
 				adminRoute.POST("/topup/complete", controller.AdminCompleteTopUp)
+				adminRoute.POST("/topup/refund", controller.RefundTopUp)
 				adminRoute.GET("/search", controller.SearchUsers)
+				adminRoute.GET("/:id/usage", controller.GetUserUsage)
 				adminRoute.GET("/:id/oauth/bindings", controller.GetUserOAuthBindingsByAdmin)
 				adminRoute.DELETE("/:id/oauth/bindings/:provider_id", controller.UnbindCustomOAuthByAdmin)
 				adminRoute.DELETE("/:id/bindings/:binding_type", controller.AdminClearUserBinding)
@@ -162,6 +166,27 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.GET("/2fa/stats", controller.Admin2FAStats)
 				adminRoute.DELETE("/:id/2fa", controller.AdminDisable2FA)
 			}
+		}
+
+		affiliateRoute := apiRouter.Group("/affiliate")
+		affiliateRoute.Use(middleware.AdminAuth())
+		{
+			affiliateRoute.GET("/rebates", controller.GetAllAffiliateRebates)
+			affiliateRoute.POST("/rebates/reverse", controller.ReverseAffiliateRebate)
+		}
+
+		financeRoute := apiRouter.Group("/finance")
+		financeRoute.Use(middleware.AdminAuth())
+		{
+			financeRoute.GET("/topups", controller.GetFinanceTopUps)
+			financeRoute.GET("/redemptions", controller.GetFinanceRedemptions)
+			financeRoute.GET("/rebates", controller.GetFinanceRebates)
+			financeRoute.GET("/operations", controller.GetFinancialOperations)
+			financeRoute.POST("/topups/refund", controller.RefundFinanceTopUp)
+			financeRoute.POST("/redemptions/refund", controller.RefundFinanceRedemption)
+			financeRoute.POST("/rebates/reverse", controller.ReverseFinanceRebate)
+			financeRoute.POST("/penalties", controller.ApplyFinancePenalty)
+			financeRoute.POST("/penalties/reverse", controller.ReverseFinancePenalty)
 		}
 
 		// Subscription billing (plans, purchase, admin management)
@@ -298,7 +323,7 @@ func SetApiRouter(router *gin.Engine) {
 			redemptionRoute.GET("/search", controller.SearchRedemptions)
 			redemptionRoute.GET("/:id", controller.GetRedemption)
 			redemptionRoute.POST("/", controller.AddRedemption)
-			redemptionRoute.POST("/batch", controller.DeleteRedemptionBatch)
+			redemptionRoute.POST("/batch", controller.BatchRedemptionOperation)
 			redemptionRoute.PUT("/", controller.UpdateRedemption)
 			redemptionRoute.DELETE("/invalid", controller.DeleteInvalidRedemption)
 			redemptionRoute.DELETE("/:id", controller.DeleteRedemption)
@@ -313,6 +338,24 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute.GET("/search", middleware.AdminAuth(), controller.SearchAllLogs)
 		logRoute.GET("/self", middleware.UserAuth(), controller.GetUserLogs)
 		logRoute.GET("/self/search", middleware.UserAuth(), middleware.SearchRateLimit(), controller.SearchUserLogs)
+
+		statisticsRoute := apiRouter.Group("/statistics")
+		{
+			adminStatisticsRoute := statisticsRoute.Group("/users")
+			adminStatisticsRoute.Use(middleware.AdminAuth())
+			{
+				adminStatisticsRoute.GET("/", controller.GetUserUsageStatistics)
+				adminStatisticsRoute.GET("/:id/requests", controller.GetManagedUserUsageRequests)
+				adminStatisticsRoute.GET("/:id", controller.GetManagedUserUsageStatistics)
+			}
+
+			selfStatisticsRoute := statisticsRoute.Group("/my")
+			selfStatisticsRoute.Use(middleware.UserAuth())
+			{
+				selfStatisticsRoute.GET("/requests", controller.GetMyUsageRequests)
+				selfStatisticsRoute.GET("/", controller.GetMyUsageStatistics)
+			}
+		}
 
 		systemTaskRoute := apiRouter.Group("/system-task")
 		systemTaskRoute.Use(middleware.RootAuth())

@@ -36,6 +36,7 @@ import {
   ERROR_MESSAGES,
   REDEMPTION_STATUS,
   getRedemptionStatusOptions,
+  getRedemptionTypeOptions,
 } from '../constants'
 import { isRedemptionExpired } from '../lib'
 import type { Redemption } from '../types'
@@ -72,13 +73,22 @@ export function RedemptionsTable() {
     navigate: route.useNavigate(),
     pagination: { defaultPage: 1, defaultPageSize: isMobile ? 10 : 20 },
     globalFilter: { enabled: true, key: 'filter' },
-    columnFilters: [{ columnId: 'status', searchKey: 'status', type: 'array' }],
+    columnFilters: [
+      { columnId: 'status', searchKey: 'status', type: 'array' },
+      { columnId: 'type', searchKey: 'type', type: 'array' },
+    ],
   })
   const statusFilter =
     (columnFilters.find((filter) => filter.id === 'status')?.value as
       | string[]
       | undefined) ?? []
   const statusFilterValue = statusFilter[0] ?? ''
+  const typeFilterValue =
+    (
+      columnFilters.find((filter) => filter.id === 'type')?.value as
+        | string[]
+        | undefined
+    )?.[0] ?? ''
 
   // Fetch data with React Query
   const { data, isLoading, isFetching } = useQuery({
@@ -88,22 +98,25 @@ export function RedemptionsTable() {
       pagination.pageSize,
       globalFilter,
       statusFilterValue,
+      typeFilterValue,
       refreshTrigger,
     ],
     queryFn: async () => {
       const hasFilter = globalFilter?.trim()
       const hasStatusFilter = statusFilterValue !== ''
+      const hasTypeFilter = typeFilterValue !== ''
       const params = {
         p: pagination.pageIndex + 1,
         page_size: pagination.pageSize,
       }
 
       const result =
-        hasFilter || hasStatusFilter
+        hasFilter || hasStatusFilter || hasTypeFilter
           ? await searchRedemptions({
               ...params,
               keyword: globalFilter,
               status: statusFilterValue,
+              type: typeFilterValue as 'paid' | 'reward',
             })
           : await getRedemptions(params)
 
@@ -111,7 +124,7 @@ export function RedemptionsTable() {
         throw createServerError(
           result,
           t(
-            hasFilter || hasStatusFilter
+            hasFilter || hasStatusFilter || hasTypeFilter
               ? ERROR_MESSAGES.SEARCH_FAILED
               : ERROR_MESSAGES.LOAD_FAILED
           )
@@ -156,6 +169,7 @@ export function RedemptionsTable() {
     () => getRedemptionStatusOptions(t),
     [t]
   )
+  const redemptionTypeOptions = useMemo(() => getRedemptionTypeOptions(t), [t])
 
   return (
     <DataTablePage
@@ -177,6 +191,12 @@ export function RedemptionsTable() {
             columnId: 'status',
             title: t('Status'),
             options: redemptionStatusOptions,
+            singleSelect: true,
+          },
+          {
+            columnId: 'type',
+            title: t('Type'),
+            options: redemptionTypeOptions,
             singleSelect: true,
           },
         ],

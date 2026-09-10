@@ -141,8 +141,8 @@ function getSaveButton(): HTMLButtonElement {
 }
 
 function getControlByLabel(labelText: 'Name'): HTMLInputElement
-function getControlByLabel(labelText: 'Quota (CNY)'): HTMLInputElement
-function getControlByLabel(labelText: 'Quota (USD)'): HTMLInputElement
+function getControlByLabel(labelText: 'Bonus quota (CNY)'): HTMLInputElement
+function getControlByLabel(labelText: 'Bonus quota (USD)'): HTMLInputElement
 function getControlByLabel(labelText: string): HTMLElement {
   const label = [...document.querySelectorAll<HTMLLabelElement>('label')].find(
     (candidate) => candidate.textContent?.trim() === labelText
@@ -197,7 +197,7 @@ describe('redemption drawer', () => {
     })
     await waitForLoadedForm()
 
-    expect(getControlByLabel('Quota (CNY)').value).toBe('200')
+    expect(getControlByLabel('Bonus quota (CNY)').value).toBe('200')
   })
 
   test('blocks updates and reports an error when loading rejects', async () => {
@@ -251,7 +251,7 @@ describe('redemption drawer', () => {
 
     await renderDrawer(original)
     await waitForLoadedForm()
-    expect(getControlByLabel('Quota (USD)').value).toBe('1')
+    expect(getControlByLabel('Bonus quota (USD)').value).toBe('1')
 
     changeInput(getControlByLabel('Name'), 'renamed')
     submitForm()
@@ -259,9 +259,11 @@ describe('redemption drawer', () => {
 
     expect(updates[0]?.name).toBe('renamed')
     expect(updates[0]?.quota).toBe(500001)
+    expect(updates[0]?.paid_quota).toBe(0)
+    expect(updates[0]?.bonus_quota).toBe(500001)
   })
 
-  test('recalculates quota when the quota field changes', async () => {
+  test('recalculates total quota when the bonus field changes', async () => {
     const original = redemption(1)
     const updates: Array<Record<string, unknown>> = []
     apiClient.get = async () => ({ data: { success: true, data: original } })
@@ -273,11 +275,13 @@ describe('redemption drawer', () => {
 
     await renderDrawer(original)
     await waitForLoadedForm()
-    changeInput(getControlByLabel('Quota (USD)'), '2')
+    changeInput(getControlByLabel('Bonus quota (USD)'), '2')
     submitForm()
     await waitFor(() => expect(updates).toHaveLength(1))
 
     expect(updates[0]?.quota).toBe(1000000)
+    expect(updates[0]?.paid_quota).toBe(0)
+    expect(updates[0]?.bonus_quota).toBe(1000000)
   })
 
   test('ignores an older response after switching records', async () => {
@@ -314,5 +318,7 @@ describe('redemption drawer', () => {
 
     expect(updates[0]?.id).toBe(2)
     expect(updates[0]?.quota).toBe(1000001)
+    expect(updates[0]?.paid_quota).toBe(0)
+    expect(updates[0]?.bonus_quota).toBe(1000001)
   })
 })

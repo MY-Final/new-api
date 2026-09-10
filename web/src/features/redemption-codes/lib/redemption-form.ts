@@ -19,10 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import type { TFunction } from 'i18next'
 import { z } from 'zod'
 
-import {
-  parseQuotaFromDollars,
-  quotaUnitsToEditableAmount,
-} from '@/lib/format'
+import { parseQuotaFromDollars, quotaUnitsToEditableAmount } from '@/lib/format'
 
 import {
   REDEMPTION_VALIDATION,
@@ -36,24 +33,33 @@ import type { RedemptionFormData, Redemption } from '../types'
 
 export function getRedemptionFormSchema(t: TFunction) {
   const msg = getRedemptionFormErrorMessages(t)
-  return z.object({
-    name: z
-      .string()
-      .min(REDEMPTION_VALIDATION.NAME_MIN_LENGTH, msg.NAME_LENGTH_INVALID)
-      .max(REDEMPTION_VALIDATION.NAME_MAX_LENGTH, msg.NAME_LENGTH_INVALID),
-    quota_dollars: z.number().min(0, t('Quota must be a positive number')),
-    expired_time: z.date().optional(),
-    count: z
-      .number()
-      .min(REDEMPTION_VALIDATION.COUNT_MIN, msg.COUNT_INVALID)
-      .max(REDEMPTION_VALIDATION.COUNT_MAX, msg.COUNT_INVALID)
-      .optional(),
-  })
+  return z
+    .object({
+      name: z
+        .string()
+        .min(REDEMPTION_VALIDATION.NAME_MIN_LENGTH, msg.NAME_LENGTH_INVALID)
+        .max(REDEMPTION_VALIDATION.NAME_MAX_LENGTH, msg.NAME_LENGTH_INVALID),
+      paid_quota_dollars: z.number().min(0, t('Quota must not be negative')),
+      bonus_quota_dollars: z.number().min(0, t('Quota must not be negative')),
+      type: z.enum(['paid', 'reward']),
+      expired_time: z.date().optional(),
+      count: z
+        .number()
+        .min(REDEMPTION_VALIDATION.COUNT_MIN, msg.COUNT_INVALID)
+        .max(REDEMPTION_VALIDATION.COUNT_MAX, msg.COUNT_INVALID)
+        .optional(),
+    })
+    .refine((data) => data.paid_quota_dollars + data.bonus_quota_dollars > 0, {
+      message: t('Total quota must be positive'),
+      path: ['bonus_quota_dollars'],
+    })
 }
 
 export type RedemptionFormValues = {
   name: string
-  quota_dollars: number
+  paid_quota_dollars: number
+  bonus_quota_dollars: number
+  type: 'paid' | 'reward'
   expired_time?: Date
   count?: number
 }
@@ -64,7 +70,9 @@ export type RedemptionFormValues = {
 
 export const REDEMPTION_FORM_DEFAULT_VALUES: RedemptionFormValues = {
   name: '',
-  quota_dollars: 10,
+  paid_quota_dollars: 0,
+  bonus_quota_dollars: 10,
+  type: 'reward',
   expired_time: undefined,
   count: 1,
 }
@@ -81,7 +89,12 @@ export function transformFormDataToPayload(
 ): RedemptionFormData {
   return {
     name: data.name,
-    quota: parseQuotaFromDollars(data.quota_dollars),
+    paid_quota: parseQuotaFromDollars(data.paid_quota_dollars),
+    bonus_quota: parseQuotaFromDollars(data.bonus_quota_dollars),
+    quota: parseQuotaFromDollars(
+      data.paid_quota_dollars + data.bonus_quota_dollars
+    ),
+    type: data.type,
     expired_time: data.expired_time
       ? Math.floor(data.expired_time.getTime() / 1000)
       : 0,
@@ -95,9 +108,16 @@ export function transformFormDataToPayload(
 export function transformRedemptionToFormDefaults(
   redemption: Redemption
 ): RedemptionFormValues {
+  const paidQuota =
+    redemption.type === 'paid' ? (redemption.paid_quota ?? redemption.quota) : 0
+  const bonusQuota =
+    redemption.bonus_quota ??
+    (redemption.type === 'paid' ? 0 : redemption.quota)
   return {
     name: redemption.name,
-    quota_dollars: quotaUnitsToEditableAmount(redemption.quota),
+    paid_quota_dollars: quotaUnitsToEditableAmount(paidQuota),
+    bonus_quota_dollars: quotaUnitsToEditableAmount(bonusQuota),
+    type: redemption.type ?? 'reward',
     expired_time:
       redemption.expired_time > 0
         ? new Date(redemption.expired_time * 1000)

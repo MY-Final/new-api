@@ -49,8 +49,12 @@ export interface UserProfile {
   email?: string
   /** User group */
   group: string
-  /** Current quota balance */
-  quota: number
+	/** Current quota balance */
+	quota: number
+	/** Balance from non-paid rewards */
+	bonus_quota?: number
+	/** Balance from paid top-ups and paid codes */
+	paid_quota?: number
   /** Total used quota */
   used_quota: number
   /** Total request count */
@@ -67,6 +71,8 @@ export interface UserProfile {
   aff_quota: number
   /** Total affiliate quota earned (historical) */
   aff_history_quota: number
+  /** Total affiliate quota reversed */
+  aff_reversed_quota: number
   /** Invite user ID */
   invite_user_id?: number
   /** Account creation timestamp */

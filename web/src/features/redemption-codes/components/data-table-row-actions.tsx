@@ -52,7 +52,9 @@ export function DataTableRowActions<TData>({
   const redemption = redemptionSchema.parse(row.original)
   const { setOpen, setCurrentRow, triggerRefresh } = useRedemptions()
   const isEnabled = redemption.status === REDEMPTION_STATUS.ENABLED
-  const isUsed = redemption.status === REDEMPTION_STATUS.USED
+  const isUsed =
+    redemption.status === REDEMPTION_STATUS.USED ||
+    redemption.status === REDEMPTION_STATUS.REFUNDED
   const isExpired = isRedemptionExpired(
     redemption.expired_time,
     redemption.status

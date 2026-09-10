@@ -247,10 +247,9 @@ func (s *BillingSession) reserveFunding(delta int) error {
 		// 全额无条件扣减，余额不足的部分记为欠费（余额可为负），不中断请求，
 		// 保证日志记录的预扣额度与用户余额的实际变动始终对账一致。
 		// DecreaseUserQuota 仅在数据库错误时失败。
-		if err := model.DecreaseUserQuota(funding.userId, delta, false); err != nil {
+		if err := funding.ReserveAdditional(delta); err != nil {
 			return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
 		}
-		funding.consumed += delta
 		return nil
 	case *SubscriptionFunding:
 		if err := model.PostConsumeUserSubscriptionDelta(funding.subscriptionId, int64(delta)); err != nil {
@@ -271,10 +270,8 @@ func (s *BillingSession) reserveFunding(delta int) error {
 func (s *BillingSession) rollbackFundingReserve(delta int) {
 	switch funding := s.funding.(type) {
 	case *WalletFunding:
-		if err := model.IncreaseUserQuota(funding.userId, delta, false); err != nil {
+		if err := funding.RollbackLastReservation(); err != nil {
 			common.SysLog("error rolling back wallet funding reserve: " + err.Error())
-		} else {
-			funding.consumed -= delta
 		}
 	case *SubscriptionFunding:
 		if err := model.PostConsumeUserSubscriptionDelta(funding.subscriptionId, -int64(delta)); err != nil {
@@ -293,40 +290,10 @@ func (s *BillingSession) reserveToken(delta int) error {
 	return nil
 }
 
-// shouldTrust 统一信任额度检查，适用于钱包和订阅。
-func (s *BillingSession) shouldTrust(c *gin.Context) bool {
-	// 异步任务（ForcePreConsume=true）必须预扣全额，不允许信任旁路
-	if s.relayInfo.ForcePreConsume {
-		return false
-	}
-
-	trustQuota := common.GetTrustQuota()
-	if trustQuota <= 0 {
-		return false
-	}
-
-	// 检查令牌是否充足
-	tokenTrusted := s.relayInfo.TokenUnlimited
-	if !tokenTrusted {
-		tokenQuota := c.GetInt("token_quota")
-		tokenTrusted = tokenQuota > trustQuota
-	}
-	if !tokenTrusted {
-		return false
-	}
-
-	switch s.funding.Source() {
-	case BillingSourceWallet:
-		return s.relayInfo.UserQuota > trustQuota
-	case BillingSourceSubscription:
-		// 订阅不能启用信任旁路。原因：
-		// 1. PreConsumeUserSubscription 要求 amount>0 来创建预扣记录并锁定订阅
-		// 2. SubscriptionFunding.PreConsume 忽略参数，始终用 s.amount 预扣
-		// 3. 若信任旁路将 effectiveQuota 设为 0，会导致 preConsumedQuota 与实际订阅预扣不一致
-		return false
-	default:
-		return false
-	}
+// shouldTrust 保留会话接口，但所有钱包请求必须经过原子预扣。
+// 否则缓存中的旧正余额可能绕过检查，导致负余额用户继续消费。
+func (s *BillingSession) shouldTrust(_ *gin.Context) bool {
+	return false
 }
 
 // syncRelayInfo 将 BillingSession 的状态同步到 RelayInfo 的兼容字段上。
@@ -357,6 +324,24 @@ func (s *BillingSession) syncRelayInfo() {
 func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preConsumedQuota int) (*BillingSession, *types.NewAPIError) {
 	if relayInfo == nil {
 		return nil, types.NewError(fmt.Errorf("relayInfo is nil"), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
+	}
+
+	// A debt is a wallet-level restriction and must not be bypassed by a
+	// subscription fallback. A non-negative wallet balance still allows users
+	// with zero wallet quota to use subscription funding normally.
+	if relayInfo.UserId > 0 {
+		// Read the authoritative value here so a stale cache cannot bypass the
+		// debt restriction or make a subscription fallback available.
+		walletQuota, err := model.GetUserQuota(relayInfo.UserId, true)
+		if err != nil {
+			return nil, types.NewError(err, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())
+		}
+		if walletQuota < 0 {
+			return nil, types.NewErrorWithStatusCode(
+				fmt.Errorf("用户处于欠款状态, 欠款额度: %s", logger.FormatQuota(-walletQuota)),
+				types.ErrorCodeInsufficientUserQuota, http.StatusForbidden,
+				types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
+		}
 	}
 
 	pref := common.NormalizeBillingPreference(relayInfo.UserSetting.BillingPreference)

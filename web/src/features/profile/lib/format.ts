@@ -23,10 +23,16 @@ import type { UserProfile, UserSettings } from '../types'
 // ============================================================================
 
 /**
- * Parse user settings from JSON string
+ * Parse user settings from the API response
  */
-export function parseUserSettings(settingsJson?: string): UserSettings {
+export function parseUserSettings(
+  settingsJson?: string | Record<string, unknown>
+): UserSettings {
   if (!settingsJson) return {}
+
+  if (typeof settingsJson === 'object') {
+    return settingsJson as UserSettings
+  }
 
   try {
     return JSON.parse(settingsJson) as UserSettings

@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"maps"
 	"strconv"
 	"strings"
@@ -87,6 +88,7 @@ func InitOptionMap() {
 	common.OptionMap["WorkerAllowHttpImageRequestEnabled"] = strconv.FormatBool(system_setting.WorkerAllowHttpImageRequestEnabled)
 	common.OptionMap["PayAddress"] = ""
 	common.OptionMap["CustomCallbackAddress"] = ""
+	common.OptionMap["LiandongShopUrl"] = "https://pay.ldxp.cn/shop/Q2JDSIRE"
 	common.OptionMap["EpayId"] = ""
 	common.OptionMap["EpayKey"] = ""
 	common.OptionMap["Price"] = strconv.FormatFloat(operation_setting.Price, 'f', -1, 64)
@@ -143,6 +145,8 @@ func InitOptionMap() {
 	common.OptionMap["QuotaForNewUser"] = strconv.Itoa(common.QuotaForNewUser)
 	common.OptionMap["QuotaForInviter"] = strconv.Itoa(common.QuotaForInviter)
 	common.OptionMap["QuotaForInvitee"] = strconv.Itoa(common.QuotaForInvitee)
+	common.OptionMap["AffiliateTopupRebateRate"] = strconv.Itoa(common.AffiliateTopupRebateRate)
+	common.OptionMap["AffiliateRedemptionRebateRate"] = strconv.Itoa(common.AffiliateRedemptionRebateRate)
 	common.OptionMap["QuotaRemindThreshold"] = strconv.Itoa(common.QuotaRemindThreshold)
 	common.OptionMap["PreConsumedQuota"] = strconv.Itoa(common.PreConsumedQuota)
 	common.OptionMap["ModelRequestRateLimitCount"] = strconv.Itoa(setting.ModelRequestRateLimitCount)
@@ -221,6 +225,21 @@ func validateOptionValue(key string, value string) error {
 	}
 	if key == "MaxTokenAutoGroups" {
 		return setting.ValidateMaxTokenAutoGroups(value)
+	}
+	if key == "LiandongShopUrl" {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			return nil
+		}
+		if !strings.HasPrefix(trimmed, "http://") && !strings.HasPrefix(trimmed, "https://") {
+			return fmt.Errorf("LiandongShopUrl must start with http:// or https://")
+		}
+	}
+	if key == "AffiliateTopupRebateRate" || key == "AffiliateRedemptionRebateRate" {
+		rate, err := strconv.Atoi(strings.TrimSpace(value))
+		if err != nil || rate < 0 || rate > 10000 {
+			return ErrAffiliateRateInvalid
+		}
 	}
 	return nil
 }
@@ -554,6 +573,10 @@ func updateOptionMap(key string, value string) (err error) {
 		common.QuotaForInviter, _ = strconv.Atoi(value)
 	case "QuotaForInvitee":
 		common.QuotaForInvitee, _ = strconv.Atoi(value)
+	case "AffiliateTopupRebateRate":
+		common.AffiliateTopupRebateRate, _ = strconv.Atoi(value)
+	case "AffiliateRedemptionRebateRate":
+		common.AffiliateRedemptionRebateRate, _ = strconv.Atoi(value)
 	case "QuotaRemindThreshold":
 		common.QuotaRemindThreshold, _ = strconv.Atoi(value)
 	case "PreConsumedQuota":

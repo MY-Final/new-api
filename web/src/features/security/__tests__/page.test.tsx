@@ -54,6 +54,7 @@ const profile: UserProfile = {
   aff_count: 0,
   aff_quota: 0,
   aff_history_quota: 0,
+  aff_reversed_quota: 0,
   created_time: 0,
   setting: JSON.stringify({
     notify_type: 'email',

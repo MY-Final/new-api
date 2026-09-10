@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -12,18 +14,90 @@ import (
 )
 
 type Redemption struct {
-	Id           int            `json:"id"`
-	UserId       int            `json:"user_id"`
-	Key          string         `json:"key" gorm:"type:char(32);uniqueIndex"`
-	Status       int            `json:"status" gorm:"default:1"`
-	Name         string         `json:"name" gorm:"index"`
-	Quota        int            `json:"quota" gorm:"default:100"`
-	CreatedTime  int64          `json:"created_time" gorm:"bigint"`
-	RedeemedTime int64          `json:"redeemed_time" gorm:"bigint"`
-	Count        int            `json:"count" gorm:"-:all"` // only for api request
-	UsedUserId   int            `json:"used_user_id"`
-	DeletedAt    gorm.DeletedAt `gorm:"index"`
-	ExpiredTime  int64          `json:"expired_time" gorm:"bigint"` // 过期时间，0 表示不过期
+	Id                     int            `json:"id"`
+	UserId                 int            `json:"user_id"`
+	Key                    string         `json:"key" gorm:"type:char(32);uniqueIndex"`
+	Status                 int            `json:"status" gorm:"default:1"`
+	Name                   string         `json:"name" gorm:"index"`
+	Quota                  int            `json:"quota" gorm:"default:100"`
+	PaidQuota              int            `json:"paid_quota" gorm:"type:bigint;default:0;column:paid_quota"`
+	BonusQuota             int            `json:"bonus_quota" gorm:"type:bigint;default:0;column:bonus_quota"`
+	CreatedTime            int64          `json:"created_time" gorm:"bigint"`
+	RedeemedTime           int64          `json:"redeemed_time" gorm:"bigint"`
+	Count                  int            `json:"count" gorm:"-:all"` // only for api request
+	UsedUserId             int            `json:"used_user_id"`
+	DeletedAt              gorm.DeletedAt `gorm:"index"`
+	ExpiredTime            int64          `json:"expired_time" gorm:"bigint"` // 过期时间，0 表示不过期
+	Type                   string         `json:"type" gorm:"type:varchar(16);index"`
+	RefundedAt             int64          `json:"refunded_at" gorm:"bigint"`
+	RefundReason           string         `json:"refund_reason" gorm:"type:varchar(255)"`
+	RefundedBy             int            `json:"refunded_by" gorm:"index"`
+	UsedUsername           string         `json:"used_username,omitempty" gorm:"->;-:migration"`
+	UsedUserQuota          int            `json:"used_user_quota,omitempty" gorm:"->;-:migration"`
+	RebateQuota            int            `json:"rebate_quota,omitempty" gorm:"->;-:migration"`
+	RebateReversedQuota    int            `json:"rebate_reversed_quota,omitempty" gorm:"->;-:migration"`
+	RebateTransferredQuota int            `json:"rebate_transferred_quota,omitempty" gorm:"->;-:migration"`
+	InviterId              int            `json:"inviter_id,omitempty" gorm:"->;-:migration"`
+	InviterUsername        string         `json:"inviter_username,omitempty" gorm:"->;-:migration"`
+	InviterQuota           int            `json:"inviter_quota,omitempty" gorm:"->;-:migration"`
+	InviterAffQuota        int            `json:"inviter_aff_quota,omitempty" gorm:"->;-:migration"`
+}
+
+const (
+	RedemptionTypePaid   = "paid"
+	RedemptionTypeReward = "reward"
+	maxBatchRedemptions  = 100
+)
+
+var (
+	ErrBatchRedemptionEmpty   = errors.New("at least one redemption code is required")
+	ErrBatchRedemptionTooMany = errors.New("too many redemption codes in one batch")
+	ErrBatchRedemptionNoop    = errors.New("at least one field must be updated")
+)
+
+func (redemption *Redemption) BeforeSave(tx *gorm.DB) error {
+	if redemption.Quota == 0 && redemption.PaidQuota == 0 && redemption.BonusQuota == 0 {
+		return nil
+	}
+	return redemption.normalizeQuotaSources()
+}
+
+func (redemption *Redemption) normalizeQuotaSources() error {
+	if redemption.Type == "" {
+		redemption.Type = RedemptionTypeReward
+	}
+	if redemption.Type != RedemptionTypePaid && redemption.Type != RedemptionTypeReward {
+		return errors.New("invalid redemption type")
+	}
+	if redemption.PaidQuota < 0 || redemption.BonusQuota < 0 {
+		return errors.New("redemption quota sources must not be negative")
+	}
+	if redemption.PaidQuota == 0 && redemption.BonusQuota == 0 && redemption.Quota > 0 {
+		if redemption.Type == RedemptionTypePaid {
+			redemption.PaidQuota = redemption.Quota
+		} else {
+			redemption.BonusQuota = redemption.Quota
+		}
+	}
+	if redemption.Type == RedemptionTypeReward {
+		redemption.BonusQuota += redemption.PaidQuota
+		redemption.PaidQuota = 0
+	}
+	total := int64(redemption.PaidQuota) + int64(redemption.BonusQuota)
+	if total <= 0 || total > int64(common.MaxWalletQuota) {
+		return errors.New("redemption quota must be positive and within wallet limit")
+	}
+	redemption.PaidQuota = int(total - int64(redemption.BonusQuota))
+	redemption.Quota = int(total)
+	return nil
+}
+
+func (redemption *Redemption) quotaAllocation() (QuotaAllocation, error) {
+	normalized := *redemption
+	if err := normalized.normalizeQuotaSources(); err != nil {
+		return QuotaAllocation{}, err
+	}
+	return QuotaAllocation{Bonus: normalized.BonusQuota, Paid: normalized.PaidQuota}, nil
 }
 
 func GetAllRedemptions(startIdx int, num int) (redemptions []*Redemption, total int64, err error) {
@@ -60,7 +134,7 @@ func GetAllRedemptions(startIdx int, num int) (redemptions []*Redemption, total 
 	return redemptions, total, nil
 }
 
-func SearchRedemptions(keyword string, status string, startIdx int, num int) (redemptions []*Redemption, total int64, err error) {
+func SearchRedemptions(keyword string, status string, redemptionType string, startIdx int, num int) (redemptions []*Redemption, total int64, err error) {
 	tx := DB.Begin()
 	if tx.Error != nil {
 		return nil, 0, tx.Error
@@ -100,7 +174,13 @@ func SearchRedemptions(keyword string, status string, startIdx int, num int) (re
 			query = query.Where("status = ?", common.RedemptionCodeStatusDisabled)
 		case strconv.Itoa(common.RedemptionCodeStatusUsed):
 			query = query.Where("status = ?", common.RedemptionCodeStatusUsed)
+		case strconv.Itoa(common.RedemptionCodeStatusRefunded):
+			query = query.Where("status = ?", common.RedemptionCodeStatusRefunded)
 		}
+	}
+
+	if redemptionType == RedemptionTypePaid || redemptionType == RedemptionTypeReward {
+		query = query.Where("type = ?", redemptionType)
 	}
 
 	// Get total count
@@ -134,7 +214,7 @@ func GetRedemptionById(id int) (*Redemption, error) {
 	return &redemption, err
 }
 
-func Redeem(key string, userId int, callerIp string) (quota int, err error) {
+func Redeem(key string, userId int, callerIps ...string) (quota int, err error) {
 	if key == "" {
 		return 0, errors.New("未提供兑换码")
 	}
@@ -148,9 +228,9 @@ func Redeem(key string, userId int, callerIp string) (quota int, err error) {
 		keyCol = `"key"`
 	}
 	common.RandomSleep()
+	var allocation QuotaAllocation
 	err = DB.Transaction(func(tx *gorm.DB) error {
-		err := lockForUpdate(tx).Where(keyCol+" = ?", key).First(redemption).Error
-		if err != nil {
+		if err := lockForUpdate(tx).Where(keyCol+" = ?", key).First(redemption).Error; err != nil {
 			return errors.New("无效的兑换码")
 		}
 		if redemption.Status != common.RedemptionCodeStatusEnabled {
@@ -175,22 +255,34 @@ func Redeem(key string, userId int, callerIp string) (quota int, err error) {
 		if result.RowsAffected == 0 {
 			return errors.New("该兑换码已被使用")
 		}
-		return creditTopUpQuota(tx, userId, redemption.Quota, nil)
+		var err error
+		allocation, err = redemption.quotaAllocation()
+		if err != nil {
+			return err
+		}
+		if err := creditTopUpQuotaWithAllocation(tx, userId, allocation, nil); err != nil {
+			return err
+		}
+		return recordAffiliateRebateForRedemptionTx(tx, redemption, userId)
 	})
 	if err != nil {
 		common.SysError("redemption failed: " + err.Error())
 		return 0, ErrRedeemFailed
 	}
-	syncCreditUserQuotaCache(userId, redemption.Quota, "redemption")
+	if _, err := cacheApplyUserQuotaSourceDelta(userId, allocation); err != nil {
+		common.SysLog(fmt.Sprintf("failed to sync redemption quota sources: %s", err.Error()))
+	}
+	invalidateAffiliateRebateUserCache(AffiliateRebateSourceRedemption, fmt.Sprintf("%d", redemption.Id), "redemption rebate")
+	callerIp := ""
+	if len(callerIps) > 0 {
+		callerIp = callerIps[0]
+	}
 	RecordTopupLog(userId, fmt.Sprintf("通过兑换码充值 %s，兑换码ID %d", logger.LogQuota(redemption.Quota), redemption.Id), callerIp, PaymentMethodRedemption, "")
 	return redemption.Quota, nil
 }
 
 func (redemption *Redemption) Insert() error {
-	if redemption.Quota <= 0 {
-		return errors.New("redemption quota must be positive")
-	}
-	if err := common.ValidateWalletQuota(redemption.Quota); err != nil {
+	if err := redemption.normalizeQuotaSources(); err != nil {
 		return err
 	}
 	var err error
@@ -205,15 +297,191 @@ func (redemption *Redemption) SelectUpdate() error {
 
 // Update Make sure your token's fields is completed, because this will update non-zero values
 func (redemption *Redemption) Update() error {
-	if redemption.Quota <= 0 {
-		return errors.New("redemption quota must be positive")
-	}
-	if err := common.ValidateWalletQuota(redemption.Quota); err != nil {
+	if err := redemption.normalizeQuotaSources(); err != nil {
 		return err
 	}
-	var err error
-	err = DB.Model(redemption).Select("name", "status", "quota", "redeemed_time", "expired_time").Updates(redemption).Error
-	return err
+	var existing Redemption
+	if err := DB.Select("status").Where("id = ?", redemption.Id).First(&existing).Error; err != nil {
+		return err
+	}
+	if existing.Status == common.RedemptionCodeStatusUsed || existing.Status == common.RedemptionCodeStatusRefunded {
+		return errors.New("used or refunded redemption codes cannot be modified")
+	}
+	result := DB.Model(redemption).
+		Where("id = ? AND status IN ?", redemption.Id, []int{common.RedemptionCodeStatusEnabled, common.RedemptionCodeStatusDisabled}).
+		Select("name", "status", "quota", "paid_quota", "bonus_quota", "redeemed_time", "expired_time", "type").Updates(redemption)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return errors.New("used or refunded redemption codes cannot be modified")
+	}
+	return nil
+}
+
+func normalizeRedemptionIDs(ids []int) ([]int, error) {
+	unique := make([]int, 0, len(ids))
+	seen := make(map[int]struct{}, len(ids))
+	for _, id := range ids {
+		if id <= 0 {
+			return nil, errors.New("redemption id must be positive")
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		unique = append(unique, id)
+	}
+	if len(unique) == 0 {
+		return nil, ErrBatchRedemptionEmpty
+	}
+	if len(unique) > maxBatchRedemptions {
+		return nil, ErrBatchRedemptionTooMany
+	}
+	return unique, nil
+}
+
+func BatchUpdateRedemptions(ids []int, name *string, redemptionType *string, quota *int, status *int) (int, error) {
+	return BatchUpdateRedemptionsWithSources(ids, name, redemptionType, quota, nil, nil, status)
+}
+
+func BatchUpdateRedemptionsWithSources(ids []int, name *string, redemptionType *string, quota *int, paidQuota *int, bonusQuota *int, status *int) (int, error) {
+	ids, err := normalizeRedemptionIDs(ids)
+	if err != nil {
+		return 0, err
+	}
+	if name == nil && redemptionType == nil && quota == nil && paidQuota == nil && bonusQuota == nil && status == nil {
+		return 0, ErrBatchRedemptionNoop
+	}
+
+	var normalizedName string
+	if name != nil {
+		normalizedName = strings.TrimSpace(*name)
+		if utf8.RuneCountInString(normalizedName) == 0 || utf8.RuneCountInString(normalizedName) > 20 {
+			return 0, errors.New("redemption name must contain 1 to 20 characters")
+		}
+	}
+	if redemptionType != nil && *redemptionType != RedemptionTypePaid && *redemptionType != RedemptionTypeReward {
+		return 0, errors.New("invalid redemption type")
+	}
+	if quota != nil && paidQuota == nil && bonusQuota == nil {
+		if *quota <= 0 {
+			return 0, errors.New("redemption quota must be positive")
+		}
+		if err := common.ValidateWalletQuota(*quota); err != nil {
+			return 0, err
+		}
+	}
+	if paidQuota != nil && *paidQuota < 0 {
+		return 0, errors.New("paid quota must not be negative")
+	}
+	if bonusQuota != nil && *bonusQuota < 0 {
+		return 0, errors.New("bonus quota must not be negative")
+	}
+	if paidQuota != nil || bonusQuota != nil {
+		paid := 0
+		bonus := 0
+		if paidQuota != nil {
+			paid = *paidQuota
+		}
+		if bonusQuota != nil {
+			bonus = *bonusQuota
+		}
+		if int64(paid)+int64(bonus) <= 0 || int64(paid)+int64(bonus) > int64(common.MaxWalletQuota) {
+			return 0, errors.New("redemption quota must be positive and within wallet limit")
+		}
+	}
+	if status != nil && *status != common.RedemptionCodeStatusEnabled && *status != common.RedemptionCodeStatusDisabled {
+		return 0, errors.New("invalid redemption status")
+	}
+
+	updated := 0
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		for _, id := range ids {
+			var redemption Redemption
+			if err := lockForUpdate(tx).Where("id = ?", id).First(&redemption).Error; err != nil {
+				return err
+			}
+			if err := redemption.normalizeQuotaSources(); err != nil {
+				return err
+			}
+			if redemption.Status == common.RedemptionCodeStatusUsed || redemption.Status == common.RedemptionCodeStatusRefunded {
+				return fmt.Errorf("redemption %d is already used or refunded", id)
+			}
+
+			changes := make(map[string]interface{})
+			if name != nil {
+				changes["name"] = normalizedName
+			}
+			if redemptionType != nil {
+				changes["type"] = *redemptionType
+			}
+			if paidQuota != nil || bonusQuota != nil || quota != nil || redemptionType != nil {
+				if quota != nil && paidQuota == nil && bonusQuota == nil {
+					redemption.PaidQuota = 0
+					redemption.BonusQuota = 0
+					redemption.Quota = *quota
+				} else {
+					if paidQuota != nil {
+						redemption.PaidQuota = *paidQuota
+					}
+					if bonusQuota != nil {
+						redemption.BonusQuota = *bonusQuota
+					}
+				}
+				if redemptionType != nil {
+					redemption.Type = *redemptionType
+				}
+				if err := redemption.normalizeQuotaSources(); err != nil {
+					return err
+				}
+				changes["quota"] = redemption.Quota
+				changes["paid_quota"] = redemption.PaidQuota
+				changes["bonus_quota"] = redemption.BonusQuota
+			}
+			if status != nil {
+				changes["status"] = *status
+			}
+			if err := tx.Model(&redemption).Updates(changes).Error; err != nil {
+				return err
+			}
+			updated++
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return updated, nil
+}
+
+func BatchDeleteRedemptions(ids []int) (int, error) {
+	ids, err := normalizeRedemptionIDs(ids)
+	if err != nil {
+		return 0, err
+	}
+
+	deleted := 0
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		for _, id := range ids {
+			var redemption Redemption
+			if err := lockForUpdate(tx).Where("id = ?", id).First(&redemption).Error; err != nil {
+				return err
+			}
+			if redemption.Status == common.RedemptionCodeStatusUsed || redemption.Status == common.RedemptionCodeStatusRefunded {
+				return fmt.Errorf("redemption %d is already used or refunded", id)
+			}
+			if err := tx.Delete(&redemption).Error; err != nil {
+				return err
+			}
+			deleted++
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return deleted, nil
 }
 
 func (redemption *Redemption) Delete() error {
@@ -237,19 +505,5 @@ func DeleteRedemptionById(id int) (err error) {
 func DeleteInvalidRedemptions() (int64, error) {
 	now := common.GetTimestamp()
 	result := DB.Where("status IN ? OR (status = ? AND expired_time != 0 AND expired_time < ?)", []int{common.RedemptionCodeStatusUsed, common.RedemptionCodeStatusDisabled}, common.RedemptionCodeStatusEnabled, now).Delete(&Redemption{})
-	return result.RowsAffected, result.Error
-}
-
-// BatchDeleteRedemptions soft-deletes the selected codes in one statement.
-func BatchDeleteRedemptions(ids []int) (int64, error) {
-	if len(ids) == 0 || len(ids) > 1000 {
-		return 0, errors.New("select between 1 and 1000 redemption codes")
-	}
-	for _, id := range ids {
-		if id <= 0 {
-			return 0, errors.New("redemption IDs must be positive")
-		}
-	}
-	result := DB.Where("id IN ?", ids).Delete(&Redemption{})
 	return result.RowsAffected, result.Error
 }
