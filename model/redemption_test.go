@@ -128,7 +128,7 @@ func setupRedeemFixture(t *testing.T, quota int) (userId int, key string) {
 func TestRedeemCreditsQuotaExactlyOnce(t *testing.T) {
 	userId, key := setupRedeemFixture(t, 500)
 
-	quota, err := Redeem(key, userId)
+	quota, err := Redeem(key, userId, "192.0.2.10")
 	require.NoError(t, err)
 	assert.Equal(t, 500, quota)
 
@@ -141,8 +141,18 @@ func TestRedeemCreditsQuotaExactlyOnce(t *testing.T) {
 	assert.Equal(t, common.RedemptionCodeStatusUsed, redemption.Status)
 	assert.Equal(t, userId, redemption.UsedUserId)
 
+	var logs []Log
+	require.NoError(t, LOG_DB.Where("user_id = ? AND type = ?", userId, LogTypeTopup).Find(&logs).Error)
+	require.Len(t, logs, 1)
+	assert.Equal(t, "192.0.2.10", logs[0].Ip)
+	var other map[string]map[string]any
+	require.NoError(t, common.UnmarshalJsonStr(logs[0].Other, &other))
+	assert.Equal(t, PaymentMethodRedemption, other["admin_info"]["payment_method"])
+	assert.NotEmpty(t, other["admin_info"]["server_ip"])
+	assert.NotEmpty(t, other["admin_info"]["version"])
+
 	// Redeeming the same code again must fail and must not credit quota.
-	_, err = Redeem(key, userId)
+	_, err = Redeem(key, userId, "192.0.2.10")
 	require.Error(t, err)
 	require.NoError(t, DB.First(&user, "id = ?", userId).Error)
 	assert.Equal(t, 500, user.Quota)
@@ -152,7 +162,7 @@ func TestRedeemRejectsWalletOverflow(t *testing.T) {
 	userId, key := setupRedeemFixture(t, 11)
 	require.NoError(t, DB.Model(&User{}).Where("id = ?", userId).Update("quota", common.MaxWalletQuota-10).Error)
 
-	_, err := Redeem(key, userId)
+	_, err := Redeem(key, userId, "192.0.2.10")
 	require.ErrorIs(t, err, ErrRedeemFailed)
 
 	var user User
@@ -189,7 +199,7 @@ func TestRedeemConcurrentSingleSuccess(t *testing.T) {
 	for i := range goroutines {
 		go func(idx int) {
 			defer wg.Done()
-			if _, err := Redeem(key, userId); err == nil {
+			if _, err := Redeem(key, userId, "192.0.2.10"); err == nil {
 				successes[idx] = true
 			}
 		}(i)

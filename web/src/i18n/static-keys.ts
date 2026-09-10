@@ -675,6 +675,7 @@ export const STATIC_I18N_KEYS = [
   'Increase user quota',
   'Decrease user quota',
   'Override user quota',
+  'Redeemed a redemption code for {{quota}}',
   'Increase quota for user “{{name}}”',
   'Decrease quota for user “{{name}}”',
   'Override quota for user “{{name}}”',

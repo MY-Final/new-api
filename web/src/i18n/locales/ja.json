@@ -4306,6 +4306,7 @@
     "Redeem": "引き換え",
     "Redeem codes": "コードを交換",
     "Redeemed": "使用済み",
+    "Redeemed a redemption code for {{quota}}": "交換コードで {{quota}} をチャージ",
     "Redeemed at": "使用日時",
     "Redeemed By": "引き換え元",
     "Redeemed:": "引き換え済み:",

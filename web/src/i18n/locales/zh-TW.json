@@ -4306,6 +4306,7 @@
     "Redeem": "兌換額度",
     "Redeem codes": "兌換碼",
     "Redeemed": "已使用",
+    "Redeemed a redemption code for {{quota}}": "透過兌換碼兌換了 {{quota}}",
     "Redeemed at": "使用時間",
     "Redeemed By": "兌換人",
     "Redeemed:": "已兌換：",

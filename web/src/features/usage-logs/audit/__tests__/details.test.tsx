@@ -668,6 +668,29 @@ it.each([
   }
 )
 
+it('renders a user redemption as a localized audit event', async () => {
+  const i18n = createInstance()
+  await i18n.init({ lng: 'zh', resources: { zh } })
+  const detail = buildAuditDetails(
+    {
+      ...entry,
+      category: 'security',
+      actor_role: 1,
+      action: 'user.topup_redeem',
+      other: {
+        op: {
+          action: 'user.topup_redeem',
+          params: { quota: '$10.000000' },
+        },
+      },
+    },
+    i18n.t
+  )
+
+  expect(detail.summary).toBe('通过兑换码兑换了 $10.000000')
+  expect(detail.fields).toContainEqual({ label: '额度', value: '$10.000000' })
+})
+
 it('shows the affected count separately from requested redemption IDs', async () => {
   const i18n = createInstance()
   await i18n.init({ lng: 'en', resources: {} })

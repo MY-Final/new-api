@@ -4306,6 +4306,7 @@
     "Redeem": "Обменять квоту",
     "Redeem codes": "Активировать коды",
     "Redeemed": "Использовано",
+    "Redeemed a redemption code for {{quota}}": "Погашен код пополнения на {{quota}}",
     "Redeemed at": "Использовано в",
     "Redeemed By": "Активировано",
     "Redeemed:": "Активировано:",

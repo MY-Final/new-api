@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -198,4 +199,94 @@ func TestDeleteRedemptionBatch(t *testing.T) {
 			assert.False(t, all[15].DeletedAt.Valid)
 		})
 	}
+}
+
+func TestTopUpRedeemCreatesAuditLog(t *testing.T) {
+	previousDB, previousLogDB := model.DB, model.LOG_DB
+	previousMain, previousLog := common.MainDatabaseType(), common.LogDatabaseType()
+	previousRedis := common.RedisEnabled
+	previousPaymentSetting := *operation_setting.GetPaymentSetting()
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	logDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Redemption{}))
+	require.NoError(t, logDB.AutoMigrate(&model.Log{}, &model.AuditLog{}))
+
+	model.DB, model.LOG_DB = db, logDB
+	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
+	common.RedisEnabled = false
+	paymentSetting := operation_setting.GetPaymentSetting()
+	paymentSetting.ComplianceConfirmed = true
+	paymentSetting.ComplianceTermsVersion = operation_setting.CurrentComplianceTermsVersion
+	t.Cleanup(func() {
+		model.DB, model.LOG_DB = previousDB, previousLogDB
+		common.SetDatabaseTypes(previousMain, previousLog)
+		common.RedisEnabled = previousRedis
+		*operation_setting.GetPaymentSetting() = previousPaymentSetting
+		dbConnection, dbErr := db.DB()
+		if dbErr == nil {
+			_ = dbConnection.Close()
+		}
+		logConnection, logErr := logDB.DB()
+		if logErr == nil {
+			_ = logConnection.Close()
+		}
+	})
+
+	user := model.User{
+		Username:    "redeem-audit-user",
+		Password:    "unused",
+		Role:        common.RoleCommonUser,
+		Status:      common.UserStatusEnabled,
+		Group:       "default",
+		AuthVersion: 1,
+	}
+	require.NoError(t, db.Create(&user).Error)
+	redemption := model.Redemption{
+		Name:   "audit-code",
+		Key:    "20000000000000000000000000000001",
+		Quota:  500,
+		Status: common.RedemptionCodeStatusEnabled,
+	}
+	require.NoError(t, db.Create(&redemption).Error)
+
+	router := gin.New()
+	router.Use(middleware.RequestId())
+	router.POST("/api/user/topup", func(c *gin.Context) {
+		c.Set("id", user.Id)
+		c.Set("username", user.Username)
+		c.Set("role", user.Role)
+		TopUp(c)
+	})
+	request := httptest.NewRequest(http.MethodPost, "/api/user/topup", bytes.NewBufferString(`{"key":"20000000000000000000000000000001"}`))
+	request.RemoteAddr = "192.0.2.18:4567"
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	assert.Equal(t, http.StatusOK, response.Code)
+	var result struct {
+		Success bool `json:"success"`
+	}
+	require.NoError(t, common.Unmarshal(response.Body.Bytes(), &result))
+	assert.True(t, result.Success)
+
+	var audit model.AuditLog
+	require.NoError(t, logDB.Where("request_id = ? AND action = ?", response.Header().Get(common.RequestIdKey), "user.topup_redeem").First(&audit).Error)
+	assert.Equal(t, model.AuditCategorySecurity, audit.Category)
+	assert.Equal(t, user.Id, audit.UserId)
+	assert.Equal(t, "192.0.2.18", audit.Ip)
+	assert.Equal(t, http.MethodPost, audit.Method)
+	assert.Equal(t, "/api/user/topup", audit.Route)
+	assert.True(t, audit.Success)
+	require.NotNil(t, audit.Other.Op)
+	assert.Equal(t, "user.topup_redeem", audit.Other.Op.Action)
+	params, err := common.Marshal(audit.Other.Op.Params)
+	require.NoError(t, err)
+	var auditParams struct {
+		Quota string `json:"quota"`
+	}
+	require.NoError(t, common.Unmarshal(params, &auditParams))
+	assert.NotEmpty(t, auditParams.Quota)
 }
