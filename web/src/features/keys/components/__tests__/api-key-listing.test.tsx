@@ -372,21 +372,27 @@ it('combines creation and last use while keeping expiry, models and IP restricti
   expect(quotaTrigger.closest('td')).not.toHaveClass('pr-8')
 })
 
-it('shows configured API endpoints below the filters with open and copy actions', async () => {
+it('shows configured API endpoints below the filters as copy-only buttons', async () => {
   const urls = ['https://kuncode.120403.xyz', 'https://wcnmb.fun']
   await renderKeysPage(1, {}, { api_base_urls: urls })
 
   const endpointRegion = screen.getByLabelText('API endpoints')
+  const user = userEvent.setup()
+  const copy = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue()
   for (const url of urls) {
-    expect(
-      within(endpointRegion).getByRole('link', { name: url })
-    ).toHaveAttribute('href', url)
-    expect(
-      within(endpointRegion).getByRole('button', {
-        name: `Copy API endpoint: ${url}`,
-      })
-    ).toBeInTheDocument()
+    const copyButton = within(endpointRegion).getByRole('button', {
+      name: `Copy API endpoint: ${url}`,
+    })
+    expect(copyButton).toHaveTextContent(url)
   }
+  expect(within(endpointRegion).queryByRole('link')).not.toBeInTheDocument()
+
+  await user.click(
+    within(endpointRegion).getByRole('button', {
+      name: `Copy API endpoint: ${urls[0]}`,
+    })
+  )
+  expect(copy).toHaveBeenCalledWith(urls[0])
 })
 
 it('hides the API endpoint row when no endpoints are configured', async () => {

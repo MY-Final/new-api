@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
 import { flexRender, type Table as TanstackTable } from '@tanstack/react-table'
-import { Database, ExternalLink, Globe2 } from 'lucide-react'
+import { Database, Globe2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -115,27 +115,18 @@ function APIEndpointList(props: { urls: string[] }) {
       </span>
       <span className='bg-border mx-0.5 hidden h-4 w-px sm:block' />
       {props.urls.map((url) => (
-        <span
+        <CopyButton
           key={url}
-          className='border-border/70 bg-background flex max-w-full min-w-0 items-center rounded-sm border'
+          value={url}
+          variant='outline'
+          size='sm'
+          className='h-7 max-w-72 min-w-0 gap-1.5 rounded-sm px-2 font-mono text-xs font-normal sm:max-w-88'
+          iconClassName='size-3'
+          tooltip={t('Copy API endpoint')}
+          aria-label={`${t('Copy API endpoint')}: ${url}`}
         >
-          <a
-            href={url}
-            target='_blank'
-            rel='noreferrer'
-            className='text-foreground hover:text-primary max-w-64 truncate px-2 py-1 font-mono text-xs underline-offset-4 hover:underline sm:max-w-80'
-          >
-            {url}
-            <ExternalLink className='ms-1 inline size-3' aria-hidden='true' />
-          </a>
-          <CopyButton
-            value={url}
-            className='size-6 rounded-sm'
-            iconClassName='size-3'
-            tooltip={t('Copy API endpoint')}
-            aria-label={`${t('Copy API endpoint')}: ${url}`}
-          />
-        </span>
+          <span className='truncate'>{url}</span>
+        </CopyButton>
       ))}
     </div>
   )
