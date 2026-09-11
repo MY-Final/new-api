@@ -303,7 +303,11 @@ function KeysPage() {
   )
 }
 
-async function renderKeysPage(status = 1, overrides: Partial<ApiKey> = {}) {
+async function renderKeysPage(
+  status = 1,
+  overrides: Partial<ApiKey> = {},
+  statusData: Record<string, unknown> = {}
+) {
   let currentKey = { ...key, status, ...overrides }
   vi.mocked(api.get).mockImplementation(async (url) => {
     if (url.startsWith('/api/token/')) {
@@ -324,7 +328,7 @@ async function renderKeysPage(status = 1, overrides: Partial<ApiKey> = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
-  client.setQueryData(['status'], {})
+  client.setQueryData(['status'], statusData)
   clients.push(client)
   const root = createRootRoute()
   const auth = createRoute({ getParentRoute: () => root, id: '_authenticated' })
@@ -366,6 +370,28 @@ it('combines creation and last use while keeping expiry, models and IP restricti
   })
   expect(quotaHeader).not.toHaveClass('pr-8')
   expect(quotaTrigger.closest('td')).not.toHaveClass('pr-8')
+})
+
+it('shows configured API endpoints below the filters with open and copy actions', async () => {
+  const urls = ['https://kuncode.120403.xyz', 'https://wcnmb.fun']
+  await renderKeysPage(1, {}, { api_base_urls: urls })
+
+  const endpointRegion = screen.getByLabelText('API endpoints')
+  for (const url of urls) {
+    expect(
+      within(endpointRegion).getByRole('link', { name: url })
+    ).toHaveAttribute('href', url)
+    expect(
+      within(endpointRegion).getByRole('button', {
+        name: `Copy API endpoint: ${url}`,
+      })
+    ).toBeInTheDocument()
+  }
+})
+
+it('hides the API endpoint row when no endpoints are configured', async () => {
+  await renderKeysPage()
+  expect(screen.queryByLabelText('API endpoints')).not.toBeInTheDocument()
 })
 
 it('restores dates hidden by the old default and preserves unrelated column preferences', async () => {

@@ -41,6 +41,7 @@ const STATUS_RELATED_KEYS = new Set([
   'general_setting.custom_currency_exchange_rate',
   'oidc.display_name',
   'KunCodeRelayPulseUrl',
+  'ApiBaseURLs',
 ])
 
 export function useUpdateOption() {

@@ -82,6 +82,7 @@ func InitOptionMap() {
 	common.OptionMap["SystemName"] = common.SystemName
 	common.OptionMap["Logo"] = common.Logo
 	common.OptionMap["ServerAddress"] = ""
+	common.OptionMap[system_setting.APIBaseURLsOptionKey] = system_setting.DefaultAPIBaseURLs
 	common.OptionMap["TaskPublicAddress"] = system_setting.TaskPublicAddress
 	common.OptionMap["WorkerUrl"] = system_setting.WorkerUrl
 	common.OptionMap["WorkerValidKey"] = system_setting.WorkerValidKey
@@ -226,6 +227,9 @@ func validateOptionValue(key string, value string) error {
 	}
 	if key == "MaxTokenAutoGroups" {
 		return setting.ValidateMaxTokenAutoGroups(value)
+	}
+	if key == system_setting.APIBaseURLsOptionKey {
+		return system_setting.ValidateAPIBaseURLs(value)
 	}
 	if key == "LiandongShopUrl" || key == "KunCodeRelayPulseUrl" {
 		trimmed := strings.TrimSpace(value)

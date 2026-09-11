@@ -114,6 +114,7 @@ export type SiteSettings = {
   About: string
   HomePageContent: string
   ServerAddress: string
+  ApiBaseURLs: string
   TaskPublicAddress: string
   KunCodeRelayPulseUrl: string
   'legal.user_agreement': string

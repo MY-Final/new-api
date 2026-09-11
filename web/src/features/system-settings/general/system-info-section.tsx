@@ -46,9 +46,36 @@ import { useSettingsForm } from '../hooks/use-settings-form'
 import { useUpdateOption } from '../hooks/use-update-option'
 import { isValidTaskPublicAddress } from './task-public-address'
 
+const MAX_API_BASE_URLS = 20
+
+function hasValidAPIBaseURLs(value: string): boolean {
+  const urls = value
+    .split(/\r?\n/)
+    .map((url) => url.trim())
+    .filter(Boolean)
+
+  if (urls.length > MAX_API_BASE_URLS) return false
+
+  return urls.every((rawURL) => {
+    try {
+      const url = new URL(rawURL)
+      return (
+        (url.protocol === 'http:' || url.protocol === 'https:') &&
+        !url.username &&
+        !url.password &&
+        !url.search &&
+        !url.hash
+      )
+    } catch {
+      return false
+    }
+  })
+}
+
 const _systemInfoSchema = z.object({
   SystemName: z.string().min(1),
   ServerAddress: z.string().optional(),
+  ApiBaseURLs: z.string().refine(hasValidAPIBaseURLs),
   TaskPublicAddress: z.string().refine(isValidTaskPublicAddress),
   KunCodeRelayPulseUrl: z.string().refine((value) => {
     const trimmed = value.trim()
@@ -83,6 +110,7 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
   const normalizedDefaults: SystemInfoFormValues = {
     SystemName: normalizeValue(defaultValues.SystemName),
     ServerAddress: normalizeValue(defaultValues.ServerAddress),
+    ApiBaseURLs: normalizeValue(defaultValues.ApiBaseURLs),
     TaskPublicAddress: normalizeValue(defaultValues.TaskPublicAddress),
     KunCodeRelayPulseUrl: normalizeValue(defaultValues.KunCodeRelayPulseUrl),
     Logo: normalizeValue(defaultValues.Logo),
@@ -100,6 +128,12 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
       error: () => t('System name is required'),
     }),
     ServerAddress: z.string().optional(),
+    ApiBaseURLs: z.string().refine(hasValidAPIBaseURLs, {
+      error: () =>
+        t(
+          'Enter up to 20 absolute HTTP(S) URLs, one per line, without credentials, query parameters, or fragments'
+        ),
+    }),
     TaskPublicAddress: z.string().refine(isValidTaskPublicAddress, {
       error: () =>
         t(
@@ -138,6 +172,13 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
             key === 'KunCodeRelayPulseUrl'
           ) {
             v = v.replace(/\/+$/, '')
+          }
+          if (key === 'ApiBaseURLs') {
+            v = v
+              .split(/\r?\n/)
+              .map((url) => url.trim().replace(/\/+$/, ''))
+              .filter(Boolean)
+              .join('\n')
           }
           await updateOption.mutateAsync({
             key,
@@ -197,6 +238,33 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                   </FormItem>
                 )}
               />
+
+              <SettingsFormGridItem span='full'>
+                <FormField
+                  control={form.control}
+                  name='ApiBaseURLs'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('API endpoints')}</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder={
+                            'https://api.example.com\nhttps://api-fast.example.com'
+                          }
+                          rows={3}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        {t(
+                          'Configure one API endpoint per line. These endpoints are shown below the filters on the API keys page.'
+                        )}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </SettingsFormGridItem>
 
               <FormField
                 control={form.control}

@@ -19,10 +19,11 @@ For commercial licensing, please contact support@quantumnous.com
 import { useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
 import { flexRender, type Table as TanstackTable } from '@tanstack/react-table'
-import { Database } from 'lucide-react'
+import { Database, ExternalLink, Globe2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { CopyButton } from '@/components/copy-button'
 import {
   DISABLED_ROW_DESKTOP,
   DISABLED_ROW_MOBILE,
@@ -40,6 +41,7 @@ import {
 } from '@/components/ui/empty'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useStatus } from '@/hooks/use-status'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
 import { createServerError } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
@@ -73,6 +75,70 @@ const API_KEYS_MOBILE_SKELETON_IDS = Array.from(
 
 function isDisabledApiKeyRow(apiKey: ApiKey) {
   return apiKey.status !== API_KEY_STATUS.ENABLED
+}
+
+function getAPIBaseURLs(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+
+  const urls = value.filter((item): item is string => {
+    if (typeof item !== 'string') return false
+    try {
+      const url = new URL(item)
+      return (
+        (url.protocol === 'http:' || url.protocol === 'https:') &&
+        !url.username &&
+        !url.password &&
+        !url.search &&
+        !url.hash
+      )
+    } catch {
+      return false
+    }
+  })
+
+  return [...new Set(urls)]
+}
+
+function APIEndpointList(props: { urls: string[] }) {
+  const { t } = useTranslation()
+
+  if (!props.urls.length) return null
+
+  return (
+    <div
+      className='border-border/70 bg-muted/30 flex max-w-full min-w-0 flex-wrap items-center gap-1.5 rounded-md border px-2 py-1'
+      aria-label={t('API endpoints')}
+    >
+      <span className='text-muted-foreground flex shrink-0 items-center gap-1 text-xs font-medium'>
+        <Globe2 className='size-3.5' aria-hidden='true' />
+        {t('API endpoints')}
+      </span>
+      <span className='bg-border mx-0.5 hidden h-4 w-px sm:block' />
+      {props.urls.map((url) => (
+        <span
+          key={url}
+          className='border-border/70 bg-background flex max-w-full min-w-0 items-center rounded-sm border'
+        >
+          <a
+            href={url}
+            target='_blank'
+            rel='noreferrer'
+            className='text-foreground hover:text-primary max-w-64 truncate px-2 py-1 font-mono text-xs underline-offset-4 hover:underline sm:max-w-80'
+          >
+            {url}
+            <ExternalLink className='ms-1 inline size-3' aria-hidden='true' />
+          </a>
+          <CopyButton
+            value={url}
+            className='size-6 rounded-sm'
+            iconClassName='size-3'
+            tooltip={t('Copy API endpoint')}
+            aria-label={`${t('Copy API endpoint')}: ${url}`}
+          />
+        </span>
+      ))}
+    </div>
+  )
 }
 
 function ApiKeysMobileSkeleton() {
@@ -217,6 +283,7 @@ function ApiKeysMobileList({
 
 export function ApiKeysTable() {
   const { t } = useTranslation()
+  const { status } = useStatus()
   const { refreshTrigger } = useApiKeys()
   const [now, setNow] = useState(() => Date.now())
   const columns = useApiKeysColumns(now)
@@ -303,6 +370,7 @@ export function ApiKeysTable() {
   })
 
   const apiKeys = data?.items || []
+  const apiBaseURLs = getAPIBaseURLs(status?.api_base_urls)
 
   const { table } = useDataTable({
     data: apiKeys,
@@ -370,6 +438,9 @@ export function ApiKeysTable() {
             singleSelect: true,
           },
         ],
+        leftActions: apiBaseURLs.length ? (
+          <APIEndpointList urls={apiBaseURLs} />
+        ) : undefined,
       }}
       mobile={
         <ApiKeysMobileList table={table} isLoading={isLoading} now={now} />

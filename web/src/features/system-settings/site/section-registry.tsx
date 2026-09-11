@@ -42,6 +42,7 @@ const SITE_SECTIONS = [
           About: settings.About,
           HomePageContent: settings.HomePageContent,
           ServerAddress: settings.ServerAddress,
+          ApiBaseURLs: settings.ApiBaseURLs,
           TaskPublicAddress: settings.TaskPublicAddress,
           KunCodeRelayPulseUrl: settings.KunCodeRelayPulseUrl,
           legal: {
