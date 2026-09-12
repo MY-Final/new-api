@@ -3,12 +3,11 @@ name: Publish Docker image (Multi-arch)
 on:
   push:
     tags:
-      - '*'
-      - '!nightly*'
+      - 'v*'
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag name to build (e.g., v0.10.8-alpha.3)'
+        description: 'Version tag to build (must start with v, e.g. v0.10.8-alpha.3)'
         required: true
         type: string
 
@@ -43,15 +42,21 @@ jobs:
 
       - name: Resolve tag & write VERSION
         id: version
+        env:
+          REQUESTED_TAG: ${{ inputs.tag }}
         run: |
-          if [ -n "${{ github.event.inputs.tag }}" ]; then
-            TAG="${{ github.event.inputs.tag }}"
+          if [ -n "$REQUESTED_TAG" ]; then
+            TAG="$REQUESTED_TAG"
             if ! git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; then
               echo "::error::Tag '$TAG' does not exist"
               exit 1
             fi
           else
             TAG=${GITHUB_REF#refs/tags/}
+          fi
+          if [[ "$TAG" != v* ]]; then
+            echo "::error::Tag '$TAG' must start with v"
+            exit 1
           fi
           echo "TAG=${TAG}" >> $GITHUB_ENV
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
@@ -71,7 +76,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: calciumion/new-api
+          images: myfinal12/kuncode
 
       - name: Build & push
         id: build
@@ -81,8 +86,8 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: true
           tags: |
-            calciumion/new-api:${{ env.TAG }}-${{ matrix.arch }}
-            calciumion/new-api:latest-${{ matrix.arch }}
+            myfinal12/kuncode:${{ env.TAG }}-${{ matrix.arch }}
+            myfinal12/kuncode:latest-${{ matrix.arch }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -93,13 +98,13 @@ jobs:
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
       - name: Sign image with cosign
-        run: cosign sign --yes calciumion/new-api@${{ steps.build.outputs.digest }}
+        run: cosign sign --yes myfinal12/kuncode@${{ steps.build.outputs.digest }}
 
       - name: Image summary
         run: |
           echo "### Docker Image Digest (${{ matrix.arch }})" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "calciumion/new-api:${TAG}-${{ matrix.arch }}" >> $GITHUB_STEP_SUMMARY
+          echo "myfinal12/kuncode:${TAG}-${{ matrix.arch }}" >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.build.outputs.digest }}" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
@@ -125,28 +130,28 @@ jobs:
       - name: Create & push manifest (version)
         run: |
           docker buildx imagetools create \
-            -t calciumion/new-api:${TAG} \
-            calciumion/new-api:${TAG}-amd64 \
-            calciumion/new-api:${TAG}-arm64
+            -t myfinal12/kuncode:${TAG} \
+            myfinal12/kuncode:${TAG}-amd64 \
+            myfinal12/kuncode:${TAG}-arm64
 
       - name: Create & push manifest (latest)
         run: |
           docker buildx imagetools create \
-            -t calciumion/new-api:latest \
-            calciumion/new-api:latest-amd64 \
-            calciumion/new-api:latest-arm64
+            -t myfinal12/kuncode:latest \
+            myfinal12/kuncode:latest-amd64 \
+            myfinal12/kuncode:latest-arm64
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
 
       - name: Sign manifests with cosign
         run: |
-          cosign sign --yes calciumion/new-api:${TAG}
-          cosign sign --yes calciumion/new-api:latest
+          cosign sign --yes myfinal12/kuncode:${TAG}
+          cosign sign --yes myfinal12/kuncode:latest
 
       - name: Manifest summary
         run: |
           echo "### Multi-arch Manifest" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          docker buildx imagetools inspect calciumion/new-api:${TAG} >> $GITHUB_STEP_SUMMARY
+          docker buildx imagetools inspect myfinal12/kuncode:${TAG} >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
