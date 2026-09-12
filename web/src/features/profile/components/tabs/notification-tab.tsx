@@ -27,13 +27,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { handleServerError } from '@/lib/handle-server-error'
 import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
 import {
   getEditableQuotaStep,
   parseQuotaFromDollars,
   quotaUnitsToEditableAmount,
 } from '@/lib/format'
+import { handleServerError } from '@/lib/handle-server-error'
 import { ROLE } from '@/lib/roles'
 
 import { updateUserSettings } from '../../api'
@@ -176,6 +176,9 @@ export function NotificationTab({ profile, onUpdate }: NotificationTabProps) {
         />
         <p className='text-muted-foreground text-xs'>
           {t('Get notified when balance falls below this amount')}
+        </p>
+        <p className='text-muted-foreground text-xs'>
+          {t('Set to 0 to disable balance warnings')}
         </p>
       </div>
 

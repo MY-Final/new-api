@@ -5298,6 +5298,7 @@
     "Set the user's role (cannot be Root)": "Đặt vai trò của người dùng (không được là Root)",
     "Set the website where users will use their Passkeys.": "Nhập tên miền trang mà người dùng sẽ dùng Passkey.",
     "Set these values in the provider application before enabling login.": "Thiết lập các giá trị này trong ứng dụng của nhà cung cấp trước khi bật đăng nhập.",
+    "Set to 0 to disable balance warnings": "Đặt 0 để tắt cảnh báo số dư",
     "Setting Key": "Khóa cài đặt",
     "Setting saved": "Cài đặt đã được lưu",
     "Setting up 2FA...": "Đang thiết lập 2FA...",

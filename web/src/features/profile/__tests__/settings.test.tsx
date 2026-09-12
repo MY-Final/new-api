@@ -87,7 +87,7 @@ describe('user settings saves across profile and security', () => {
     await updateUserSettings({ record_ip_log: true })
     expect(put).toHaveBeenCalledWith('/api/user/setting', {
       notify_type: 'email',
-      quota_warning_threshold: 500000,
+      quota_warning_threshold: 0,
       notification_email: '',
       webhook_url: '',
       webhook_secret: '',

@@ -71,15 +71,17 @@ afterEach(() => {
   for (const queryClient of queryClients) queryClient.clear()
   queryClients.length = 0
   useAuthStore.getState().auth.setUser(null)
+  localStorage.clear()
 })
 
 beforeEach(() => {
   getSelf.mockReset()
+  localStorage.clear()
 })
 
 describe('BalanceWarningBanner', () => {
-  test('stays hidden when the balance is above the default threshold', () => {
-    const user = setUser({ quota: DEFAULT_QUOTA_WARNING_THRESHOLD + 1 })
+  test('stays hidden when the default threshold is disabled', () => {
+    const user = setUser({ quota: 1 })
     getSelf.mockResolvedValue({ success: true, data: user })
 
     renderBanner()
@@ -87,8 +89,11 @@ describe('BalanceWarningBanner', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
-  test('shows when the balance equals the default threshold', () => {
-    const user = setUser({ quota: DEFAULT_QUOTA_WARNING_THRESHOLD })
+  test('shows when the balance equals a configured threshold', () => {
+    const user = setUser({
+      quota: 100,
+      setting: { quota_warning_threshold: 100 },
+    })
     getSelf.mockResolvedValue({ success: true, data: user })
 
     renderBanner()
@@ -97,7 +102,10 @@ describe('BalanceWarningBanner', () => {
   })
 
   test('shows a negative balance and links to the wallet', () => {
-    const user = setUser({ quota: -1 })
+    const user = setUser({
+      quota: -1,
+      setting: { quota_warning_threshold: 100 },
+    })
     getSelf.mockResolvedValue({ success: true, data: user })
 
     renderBanner()
@@ -129,7 +137,27 @@ describe('BalanceWarningBanner', () => {
 
     renderBanner()
 
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  test('dismisses the warning and keeps it hidden after remounting', async () => {
+    const user = setUser({
+      quota: 50,
+      setting: { quota_warning_threshold: 100 },
+    })
+    getSelf.mockResolvedValue({ success: true, data: user })
+
+    const rendered = renderBanner()
     expectBannerVisible()
+
+    rendered.getByRole('button', { name: 'Close' }).click()
+    await waitFor(() =>
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    )
+
+    rendered.unmount()
+    renderBanner()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   test('keeps the existing balance when the refresh request fails', async () => {
@@ -143,7 +171,10 @@ describe('BalanceWarningBanner', () => {
   })
 
   test('syncs a successful refresh into the auth store', async () => {
-    const initialUser = setUser({ quota: 1_000_000 })
+    const initialUser = setUser({
+      quota: 1_000_000,
+      setting: { quota_warning_threshold: 100 },
+    })
     const refreshedUser = { ...initialUser, quota: 10 }
     getSelf.mockResolvedValue({ success: true, data: refreshedUser })
 
@@ -156,19 +187,21 @@ describe('BalanceWarningBanner', () => {
   })
 
   test('hides after a successful refresh reports a recovered balance', async () => {
-    const initialUser = setUser({ quota: 10 })
+    const initialUser = setUser({
+      quota: 10,
+      setting: { quota_warning_threshold: 100 },
+    })
     const refreshedUser = {
       ...initialUser,
-      quota: DEFAULT_QUOTA_WARNING_THRESHOLD + 1,
+      setting: { quota_warning_threshold: 100 },
+      quota: 101,
     }
     getSelf.mockResolvedValue({ success: true, data: refreshedUser })
 
     renderBanner()
 
     await waitFor(() =>
-      expect(useAuthStore.getState().auth.user?.quota).toBe(
-        DEFAULT_QUOTA_WARNING_THRESHOLD + 1
-      )
+      expect(useAuthStore.getState().auth.user?.quota).toBe(101)
     )
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })

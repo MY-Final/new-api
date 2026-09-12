@@ -5298,6 +5298,7 @@
     "Set the user's role (cannot be Root)": "ユーザーのロールを設定します（Rootにはできません）",
     "Set the website where users will use their Passkeys.": "ユーザーが Passkey を使うサイトのドメインを入力してください。",
     "Set these values in the provider application before enabling login.": "ログインを有効にする前に、プロバイダーアプリでこれらの値を設定してください。",
+    "Set to 0 to disable balance warnings": "0 に設定すると残高警告を無効にします",
     "Setting Key": "設定キー",
     "Setting saved": "設定が保存されました",
     "Setting up 2FA...": "2FAを設定中...",

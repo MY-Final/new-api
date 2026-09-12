@@ -5298,6 +5298,7 @@
     "Set the user's role (cannot be Root)": "Set the user's role (cannot be Root)",
     "Set the website where users will use their Passkeys.": "Set the website where users will use their Passkeys.",
     "Set these values in the provider application before enabling login.": "Set these values in the provider application before enabling login.",
+    "Set to 0 to disable balance warnings": "Set to 0 to disable balance warnings",
     "Setting Key": "Setting Key",
     "Setting saved": "Setting saved",
     "Setting up 2FA...": "Setting up 2FA...",

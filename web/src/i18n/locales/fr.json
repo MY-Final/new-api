@@ -5298,6 +5298,7 @@
     "Set the user's role (cannot be Root)": "Définir le rôle de l'utilisateur (ne peut pas être Root)",
     "Set the website where users will use their Passkeys.": "Indiquez le domaine du site où les utilisateurs utiliseront leurs Passkeys.",
     "Set these values in the provider application before enabling login.": "Renseignez ces valeurs dans l'application du fournisseur avant d'activer la connexion.",
+    "Set to 0 to disable balance warnings": "Définissez 0 pour désactiver les alertes de solde",
     "Setting Key": "Clé de paramètre",
     "Setting saved": "Paramètre sauvegardé",
     "Setting up 2FA...": "Configuration de la 2FA...",

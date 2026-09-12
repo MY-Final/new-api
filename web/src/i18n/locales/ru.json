@@ -5298,6 +5298,7 @@
     "Set the user's role (cannot be Root)": "Установить роль пользователя (не может быть Root)",
     "Set the website where users will use their Passkeys.": "Укажите домен сайта, на котором пользователи будут использовать Passkey.",
     "Set these values in the provider application before enabling login.": "Укажите эти значения в приложении провайдера перед включением входа.",
+    "Set to 0 to disable balance warnings": "Установите 0, чтобы отключить предупреждения о балансе",
     "Setting Key": "Ключ настройки",
     "Setting saved": "Настройка сохранена",
     "Setting up 2FA...": "Настройка 2FA...",

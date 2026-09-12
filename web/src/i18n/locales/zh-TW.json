@@ -5298,6 +5298,7 @@
     "Set the user's role (cannot be Root)": "設定用戶角色（不能是 Root）",
     "Set the website where users will use their Passkeys.": "請填寫使用者使用通行密鑰的網站網域。",
     "Set these values in the provider application before enabling login.": "啟用登入前，請先在提供商應用程式中設定這些值。",
+    "Set to 0 to disable balance warnings": "設為 0 可關閉餘額預警",
     "Setting Key": "設定項",
     "Setting saved": "設定已儲存",
     "Setting up 2FA...": "正在設定 2FA...",

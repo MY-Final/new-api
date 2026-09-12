@@ -16,10 +16,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { AlertTriangle, ArrowUpRight } from 'lucide-react'
+import { AlertTriangle, ArrowUpRight, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import {
+  Alert,
+  AlertAction,
+  AlertDescription,
+  AlertTitle,
+} from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { DEFAULT_QUOTA_WARNING_THRESHOLD } from '@/features/profile/constants'
 import { parseUserSettings } from '@/features/profile/lib'
@@ -31,6 +37,9 @@ export function BalanceWarningBanner() {
   const { t } = useTranslation()
   const user = useAuthStore((state) => state.auth.user)
   const setUser = useAuthStore((state) => state.auth.setUser)
+  const [dismissedWarningKey, setDismissedWarningKey] = useState<string | null>(
+    null
+  )
 
   useQuery({
     queryKey: ['user', 'self', user?.id],
@@ -58,24 +67,63 @@ export function BalanceWarningBanner() {
   })
 
   const currentUser = user
-  if (!currentUser) return null
-
-  const quota = Number(currentUser.quota)
-  if (!Number.isFinite(quota)) return null
-
-  const settings = parseUserSettings(currentUser.setting)
+  const quota = Number(currentUser?.quota)
+  const settings = parseUserSettings(currentUser?.setting)
   const configuredThreshold = Number(settings.quota_warning_threshold)
-  const threshold =
-    Number.isFinite(configuredThreshold) && configuredThreshold > 0
-      ? configuredThreshold
-      : DEFAULT_QUOTA_WARNING_THRESHOLD
+  const threshold = Number.isFinite(configuredThreshold)
+    ? configuredThreshold
+    : DEFAULT_QUOTA_WARNING_THRESHOLD
+  const warningKey = currentUser ? `${currentUser.id}:${threshold}` : ''
+  const dismissalStorageKey = currentUser
+    ? `balance-warning-dismissed:v1:${currentUser.id}:${threshold}`
+    : ''
 
-  if (quota > threshold) return null
+  useEffect(() => {
+    if (!currentUser || !Number.isFinite(quota) || threshold <= 0) {
+      setDismissedWarningKey(null)
+      return
+    }
+
+    const dismissed = window.localStorage.getItem(dismissalStorageKey)
+    if (quota > threshold) {
+      if (dismissed) window.localStorage.removeItem(dismissalStorageKey)
+      setDismissedWarningKey(null)
+      return
+    }
+
+    setDismissedWarningKey(dismissed === warningKey ? warningKey : null)
+  }, [currentUser, dismissalStorageKey, quota, threshold, warningKey])
+
+  if (!currentUser || !Number.isFinite(quota)) return null
+
+  if (
+    threshold <= 0 ||
+    quota > threshold ||
+    dismissedWarningKey === warningKey
+  ) {
+    return null
+  }
+
+  const dismissWarning = () => {
+    window.localStorage.setItem(dismissalStorageKey, warningKey)
+    setDismissedWarningKey(warningKey)
+  }
 
   return (
     <div className='shrink-0 px-3 pt-2 sm:px-4'>
       <Alert className='border-amber-500/40 bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100'>
         <AlertTriangle aria-hidden='true' />
+        <AlertAction>
+          <Button
+            variant='ghost'
+            size='icon-sm'
+            aria-label={t('Close')}
+            onClick={dismissWarning}
+            className='text-amber-900/70 hover:bg-amber-100 hover:text-amber-950 dark:text-amber-100/70 dark:hover:bg-amber-900/50 dark:hover:text-amber-50'
+          >
+            <X aria-hidden='true' />
+          </Button>
+        </AlertAction>
         <AlertTitle>{t('Low balance')}</AlertTitle>
         <AlertDescription className='flex flex-wrap items-center gap-x-3 gap-y-2'>
           <span>
