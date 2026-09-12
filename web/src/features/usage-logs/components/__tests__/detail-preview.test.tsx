@@ -86,6 +86,21 @@ function DetailPreview(props: { other: LogOtherData; isAdmin: boolean }) {
   if (!cell) throw new Error('The log must have a content column')
   return flexRender(cell.column.columnDef.cell, cell.getContext())
 }
+
+function TokenPreview() {
+  const log = { ...makeLog({}), prompt_tokens: 1200, completion_tokens: 800 }
+  const table = useReactTable({
+    data: [log],
+    columns: useCommonLogsColumns(true, false),
+    getCoreRowModel: getCoreRowModel(),
+  })
+  const cell = table
+    .getRowModel()
+    .rows[0].getAllCells()
+    .find((item) => item.column.id === 'prompt_tokens')
+  if (!cell) throw new Error('The log must have a token column')
+  return flexRender(cell.column.columnDef.cell, cell.getContext())
+}
 const plugin = {
   key: 'incho',
   name: 'Incho',
@@ -126,6 +141,23 @@ function renderPreview(other: LogOtherData, isAdmin = true) {
   )
   return screen.getByRole('button', { name: /./ })
 }
+
+function renderTokenPreview() {
+  render(
+    <I18nextProvider i18n={i18n}>
+      <QueryClientProvider client={client}>
+        <TokenPreview />
+      </QueryClientProvider>
+    </I18nextProvider>
+  )
+}
+
+test('token column labels input and output counts', () => {
+  renderTokenPreview()
+
+  const tokenLine = screen.getByText('Input').parentElement
+  expect(tokenLine).toHaveTextContent('Input 1,200 Output 800')
+})
 
 test.each([
   {

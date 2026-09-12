@@ -702,7 +702,7 @@ export function useCommonLogsColumns(
     },
     {
       accessorKey: 'prompt_tokens',
-      header: 'Tokens',
+      header: t('Input / Output'),
       cell: ({ row }) => {
         const log = row.original
         if (!isDisplayableLogType(log.type)) return null
@@ -726,7 +726,13 @@ export function useCommonLogsColumns(
         return (
           <div className='flex flex-col gap-0.5'>
             <span className='font-mono text-xs font-medium tabular-nums'>
-              {promptTokens.toLocaleString()} /{' '}
+              <span className='text-muted-foreground/70 font-sans font-normal'>
+                {t('Input')}{' '}
+              </span>
+              {promptTokens.toLocaleString()}{' '}
+              <span className='text-muted-foreground/70 font-sans font-normal'>
+                {t('Output')}{' '}
+              </span>
               {completionTokens.toLocaleString()}
             </span>
             {(cacheReadTokens > 0 || cacheWriteTokens > 0) && (
