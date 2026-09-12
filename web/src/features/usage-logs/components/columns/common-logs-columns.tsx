@@ -724,27 +724,42 @@ export function useCommonLogsColumns(
           : other?.cache_creation_tokens || 0
 
         return (
-          <div className='flex flex-col gap-0.5'>
-            <span className='font-mono text-xs font-medium tabular-nums'>
-              <span className='text-muted-foreground/70 font-sans font-normal'>
-                {t('Input')}{' '}
+          <div className='flex min-w-[9.5rem] flex-col gap-1'>
+            <div className='flex items-baseline gap-3 text-xs tabular-nums'>
+              <span className='inline-flex items-baseline gap-1 whitespace-nowrap'>
+                <span className='text-muted-foreground/70 text-[11px] font-normal'>
+                  {t('Input')}
+                </span>
+                <span className='text-foreground font-mono font-semibold'>
+                  {promptTokens.toLocaleString()}
+                </span>
               </span>
-              {promptTokens.toLocaleString()}{' '}
-              <span className='text-muted-foreground/70 font-sans font-normal'>
-                {t('Output')}{' '}
+              <span className='inline-flex items-baseline gap-1 whitespace-nowrap'>
+                <span className='text-muted-foreground/70 text-[11px] font-normal'>
+                  {t('Output')}
+                </span>
+                <span className='text-foreground font-mono font-semibold'>
+                  {completionTokens.toLocaleString()}
+                </span>
               </span>
-              {completionTokens.toLocaleString()}
-            </span>
+            </div>
             {(cacheReadTokens > 0 || cacheWriteTokens > 0) && (
-              <div className='flex items-center gap-1 text-[11px]'>
+              <div className='text-muted-foreground/70 flex flex-wrap items-center gap-x-2 text-[11px] tabular-nums'>
+                <span className='font-normal'>{t('Cache')}</span>
                 {cacheReadTokens > 0 && (
-                  <span className='text-muted-foreground/60'>
-                    {t('Cache')}↓ {cacheReadTokens.toLocaleString()}
+                  <span className='inline-flex items-center gap-0.5 whitespace-nowrap'>
+                    <span aria-hidden='true'>↓</span>
+                    <span className='font-mono'>
+                      {cacheReadTokens.toLocaleString()}
+                    </span>
                   </span>
                 )}
                 {cacheWriteTokens > 0 && (
-                  <span className='text-muted-foreground/60'>
-                    ↑ {cacheWriteTokens.toLocaleString()}
+                  <span className='inline-flex items-center gap-0.5 whitespace-nowrap'>
+                    <span aria-hidden='true'>↑</span>
+                    <span className='font-mono'>
+                      {cacheWriteTokens.toLocaleString()}
+                    </span>
                   </span>
                 )}
               </div>

@@ -155,8 +155,8 @@ function renderTokenPreview() {
 test('token column labels input and output counts', () => {
   renderTokenPreview()
 
-  const tokenLine = screen.getByText('Input').parentElement
-  expect(tokenLine).toHaveTextContent('Input 1,200 Output 800')
+  const tokenLine = screen.getByText('Input').parentElement?.parentElement
+  expect(tokenLine).toHaveTextContent(/Input\s*1,200\s*Output\s*800/)
 })
 
 test.each([
