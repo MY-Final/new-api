@@ -38,16 +38,9 @@ import type { UserChartsFilters } from '@/features/dashboard/types'
 import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
 import { UserUsageDialog } from '@/features/users/components/dialogs/user-usage-dialog'
 import { formatNumber, formatQuota } from '@/lib/format'
-import { dateToUnixTimestamp, getRollingDateRange } from '@/lib/time'
+import { dateToUnixTimestamp } from '@/lib/time'
 
 import { getAdminUserUsageRanking } from '../api'
-
-const RANGE_OPTIONS = [
-  { label: 'Today', days: 0 },
-  { label: '7 Days', days: 7 },
-  { label: '14 Days', days: 14 },
-  { label: '29 Days', days: 29 },
-] as const
 
 type SortBy = 'user_cost' | 'total_tokens' | 'request_count'
 
@@ -87,16 +80,12 @@ export function AdminUsageAnalytics(props: AdminUsageAnalyticsProps) {
   const [username, setUsername] = useState('')
   const [modelName, setModelName] = useState('')
   const [channel, setChannel] = useState('')
-  const [customRange, setCustomRange] = useState<{ start: Date; end: Date }>()
   const [selectedUser, setSelectedUser] = useState<{
     id: number
     username: string
   }>()
 
-  const range = useMemo(() => {
-    if (customRange) return customRange
-    return getRollingDateRange(props.filters.selectedRange)
-  }, [customRange, props.filters.selectedRange])
+  const range = props.filters.range
   const queryParams = useMemo(() => {
     const params = {
       start_timestamp: dateToUnixTimestamp(range.start),
@@ -196,36 +185,22 @@ export function AdminUsageAnalytics(props: AdminUsageAnalyticsProps) {
     )
   }
 
-  const handlePresetChange = (value: string) => {
-    setCustomRange(undefined)
-    setPage(1)
-    props.onFiltersChange({ ...props.filters, selectedRange: Number(value) })
-  }
-  const handleCustomRangeChange = (next: { start?: Date; end?: Date }) => {
+  const handleRangeChange = (next: { start?: Date; end?: Date }) => {
     if (!next.start || !next.end) return
-    setCustomRange({ start: next.start, end: next.end })
     setPage(1)
+    props.onFiltersChange({
+      ...props.filters,
+      range: { start: next.start, end: next.end },
+    })
   }
 
   return (
     <div className='space-y-3 sm:space-y-4'>
-      <div className='flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between'>
-        <Tabs
-          value={customRange ? undefined : String(props.filters.selectedRange)}
-          onValueChange={handlePresetChange}
-        >
-          <TabsList className='max-w-full overflow-x-auto'>
-            {RANGE_OPTIONS.map((option) => (
-              <TabsTrigger key={option.days} value={String(option.days)}>
-                {t(option.label)}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+      <div className='flex justify-end'>
         <CompactDateTimeRangePicker
-          start={customRange?.start}
-          end={customRange?.end}
-          onChange={handleCustomRangeChange}
+          start={range.start}
+          end={range.end}
+          onChange={handleRangeChange}
           maxRangeDays={31}
           className='lg:w-80'
         />
