@@ -93,7 +93,7 @@ function deferred<T>() {
   return { promise, reject, resolve }
 }
 
-function drawerTree(currentRow: Redemption) {
+function drawerTree(currentRow?: Redemption) {
   return (
     <I18nextProvider i18n={i18n}>
       <RedemptionsProvider>
@@ -109,7 +109,7 @@ function drawerTree(currentRow: Redemption) {
 }
 
 async function renderDrawer(
-  currentRow: Redemption,
+  currentRow: Redemption | undefined,
   currency: CurrencyFixture = {
     quotaDisplayType: 'USD',
     usdExchangeRate: 1,
@@ -143,6 +143,7 @@ function getSaveButton(): HTMLButtonElement {
 function getControlByLabel(labelText: 'Name'): HTMLInputElement
 function getControlByLabel(labelText: 'Bonus quota (CNY)'): HTMLInputElement
 function getControlByLabel(labelText: 'Bonus quota (USD)'): HTMLInputElement
+function getControlByLabel(labelText: 'Paid quota (USD)'): HTMLInputElement
 function getControlByLabel(labelText: string): HTMLElement {
   const label = [...document.querySelectorAll<HTMLLabelElement>('label')].find(
     (candidate) => candidate.textContent?.trim() === labelText
@@ -187,6 +188,14 @@ afterEach(() => {
 })
 
 describe('redemption drawer', () => {
+  test('defaults a new redemption code to paid with no bonus quota', async () => {
+    await renderDrawer(undefined)
+
+    expect(getControlByLabel('Bonus quota (USD)').value).toBe('0')
+    expect(screen.getByText('Paid code')).toBeInTheDocument()
+    expect(getControlByLabel('Paid quota (USD)')).toBeEnabled()
+  })
+
   test('shows the reported CNY quota without floating-point noise', async () => {
     const original = redemption(1, 13888889)
     apiClient.get = async () => ({ data: { success: true, data: original } })

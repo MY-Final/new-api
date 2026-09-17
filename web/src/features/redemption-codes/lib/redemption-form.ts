@@ -71,8 +71,8 @@ export type RedemptionFormValues = {
 export const REDEMPTION_FORM_DEFAULT_VALUES: RedemptionFormValues = {
   name: '',
   paid_quota_dollars: 0,
-  bonus_quota_dollars: 10,
-  type: 'reward',
+  bonus_quota_dollars: 0,
+  type: 'paid',
   expired_time: undefined,
   count: 1,
 }
