@@ -95,6 +95,8 @@ function rowValue(label: string): string | null {
 }
 
 describe('usage facts billing details', () => {
+  const queryClients: QueryClient[] = []
+
   test('shows the settled image count and a per-image price', () => {
     const queryClient = renderDetails({
       billing_mode: 'tiered_expr',
@@ -110,8 +112,6 @@ describe('usage facts billing details', () => {
     expect(screen.getAllByText(/\/image/).length).toBeGreaterThan(0)
     queryClient.clear()
   })
-  const queryClients: QueryClient[] = []
-
   test('shows actual billable image and cache tokens while retaining the aggregate cache count', () => {
     queryClients.push(
       renderDetails(
@@ -148,6 +148,17 @@ describe('usage facts billing details', () => {
         .getAllByText('Cache Read')
         .some((label) => label.nextElementSibling?.textContent === '300')
     ).toBe(true)
+  })
+
+  test('separates the total input from the cache-miss input', () => {
+    queryClients.push(renderDetails({ cache_tokens: 300 }, 1000))
+
+    expect(
+      screen.getByText('Input Tokens').nextElementSibling
+    ).toHaveTextContent('1,000')
+    expect(screen.getByText('Cache Miss').nextElementSibling).toHaveTextContent(
+      '700'
+    )
   })
 
   beforeAll(() => {

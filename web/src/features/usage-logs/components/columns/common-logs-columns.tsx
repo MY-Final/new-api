@@ -57,6 +57,7 @@ import type { UsageLog } from '../../data/schema'
 import {
   formatModelName,
   decodeBillingExprB64,
+  getInputTokenBreakdown,
   getTieredBillingSummary,
   hasAnyCacheTokens,
   parseLogOther,
@@ -715,13 +716,11 @@ export function useCommonLogsColumns(
           return <span className='text-muted-foreground text-xs'>-</span>
         }
 
-        const cacheReadTokens = other?.cache_tokens || 0
-        const cacheWrite5m = other?.cache_creation_tokens_5m || 0
-        const cacheWrite1h = other?.cache_creation_tokens_1h || 0
-        const hasSplitCache = cacheWrite5m > 0 || cacheWrite1h > 0
-        const cacheWriteTokens = hasSplitCache
-          ? cacheWrite5m + cacheWrite1h
-          : other?.cache_creation_tokens || 0
+        const { missed, cacheRead, cacheWrite } = getInputTokenBreakdown(
+          promptTokens,
+          other
+        )
+        const showCacheMiss = missed > 0 && missed < promptTokens
 
         return (
           <div className='flex min-w-[9.5rem] flex-col gap-1'>
@@ -743,22 +742,30 @@ export function useCommonLogsColumns(
                 </span>
               </span>
             </div>
-            {(cacheReadTokens > 0 || cacheWriteTokens > 0) && (
+            {showCacheMiss && (
+              <div className='text-muted-foreground/70 flex items-baseline gap-1 text-[11px] tabular-nums'>
+                <span className='font-normal'>{t('Cache Miss')}</span>
+                <span className='text-foreground font-mono font-semibold'>
+                  {missed.toLocaleString()}
+                </span>
+              </div>
+            )}
+            {(cacheRead > 0 || cacheWrite > 0) && (
               <div className='text-muted-foreground/70 flex flex-wrap items-center gap-x-2 text-[11px] tabular-nums'>
                 <span className='font-normal'>{t('Cache')}</span>
-                {cacheReadTokens > 0 && (
+                {cacheRead > 0 && (
                   <span className='inline-flex items-center gap-0.5 whitespace-nowrap'>
                     <span aria-hidden='true'>↓</span>
                     <span className='font-mono'>
-                      {cacheReadTokens.toLocaleString()}
+                      {cacheRead.toLocaleString()}
                     </span>
                   </span>
                 )}
-                {cacheWriteTokens > 0 && (
+                {cacheWrite > 0 && (
                   <span className='inline-flex items-center gap-0.5 whitespace-nowrap'>
                     <span aria-hidden='true'>↑</span>
                     <span className='font-mono'>
-                      {cacheWriteTokens.toLocaleString()}
+                      {cacheWrite.toLocaleString()}
                     </span>
                   </span>
                 )}

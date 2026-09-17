@@ -183,6 +183,11 @@ export interface LogOtherData {
   cache_creation_tokens?: number
   cache_creation_tokens_5m?: number
   cache_creation_tokens_1h?: number
+  // Normalized total input tokens written by the backend for text logs. Unlike
+  // prompt_tokens, it always includes cached tokens across usage semantics.
+  input_tokens_total?: number
+  // Billing usage semantic reported by upstream ("anthropic" or openai-style).
+  usage_semantic?: string
   claude?: boolean
   model_ratio?: number
   completion_ratio?: number

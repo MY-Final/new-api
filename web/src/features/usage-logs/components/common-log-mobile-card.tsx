@@ -32,7 +32,11 @@ import dayjs from '@/lib/dayjs'
 import { formatLogQuota, formatTimestampToDate } from '@/lib/format'
 
 import type { UsageLog } from '../data/schema'
-import { formatModelName, parseLogOther } from '../lib/format'
+import {
+  formatModelName,
+  getInputTokenBreakdown,
+  parseLogOther,
+} from '../lib/format'
 import {
   getLogTypeConfig,
   isDisplayableLogType,
@@ -127,12 +131,11 @@ export function CommonLogMobileCard<TData>(props: {
   const costCell = props.cells.get('quota')
   const contentCell = props.cells.get('content')
   const channelCell = props.cells.get('channel')
-  const cacheRead = other?.cache_tokens || 0
-  const cacheWrite =
-    (other?.cache_creation_tokens_5m || 0) +
-      (other?.cache_creation_tokens_1h || 0) ||
-    other?.cache_creation_tokens ||
-    0
+  const { missed, cacheRead, cacheWrite } = getInputTokenBreakdown(
+    log.prompt_tokens || 0,
+    other
+  )
+  const showCacheMiss = missed > 0 && missed < (log.prompt_tokens || 0)
   const showTokens =
     displayable &&
     props.cells.has('prompt_tokens') &&
@@ -294,6 +297,14 @@ export function CommonLogMobileCard<TData>(props: {
               {log.prompt_tokens.toLocaleString()}
             </span>
           </span>
+          {showCacheMiss && (
+            <span>
+              {t('Cache Miss')}{' '}
+              <span className='text-foreground tabular-nums'>
+                {missed.toLocaleString()}
+              </span>
+            </span>
+          )}
           <span>
             {t('Output')}{' '}
             <span className='text-foreground tabular-nums'>

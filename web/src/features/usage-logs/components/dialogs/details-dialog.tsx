@@ -72,6 +72,7 @@ import {
   getParamOverrideActionLabel,
   parseAuditLine,
   decodeBillingExprB64,
+  getInputTokenBreakdown,
   getTieredBillingSummary,
   hasAnyCacheTokens,
   isViolationFeeLog,
@@ -382,9 +383,20 @@ function TokenBreakdown(props: { log: UsageLog; other: LogOtherData }) {
 
   if (!hasTokens) return null
 
+  const { missed } = getInputTokenBreakdown(promptTokens, other)
+  const showCacheMiss = missed > 0 && missed < promptTokens
+
   const rows: Array<{ label: string; value: string }> = []
 
   rows.push({ label: t('Input Tokens'), value: promptTokens.toLocaleString() })
+
+  if (showCacheMiss) {
+    rows.push({
+      label: t('Cache Miss'),
+      value: missed.toLocaleString(),
+    })
+  }
+
   rows.push({
     label: t('Output Tokens'),
     value: completionTokens.toLocaleString(),

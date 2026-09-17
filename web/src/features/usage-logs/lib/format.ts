@@ -338,6 +338,38 @@ export function hasAnyCacheTokens(
   )
 }
 
+/**
+ * Split a log's input tokens into the partition used by the log views.
+ *
+ * OpenAI-compatible usage reports prompt_tokens as the total input including
+ * cached tokens, while Anthropic reports input_tokens excluding cache reads and
+ * writes. `input_tokens_total` (written by the backend) normalizes the total, so
+ * it is only derived here for older logs. `missed` is the input not served from
+ * the prompt cache, i.e. total minus cache reads.
+ */
+export function getInputTokenBreakdown(
+  promptTokens: number,
+  other: LogOtherData | null | undefined
+): { missed: number; cacheRead: number; cacheWrite: number } {
+  const cacheRead = other?.cache_tokens || 0
+  const cacheWrite5m = other?.cache_creation_tokens_5m || 0
+  const cacheWrite1h = other?.cache_creation_tokens_1h || 0
+  const cacheWrite =
+    cacheWrite5m + cacheWrite1h > 0
+      ? cacheWrite5m + cacheWrite1h
+      : other?.cache_creation_tokens || 0
+
+  let total = other?.input_tokens_total || 0
+  if (total <= 0) {
+    const isClaude =
+      other?.usage_semantic === 'anthropic' || other?.claude === true
+    total = isClaude ? promptTokens + cacheRead + cacheWrite : promptTokens
+  }
+
+  const missed = Math.max(total - cacheRead, 0)
+  return { missed, cacheRead, cacheWrite }
+}
+
 export function getTieredBillingSummary(
   other: LogOtherData | null
 ): TieredBillingSummary | null {
