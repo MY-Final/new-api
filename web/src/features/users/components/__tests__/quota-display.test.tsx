@@ -256,31 +256,38 @@ function UsersPage() {
 
 async function renderUsersList(emptyInvitation = false) {
   useAuthStore.getState().auth.setUser({ id: 1, username: 'admin', role: 100 })
-  const get = vi.spyOn(api, 'get').mockResolvedValue({
-    data: {
-      success: true,
+  const get = vi.spyOn(api, 'get').mockImplementation((url) => {
+    if (url === '/api/group/') {
+      return Promise.resolve({
+        data: { success: true, data: ['default', 'paidGroup'] },
+      })
+    }
+    return Promise.resolve({
       data: {
-        items: [
-          {
-            id: 2,
-            username: 'long-user-name-for-table-layout',
-            display_name: 'A display name',
-            role: 1,
-            status: 1,
-            quota: 1900,
-            used_quota: 1100,
-            request_count: 0,
-            created_at: Math.floor(Date.now() / 1000) - 86400,
-            last_login_at: Math.floor(Date.now() / 1000) - 20,
-            group: 'default',
-            aff_count: emptyInvitation ? 0 : 2,
-            aff_history_quota: emptyInvitation ? 0 : 500000,
-            inviter_id: emptyInvitation ? 0 : 42,
-          },
-        ],
-        total: 1,
+        success: true,
+        data: {
+          items: [
+            {
+              id: 2,
+              username: 'long-user-name-for-table-layout',
+              display_name: 'A display name',
+              role: 1,
+              status: 1,
+              quota: 1900,
+              used_quota: 1100,
+              request_count: 0,
+              created_at: Math.floor(Date.now() / 1000) - 86400,
+              last_login_at: Math.floor(Date.now() / 1000) - 20,
+              group: 'default',
+              aff_count: emptyInvitation ? 0 : 2,
+              aff_history_quota: emptyInvitation ? 0 : 500000,
+              inviter_id: emptyInvitation ? 0 : 42,
+            },
+          ],
+          total: 1,
+        },
       },
-    },
+    })
   })
   const root = createRootRoute()
   const auth = createRoute({ getParentRoute: () => root, id: '_authenticated' })
