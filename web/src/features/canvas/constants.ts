@@ -60,11 +60,23 @@ export const COUNT_MAX = 10
 export const STORAGE_KEYS = {
   API_KEY: 'canvas_api_key',
   GROUP: 'canvas_group',
+  MODEL: 'canvas_model',
+  PROMPT: 'canvas_prompt',
   RESTORE: 'canvas_restore',
   ASPECT_RATIO: 'canvas_aspect_ratio',
   RESOLUTION: 'canvas_resolution',
   COUNT: 'canvas_count',
+  LAST_BATCH: 'canvas_last_batch',
 } as const
+
+const LOCAL_STORAGE_KEYS: readonly string[] = [
+  STORAGE_KEYS.GROUP,
+  STORAGE_KEYS.MODEL,
+  STORAGE_KEYS.ASPECT_RATIO,
+  STORAGE_KEYS.RESOLUTION,
+  STORAGE_KEYS.COUNT,
+  STORAGE_KEYS.LAST_BATCH,
+]
 
 export function getCanvasStorageKey(key: string, userId: number): string {
   return `${key}:${userId}`
@@ -83,6 +95,14 @@ export function clearCanvasSessionData(userId?: number): void {
       } catch {
         // Continue clearing the remaining Canvas keys.
       }
+    }
+  }
+  if (userId === undefined) return
+  for (const key of LOCAL_STORAGE_KEYS) {
+    try {
+      localStorage.removeItem(getCanvasStorageKey(key, userId))
+    } catch {
+      // Continue clearing the remaining Canvas workspace keys.
     }
   }
 }

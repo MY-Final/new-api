@@ -50,10 +50,12 @@ function supportsResponseFormatRetry(error: unknown): boolean {
 async function relayFetch<T>(
   url: string,
   init: RequestInit,
-  apiKey: string
+  apiKey: string,
+  signal?: AbortSignal
 ): Promise<T> {
   const response = await fetch(url, {
     ...init,
+    signal,
     headers: {
       ...(init.headers as Record<string, string> | undefined),
       Authorization: `Bearer ${apiKey}`,
@@ -74,7 +76,8 @@ async function relayFetch<T>(
 
 export async function generateImages(
   payload: ImageGenerationRequest,
-  apiKey: string
+  apiKey: string,
+  signal?: AbortSignal
 ): Promise<ImageResponse> {
   try {
     return await relayFetch<ImageResponse>(
@@ -84,7 +87,8 @@ export async function generateImages(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...payload, response_format: 'b64_json' }),
       },
-      apiKey
+      apiKey,
+      signal
     )
   } catch (error) {
     if (!supportsResponseFormatRetry(error)) throw error
@@ -96,14 +100,16 @@ export async function generateImages(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(retryPayload),
       },
-      apiKey
+      apiKey,
+      signal
     )
   }
 }
 
 export async function editImage(
   payload: ImageEditRequest,
-  apiKey: string
+  apiKey: string,
+  signal?: AbortSignal
 ): Promise<ImageResponse> {
   const form = new FormData()
   form.append('model', payload.model)
@@ -118,7 +124,8 @@ export async function editImage(
     return await relayFetch<ImageResponse>(
       API_ENDPOINTS.IMAGES_EDITS,
       { method: 'POST', body: form },
-      apiKey
+      apiKey,
+      signal
     )
   } catch (error) {
     if (!supportsResponseFormatRetry(error)) throw error
@@ -133,7 +140,8 @@ export async function editImage(
     return relayFetch<ImageResponse>(
       API_ENDPOINTS.IMAGES_EDITS,
       { method: 'POST', body: retryForm },
-      apiKey
+      apiKey,
+      signal
     )
   }
 }

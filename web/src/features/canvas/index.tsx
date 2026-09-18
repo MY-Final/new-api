@@ -26,6 +26,7 @@ import {
   Loader2,
   Minus,
   Plus,
+  RotateCcw,
   Sparkles,
   X,
 } from 'lucide-react'
@@ -82,6 +83,7 @@ import {
 } from './constants'
 import {
   downloadImage,
+  loadHistory,
   persistImageSource,
   saveHistoryEntries,
 } from './lib/history'
@@ -109,10 +111,14 @@ function CanvasResults({
   loading,
   results,
   onPreview,
+  onUseAsReference,
+  referenceLoadingSrc,
 }: {
   loading: boolean
   results: string[]
   onPreview: (src: string) => void
+  onUseAsReference: (src: string) => void
+  referenceLoadingSrc: string | null
 }) {
   const { t } = useTranslation()
   const [downloadingSrc, setDownloadingSrc] = useState<string | null>(null)
@@ -129,6 +135,39 @@ function CanvasResults({
       setDownloadingSrc(null)
     }
   }
+
+  const renderActions = (src: string, index: number) => (
+    <div className='absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100'>
+      <button
+        type='button'
+        onClick={() => onUseAsReference(src)}
+        disabled={referenceLoadingSrc !== null}
+        aria-label={t('Use as reference image')}
+        className='bg-background/80 rounded-md p-1.5'
+      >
+        {referenceLoadingSrc === src ? (
+          <Loader2 className='h-4 w-4 animate-spin' />
+        ) : (
+          <ImagePlus className='h-4 w-4' />
+        )}
+      </button>
+      <button
+        type='button'
+        onClick={() =>
+          void handleDownload(src, `canvas-${Date.now()}-${index + 1}.png`)
+        }
+        disabled={downloadingSrc !== null}
+        aria-label={t('Download')}
+        className='bg-background/80 rounded-md p-1.5'
+      >
+        {downloadingSrc === src ? (
+          <Loader2 className='h-4 w-4 animate-spin' />
+        ) : (
+          <Download className='h-4 w-4' />
+        )}
+      </button>
+    </div>
+  )
 
   if (loading) {
     return (
@@ -147,12 +186,15 @@ function CanvasResults({
   if (results.length === 1) {
     return (
       <div className='flex h-full min-h-40 items-center justify-center overflow-auto'>
-        <img
-          src={results[0]}
-          alt={t('Generated image')}
-          onClick={() => onPreview(results[0])}
-          className='hover:border-border max-h-full max-w-full cursor-zoom-in rounded-xl border border-transparent object-contain transition'
-        />
+        <div className='group relative h-full w-full'>
+          <img
+            src={results[0]}
+            alt={t('Generated image')}
+            onClick={() => onPreview(results[0])}
+            className='h-full w-full cursor-zoom-in object-contain'
+          />
+          {renderActions(results[0], 0)}
+        </div>
       </div>
     )
   }
@@ -169,17 +211,7 @@ function CanvasResults({
             onClick={() => onPreview(src)}
             className='h-full w-full cursor-zoom-in object-contain'
           />
-          <button
-            type='button'
-            onClick={() =>
-              void handleDownload(src, `canvas-${Date.now()}-${index + 1}.png`)
-            }
-            disabled={downloadingSrc !== null}
-            aria-label={t('Download')}
-            className='bg-background/80 absolute top-2 right-2 rounded-md p-1.5 opacity-0 transition-opacity group-hover:opacity-100'
-          >
-            <Download className='h-4 w-4' />
-          </button>
+          {renderActions(src, index)}
         </div>
       ))}
     </div>
@@ -209,8 +241,13 @@ export function Canvas() {
   const [error, setError] = useState('')
   const [previewSrc, setPreviewSrc] = useState<string | null>(null)
   const [hasPendingRestore, setHasPendingRestore] = useState(false)
+  const [downloadingAll, setDownloadingAll] = useState(false)
+  const [referenceLoadingSrc, setReferenceLoadingSrc] = useState<string | null>(
+    null
+  )
   const fileInputRef = useRef<HTMLInputElement>(null)
   const settingsHydratedRef = useRef(false)
+  const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     setApiKey(null)
@@ -229,6 +266,8 @@ export function Canvas() {
     setResults([])
     setError('')
     setPreviewSrc(null)
+    setDownloadingAll(false)
+    setReferenceLoadingSrc(null)
     settingsHydratedRef.current = false
 
     let cancelled = false
@@ -236,31 +275,55 @@ export function Canvas() {
 
     let key: string | null = null
     let savedGroup: string | null = null
+    let savedModel: string | null = null
+    let savedPrompt: string | null = null
     let savedAspectRatio: string | null = null
     let savedResolution: string | null = null
     let savedCount: string | null = null
+    let lastBatchIds: string[] = []
     try {
       key = sessionStorage.getItem(
         getCanvasStorageKey(STORAGE_KEYS.API_KEY, userId)
       )
-      savedGroup = sessionStorage.getItem(
-        getCanvasStorageKey(STORAGE_KEYS.GROUP, userId)
+      savedPrompt = sessionStorage.getItem(
+        getCanvasStorageKey(STORAGE_KEYS.PROMPT, userId)
       )
-      savedAspectRatio = sessionStorage.getItem(
+      savedGroup =
+        sessionStorage.getItem(
+          getCanvasStorageKey(STORAGE_KEYS.GROUP, userId)
+        ) ??
+        localStorage.getItem(getCanvasStorageKey(STORAGE_KEYS.GROUP, userId))
+      savedModel = localStorage.getItem(
+        getCanvasStorageKey(STORAGE_KEYS.MODEL, userId)
+      )
+      savedAspectRatio = localStorage.getItem(
         getCanvasStorageKey(STORAGE_KEYS.ASPECT_RATIO, userId)
       )
-      savedResolution = sessionStorage.getItem(
+      savedResolution = localStorage.getItem(
         getCanvasStorageKey(STORAGE_KEYS.RESOLUTION, userId)
       )
-      savedCount = sessionStorage.getItem(
+      savedCount = localStorage.getItem(
         getCanvasStorageKey(STORAGE_KEYS.COUNT, userId)
       )
+      const rawBatch = localStorage.getItem(
+        getCanvasStorageKey(STORAGE_KEYS.LAST_BATCH, userId)
+      )
+      if (rawBatch) {
+        const parsed = JSON.parse(rawBatch) as { ids?: unknown }
+        if (Array.isArray(parsed.ids)) {
+          lastBatchIds = parsed.ids.filter(
+            (id): id is string => typeof id === 'string'
+          )
+        }
+      }
     } catch {
-      // Private browsing can block session storage; Canvas remains usable after import.
+      // Unavailable storage must not block Canvas; defaults remain in place.
     }
     setApiKey(key)
     setSessionUserId(userId)
     if (savedGroup) setGroup(savedGroup)
+    if (savedModel) setModel(savedModel)
+    if (savedPrompt) setPrompt(savedPrompt)
     if (
       savedAspectRatio &&
       (ASPECT_RATIO_VALUES as readonly string[]).includes(savedAspectRatio)
@@ -287,6 +350,21 @@ export function Canvas() {
         if (!cancelled) setGroups(nextGroups)
       })
       .catch(() => undefined)
+
+    if (lastBatchIds.length > 0) {
+      loadHistory(userId)
+        .then((entries) => {
+          if (cancelled) return
+          const imagesById = new Map(
+            entries.map((entry) => [entry.id, entry.image])
+          )
+          const images = lastBatchIds
+            .map((id) => imagesById.get(id))
+            .filter((image): image is string => typeof image === 'string')
+          if (images.length > 0) setResults(images)
+        })
+        .catch(() => undefined)
+    }
 
     return () => {
       cancelled = true
@@ -357,22 +435,44 @@ export function Canvas() {
   useEffect(() => {
     if (!settingsHydratedRef.current || !userId) return
     try {
-      sessionStorage.setItem(
+      localStorage.setItem(
+        getCanvasStorageKey(STORAGE_KEYS.GROUP, userId),
+        group
+      )
+      localStorage.setItem(
+        getCanvasStorageKey(STORAGE_KEYS.MODEL, userId),
+        model
+      )
+      localStorage.setItem(
         getCanvasStorageKey(STORAGE_KEYS.ASPECT_RATIO, userId),
         aspectRatio
       )
-      sessionStorage.setItem(
+      localStorage.setItem(
         getCanvasStorageKey(STORAGE_KEYS.RESOLUTION, userId),
         resolution
       )
-      sessionStorage.setItem(
+      localStorage.setItem(
         getCanvasStorageKey(STORAGE_KEYS.COUNT, userId),
         String(n)
       )
     } catch {
-      // Ignore unavailable session storage.
+      // Ignore unavailable local storage; the workspace stays usable.
     }
-  }, [aspectRatio, resolution, n, userId])
+  }, [aspectRatio, group, model, n, resolution, userId])
+
+  useEffect(() => {
+    if (!settingsHydratedRef.current || !userId) return
+    const timer = window.setTimeout(() => {
+      try {
+        const key = getCanvasStorageKey(STORAGE_KEYS.PROMPT, userId)
+        if (prompt) sessionStorage.setItem(key, prompt)
+        else sessionStorage.removeItem(key)
+      } catch {
+        // Ignore unavailable session storage.
+      }
+    }, 300)
+    return () => window.clearTimeout(timer)
+  }, [prompt, userId])
 
   useEffect(() => {
     if (!userId || !group) return () => undefined
@@ -463,6 +563,68 @@ export function Canvas() {
     setApiKey(null)
   }
 
+  const handleUseAsReference = async (src: string) => {
+    if (referenceLoadingSrc !== null) return
+    if (files.length >= MAX_REFERENCE_IMAGES) {
+      toast.warning(t('Reference image limit reached.'))
+      return
+    }
+    setReferenceLoadingSrc(src)
+    try {
+      const response = await fetch(src)
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const blob = await response.blob()
+      const extension = blob.type === 'image/jpeg' ? 'jpg' : 'png'
+      const file = new File(
+        [blob],
+        `canvas-reference-${Date.now()}.${extension}`,
+        { type: blob.type || 'image/png' }
+      )
+      setFiles((prev) => [...prev, file].slice(0, MAX_REFERENCE_IMAGES))
+      toast.success(t('Added to reference images.'))
+    } catch {
+      toast.error(t('Unable to use this image as a reference.'))
+    } finally {
+      setReferenceLoadingSrc(null)
+    }
+  }
+
+  const handleDownloadAll = async () => {
+    if (downloadingAll || results.length === 0) return
+    setDownloadingAll(true)
+    try {
+      for (const [index, src] of results.entries()) {
+        const success = await downloadImage(
+          src,
+          `canvas-${Date.now()}-${index + 1}.png`
+        )
+        if (!success) {
+          toast.error(t('Download failed. Try opening the original image.'))
+          break
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 300))
+      }
+    } finally {
+      setDownloadingAll(false)
+    }
+  }
+
+  const showRelativePreview = (offset: number) => {
+    if (results.length === 0 || previewSrc === null) return
+    const currentIndex = results.indexOf(previewSrc)
+    if (currentIndex < 0) return
+    const nextIndex = (currentIndex + offset + results.length) % results.length
+    setPreviewSrc(results[nextIndex])
+  }
+
+  const handleShortcutKeyDown: React.KeyboardEventHandler<HTMLDivElement> = (
+    event
+  ) => {
+    if (!(event.metaKey || event.ctrlKey) || event.key !== 'Enter') return
+    event.preventDefault()
+    if (!loading) void handleGenerate()
+  }
+
   const effectiveSize =
     customSize.trim() !== ''
       ? customSize.trim()
@@ -481,6 +643,8 @@ export function Canvas() {
       setError(t('Enter a prompt.'))
       return
     }
+    const controller = new AbortController()
+    abortRef.current = controller
     setLoading(true)
     setError('')
     setResults([])
@@ -495,11 +659,13 @@ export function Canvas() {
                 n,
                 images: files,
               },
-              apiKey
+              apiKey,
+              controller.signal
             )
           : await generateImages(
               { model, prompt: prompt.trim(), size: effectiveSize, n },
-              apiKey
+              apiKey,
+              controller.signal
             )
       const images = await Promise.all(
         (response.data ?? [])
@@ -509,31 +675,48 @@ export function Canvas() {
       )
       setResults(images.map((item) => item.image))
       const now = Date.now()
-      const saveResult = await saveHistoryEntries(
-        userId,
-        images.map((item, index) => ({
-          id: `${now}-${index}-${Math.random().toString(36).slice(2, 8)}`,
-          image: item.image,
-          temporary: item.temporary,
-          prompt: prompt.trim(),
-          model,
-          group,
-          size: effectiveSize ?? '',
-          n,
-          createdAt: now,
-        }))
-      )
+      const entries = images.map((item, index) => ({
+        id: `${now}-${index}-${Math.random().toString(36).slice(2, 8)}`,
+        image: item.image,
+        temporary: item.temporary,
+        prompt: prompt.trim(),
+        model,
+        group,
+        size: effectiveSize ?? '',
+        n,
+        createdAt: now,
+      }))
+      const saveResult = await saveHistoryEntries(userId, entries)
       if (!saveResult.success) {
         toast.error(t('Image generated, but it could not be saved to history.'))
+      } else if (entries.length > 0) {
+        try {
+          localStorage.setItem(
+            getCanvasStorageKey(STORAGE_KEYS.LAST_BATCH, userId),
+            JSON.stringify({
+              ids: entries.map((entry) => entry.id),
+              createdAt: now,
+            })
+          )
+        } catch {
+          // Restoring the last batch is best-effort when storage is blocked.
+        }
       }
       if (images.some((item) => item.temporary)) {
         toast.warning(t('This image is temporary and may expire.'))
       }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause))
+      if (!controller.signal.aborted) {
+        setError(cause instanceof Error ? cause.message : String(cause))
+      }
     } finally {
+      if (abortRef.current === controller) abortRef.current = null
       setLoading(false)
     }
+  }
+
+  const handleCancelGenerate = () => {
+    abortRef.current?.abort()
   }
 
   if (!apiKey || sessionUserId !== userId) {
@@ -565,7 +748,10 @@ export function Canvas() {
 
   return (
     <Main className='p-0'>
-      <div className='flex h-full flex-col overflow-hidden'>
+      <div
+        className='flex h-full flex-col overflow-hidden'
+        onKeyDown={handleShortcutKeyDown}
+      >
         <div className='border-border flex items-center justify-between border-b px-6 py-4'>
           <div className='flex items-center gap-2'>
             <ImageIcon className='text-primary h-5 w-5' />
@@ -849,7 +1035,7 @@ export function Canvas() {
 
               <Button
                 className='w-full'
-                onClick={handleGenerate}
+                onClick={() => void handleGenerate()}
                 disabled={loading}
               >
                 {loading ? (
@@ -859,6 +1045,26 @@ export function Canvas() {
                 )}
                 {loading ? t('Generating...') : t('Generate')}
               </Button>
+              {loading ? (
+                <Button
+                  type='button'
+                  variant='outline'
+                  className='w-full'
+                  onClick={handleCancelGenerate}
+                >
+                  {t('Cancel')}
+                </Button>
+              ) : (
+                <p className='text-muted-foreground text-center text-xs'>
+                  <kbd className='bg-muted rounded border px-1 py-0.5 font-mono'>
+                    Ctrl/⌘
+                  </kbd>{' '}
+                  +{' '}
+                  <kbd className='bg-muted rounded border px-1 py-0.5 font-mono'>
+                    Enter
+                  </kbd>
+                </p>
+              )}
             </CardContent>
           </Card>
 
@@ -866,12 +1072,43 @@ export function Canvas() {
             <div className='mb-4 flex items-center gap-2'>
               <ImagePlus className='text-muted-foreground h-5 w-5' />
               <h2 className='text-base font-semibold'>{t('Result')}</h2>
+              <div className='ml-auto flex items-center gap-2'>
+                {results.length > 0 && !loading && (
+                  <Button
+                    type='button'
+                    variant='outline'
+                    size='sm'
+                    onClick={() => void handleGenerate()}
+                  >
+                    <RotateCcw className='h-3.5 w-3.5' />
+                    {t('Generate again')}
+                  </Button>
+                )}
+                {results.length > 1 && !loading && (
+                  <Button
+                    type='button'
+                    variant='outline'
+                    size='sm'
+                    onClick={() => void handleDownloadAll()}
+                    disabled={downloadingAll}
+                  >
+                    {downloadingAll ? (
+                      <Loader2 className='h-3.5 w-3.5 animate-spin' />
+                    ) : (
+                      <Download className='h-3.5 w-3.5' />
+                    )}
+                    {t('Download all')}
+                  </Button>
+                )}
+              </div>
             </div>
             <div className='min-h-0 flex-1'>
               <CanvasResults
                 loading={loading}
                 results={results}
                 onPreview={setPreviewSrc}
+                onUseAsReference={(src) => void handleUseAsReference(src)}
+                referenceLoadingSrc={referenceLoadingSrc}
               />
             </div>
           </div>
@@ -880,6 +1117,10 @@ export function Canvas() {
       <ImagePreviewDialog
         src={previewSrc}
         onClose={() => setPreviewSrc(null)}
+        onPrevious={
+          results.length > 1 ? () => showRelativePreview(-1) : undefined
+        }
+        onNext={results.length > 1 ? () => showRelativePreview(1) : undefined}
       />
     </Main>
   )
