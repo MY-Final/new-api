@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useNavigate } from '@tanstack/react-router'
 import type { Row } from '@tanstack/react-table'
 import {
   Trash2,
@@ -83,6 +84,7 @@ export function DataTableRowActions<TData>({
   row,
 }: DataTableRowActionsProps<TData>) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const apiKey = apiKeySchema.parse(row.original)
   const {
     setOpen,
@@ -293,7 +295,7 @@ export function DataTableRowActions<TData>({
               return
             }
             toast.success(t('Imported to Canvas'))
-            window.location.assign('/canvas')
+            void navigate({ to: '/canvas' })
           }}
         >
           {t('Import to Canvas')}

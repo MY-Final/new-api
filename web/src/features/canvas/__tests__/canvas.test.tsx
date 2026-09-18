@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { getCanvasStorageKey, STORAGE_KEYS } from '@/features/canvas/constants'
@@ -32,10 +33,13 @@ const mocks = vi.hoisted(() => ({
   downloadImage: vi.fn(),
   persistImageSource: vi.fn(),
   saveHistoryEntries: vi.fn(),
+  getApiKeys: vi.fn(),
+  fetchTokenKey: vi.fn(),
+  navigate: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-router', () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => mocks.navigate,
 }))
 
 vi.mock('../api', () => ({
@@ -43,6 +47,11 @@ vi.mock('../api', () => ({
   generateImages: mocks.generateImages,
   getAvailableGroups: mocks.getAvailableGroups,
   getAvailableModels: mocks.getAvailableModels,
+}))
+
+vi.mock('@/features/keys/api', () => ({
+  getApiKeys: mocks.getApiKeys,
+  fetchTokenKey: mocks.fetchTokenKey,
 }))
 
 vi.mock('../lib/history', () => ({
@@ -59,8 +68,15 @@ beforeEach(() => {
   mocks.generateImages.mockReset()
   mocks.editImage.mockReset()
   mocks.saveHistoryEntries.mockReset()
+  mocks.getApiKeys.mockReset()
+  mocks.fetchTokenKey.mockReset()
+  mocks.navigate.mockReset()
   mocks.getAvailableGroups.mockResolvedValue([])
   mocks.getAvailableModels.mockResolvedValue([])
+  mocks.getApiKeys.mockResolvedValue({
+    success: true,
+    data: { items: [], total: 0, page: 1, page_size: 100 },
+  })
 })
 
 afterEach(() => {
@@ -191,5 +207,78 @@ describe('Canvas restore flow', () => {
         'canvas-key'
       )
     )
+  })
+})
+
+describe('Canvas API key import', () => {
+  test('imports a selected API key and restores the pending prompt', async () => {
+    const restoreKey = getCanvasStorageKey(STORAGE_KEYS.RESTORE, 7)
+    sessionStorage.setItem(
+      restoreKey,
+      JSON.stringify({ userId: 7, prompt: 'restore this prompt' })
+    )
+    mocks.getApiKeys.mockResolvedValue({
+      success: true,
+      data: {
+        items: [{ id: 11, name: 'Canvas Key', status: 1, group: 'vip' }],
+      },
+    })
+    mocks.fetchTokenKey.mockResolvedValue({
+      success: true,
+      data: { key: 'secret-value' },
+    })
+
+    render(<Canvas />)
+
+    const user = userEvent.setup()
+    await user.click(
+      await screen.findByRole('combobox', { name: 'Select an API key' })
+    )
+    await user.click(await screen.findByRole('option', { name: 'Canvas Key' }))
+
+    await waitFor(() =>
+      expect(
+        sessionStorage.getItem(getCanvasStorageKey(STORAGE_KEYS.API_KEY, 7))
+      ).toBe('sk-secret-value')
+    )
+    expect(mocks.fetchTokenKey).toHaveBeenCalledWith(11)
+    expect(
+      sessionStorage.getItem(getCanvasStorageKey(STORAGE_KEYS.GROUP, 7))
+    ).toBe('vip')
+    const prompt = await screen.findByPlaceholderText(
+      'Describe the image you want to create...'
+    )
+    await waitFor(() => expect(prompt).toHaveValue('restore this prompt'))
+    expect(sessionStorage.getItem(restoreKey)).toBe(null)
+  })
+
+  test('guides users without API keys to create one', async () => {
+    render(<Canvas />)
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Create API Key' })
+    )
+
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: '/keys' })
+  })
+
+  test('switches the imported API key from the Canvas header', async () => {
+    sessionStorage.setItem(
+      getCanvasStorageKey(STORAGE_KEYS.API_KEY, 7),
+      'canvas-key'
+    )
+
+    render(<Canvas />)
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Switch API Key' })
+    )
+
+    expect(
+      sessionStorage.getItem(getCanvasStorageKey(STORAGE_KEYS.API_KEY, 7))
+    ).toBe(null)
+    expect(
+      await screen.findByText('No API key imported yet.')
+    ).toBeInTheDocument()
   })
 })

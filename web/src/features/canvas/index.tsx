@@ -66,6 +66,7 @@ import {
   getAvailableGroups,
   getAvailableModels,
 } from './api'
+import { ApiKeyImportCard } from './components/api-key-import-card'
 import {
   ASPECT_RATIO_VALUES,
   COUNT_MAX,
@@ -88,6 +89,15 @@ import { getImageSize, parseImageSize } from './lib/size'
 import type { GroupOption, ImageResponse, ModelOption } from './types'
 
 const MAX_REFERENCE_IMAGES = 4
+
+type CanvasRestorePayload = {
+  userId?: number
+  prompt?: string
+  model?: string
+  group?: string
+  size?: string
+  n?: number
+}
 
 function toImageSrc(item: NonNullable<ImageResponse['data']>[number]): string {
   if (item.b64_json) return `data:image/png;base64,${item.b64_json}`
@@ -278,63 +288,71 @@ export function Canvas() {
       })
       .catch(() => undefined)
 
+    return () => {
+      cancelled = true
+    }
+  }, [userId])
+
+  useEffect(() => {
+    if (!userId || sessionUserId !== userId) return
     const restoreKey = getCanvasStorageKey(STORAGE_KEYS.RESTORE, userId)
     let restore: string | null = null
     try {
       restore = sessionStorage.getItem(restoreKey)
     } catch {
-      restore = null
+      return
     }
-    if (restore) {
+    if (!restore) return
+    if (!apiKey) {
+      setHasPendingRestore(true)
+      return
+    }
+
+    const clearRestore = () => {
       try {
-        const data = JSON.parse(restore) as {
-          userId?: number
-          prompt?: string
-          model?: string
-          group?: string
-          size?: string
-          n?: number
-        }
-        if (data.userId !== userId) {
-          sessionStorage.removeItem(restoreKey)
-        } else {
-          if (typeof data.prompt === 'string') setPrompt(data.prompt)
-          if (typeof data.model === 'string') setModel(data.model)
-          if (typeof data.group === 'string') setGroup(data.group)
-          if (typeof data.size === 'string' && data.size.trim() !== '') {
-            const parsedSize = parseImageSize(data.size)
-            if (parsedSize) {
-              setAspectRatio(parsedSize.aspectRatio)
-              setResolution(parsedSize.resolution)
-              setCustomSize('')
-            } else {
-              setCustomSize(data.size)
-              setCustomSizeOpen(true)
-            }
-          }
-          if (
-            typeof data.n === 'number' &&
-            Number.isInteger(data.n) &&
-            data.n >= 1 &&
-            data.n <= COUNT_MAX
-          ) {
-            setN(data.n)
-          }
-          setHasPendingRestore(!key)
-          if (key) sessionStorage.removeItem(restoreKey)
-        }
+        sessionStorage.removeItem(restoreKey)
       } catch {
-        try {
-          sessionStorage.removeItem(restoreKey)
-        } catch {
-          // Ignore malformed or unavailable restore storage.
-        }
+        // Ignore malformed or unavailable restore storage.
       }
     }
-    return () => {
-      cancelled = true
+
+    let data: CanvasRestorePayload
+    try {
+      data = JSON.parse(restore) as CanvasRestorePayload
+      if (data.userId !== userId) {
+        clearRestore()
+        return
+      }
+    } catch {
+      clearRestore()
+      return
     }
-  }, [userId])
+
+    if (typeof data.prompt === 'string') setPrompt(data.prompt)
+    if (typeof data.model === 'string') setModel(data.model)
+    if (typeof data.group === 'string') setGroup(data.group)
+    if (typeof data.size === 'string' && data.size.trim() !== '') {
+      const parsedSize = parseImageSize(data.size)
+      if (parsedSize) {
+        setAspectRatio(parsedSize.aspectRatio)
+        setResolution(parsedSize.resolution)
+        setCustomSize('')
+      } else {
+        setCustomSize(data.size)
+        setCustomSizeOpen(true)
+      }
+    }
+    if (
+      typeof data.n === 'number' &&
+      Number.isInteger(data.n) &&
+      data.n >= 1 &&
+      data.n <= COUNT_MAX
+    ) {
+      setN(data.n)
+    }
+    setHasPendingRestore(false)
+    clearRestore()
+  }, [apiKey, sessionUserId, userId])
 
   useEffect(() => {
     if (!settingsHydratedRef.current || !userId) return
@@ -411,6 +429,38 @@ export function Canvas() {
 
   const removeFile = (file: File) => {
     setFiles((prev) => prev.filter((item) => item !== file))
+  }
+
+  const handleImportedKey = (importedKey: string, importedGroup: string) => {
+    if (!userId || sessionUserId !== userId) return
+    try {
+      sessionStorage.setItem(
+        getCanvasStorageKey(STORAGE_KEYS.API_KEY, userId),
+        importedKey
+      )
+      sessionStorage.setItem(
+        getCanvasStorageKey(STORAGE_KEYS.GROUP, userId),
+        importedGroup
+      )
+    } catch {
+      toast.error(t('Unable to import the API key to Canvas.'))
+      return
+    }
+    setApiKey(importedKey)
+    if (importedGroup) setGroup(importedGroup)
+    toast.success(t('Imported to Canvas'))
+  }
+
+  const handleSwitchKey = () => {
+    if (!userId) return
+    try {
+      sessionStorage.removeItem(
+        getCanvasStorageKey(STORAGE_KEYS.API_KEY, userId)
+      )
+    } catch {
+      // Ignore unavailable session storage; clearing state switches the key.
+    }
+    setApiKey(null)
   }
 
   const effectiveSize =
@@ -490,29 +540,11 @@ export function Canvas() {
     return (
       <Main className='p-0'>
         <div className='flex min-h-[60vh] items-center justify-center p-8'>
-          <Card className='max-w-md'>
-            <CardHeader>
-              <CardTitle>{t('Canvas')}</CardTitle>
-              <CardDescription>{t('No API key imported yet.')}</CardDescription>
-            </CardHeader>
-            <CardContent className='flex flex-col gap-4'>
-              <p className='text-muted-foreground text-sm'>
-                {t(
-                  'Import an API key from the API Keys page to start generating images.'
-                )}
-              </p>
-              {hasPendingRestore && (
-                <p className='text-muted-foreground text-sm'>
-                  {t(
-                    'Your prompt is ready. Import an API key and it will be restored automatically.'
-                  )}
-                </p>
-              )}
-              <Button onClick={() => navigate({ to: '/keys' })}>
-                {t('Go to API Keys')}
-              </Button>
-            </CardContent>
-          </Card>
+          <ApiKeyImportCard
+            hasPendingRestore={hasPendingRestore}
+            onImported={handleImportedKey}
+            onGoToKeys={() => navigate({ to: '/keys' })}
+          />
         </div>
       </Main>
     )
@@ -539,9 +571,19 @@ export function Canvas() {
             <ImageIcon className='text-primary h-5 w-5' />
             <h1 className='text-lg font-semibold'>{t('Canvas')}</h1>
           </div>
-          <span className='text-muted-foreground text-xs'>
-            {t('Using imported API key')}
-          </span>
+          <div className='flex items-center gap-2'>
+            <span className='text-muted-foreground text-xs'>
+              {t('Using imported API key')}
+            </span>
+            <Button
+              variant='ghost'
+              size='sm'
+              className='h-7 px-2 text-xs'
+              onClick={handleSwitchKey}
+            >
+              {t('Switch API Key')}
+            </Button>
+          </div>
         </div>
 
         <div className='flex min-h-0 flex-1 gap-6 overflow-auto p-6'>
