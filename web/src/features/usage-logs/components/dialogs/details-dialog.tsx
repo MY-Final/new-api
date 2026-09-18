@@ -390,6 +390,13 @@ function TokenBreakdown(props: { log: UsageLog; other: LogOtherData }) {
 
   rows.push({ label: t('Input Tokens'), value: promptTokens.toLocaleString() })
 
+  if (cacheRead > 0) {
+    rows.push({
+      label: t('Cache Hit'),
+      value: cacheRead.toLocaleString(),
+    })
+  }
+
   if (showCacheMiss) {
     rows.push({
       label: t('Cache Miss'),
@@ -401,13 +408,6 @@ function TokenBreakdown(props: { log: UsageLog; other: LogOtherData }) {
     label: t('Output Tokens'),
     value: completionTokens.toLocaleString(),
   })
-
-  if (cacheRead > 0) {
-    rows.push({
-      label: t('Cache Read'),
-      value: cacheRead.toLocaleString(),
-    })
-  }
 
   if (other.image_cache_tokens !== undefined) {
     rows.push({

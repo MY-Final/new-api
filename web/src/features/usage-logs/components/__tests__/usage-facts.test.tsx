@@ -143,11 +143,9 @@ describe('usage facts billing details', () => {
     expect(
       screen.getByText('Input Tokens').nextElementSibling
     ).toHaveTextContent('1,000')
-    expect(
-      screen
-        .getAllByText('Cache Read')
-        .some((label) => label.nextElementSibling?.textContent === '300')
-    ).toBe(true)
+    expect(screen.getByText('Cache Hit').nextElementSibling).toHaveTextContent(
+      '300'
+    )
   })
 
   test('separates the total input from the cache-miss input', () => {

@@ -721,11 +721,20 @@ export function useCommonLogsColumns(
           other
         )
         const showCacheMiss = missed > 0 && missed < promptTokens
+        const hasCacheBreakdown =
+          cacheRead > 0 || showCacheMiss || cacheWrite > 0
+        const cacheWriteShown = Math.min(cacheWrite, missed)
+        const freshMiss = Math.max(missed - cacheWriteShown, 0)
+        const inputTotal = cacheRead + missed
+        const cacheHitRateLabel =
+          inputTotal > 0
+            ? `${((cacheRead / inputTotal) * 100).toFixed(1).replace(/\.0$/, '')}%`
+            : '0%'
 
         return (
-          <div className='flex min-w-[9.5rem] flex-col gap-1'>
-            <div className='flex items-baseline gap-3 text-xs tabular-nums'>
-              <span className='inline-flex items-baseline gap-1 whitespace-nowrap'>
+          <div className='flex min-w-[9.5rem] flex-col gap-0.5'>
+            <div className='flex items-baseline gap-2 text-xs whitespace-nowrap tabular-nums'>
+              <span className='inline-flex items-baseline gap-1'>
                 <span className='text-muted-foreground/70 text-[11px] font-normal'>
                   {t('Input')}
                 </span>
@@ -733,7 +742,10 @@ export function useCommonLogsColumns(
                   {promptTokens.toLocaleString()}
                 </span>
               </span>
-              <span className='inline-flex items-baseline gap-1 whitespace-nowrap'>
+              <span aria-hidden='true' className='text-muted-foreground/40'>
+                /
+              </span>
+              <span className='inline-flex items-baseline gap-1'>
                 <span className='text-muted-foreground/70 text-[11px] font-normal'>
                   {t('Output')}
                 </span>
@@ -742,34 +754,76 @@ export function useCommonLogsColumns(
                 </span>
               </span>
             </div>
-            {showCacheMiss && (
-              <div className='text-muted-foreground/70 flex items-baseline gap-1 text-[11px] tabular-nums'>
-                <span className='font-normal'>{t('Cache Miss')}</span>
-                <span className='text-foreground font-mono font-semibold'>
-                  {missed.toLocaleString()}
-                </span>
-              </div>
-            )}
-            {(cacheRead > 0 || cacheWrite > 0) && (
-              <div className='text-muted-foreground/70 flex flex-wrap items-center gap-x-2 text-[11px] tabular-nums'>
-                <span className='font-normal'>{t('Cache')}</span>
+            {hasCacheBreakdown && (
+              <div className='text-muted-foreground/70 flex items-baseline text-[11px] whitespace-nowrap tabular-nums'>
                 {cacheRead > 0 && (
-                  <span className='inline-flex items-center gap-0.5 whitespace-nowrap'>
-                    <span aria-hidden='true'>↓</span>
-                    <span className='font-mono'>
+                  <span className='inline-flex items-baseline gap-1'>
+                    <span>{t('Hit')}</span>
+                    <span className='text-foreground/80 font-mono'>
                       {cacheRead.toLocaleString()}
                     </span>
                   </span>
                 )}
+                {cacheRead > 0 && (showCacheMiss || cacheWrite > 0) && (
+                  <span aria-hidden='true' className='px-1'>
+                    ·
+                  </span>
+                )}
+                {showCacheMiss && (
+                  <span className='inline-flex items-baseline gap-1'>
+                    <span>{t('Miss')}</span>
+                    <span className='text-foreground/80 font-mono'>
+                      {missed.toLocaleString()}
+                    </span>
+                  </span>
+                )}
+                {showCacheMiss && cacheWrite > 0 && (
+                  <span aria-hidden='true' className='px-1'>
+                    ·
+                  </span>
+                )}
                 {cacheWrite > 0 && (
-                  <span className='inline-flex items-center gap-0.5 whitespace-nowrap'>
-                    <span aria-hidden='true'>↑</span>
-                    <span className='font-mono'>
+                  <span className='inline-flex items-baseline gap-1'>
+                    <span>{t('Write')}</span>
+                    <span className='text-foreground/80 font-mono'>
                       {cacheWrite.toLocaleString()}
                     </span>
                   </span>
                 )}
               </div>
+            )}
+            {hasCacheBreakdown && inputTotal > 0 && (
+              <span className='mt-0.5 flex items-center gap-2'>
+                <span
+                  data-slot='token-composition-bar'
+                  aria-hidden='true'
+                  className='bg-muted flex h-[3px] min-w-6 flex-1 overflow-hidden rounded-full'
+                >
+                  {cacheRead > 0 && (
+                    <span
+                      className='bg-primary/70 h-full'
+                      style={{ width: `${(cacheRead / inputTotal) * 100}%` }}
+                    />
+                  )}
+                  {freshMiss > 0 && (
+                    <span
+                      className='bg-muted-foreground/25 h-full'
+                      style={{ width: `${(freshMiss / inputTotal) * 100}%` }}
+                    />
+                  )}
+                  {cacheWriteShown > 0 && (
+                    <span
+                      className='bg-primary/30 h-full'
+                      style={{
+                        width: `${(cacheWriteShown / inputTotal) * 100}%`,
+                      }}
+                    />
+                  )}
+                </span>
+                <span className='text-foreground/80 shrink-0 font-mono text-[11px] font-medium whitespace-nowrap tabular-nums'>
+                  {cacheHitRateLabel}
+                </span>
+              </span>
             )}
           </div>
         )

@@ -87,10 +87,9 @@ function DetailPreview(props: { other: LogOtherData; isAdmin: boolean }) {
   return flexRender(cell.column.columnDef.cell, cell.getContext())
 }
 
-function TokenPreview() {
-  const log = { ...makeLog({}), prompt_tokens: 1200, completion_tokens: 800 }
+function TokenPreview(props: { log: UsageLog }) {
   const table = useReactTable({
-    data: [log],
+    data: [props.log],
     columns: useCommonLogsColumns(true, false),
     getCoreRowModel: getCoreRowModel(),
   })
@@ -142,11 +141,17 @@ function renderPreview(other: LogOtherData, isAdmin = true) {
   return screen.getByRole('button', { name: /./ })
 }
 
-function renderTokenPreview() {
+function renderTokenPreview(overrides: Partial<UsageLog> = {}) {
+  const log = {
+    ...makeLog({}),
+    prompt_tokens: 1200,
+    completion_tokens: 800,
+    ...overrides,
+  }
   render(
     <I18nextProvider i18n={i18n}>
       <QueryClientProvider client={client}>
-        <TokenPreview />
+        <TokenPreview log={log} />
       </QueryClientProvider>
     </I18nextProvider>
   )
@@ -156,7 +161,41 @@ test('token column labels input and output counts', () => {
   renderTokenPreview()
 
   const tokenLine = screen.getByText('Input').parentElement?.parentElement
-  expect(tokenLine).toHaveTextContent(/Input\s*1,200\s*Output\s*800/)
+  expect(tokenLine).toHaveTextContent(/Input\s*1,200/)
+  expect(tokenLine).toHaveTextContent(/Output\s*800/)
+  expect(
+    document.querySelector('[data-slot="token-composition-bar"]')
+  ).toBeNull()
+})
+
+test('token column shows the cache breakdown below the totals', () => {
+  renderTokenPreview({
+    prompt_tokens: 154167,
+    completion_tokens: 215,
+    other: JSON.stringify({
+      input_tokens_total: 154167,
+      cache_tokens: 150656,
+      cache_creation_tokens: 100,
+    }),
+  })
+
+  expect(screen.getByText('Input')).toHaveClass('text-muted-foreground/70')
+  expect(screen.getByText('154,167')).toHaveClass('font-semibold')
+  expect(screen.getByText('Output')).toHaveClass('text-muted-foreground/70')
+  expect(screen.getByText('215')).toHaveClass('font-semibold')
+
+  const breakdown = screen.getByText('Hit').parentElement?.parentElement
+  expect(breakdown).toHaveTextContent('150,656')
+  expect(breakdown).toHaveTextContent('Miss')
+  expect(breakdown).toHaveTextContent('3,511')
+  expect(breakdown).toHaveTextContent('Write')
+  expect(breakdown).toHaveTextContent('100')
+
+  const bar = document.querySelector('[data-slot="token-composition-bar"]')
+  expect(bar).not.toBeNull()
+  expect(bar?.children).toHaveLength(3)
+
+  expect(screen.getByText('97.7%')).toBeInTheDocument()
 })
 
 test.each([
