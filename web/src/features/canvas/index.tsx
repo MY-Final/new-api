@@ -19,10 +19,13 @@ For commercial licensing, please contact support@quantumnous.com
 import { useNavigate } from '@tanstack/react-router'
 import {
   AlertCircle,
+  ChevronDown,
   Download,
   Image as ImageIcon,
   ImagePlus,
   Loader2,
+  Minus,
+  Plus,
   Sparkles,
   X,
 } from 'lucide-react'
@@ -40,9 +43,21 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import { ComboboxInput } from '@/components/ui/combobox-input'
-import { Input } from '@/components/ui/input'
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@/components/ui/input-group'
 import { Textarea } from '@/components/ui/textarea'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
 import {
@@ -52,10 +67,16 @@ import {
   getAvailableModels,
 } from './api'
 import {
+  ASPECT_RATIO_VALUES,
+  COUNT_MAX,
+  DEFAULT_ASPECT_RATIO,
+  DEFAULT_COUNT,
   DEFAULT_GROUP,
   DEFAULT_MODEL,
+  DEFAULT_RESOLUTION,
   getCanvasStorageKey,
   IMAGE_SIZES,
+  RESOLUTIONS,
   STORAGE_KEYS,
 } from './constants'
 import {
@@ -63,6 +84,7 @@ import {
   persistImageSource,
   saveHistoryEntries,
 } from './lib/history'
+import { getImageSize, parseImageSize } from './lib/size'
 import type { GroupOption, ImageResponse, ModelOption } from './types'
 
 const MAX_REFERENCE_IMAGES = 4
@@ -162,8 +184,11 @@ export function Canvas() {
   const [sessionUserId, setSessionUserId] = useState<number | null>(null)
   const [group, setGroup] = useState(DEFAULT_GROUP)
   const [model, setModel] = useState(DEFAULT_MODEL)
-  const [size, setSize] = useState<string>('1024x1024')
-  const [n, setN] = useState(1)
+  const [aspectRatio, setAspectRatio] = useState<string>(DEFAULT_ASPECT_RATIO)
+  const [resolution, setResolution] = useState<string>(DEFAULT_RESOLUTION)
+  const [customSize, setCustomSize] = useState('')
+  const [customSizeOpen, setCustomSizeOpen] = useState(false)
+  const [n, setN] = useState(DEFAULT_COUNT)
   const [prompt, setPrompt] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const [previewUrls, setPreviewUrls] = useState<string[]>([])
@@ -175,6 +200,7 @@ export function Canvas() {
   const [previewSrc, setPreviewSrc] = useState<string | null>(null)
   const [hasPendingRestore, setHasPendingRestore] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const settingsHydratedRef = useRef(false)
 
   useEffect(() => {
     setApiKey(null)
@@ -182,8 +208,10 @@ export function Canvas() {
     setHasPendingRestore(false)
     setGroup(DEFAULT_GROUP)
     setModel(DEFAULT_MODEL)
-    setSize('1024x1024')
-    setN(1)
+    setAspectRatio(DEFAULT_ASPECT_RATIO)
+    setResolution(DEFAULT_RESOLUTION)
+    setCustomSize('')
+    setN(DEFAULT_COUNT)
     setPrompt('')
     setFiles([])
     setGroups([])
@@ -191,12 +219,16 @@ export function Canvas() {
     setResults([])
     setError('')
     setPreviewSrc(null)
+    settingsHydratedRef.current = false
 
     let cancelled = false
     if (!userId) return () => undefined
 
     let key: string | null = null
     let savedGroup: string | null = null
+    let savedAspectRatio: string | null = null
+    let savedResolution: string | null = null
+    let savedCount: string | null = null
     try {
       key = sessionStorage.getItem(
         getCanvasStorageKey(STORAGE_KEYS.API_KEY, userId)
@@ -204,12 +236,42 @@ export function Canvas() {
       savedGroup = sessionStorage.getItem(
         getCanvasStorageKey(STORAGE_KEYS.GROUP, userId)
       )
+      savedAspectRatio = sessionStorage.getItem(
+        getCanvasStorageKey(STORAGE_KEYS.ASPECT_RATIO, userId)
+      )
+      savedResolution = sessionStorage.getItem(
+        getCanvasStorageKey(STORAGE_KEYS.RESOLUTION, userId)
+      )
+      savedCount = sessionStorage.getItem(
+        getCanvasStorageKey(STORAGE_KEYS.COUNT, userId)
+      )
     } catch {
       // Private browsing can block session storage; Canvas remains usable after import.
     }
     setApiKey(key)
     setSessionUserId(userId)
     if (savedGroup) setGroup(savedGroup)
+    if (
+      savedAspectRatio &&
+      (ASPECT_RATIO_VALUES as readonly string[]).includes(savedAspectRatio)
+    ) {
+      setAspectRatio(savedAspectRatio)
+    }
+    if (
+      savedResolution &&
+      RESOLUTIONS.some((item) => item.value === savedResolution)
+    ) {
+      setResolution(savedResolution)
+    }
+    const restoredCount = Number(savedCount)
+    if (
+      Number.isInteger(restoredCount) &&
+      restoredCount >= 1 &&
+      restoredCount <= COUNT_MAX
+    ) {
+      setN(restoredCount)
+    }
+    settingsHydratedRef.current = true
     getAvailableGroups()
       .then((nextGroups) => {
         if (!cancelled) setGroups(nextGroups)
@@ -239,12 +301,22 @@ export function Canvas() {
           if (typeof data.prompt === 'string') setPrompt(data.prompt)
           if (typeof data.model === 'string') setModel(data.model)
           if (typeof data.group === 'string') setGroup(data.group)
-          if (typeof data.size === 'string') setSize(data.size)
+          if (typeof data.size === 'string' && data.size.trim() !== '') {
+            const parsedSize = parseImageSize(data.size)
+            if (parsedSize) {
+              setAspectRatio(parsedSize.aspectRatio)
+              setResolution(parsedSize.resolution)
+              setCustomSize('')
+            } else {
+              setCustomSize(data.size)
+              setCustomSizeOpen(true)
+            }
+          }
           if (
             typeof data.n === 'number' &&
             Number.isInteger(data.n) &&
             data.n >= 1 &&
-            data.n <= 4
+            data.n <= COUNT_MAX
           ) {
             setN(data.n)
           }
@@ -263,6 +335,26 @@ export function Canvas() {
       cancelled = true
     }
   }, [userId])
+
+  useEffect(() => {
+    if (!settingsHydratedRef.current || !userId) return
+    try {
+      sessionStorage.setItem(
+        getCanvasStorageKey(STORAGE_KEYS.ASPECT_RATIO, userId),
+        aspectRatio
+      )
+      sessionStorage.setItem(
+        getCanvasStorageKey(STORAGE_KEYS.RESOLUTION, userId),
+        resolution
+      )
+      sessionStorage.setItem(
+        getCanvasStorageKey(STORAGE_KEYS.COUNT, userId),
+        String(n)
+      )
+    } catch {
+      // Ignore unavailable session storage.
+    }
+  }, [aspectRatio, resolution, n, userId])
 
   useEffect(() => {
     if (!userId || !group) return () => undefined
@@ -321,6 +413,11 @@ export function Canvas() {
     setFiles((prev) => prev.filter((item) => item !== file))
   }
 
+  const effectiveSize =
+    customSize.trim() !== ''
+      ? customSize.trim()
+      : getImageSize(aspectRatio, resolution)
+
   const handleGenerate = async () => {
     if (!apiKey || !userId || sessionUserId !== userId) {
       setError(t('Please import an API key first.'))
@@ -341,11 +438,17 @@ export function Canvas() {
       const response =
         files.length > 0
           ? await editImage(
-              { model, prompt: prompt.trim(), size, n, images: files },
+              {
+                model,
+                prompt: prompt.trim(),
+                size: effectiveSize,
+                n,
+                images: files,
+              },
               apiKey
             )
           : await generateImages(
-              { model, prompt: prompt.trim(), size, n },
+              { model, prompt: prompt.trim(), size: effectiveSize, n },
               apiKey
             )
       const images = await Promise.all(
@@ -365,7 +468,7 @@ export function Canvas() {
           prompt: prompt.trim(),
           model,
           group,
-          size,
+          size: effectiveSize ?? '',
           n,
           createdAt: now,
         }))
@@ -485,35 +588,147 @@ export function Canvas() {
                 />
               </div>
 
-              <div className='grid grid-cols-2 gap-3'>
-                <div className='space-y-2'>
-                  <label className='text-sm font-medium'>{t('Size')}</label>
+              <div className='space-y-2'>
+                <label className='text-sm font-medium'>
+                  {t('Aspect Ratio')}
+                </label>
+                <ToggleGroup
+                  value={[aspectRatio]}
+                  onValueChange={(values) => {
+                    if (values.length > 0) setAspectRatio(values[0])
+                  }}
+                  variant='outline'
+                  size='sm'
+                  className='flex-wrap'
+                  aria-label={t('Aspect Ratio')}
+                >
+                  {ASPECT_RATIO_VALUES.map((value) => (
+                    <ToggleGroupItem key={value} value={value}>
+                      {value === 'auto' ? t('Auto') : value}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+              </div>
+
+              <div className='space-y-2'>
+                <label className='text-sm font-medium'>{t('Resolution')}</label>
+                <ToggleGroup
+                  value={[resolution]}
+                  onValueChange={(values) => {
+                    if (values.length > 0) setResolution(values[0])
+                  }}
+                  variant='outline'
+                  size='sm'
+                  disabled={aspectRatio === 'auto'}
+                  className='flex-wrap'
+                  aria-label={t('Resolution')}
+                >
+                  {RESOLUTIONS.map((item) => (
+                    <ToggleGroupItem key={item.value} value={item.value}>
+                      {item.value}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+                <p className='text-muted-foreground text-xs'>
+                  {t('Actual size')}:{' '}
+                  {effectiveSize
+                    ? effectiveSize.replace('x', ' × ')
+                    : t('Determined by model')}
+                </p>
+              </div>
+
+              <Collapsible
+                open={customSizeOpen}
+                onOpenChange={setCustomSizeOpen}
+              >
+                <CollapsibleTrigger
+                  render={
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='sm'
+                      className='-ml-2 h-7 gap-1 px-2 text-xs'
+                    />
+                  }
+                >
+                  <ChevronDown
+                    className={cn(
+                      'h-3.5 w-3.5 transition-transform',
+                      customSizeOpen && 'rotate-180'
+                    )}
+                  />
+                  {t('Custom size')}
+                  {customSize && (
+                    <span className='text-muted-foreground'>
+                      ({customSize})
+                    </span>
+                  )}
+                </CollapsibleTrigger>
+                <CollapsibleContent className='space-y-2 pt-2'>
                   <ComboboxInput
                     className='w-full'
                     options={sizeOptions}
-                    value={size}
-                    onValueChange={(value) => setSize(value)}
+                    value={customSize}
+                    onValueChange={(value) => setCustomSize(value)}
                     placeholder={t('Select a size')}
                     emptyText={t('No size found.')}
                   />
-                </div>
-                <div className='space-y-2'>
-                  <label className='text-sm font-medium'>{t('Count')}</label>
-                  <Input
+                  {customSize && (
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='sm'
+                      className='h-7 px-2 text-xs'
+                      onClick={() => setCustomSize('')}
+                    >
+                      {t('Clear custom size')}
+                    </Button>
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
+
+              <div className='space-y-2'>
+                <label className='text-sm font-medium'>{t('Quantity')}</label>
+                <InputGroup className='w-full'>
+                  <InputGroupAddon align='inline-start'>
+                    <InputGroupButton
+                      size='icon-xs'
+                      onClick={() => setN((prev) => Math.max(1, prev - 1))}
+                      disabled={n <= 1}
+                      aria-label={t('Decrease')}
+                    >
+                      <Minus />
+                    </InputGroupButton>
+                  </InputGroupAddon>
+                  <InputGroupInput
                     type='number'
                     min={1}
-                    max={4}
+                    max={COUNT_MAX}
                     value={n}
+                    aria-label={t('Quantity')}
+                    className='text-center tabular-nums'
                     onChange={(event) =>
                       setN(
                         Math.max(
                           1,
-                          Math.min(4, Number(event.target.value) || 1)
+                          Math.min(COUNT_MAX, Number(event.target.value) || 1)
                         )
                       )
                     }
                   />
-                </div>
+                  <InputGroupAddon align='inline-end'>
+                    <InputGroupButton
+                      size='icon-xs'
+                      onClick={() =>
+                        setN((prev) => Math.min(COUNT_MAX, prev + 1))
+                      }
+                      disabled={n >= COUNT_MAX}
+                      aria-label={t('Increase')}
+                    >
+                      <Plus />
+                    </InputGroupButton>
+                  </InputGroupAddon>
+                </InputGroup>
               </div>
 
               <div className='space-y-2'>

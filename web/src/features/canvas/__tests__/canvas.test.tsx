@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { getCanvasStorageKey, STORAGE_KEYS } from '@/features/canvas/constants'
@@ -27,6 +27,8 @@ import { Canvas } from '..'
 const mocks = vi.hoisted(() => ({
   getAvailableGroups: vi.fn(),
   getAvailableModels: vi.fn(),
+  generateImages: vi.fn(),
+  editImage: vi.fn(),
   downloadImage: vi.fn(),
   persistImageSource: vi.fn(),
   saveHistoryEntries: vi.fn(),
@@ -37,8 +39,8 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 vi.mock('../api', () => ({
-  editImage: vi.fn(),
-  generateImages: vi.fn(),
+  editImage: mocks.editImage,
+  generateImages: mocks.generateImages,
   getAvailableGroups: mocks.getAvailableGroups,
   getAvailableModels: mocks.getAvailableModels,
 }))
@@ -52,6 +54,11 @@ vi.mock('../lib/history', () => ({
 beforeEach(() => {
   sessionStorage.clear()
   useAuthStore.getState().auth.setUser({ id: 7, username: 'user', role: 1 })
+  mocks.getAvailableGroups.mockReset()
+  mocks.getAvailableModels.mockReset()
+  mocks.generateImages.mockReset()
+  mocks.editImage.mockReset()
+  mocks.saveHistoryEntries.mockReset()
   mocks.getAvailableGroups.mockResolvedValue([])
   mocks.getAvailableModels.mockResolvedValue([])
 })
@@ -123,5 +130,66 @@ describe('Canvas restore flow', () => {
     )
     await waitFor(() => expect(prompt).toHaveValue('restore this prompt'))
     expect(sessionStorage.getItem(restoreKey)).toBe(null)
+  })
+
+  test('sends the composed size for the selected ratio and resolution', async () => {
+    sessionStorage.setItem(
+      getCanvasStorageKey(STORAGE_KEYS.API_KEY, 7),
+      'canvas-key'
+    )
+    sessionStorage.setItem(
+      getCanvasStorageKey(STORAGE_KEYS.RESTORE, 7),
+      JSON.stringify({ userId: 7, model: 'image-model', prompt: 'cats' })
+    )
+    mocks.generateImages.mockResolvedValue({ data: [] })
+    mocks.saveHistoryEntries.mockResolvedValue({ success: true })
+
+    render(<Canvas />)
+
+    const prompt = await screen.findByPlaceholderText(
+      'Describe the image you want to create...'
+    )
+    await waitFor(() => expect(prompt).toHaveValue('cats'))
+
+    fireEvent.click(screen.getByRole('button', { name: '16:9' }))
+    fireEvent.click(screen.getByRole('button', { name: '512P' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }))
+
+    await waitFor(() =>
+      expect(mocks.generateImages).toHaveBeenCalledWith(
+        expect.objectContaining({ size: '512x288', n: 1 }),
+        'canvas-key'
+      )
+    )
+  })
+
+  test('omits the size when the ratio is automatic', async () => {
+    sessionStorage.setItem(
+      getCanvasStorageKey(STORAGE_KEYS.API_KEY, 7),
+      'canvas-key'
+    )
+    sessionStorage.setItem(
+      getCanvasStorageKey(STORAGE_KEYS.RESTORE, 7),
+      JSON.stringify({ userId: 7, model: 'image-model', prompt: 'cats' })
+    )
+    mocks.generateImages.mockResolvedValue({ data: [] })
+    mocks.saveHistoryEntries.mockResolvedValue({ success: true })
+
+    render(<Canvas />)
+
+    const prompt = await screen.findByPlaceholderText(
+      'Describe the image you want to create...'
+    )
+    await waitFor(() => expect(prompt).toHaveValue('cats'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auto' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }))
+
+    await waitFor(() =>
+      expect(mocks.generateImages).toHaveBeenCalledWith(
+        expect.objectContaining({ size: undefined }),
+        'canvas-key'
+      )
+    )
   })
 })

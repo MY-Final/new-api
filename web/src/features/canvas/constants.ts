@@ -32,10 +32,38 @@ export const IMAGE_SIZES = [
   '1024x1792',
 ] as const
 
+export const ASPECT_RATIO_VALUES = [
+  'auto',
+  '1:1',
+  '4:3',
+  '3:2',
+  '16:9',
+  '21:9',
+  '3:4',
+  '2:3',
+  '9:16',
+] as const
+
+export const RESOLUTIONS = [
+  { value: '512P', longEdge: 512 },
+  { value: '1024P', longEdge: 1024 },
+  { value: '1536P', longEdge: 1536 },
+  { value: '2048P', longEdge: 2048 },
+  { value: '4K', longEdge: 4096 },
+] as const
+
+export const DEFAULT_ASPECT_RATIO = '1:1'
+export const DEFAULT_RESOLUTION = '1024P'
+export const DEFAULT_COUNT = 1
+export const COUNT_MAX = 10
+
 export const STORAGE_KEYS = {
   API_KEY: 'canvas_api_key',
   GROUP: 'canvas_group',
   RESTORE: 'canvas_restore',
+  ASPECT_RATIO: 'canvas_aspect_ratio',
+  RESOLUTION: 'canvas_resolution',
+  COUNT: 'canvas_count',
 } as const
 
 export function getCanvasStorageKey(key: string, userId: number): string {
