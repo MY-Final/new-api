@@ -71,5 +71,111 @@ describe('affiliate rebate filters', () => {
     expect(comboboxes[1]).toHaveTextContent('全部状态')
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     expect(document.body).not.toHaveTextContent(/^all$/im)
+    expect(
+      screen.getByRole('columnheader', { name: 'Source' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('columnheader', { name: 'Rebate' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('columnheader', { name: 'Status' })
+    ).toBeInTheDocument()
+  })
+
+  test('renders rebate rows with source and status labels in the table', async () => {
+    getAffiliateRebates.mockResolvedValue({
+      data: {
+        items: [
+          {
+            id: 1,
+            inviter_id: 1,
+            invitee_id: 2,
+            invitee_username: 'alice',
+            source_type: 'topup',
+            source_id: 'trade-1',
+            source_key: '',
+            base_quota: 1000000,
+            rate: 500,
+            rebate_quota: 50000,
+            reversed_quota: 0,
+            transferred_quota: 50000,
+            debt_offset_quota: 0,
+            status: 'settled',
+            created_at: 1700000000,
+            settled_at: 1700000000,
+            reversed_at: 0,
+          },
+        ],
+        total: 1,
+      },
+    })
+
+    renderPage()
+
+    await screen.findByText('alice')
+    expect(screen.getByRole('cell', { name: /Top-up/ })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: /Settled/ })).toBeInTheDocument()
+  })
+
+  test('renders the mobile list layout on narrow viewports', async () => {
+    getAffiliateRebates.mockResolvedValue({
+      data: {
+        items: [
+          {
+            id: 2,
+            inviter_id: 1,
+            invitee_id: 3,
+            invitee_username: 'bob',
+            source_type: 'signup',
+            source_id: 'signup-3',
+            source_key: '',
+            base_quota: 0,
+            rate: 500,
+            rebate_quota: 1000,
+            reversed_quota: 0,
+            transferred_quota: 1000,
+            debt_offset_quota: 0,
+            status: 'settled',
+            created_at: 1700000000,
+            settled_at: 1700000000,
+            reversed_at: 0,
+          },
+        ],
+        total: 1,
+      },
+    })
+    const originalMatchMedia = window.matchMedia
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: (query: string) => ({
+        matches: query.includes('max-width: 640px'),
+        media: query,
+        onchange: null,
+        addListener: () => undefined,
+        removeListener: () => undefined,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+        dispatchEvent: () => false,
+      }),
+    })
+
+    try {
+      renderPage()
+
+      await screen.findByText('bob')
+      expect(screen.queryByRole('columnheader')).not.toBeInTheDocument()
+      expect(
+        screen.getByText('Settled', {
+          selector: '[data-slot=status-badge] span',
+        })
+      ).toBeInTheDocument()
+    } finally {
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        writable: true,
+        value: originalMatchMedia,
+      })
+    }
   })
 })
