@@ -82,6 +82,23 @@ export interface FinancialOperation {
   created_at: number
 }
 
+export type FinanceSection = 'topups' | 'redemptions' | 'rebates' | 'operations'
+
+export type FinanceRecord =
+  | FinanceTopup
+  | FinanceRedemption
+  | FinanceRebate
+  | FinancialOperation
+
+export type PenaltyMode = 'request' | 'custom'
+
+export type FinanceAction =
+  | { kind: 'topup-refund'; item: FinanceTopup }
+  | { kind: 'redemption-refund'; item: FinanceRedemption }
+  | { kind: 'rebate-reverse'; item: FinanceRebate }
+  | { kind: 'penalty'; item?: undefined }
+  | { kind: 'penalty-reverse'; item: FinancialOperation }
+
 export interface FinanceFilters {
   page: number
   pageSize: number

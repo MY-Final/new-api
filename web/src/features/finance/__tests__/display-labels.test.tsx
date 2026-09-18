@@ -136,6 +136,67 @@ describe('finance display labels', () => {
     expect(comboboxes[1]).toHaveTextContent('全部支付平台')
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     expect(document.body).not.toHaveTextContent(/^all$/im)
+    expect(
+      screen.getByRole('columnheader', { name: 'Order number' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('columnheader', { name: 'Amount' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('columnheader', { name: 'Status' })
+    ).toBeInTheDocument()
+  })
+
+  test('renders the mobile list layout on narrow viewports', async () => {
+    getFinanceTopups.mockResolvedValue({
+      items: [
+        {
+          id: 8,
+          user_id: 12,
+          amount: 1000000,
+          money: 10,
+          trade_no: 'trade-8',
+          payment_method: 'epay',
+          create_time: 1700000000,
+          status: 'success',
+          source: 'topup',
+        },
+      ],
+      total: 1,
+    })
+    const originalMatchMedia = window.matchMedia
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: (query: string) => ({
+        matches: query.includes('max-width: 640px'),
+        media: query,
+        onchange: null,
+        addListener: () => undefined,
+        removeListener: () => undefined,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+        dispatchEvent: () => false,
+      }),
+    })
+
+    try {
+      renderPage()
+
+      await screen.findByText('trade-8')
+      expect(screen.queryByRole('columnheader')).not.toBeInTheDocument()
+      expect(
+        screen.getByText('Success', {
+          selector: '[data-slot=status-badge] span',
+        })
+      ).toBeInTheDocument()
+    } finally {
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        writable: true,
+        value: originalMatchMedia,
+      })
+    }
   })
 
   test('opens the refund dialog and submits after confirmation', async () => {
@@ -161,7 +222,10 @@ describe('finance display labels', () => {
     renderPage()
 
     await screen.findByText('trade-7')
-    fireEvent.click(screen.getByRole('button', { name: 'Refund' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }))
+    fireEvent.click(
+      await screen.findByRole('menuitem', { name: 'Refund top-up' })
+    )
 
     expect(
       await screen.findByRole('heading', { name: 'Refund top-up' })
