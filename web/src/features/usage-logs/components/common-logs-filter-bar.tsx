@@ -125,7 +125,12 @@ export function CommonLogsFilterBar<TData>(
   const queryClient = useQueryClient()
   const searchParams = route.useSearch()
   const { isAdminView: isAdmin } = useLogsViewScope()
-  const { sensitiveVisible, setSensitiveVisible } = useUsageLogsContext()
+  const {
+    sensitiveVisible,
+    setSensitiveVisible,
+    autoRefreshInterval,
+    setAutoRefreshInterval,
+  } = useUsageLogsContext()
   const fetchingLogs = useIsFetching({ queryKey: ['logs'] })
   const { data: adminGroups } = useQuery({
     queryKey: ['groups'],
@@ -489,7 +494,12 @@ export function CommonLogsFilterBar<TData>(
       compactMobile
       stats={statsBar}
       actionStart={sensitiveToggle}
-      autoRefreshControl={<AutoRefreshControl />}
+      autoRefreshControl={
+        <AutoRefreshControl
+          autoRefreshInterval={autoRefreshInterval}
+          onAutoRefreshIntervalChange={setAutoRefreshInterval}
+        />
+      }
       primaryFilters={
         <>
           {dateRangeFilter}

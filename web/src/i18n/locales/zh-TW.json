@@ -6323,6 +6323,7 @@
     "US dollar (USD)": "美元（USD）",
     "Usage": "用量",
     "Usage · {{price}}": "用量 · {{price}}",
+    "Usage appears here after you make your first API request.": "發起第一次 API 請求後，這裡會顯示用量資料。",
     "Usage at a glance": "用量概覽",
     "Usage Details": "用量詳情",
     "Usage guide": "使用教學",

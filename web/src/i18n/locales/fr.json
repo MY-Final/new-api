@@ -6323,6 +6323,7 @@
     "US dollar (USD)": "Dollar américain (USD)",
     "Usage": "Utilisation",
     "Usage · {{price}}": "Usage · {{price}}",
+    "Usage appears here after you make your first API request.": "Les statistiques d’utilisation apparaîtront ici après votre première requête API.",
     "Usage at a glance": "Vue d'ensemble de l'utilisation",
     "Usage Details": "Détails de l'utilisation",
     "Usage guide": "Guide d'utilisation",

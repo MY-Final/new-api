@@ -1,3 +1,6 @@
+import type { Table } from '@tanstack/react-table'
+import { useTranslation } from 'react-i18next'
+
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -17,11 +20,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Combobox } from '@/components/ui/combobox'
-import type { Table } from '@tanstack/react-table'
-import { useTranslation } from 'react-i18next'
 
-
-
+import { AutoRefreshControl } from '../../components/auto-refresh-control'
 import { CompactDateTimeRangePicker } from '../../components/compact-date-time-range-picker'
 import {
   LogsFilterField,
@@ -39,14 +39,14 @@ function AuditFilterSelect(props: {
   return (
     <LogsFilterField>
       <Combobox
-options={props.options}
-value={props.value}
-onValueChange={(value) => {
+        options={props.options}
+        value={props.value}
+        onValueChange={(value) => {
           if (value !== null) props.onChange(value)
         }}
-aria-label={props.label}
-className='w-full'
-/>
+        aria-label={props.label}
+        className='w-full'
+      />
     </LogsFilterField>
   )
 }
@@ -61,6 +61,8 @@ export function AuditLogFilterBar(props: {
   currentTokenRef?: string
   onTokenScopeChange: (value: string) => void
   isFetching: boolean
+  autoRefreshInterval: number
+  onAutoRefreshIntervalChange: (interval: number) => void
   onSearch: () => void
   onReset: () => void
 }) {
@@ -218,6 +220,12 @@ export function AuditLogFilterBar(props: {
       }
       mobileFilterCount={filterCount}
       advancedFilterCount={advancedCount}
+      autoRefreshControl={
+        <AutoRefreshControl
+          autoRefreshInterval={props.autoRefreshInterval}
+          onAutoRefreshIntervalChange={props.onAutoRefreshIntervalChange}
+        />
+      }
       hasActiveFilters={hasFilters}
       hasAdvancedActiveFilters={advancedCount > 0}
       searchLoading={props.isFetching}

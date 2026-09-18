@@ -28,6 +28,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
+import { AUTO_REFRESH_STORAGE_KEY } from '@/hooks'
 import { api } from '@/lib/api'
 
 import { UsageLogsProvider } from '../usage-logs-provider'
@@ -103,6 +104,7 @@ afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
   vi.useRealTimers()
+  localStorage.clear()
   if (pointerCaptureDescriptor) {
     Object.defineProperty(
       HTMLElement.prototype,
@@ -143,6 +145,7 @@ it('refreshes logs and stats on the selected interval and stops when disabled', 
   expect(
     screen.getByRole('button', { name: 'Auto refresh · 5 seconds' })
   ).toBeVisible()
+  expect(localStorage.getItem(AUTO_REFRESH_STORAGE_KEY)).toBe('5000')
 
   await vi.advanceTimersByTimeAsync(5_000)
   await vi.waitFor(() => {

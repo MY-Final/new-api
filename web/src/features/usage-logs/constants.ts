@@ -45,22 +45,6 @@ export const DEFAULT_LOGS_DATA = {
 }
 
 // ============================================================================
-// Auto Refresh
-// ============================================================================
-
-/**
- * Auto-refresh cadence options for usage logs. `0` means disabled and is the
- * default; `labelKey` is an i18n key resolved at render time.
- */
-export const AUTO_REFRESH_INTERVALS = [
-  { value: 0, labelKey: 'Off' },
-  { value: 5000, labelKey: '5 seconds' },
-  { value: 10000, labelKey: '10 seconds' },
-  { value: 60000, labelKey: '1 minute' },
-  { value: 300000, labelKey: '5 minutes' },
-] as const
-
-// ============================================================================
 // Log Type Enum
 // ============================================================================
 

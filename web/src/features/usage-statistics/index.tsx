@@ -17,12 +17,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
+import { KeyRound } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import { EmptyState } from '@/components/empty-state'
 import { ErrorState } from '@/components/error-state'
 import { SectionPageLayout } from '@/components/layout'
+import { Button } from '@/components/ui/button'
 import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
 import { dateToUnixTimestamp, getRollingDateRange } from '@/lib/time'
 
@@ -92,6 +96,7 @@ export function UsageStatistics() {
   }
 
   const today = todayQuery.data?.summary
+  const hasUsage = (usageQuery.data?.summary.request_count ?? 0) > 0
   let usageContent: ReactNode
   if (usageQuery.isError) {
     usageContent = (
@@ -105,8 +110,22 @@ export function UsageStatistics() {
         onRetry={() => usageQuery.refetch()}
       />
     )
-  } else if (usageQuery.data) {
+  } else if (usageQuery.data && hasUsage) {
     usageContent = <UsageOverview data={usageQuery.data} range={range} />
+  } else if (usageQuery.data) {
+    usageContent = (
+      <EmptyState
+        bordered
+        icon={KeyRound}
+        title={t('No usage data')}
+        description={t(
+          'Usage appears here after you make your first API request.'
+        )}
+        action={
+          <Button render={<Link to='/keys' />}>{t('Create API Key')}</Button>
+        }
+      />
+    )
   } else {
     usageContent = (
       <div className='text-muted-foreground rounded-lg border p-8 text-center text-sm'>
@@ -133,15 +152,17 @@ export function UsageStatistics() {
 
           {usageContent}
 
-          <section className='space-y-2'>
-            <h3 className='text-sm font-semibold'>{t('Request Details')}</h3>
-            <UsageRequestsTable
-              key={`${selectedParams.start_timestamp}-${selectedParams.end_timestamp}`}
-              endpoint='/api/statistics/my/requests'
-              params={selectedParams}
-              queryKey='my-requests'
-            />
-          </section>
+          {(!usageQuery.data || hasUsage) && (
+            <section className='space-y-2'>
+              <h3 className='text-sm font-semibold'>{t('Request Details')}</h3>
+              <UsageRequestsTable
+                key={`${selectedParams.start_timestamp}-${selectedParams.end_timestamp}`}
+                endpoint='/api/statistics/my/requests'
+                params={selectedParams}
+                queryKey='my-requests'
+              />
+            </section>
+          )}
         </div>
       </SectionPageLayout.Content>
     </SectionPageLayout>

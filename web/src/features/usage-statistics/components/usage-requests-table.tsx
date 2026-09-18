@@ -101,7 +101,7 @@ export function UsageRequestsTable(props: UsageRequestsTableProps) {
           {formatTimestamp(item.created_at)}
         </TableCell>
         <TableCell
-          className='max-w-40 truncate font-mono text-xs'
+          className='hidden max-w-40 truncate font-mono text-xs xl:table-cell'
           title={item.request_id}
         >
           {item.request_id || '-'}
@@ -109,23 +109,26 @@ export function UsageRequestsTable(props: UsageRequestsTableProps) {
         <TableCell className='max-w-44 truncate' title={item.model_name}>
           {item.model_name || '-'}
         </TableCell>
-        <TableCell className='max-w-36 truncate' title={item.channel_name}>
+        <TableCell
+          className='hidden max-w-36 truncate lg:table-cell'
+          title={item.channel_name}
+        >
           {item.channel_name || (item.channel_id ? `#${item.channel_id}` : '-')}
         </TableCell>
         <TableCell>{item.success ? t('Success') : t('Failed')}</TableCell>
-        <TableCell className='text-right tabular-nums'>
+        <TableCell className='hidden text-right tabular-nums lg:table-cell'>
           {formatNumber(item.input_tokens)}
         </TableCell>
-        <TableCell className='text-right tabular-nums'>
+        <TableCell className='hidden text-right tabular-nums lg:table-cell'>
           {formatNumber(item.output_tokens)}
         </TableCell>
-        <TableCell className='text-right tabular-nums'>
+        <TableCell className='hidden text-right tabular-nums xl:table-cell'>
           {formatNumber(item.cache_read_tokens)}
         </TableCell>
-        <TableCell className='text-right tabular-nums'>
+        <TableCell className='hidden text-right tabular-nums xl:table-cell'>
           {formatNumber(item.cache_write_tokens)}
         </TableCell>
-        <TableCell className='text-right tabular-nums'>
+        <TableCell className='hidden text-right tabular-nums xl:table-cell'>
           {formatNumber(item.reasoning_tokens)}
         </TableCell>
         <TableCell className='text-right tabular-nums'>
@@ -152,19 +155,33 @@ export function UsageRequestsTable(props: UsageRequestsTableProps) {
   return (
     <div className='space-y-2'>
       <div className='overflow-x-auto rounded-lg border'>
-        <Table className='min-w-[1180px]'>
+        <Table className='min-w-[560px] lg:min-w-[900px] xl:min-w-[1180px]'>
           <TableHeader>
             <TableRow>
               <TableHead>{t('Time')}</TableHead>
-              <TableHead>{t('Request ID')}</TableHead>
+              <TableHead className='hidden xl:table-cell'>
+                {t('Request ID')}
+              </TableHead>
               <TableHead>{t('Model')}</TableHead>
-              <TableHead>{t('Channel')}</TableHead>
+              <TableHead className='hidden lg:table-cell'>
+                {t('Channel')}
+              </TableHead>
               <TableHead>{t('Status')}</TableHead>
-              <TableHead className='text-right'>{t('Input Tokens')}</TableHead>
-              <TableHead className='text-right'>{t('Output Tokens')}</TableHead>
-              <TableHead className='text-right'>{t('Cache Read')}</TableHead>
-              <TableHead className='text-right'>{t('Cache Write')}</TableHead>
-              <TableHead className='text-right'>{t('Reasoning')}</TableHead>
+              <TableHead className='hidden text-right lg:table-cell'>
+                {t('Input Tokens')}
+              </TableHead>
+              <TableHead className='hidden text-right lg:table-cell'>
+                {t('Output Tokens')}
+              </TableHead>
+              <TableHead className='hidden text-right xl:table-cell'>
+                {t('Cache Read')}
+              </TableHead>
+              <TableHead className='hidden text-right xl:table-cell'>
+                {t('Cache Write')}
+              </TableHead>
+              <TableHead className='hidden text-right xl:table-cell'>
+                {t('Reasoning')}
+              </TableHead>
               <TableHead className='text-right'>{t('Total Tokens')}</TableHead>
               <TableHead className='text-right'>{t('User Cost')}</TableHead>
             </TableRow>

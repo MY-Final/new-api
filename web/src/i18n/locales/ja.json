@@ -6323,6 +6323,7 @@
     "US dollar (USD)": "米ドル（USD）",
     "Usage": "使用量",
     "Usage · {{price}}": "使用量 · {{price}}",
+    "Usage appears here after you make your first API request.": "最初の API リクエスト後に、ここに利用状況が表示されます。",
     "Usage at a glance": "使用状況の概要",
     "Usage Details": "利用状況の詳細",
     "Usage guide": "使用ガイド",

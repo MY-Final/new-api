@@ -24,6 +24,7 @@ import { useTranslation } from 'react-i18next'
 import { DataTablePage, useDataTable } from '@/components/data-table'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { useAutoRefreshInterval } from '@/hooks'
 import { requireServerSuccess } from '@/lib/server-error-message'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -43,6 +44,8 @@ export function AuditLogViewer(props: {
   const userId = useAuthStore((state) => state.auth.user?.id)
   const [filters, setFilters] = useState<AuditFilters>({ p: 1, page_size: 20 })
   const [tokenScope, setTokenScope] = useState('all')
+  const { autoRefreshInterval, setAutoRefreshInterval } =
+    useAutoRefreshInterval()
   const params = { ...filters }
   if (props.accessOnly) params.category = 'access_token'
   if (tokenScope === 'current') params.token_ref = props.currentTokenRef
@@ -63,6 +66,7 @@ export function AuditLogViewer(props: {
       requireServerSuccess(await getAuditLogs(props.scope, params)),
     enabled: canQuery && !invalidRange,
     retry: false,
+    refetchInterval: autoRefreshInterval > 0 ? autoRefreshInterval : false,
   })
   const accessDenied =
     props.scope === 'all' &&
@@ -136,6 +140,8 @@ export function AuditLogViewer(props: {
                 update({})
               }}
               isFetching={query.isFetching}
+              autoRefreshInterval={autoRefreshInterval}
+              onAutoRefreshIntervalChange={setAutoRefreshInterval}
               onSearch={() => {
                 if (!invalidRange && canQuery) void query.refetch()
               }}

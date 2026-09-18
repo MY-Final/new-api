@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, type ReactNode } from 'react'
 
+import { useAutoRefreshInterval } from '@/hooks'
 import { ROLE } from '@/lib/roles'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -68,7 +69,8 @@ export function UsageLogsProvider({ children }: { children: ReactNode }) {
   const [affinityDialogOpen, setAffinityDialogOpen] = useState(false)
   const [sensitiveVisible, setSensitiveVisible] = useState(true)
   const [viewScope, setViewScope] = useState<LogsViewScope>('all')
-  const [autoRefreshInterval, setAutoRefreshInterval] = useState(0)
+  const { autoRefreshInterval, setAutoRefreshInterval } =
+    useAutoRefreshInterval()
 
   return (
     <UsageLogsContext.Provider

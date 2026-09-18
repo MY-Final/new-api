@@ -29,22 +29,24 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { AUTO_REFRESH_INTERVALS } from '@/hooks'
 import { cn } from '@/lib/utils'
 
-import { AUTO_REFRESH_INTERVALS } from '../constants'
-import { useUsageLogsContext } from './usage-logs-provider'
+interface AutoRefreshControlProps {
+  autoRefreshInterval: number
+  onAutoRefreshIntervalChange: (interval: number) => void
+}
 
 /**
  * Toolbar control that toggles automatic log refresh and selects its cadence.
  * Off by default; the current cadence is shown on the trigger while active.
  */
-export function AutoRefreshControl() {
+export function AutoRefreshControl(props: AutoRefreshControlProps) {
   const { t } = useTranslation()
-  const { autoRefreshInterval, setAutoRefreshInterval } = useUsageLogsContext()
   const activeOption = AUTO_REFRESH_INTERVALS.find(
-    (option) => option.value === autoRefreshInterval
+    (option) => option.value === props.autoRefreshInterval
   )
-  const isActive = autoRefreshInterval > 0 && activeOption != null
+  const isActive = props.autoRefreshInterval > 0 && activeOption != null
 
   return (
     <DropdownMenu modal={false}>
@@ -73,8 +75,10 @@ export function AutoRefreshControl() {
         <DropdownMenuGroup>
           <DropdownMenuLabel>{t('Auto refresh')}</DropdownMenuLabel>
           <DropdownMenuRadioGroup
-            value={String(autoRefreshInterval)}
-            onValueChange={(value) => setAutoRefreshInterval(Number(value))}
+            value={String(props.autoRefreshInterval)}
+            onValueChange={(value) =>
+              props.onAutoRefreshIntervalChange(Number(value))
+            }
           >
             {AUTO_REFRESH_INTERVALS.map((option) => (
               <DropdownMenuRadioItem

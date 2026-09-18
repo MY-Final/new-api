@@ -29,9 +29,11 @@ import {
   Wallet,
   type LucideIcon,
 } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
+import { Progress } from '@/components/ui/progress'
 import {
   Table,
   TableBody,
@@ -40,7 +42,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { formatNumber, formatQuota } from '@/lib/format'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { formatNumber, formatPercent, formatQuota } from '@/lib/format'
 
 import { isRangeCoveringToday, type UsageDateRange } from '../lib/usage-range'
 import type { UserUsage, UserUsageAggregate } from '../types'
@@ -187,8 +190,23 @@ export function SummaryMetrics(props: { summary: UserUsageAggregate }) {
   )
 }
 
+type ModelSortBy = 'user_cost' | 'total_tokens' | 'request_count'
+
 export function ModelUsageTable(props: { data: UserUsage['models'] }) {
   const { t } = useTranslation()
+  const [sortBy, setSortBy] = useState<ModelSortBy>('user_cost')
+  const models = useMemo(() => {
+    const sorted = [...props.data]
+    sorted.sort(
+      (a, b) =>
+        b[sortBy] - a[sortBy] || a.model_name.localeCompare(b.model_name)
+    )
+    return sorted
+  }, [props.data, sortBy])
+  const totalCost = useMemo(
+    () => props.data.reduce((sum, item) => sum + item.user_cost, 0),
+    [props.data]
+  )
 
   if (props.data.length === 0) {
     return (
@@ -199,55 +217,98 @@ export function ModelUsageTable(props: { data: UserUsage['models'] }) {
   }
 
   return (
-    <div className='overflow-x-auto rounded-lg border'>
-      <Table className='min-w-[1120px]'>
-        <TableHeader>
-          <TableRow>
-            <TableHead>{t('Model')}</TableHead>
-            <TableHead className='text-right'>{t('Requests')}</TableHead>
-            <TableHead className='text-right'>{t('Input Tokens')}</TableHead>
-            <TableHead className='text-right'>{t('Output Tokens')}</TableHead>
-            <TableHead className='text-right'>{t('Cache Read')}</TableHead>
-            <TableHead className='text-right'>{t('Cache Write')}</TableHead>
-            <TableHead className='text-right'>{t('Reasoning')}</TableHead>
-            <TableHead className='text-right'>{t('Total Tokens')}</TableHead>
-            <TableHead className='text-right'>{t('User Cost')}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {props.data.map((item) => (
-            <TableRow key={item.model_name || '__empty_model__'}>
-              <TableCell className='max-w-52 truncate font-medium'>
-                {item.model_name || '-'}
-              </TableCell>
-              <TableCell className='text-right tabular-nums'>
-                {formatNumber(item.request_count)}
-              </TableCell>
-              <TableCell className='text-right tabular-nums'>
-                {formatNumber(item.input_tokens)}
-              </TableCell>
-              <TableCell className='text-right tabular-nums'>
-                {formatNumber(item.output_tokens)}
-              </TableCell>
-              <TableCell className='text-right tabular-nums'>
-                {formatNumber(item.cache_read_tokens)}
-              </TableCell>
-              <TableCell className='text-right tabular-nums'>
-                {formatNumber(item.cache_write_tokens)}
-              </TableCell>
-              <TableCell className='text-right tabular-nums'>
-                {formatNumber(item.reasoning_tokens)}
-              </TableCell>
-              <TableCell className='text-right tabular-nums'>
-                {formatNumber(item.total_tokens)}
-              </TableCell>
-              <TableCell className='text-right font-medium tabular-nums'>
-                {formatQuota(item.user_cost)}
-              </TableCell>
+    <div className='space-y-2'>
+      <div className='flex justify-end'>
+        <Tabs
+          value={sortBy}
+          onValueChange={(value) => setSortBy(value as ModelSortBy)}
+        >
+          <TabsList>
+            <TabsTrigger value='user_cost'>{t('Cost')}</TabsTrigger>
+            <TabsTrigger value='total_tokens'>{t('Tokens')}</TabsTrigger>
+            <TabsTrigger value='request_count'>{t('Requests')}</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+      <div className='overflow-x-auto rounded-lg border'>
+        <Table className='min-w-[520px] md:min-w-[760px] lg:min-w-[1120px]'>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t('Model')}</TableHead>
+              <TableHead className='text-right'>{t('Requests')}</TableHead>
+              <TableHead className='hidden text-right md:table-cell'>
+                {t('Input Tokens')}
+              </TableHead>
+              <TableHead className='hidden text-right md:table-cell'>
+                {t('Output Tokens')}
+              </TableHead>
+              <TableHead className='hidden text-right lg:table-cell'>
+                {t('Cache Read')}
+              </TableHead>
+              <TableHead className='hidden text-right lg:table-cell'>
+                {t('Cache Write')}
+              </TableHead>
+              <TableHead className='hidden text-right lg:table-cell'>
+                {t('Reasoning')}
+              </TableHead>
+              <TableHead className='text-right'>{t('Total Tokens')}</TableHead>
+              <TableHead className='text-right'>{t('User Cost')}</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {models.map((item) => {
+              const share =
+                totalCost > 0 ? (item.user_cost / totalCost) * 100 : 0
+              return (
+                <TableRow key={item.model_name || '__empty_model__'}>
+                  <TableCell className='max-w-56'>
+                    <div
+                      className='truncate font-medium'
+                      title={item.model_name}
+                    >
+                      {item.model_name || '-'}
+                    </div>
+                    <div className='mt-1 flex items-center gap-2'>
+                      <Progress
+                        value={share}
+                        className='w-24 flex-none gap-0'
+                        aria-hidden='true'
+                      />
+                      <span className='text-muted-foreground text-xs tabular-nums'>
+                        {formatPercent(share)}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell className='text-right tabular-nums'>
+                    {formatNumber(item.request_count)}
+                  </TableCell>
+                  <TableCell className='hidden text-right tabular-nums md:table-cell'>
+                    {formatNumber(item.input_tokens)}
+                  </TableCell>
+                  <TableCell className='hidden text-right tabular-nums md:table-cell'>
+                    {formatNumber(item.output_tokens)}
+                  </TableCell>
+                  <TableCell className='hidden text-right tabular-nums lg:table-cell'>
+                    {formatNumber(item.cache_read_tokens)}
+                  </TableCell>
+                  <TableCell className='hidden text-right tabular-nums lg:table-cell'>
+                    {formatNumber(item.cache_write_tokens)}
+                  </TableCell>
+                  <TableCell className='hidden text-right tabular-nums lg:table-cell'>
+                    {formatNumber(item.reasoning_tokens)}
+                  </TableCell>
+                  <TableCell className='text-right tabular-nums'>
+                    {formatNumber(item.total_tokens)}
+                  </TableCell>
+                  <TableCell className='text-right font-medium tabular-nums'>
+                    {formatQuota(item.user_cost)}
+                  </TableCell>
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   )
 }
