@@ -798,6 +798,12 @@ export const STATIC_I18N_KEYS = [
   'Account binding',
   'Account unlinking',
   'Email confirmation code resend',
+  // Usage logs auto-refresh cadence options.
+  'Off',
+  '5 seconds',
+  '10 seconds',
+  '1 minute',
+  '5 minutes',
   // Model and vendor management labels.
   'Vendors',
   'Vendor management',

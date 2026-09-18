@@ -47,6 +47,10 @@ interface LogsFilterToolbarProps<TData> {
   mobileFilterCount?: number
   stats?: ReactNode
   actionStart?: ReactNode
+  /**
+   * Auto-refresh control rendered next to the Reset action in every layout.
+   */
+  autoRefreshControl?: ReactNode
   hasActiveFilters: boolean
   hasAdvancedActiveFilters?: boolean
   advancedFilterCount?: number
@@ -180,6 +184,7 @@ export function LogsFilterToolbar<TData>(props: LogsFilterToolbarProps<TData>) {
                 className='flex min-w-0 flex-wrap items-center justify-end gap-1.5 [&_button]:h-auto [&_button]:min-h-9 [&_button]:max-w-full [&_button]:[overflow-wrap:anywhere] [&_button]:whitespace-normal'
               >
                 {props.actionStart}
+                {props.autoRefreshControl}
                 <DrawerTrigger asChild>
                   <Button
                     variant='ghost'
@@ -247,6 +252,7 @@ export function LogsFilterToolbar<TData>(props: LogsFilterToolbarProps<TData>) {
                   />
                 </Button>
                 {props.actionStart}
+                {props.autoRefreshControl}
                 <DrawerTrigger asChild>
                   <Button
                     type='button'
@@ -347,6 +353,7 @@ export function LogsFilterToolbar<TData>(props: LogsFilterToolbarProps<TData>) {
         {props.stats}
         <div className='ms-auto flex flex-wrap items-center justify-end gap-1.5 sm:gap-2'>
           {props.actionStart}
+          {props.autoRefreshControl}
           <Button
             type='button'
             variant='outline'

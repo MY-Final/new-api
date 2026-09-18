@@ -18,13 +18,14 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQueryClient, useIsFetching } from '@tanstack/react-query'
 import { useNavigate, getRouteApi } from '@tanstack/react-router'
-import { type Table } from '@tanstack/react-table'
+import type { Table } from '@tanstack/react-table'
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { buildSearchParams } from '../lib/filter'
 import { getDefaultTimeRange } from '../lib/utils'
 import type { DrawingLogFilters, LogCategory, TaskLogFilters } from '../types'
+import { AutoRefreshControl } from './auto-refresh-control'
 import { CompactDateTimeRangePicker } from './compact-date-time-range-picker'
 import {
   LogsFilterField,
@@ -217,6 +218,7 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
         </>
       }
       mobileFilterCount={[filterValue, filters.channel].filter(Boolean).length}
+      autoRefreshControl={<AutoRefreshControl />}
       hasActiveFilters={hasAdditionalFilters}
       onSearch={handleApply}
       searchLoading={fetchingLogs > 0}

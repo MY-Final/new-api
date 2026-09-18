@@ -48,6 +48,7 @@ import { LOG_TYPE_ALL_VALUE, LOG_TYPE_FILTERS } from '../constants'
 import { buildSearchParams } from '../lib/filter'
 import { getDefaultTimeRange } from '../lib/utils'
 import type { CommonLogFilters } from '../types'
+import { AutoRefreshControl } from './auto-refresh-control'
 import { CommonLogsStats } from './common-logs-stats'
 import { CompactDateTimeRangePicker } from './compact-date-time-range-picker'
 import {
@@ -488,6 +489,7 @@ export function CommonLogsFilterBar<TData>(
       compactMobile
       stats={statsBar}
       actionStart={sensitiveToggle}
+      autoRefreshControl={<AutoRefreshControl />}
       primaryFilters={
         <>
           {dateRangeFilter}

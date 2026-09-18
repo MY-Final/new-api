@@ -48,6 +48,12 @@ interface UsageLogsContextValue {
   setSensitiveVisible: (visible: boolean) => void
   viewScope: LogsViewScope
   setViewScope: (scope: LogsViewScope) => void
+  /**
+   * Auto-refresh cadence in milliseconds. `0` keeps auto-refresh off, which
+   * is the default for every visit.
+   */
+  autoRefreshInterval: number
+  setAutoRefreshInterval: (interval: number) => void
 }
 
 const UsageLogsContext = createContext<UsageLogsContextValue | undefined>(
@@ -62,6 +68,7 @@ export function UsageLogsProvider({ children }: { children: ReactNode }) {
   const [affinityDialogOpen, setAffinityDialogOpen] = useState(false)
   const [sensitiveVisible, setSensitiveVisible] = useState(true)
   const [viewScope, setViewScope] = useState<LogsViewScope>('all')
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState(0)
 
   return (
     <UsageLogsContext.Provider
@@ -78,6 +85,8 @@ export function UsageLogsProvider({ children }: { children: ReactNode }) {
         setSensitiveVisible,
         viewScope,
         setViewScope,
+        autoRefreshInterval,
+        setAutoRefreshInterval,
       }}
     >
       {children}
