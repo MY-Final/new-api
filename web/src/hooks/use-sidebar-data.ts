@@ -149,6 +149,7 @@ export function useSidebarData(): SidebarData {
             title: t('Wallet'),
             url: '/wallet',
             icon: Wallet,
+            highlight: true,
           },
           {
             title: t('Usage Statistics'),
@@ -171,6 +172,7 @@ export function useSidebarData(): SidebarData {
                   title: t('Shop'),
                   url: '/shop',
                   icon: Store,
+                  highlight: true,
                 },
               ]
             : []),
