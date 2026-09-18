@@ -293,7 +293,7 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                 name='KunCodeRelayPulseUrl'
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t('KunCodeRelayPulse URL')}</FormLabel>
+                    <FormLabel>{t('Channel Detection URL')}</FormLabel>
                     <FormControl>
                       <Input
                         type='url'
@@ -303,7 +303,7 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                     </FormControl>
                     <FormDescription>
                       {t(
-                        'URL for the KunCodeRelayPulse page. It is embedded in the sidebar. Leave empty to hide it.'
+                        'URL for the Channel Detection page. It is embedded in the sidebar. Leave empty to hide it.'
                       )}
                     </FormDescription>
                     <FormMessage />

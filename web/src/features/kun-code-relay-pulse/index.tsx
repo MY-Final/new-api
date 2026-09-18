@@ -32,11 +32,11 @@ export function KunCodeRelayPulse() {
         {!loading && (
           <div className='max-w-md space-y-2 text-center'>
             <h2 className='text-lg font-semibold'>
-              {t('KunCodeRelayPulse is not configured')}
+              {t('Channel Detection is not configured')}
             </h2>
             <p className='text-muted-foreground text-sm'>
               {t(
-                'The administrator has not configured the KunCodeRelayPulse URL yet.'
+                'The administrator has not configured the Channel Detection URL yet.'
               )}
             </p>
           </div>
@@ -49,7 +49,7 @@ export function KunCodeRelayPulse() {
     /* eslint-disable react/iframe-missing-sandbox -- third-party monitoring page needs its own origin (cookies/sessionStorage) */
     <iframe
       src={relayPulseUrl}
-      title={t('KunCodeRelayPulse')}
+      title={t('Channel Detection')}
       sandbox='allow-scripts allow-same-origin allow-forms allow-popups'
       className='min-h-0 w-full flex-1 border-0'
     />

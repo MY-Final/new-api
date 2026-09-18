@@ -133,7 +133,7 @@ export function SidebarModulesSection({
         description: t('Background job tracker for queued work.'),
       },
       relayPulse: {
-        title: t('KunCodeRelayPulse'),
+        title: t('Channel Detection'),
         description: t('Embedded service monitoring and availability matrix.'),
       },
     },

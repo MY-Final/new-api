@@ -193,7 +193,7 @@ describe('audit log sidebar entry', () => {
   })
 })
 
-describe('KunCodeRelayPulse sidebar entry', () => {
+describe('Channel Detection sidebar entry', () => {
   it('shows only when an embed URL is configured', () => {
     const configured = sidebarFor(
       undefined,
@@ -204,14 +204,14 @@ describe('KunCodeRelayPulse sidebar entry', () => {
     expect(
       configured.result.current
         .flatMap((group) => group.items)
-        .some((item) => item.title === 'KunCodeRelayPulse')
+        .some((item) => item.title === 'Channel Detection')
     ).toBe(true)
 
     const hidden = sidebarFor()
     expect(
       hidden.result.current
         .flatMap((group) => group.items)
-        .some((item) => item.title === 'KunCodeRelayPulse')
+        .some((item) => item.title === 'Channel Detection')
     ).toBe(false)
 
     const disabled = sidebarFor(
@@ -223,7 +223,7 @@ describe('KunCodeRelayPulse sidebar entry', () => {
     expect(
       disabled.result.current
         .flatMap((group) => group.items)
-        .some((item) => item.title === 'KunCodeRelayPulse')
+        .some((item) => item.title === 'Channel Detection')
     ).toBe(false)
   })
 })

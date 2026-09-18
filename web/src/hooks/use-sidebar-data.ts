@@ -121,7 +121,7 @@ export function useSidebarData(): SidebarData {
           ...(relayPulseUrl
             ? [
                 {
-                  title: t('KunCodeRelayPulse'),
+                  title: t('Channel Detection'),
                   url: '/kun-code-relay-pulse',
                   icon: Activity,
                 },
