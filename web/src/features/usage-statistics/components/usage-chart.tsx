@@ -24,6 +24,7 @@ import { formatNumber, formatQuota } from '@/lib/format'
 import { useChartTheme } from '@/lib/use-chart-theme'
 import { VCHART_OPTION } from '@/lib/vchart'
 
+import { buildDailyTimeline, type UsageDateRange } from '../lib/usage-range'
 import type { UserUsage } from '../types'
 
 const LazyVChart = lazy(() =>
@@ -39,21 +40,40 @@ interface UsageChartProps {
   metric: UsageChartMetric
   title: string
   color: string
+  /**
+   * Selected statistics window. When provided, missing days inside it are
+   * filled with zeros so the trend stays continuous instead of collapsing
+   * into a few isolated points.
+   */
+  range?: UsageDateRange
 }
 
 export function UsageChart(props: UsageChartProps) {
   const { t } = useTranslation()
   const { resolvedTheme, themeReady } = useChartTheme()
-  const chartData = useMemo(
-    () =>
-      props.data.map((item) => {
-        let value = item.request_count
-        if (props.metric === 'tokens') value = item.total_tokens
-        if (props.metric === 'cost') value = item.user_cost
-        return { day: item.day, value }
-      }),
-    [props.data, props.metric]
-  )
+  const chartData = useMemo(() => {
+    if (props.data.length === 0) return []
+
+    const valueByDay = new Map<string, number>()
+    for (const item of props.data) {
+      let value = item.request_count
+      if (props.metric === 'tokens') value = item.total_tokens
+      if (props.metric === 'cost') value = item.user_cost
+      valueByDay.set(item.day, value)
+    }
+
+    if (!props.range) {
+      return props.data.map((item) => ({
+        day: item.day,
+        value: valueByDay.get(item.day) ?? 0,
+      }))
+    }
+
+    return buildDailyTimeline(props.range).map((day) => ({
+      day,
+      value: valueByDay.get(day) ?? 0,
+    }))
+  }, [props.data, props.metric, props.range])
 
   const spec = useMemo(() => {
     if (chartData.length === 0) return null

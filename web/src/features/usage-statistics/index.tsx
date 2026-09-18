@@ -24,18 +24,18 @@ import { toast } from 'sonner'
 import { ErrorState } from '@/components/error-state'
 import { SectionPageLayout } from '@/components/layout'
 import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
-import { formatNumber, formatQuota } from '@/lib/format'
 import { dateToUnixTimestamp, getRollingDateRange } from '@/lib/time'
 
 import { getMyUsage } from './api'
-import { UsageMetric, UsageOverview } from './components/usage-overview'
+import { TodayUsageStrip, UsageOverview } from './components/usage-overview'
 import { UsageRequestsTable } from './components/usage-requests-table'
+import { getDefaultUsageRange, isRangeCoveringToday } from './lib/usage-range'
 
 const MAX_USAGE_RANGE_DAYS = 31
 
 export function UsageStatistics() {
   const { t } = useTranslation()
-  const [range, setRange] = useState(() => getRollingDateRange(30))
+  const [range, setRange] = useState(() => getDefaultUsageRange())
   const selectedParams = useMemo(
     () => ({
       start_timestamp: dateToUnixTimestamp(range.start),
@@ -50,6 +50,7 @@ export function UsageStatistics() {
       end_timestamp: dateToUnixTimestamp(today.end),
     }
   }, [])
+  const showTodayStrip = !isRangeCoveringToday(range)
 
   const todayQuery = useQuery({
     queryKey: ['usage-statistics', 'my', 'today', todayParams],
@@ -61,6 +62,7 @@ export function UsageStatistics() {
       return result.data
     },
     staleTime: 30_000,
+    enabled: showTodayStrip,
   })
   const usageQuery = useQuery({
     queryKey: ['usage-statistics', 'my', selectedParams],
@@ -104,7 +106,7 @@ export function UsageStatistics() {
       />
     )
   } else if (usageQuery.data) {
-    usageContent = <UsageOverview data={usageQuery.data} />
+    usageContent = <UsageOverview data={usageQuery.data} range={range} />
   } else {
     usageContent = (
       <div className='text-muted-foreground rounded-lg border p-8 text-center text-sm'>
@@ -127,38 +129,7 @@ export function UsageStatistics() {
       </SectionPageLayout.Actions>
       <SectionPageLayout.Content>
         <div className='mx-auto w-full max-w-7xl space-y-4'>
-          <section className='space-y-2'>
-            <h3 className='text-sm font-semibold'>{t('Today')}</h3>
-            <div className='grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6'>
-              <UsageMetric
-                label={t('Requests')}
-                value={formatNumber(today?.request_count ?? 0)}
-              />
-              <UsageMetric
-                label={t('Input Tokens')}
-                value={formatNumber(today?.input_tokens ?? 0)}
-              />
-              <UsageMetric
-                label={t('Output Tokens')}
-                value={formatNumber(today?.output_tokens ?? 0)}
-              />
-              <UsageMetric
-                label={t('Cache Tokens')}
-                value={formatNumber(
-                  (today?.cache_read_tokens ?? 0) +
-                    (today?.cache_write_tokens ?? 0)
-                )}
-              />
-              <UsageMetric
-                label={t('Total Tokens')}
-                value={formatNumber(today?.total_tokens ?? 0)}
-              />
-              <UsageMetric
-                label={t('User Cost')}
-                value={formatQuota(today?.user_cost ?? 0)}
-              />
-            </div>
-          </section>
+          {showTodayStrip && <TodayUsageStrip summary={today} />}
 
           {usageContent}
 

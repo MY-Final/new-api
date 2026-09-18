@@ -107,7 +107,7 @@ export function UserUsageDialog(props: UserUsageDialogProps) {
   } else if (usageQuery.data) {
     content = (
       <>
-        <UsageOverview data={usageQuery.data} showAccount />
+        <UsageOverview data={usageQuery.data} showAccount range={range} />
         <section className='space-y-2'>
           <h3 className='text-sm font-semibold'>{t('Request Details')}</h3>
           <UsageRequestsTable
