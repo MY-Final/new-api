@@ -4685,6 +4685,7 @@
     "Redemption codes updated successfully": "Коды погашения обновлены",
     "redemption codes.": "коды активации.",
     "Redemption failed": "Погашение не удалось",
+    "Redemption Ledger": "Реестр кодов активации",
     "Redemption Rebate Rate": "Ставка комиссии за коды",
     "Redemption successful! Added: {{quota}}": "Погашение успешно! Добавлено: {{quota}}",
     "Redirect URL": "URL перенаправления",

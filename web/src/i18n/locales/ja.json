@@ -4685,6 +4685,7 @@
     "Redemption codes updated successfully": "引き換えコードを一括更新しました",
     "redemption codes.": "引き換えコード。",
     "Redemption failed": "交換に失敗しました",
+    "Redemption Ledger": "引き換えコード台帳",
     "Redemption Rebate Rate": "コード紹介還元率",
     "Redemption successful! Added: {{quota}}": "引き換え成功！追加：{{quota}}",
     "Redirect URL": "リダイレクト URL",

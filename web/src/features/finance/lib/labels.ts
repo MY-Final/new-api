@@ -6,7 +6,7 @@ import type { FinanceSection } from '../types'
 
 export const sectionNames: Record<FinanceSection, string> = {
   topups: 'Top-up Orders',
-  redemptions: 'Redemption Codes',
+  redemptions: 'Redemption Ledger',
   rebates: 'Rebate Ledger',
   operations: 'Financial Operations',
 }

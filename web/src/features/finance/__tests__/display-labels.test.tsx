@@ -76,6 +76,7 @@ await i18n.use(initReactI18next).init({
         'No financial records found': '暂无财务记录',
         'No users found': '未找到用户',
         'Rebate Ledger': '返佣账本',
+        'Redemption Ledger': '兑换码台账',
         'Request-based penalty': '按请求罚款',
         'Search by username, name, or ID': '按用户名、名称或 ID 搜索',
         'Target user': '目标用户',
@@ -130,6 +131,7 @@ describe('finance display labels', () => {
     await waitFor(() => expect(getFinanceTopups).toHaveBeenCalled())
 
     expect(screen.getByRole('link', { name: '充值订单' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '兑换码台账' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '返佣账本' })).toBeInTheDocument()
     const comboboxes = screen.getAllByRole('combobox')
     expect(comboboxes[0]).toHaveTextContent('全部状态')
