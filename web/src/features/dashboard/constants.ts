@@ -27,12 +27,14 @@ export const MAX_CHART_TREND_POINTS = 7
 export const DEFAULT_DASHBOARD_CHART_PREFERENCES: DashboardChartPreferences = {
   consumptionDistributionChart: 'bar',
   modelAnalyticsChart: 'trend',
-  defaultTimeRangeDays: 1,
+  defaultTimeRangeDays: 0,
   defaultTimeGranularity: DEFAULT_TIME_GRANULARITY,
 }
 
+// Fallback range for a given granularity. Hourly analytics defaults to the
+// current calendar day so the dashboard opens on today's consumption.
 export const TIME_RANGE_BY_GRANULARITY = {
-  hour: 1,
+  hour: 0,
   day: 7,
   week: 30,
 } as const
