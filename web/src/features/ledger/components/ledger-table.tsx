@@ -73,6 +73,7 @@ export function LedgerTable(props: {
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title={t('Date')} />
         ),
+        meta: { label: t('Date') },
         cell: ({ row }) => (
           <span className='tabular-nums'>{row.original.date}</span>
         ),
@@ -83,6 +84,7 @@ export function LedgerTable(props: {
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title={t('Username')} />
         ),
+        meta: { label: t('Username') },
         cell: ({ row }) => (
           <span className='truncate'>
             {row.original.username || `#${row.original.user_id}`}
@@ -95,6 +97,7 @@ export function LedgerTable(props: {
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title={t('Welfare quota')} />
         ),
+        meta: { label: t('Welfare quota') },
         cell: ({ row }) => <QuotaValue value={row.original.bonus_quota} />,
       },
       {
@@ -103,6 +106,7 @@ export function LedgerTable(props: {
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title={t('Paid quota')} />
         ),
+        meta: { label: t('Paid quota') },
         cell: ({ row }) => <QuotaValue value={row.original.paid_quota} />,
       },
       {
@@ -110,6 +114,7 @@ export function LedgerTable(props: {
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title={t('Total')} />
         ),
+        meta: { label: t('Total') },
         cell: ({ row }) => (
           <QuotaValue
             value={row.original.bonus_quota + row.original.paid_quota}
@@ -122,6 +127,7 @@ export function LedgerTable(props: {
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title={t('Updated at')} />
         ),
+        meta: { label: t('Updated at') },
         cell: ({ row }) => (
           <span className='text-muted-foreground text-xs'>
             {formatUpdatedAt(row.original.updated_at)}
