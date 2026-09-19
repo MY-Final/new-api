@@ -30,6 +30,7 @@ import type {
   DashboardChartPreferences,
   DashboardFilters,
   ModelAnalyticsChartTab,
+  UserChartsFilters,
 } from '@/features/dashboard/types'
 import { getRollingDateRange, type TimeGranularity } from '@/lib/time'
 
@@ -57,6 +58,26 @@ function isModelAnalyticsChartTab(
 
 function isTimeRangePresetDays(value: unknown): value is number {
   return TIME_RANGE_PRESETS.some((preset) => preset.days === value)
+}
+
+// Highlights the matching quick-range button when a range spans an exact
+// preset; custom ranges leave every quick button unselected.
+export function detectQuickRangeDays(start?: Date, end?: Date): number | null {
+  if (!start || !end) return null
+  // "Today" spans from local midnight, which the day-count math below cannot
+  // detect: its length varies with the current clock time.
+  const startOfDay = new Date(start)
+  startOfDay.setHours(0, 0, 0, 0)
+  const endOfStartDay = new Date(startOfDay)
+  endOfStartDay.setDate(endOfStartDay.getDate() + 1)
+  if (
+    start.getTime() === startOfDay.getTime() &&
+    end.getTime() <= endOfStartDay.getTime()
+  ) {
+    return 0
+  }
+  const days = Math.round((end.getTime() - start.getTime()) / 86_400_000)
+  return TIME_RANGE_PRESETS.some((preset) => preset.days === days) ? days : null
 }
 
 export function cleanFilters<T extends Record<string, unknown>>(
@@ -149,6 +170,15 @@ export function buildDefaultDashboardFilters(
     start_timestamp: start,
     end_timestamp: end,
     time_granularity: preferences.defaultTimeGranularity,
+  }
+}
+
+export function buildDefaultUserChartsFilters(): UserChartsFilters {
+  const timeGranularity = getSavedGranularity()
+  return {
+    timeGranularity,
+    range: getRollingDateRange(getDefaultDays(timeGranularity)),
+    topUserLimit: 10,
   }
 }
 

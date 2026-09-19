@@ -35,7 +35,6 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { UserChartsFilters } from '@/features/dashboard/types'
-import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
 import { UserUsageDialog } from '@/features/users/components/dialogs/user-usage-dialog'
 import { formatNumber, formatQuota } from '@/lib/format'
 import { dateToUnixTimestamp } from '@/lib/time'
@@ -185,27 +184,8 @@ export function AdminUsageAnalytics(props: AdminUsageAnalyticsProps) {
     )
   }
 
-  const handleRangeChange = (next: { start?: Date; end?: Date }) => {
-    if (!next.start || !next.end) return
-    setPage(1)
-    props.onFiltersChange({
-      ...props.filters,
-      range: { start: next.start, end: next.end },
-    })
-  }
-
   return (
     <div className='space-y-3 sm:space-y-4'>
-      <div className='flex justify-end'>
-        <CompactDateTimeRangePicker
-          start={range.start}
-          end={range.end}
-          onChange={handleRangeChange}
-          maxRangeDays={31}
-          className='lg:w-80'
-        />
-      </div>
-
       <div className='grid gap-2 sm:grid-cols-2 lg:grid-cols-5'>
         <StatCard
           label={t('DAU')}

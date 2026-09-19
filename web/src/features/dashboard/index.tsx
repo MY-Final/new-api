@@ -32,19 +32,18 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { ROLE } from '@/lib/roles'
-import { getRollingDateRange } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { ModelsChartPreferences } from './components/models/models-chart-preferences'
 import { ModelsFilter } from './components/models/models-filter-dialog'
 import { OverviewDashboard } from './components/overview/overview-dashboard'
+import { UsersFilter } from './components/users/users-filter-dialog'
 import { DEFAULT_TIME_GRANULARITY } from './constants'
 import {
   buildDefaultDashboardFilters,
-  getDefaultDays,
+  buildDefaultUserChartsFilters,
   getSavedChartPreferences,
-  getSavedGranularity,
   saveChartPreferences,
 } from './lib'
 import {
@@ -208,14 +207,7 @@ export function Dashboard() {
     buildDefaultDashboardFilters(getSavedChartPreferences())
   )
   const [userChartsFilters, setUserChartsFilters] = useState<UserChartsFilters>(
-    () => {
-      const granularity = getSavedGranularity()
-      return {
-        timeGranularity: granularity,
-        range: getRollingDateRange(getDefaultDays(granularity)),
-        topUserLimit: 10,
-      }
-    }
+    buildDefaultUserChartsFilters
   )
   const [flowSensitiveVisible, setFlowSensitiveVisible] = useState(true)
 
@@ -226,6 +218,14 @@ export function Dashboard() {
   const handleResetFilters = useCallback(() => {
     setModelFilters(buildDefaultDashboardFilters(chartPreferences))
   }, [chartPreferences])
+
+  const handleUserFiltersChange = useCallback((filters: UserChartsFilters) => {
+    setUserChartsFilters(filters)
+  }, [])
+
+  const handleResetUserFilters = useCallback(() => {
+    setUserChartsFilters(buildDefaultUserChartsFilters())
+  }, [])
 
   const handleDataUpdate = useCallback(
     (data: QuotaDataItem[], loading: boolean) => {
@@ -279,6 +279,14 @@ export function Dashboard() {
         />
       </>
     ) : null
+  const userActions =
+    activeSection === 'users' ? (
+      <UsersFilter
+        filters={userChartsFilters}
+        onFiltersChange={handleUserFiltersChange}
+        onReset={handleResetUserFilters}
+      />
+    ) : null
   const flowActions =
     activeSection === 'flow' ? (
       <>
@@ -316,7 +324,7 @@ export function Dashboard() {
         />
       </>
     ) : null
-  const sectionActions = modelActions ?? flowActions
+  const sectionActions = modelActions ?? flowActions ?? userActions
 
   if (activeSection === 'overview') {
     return <OverviewDashboard />

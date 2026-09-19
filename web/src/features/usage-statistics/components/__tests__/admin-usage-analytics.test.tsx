@@ -17,8 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { useState } from 'react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, test, vi } from 'vitest'
 
 import type { UserChartsFilters } from '@/features/dashboard/types'
@@ -57,70 +56,73 @@ const ranking = {
   page_size: 10,
 }
 
-const initialRange = {
-  start: new Date('2025-01-01T00:00:00'),
-  end: new Date('2025-01-02T00:00:00'),
+const initialFilters: UserChartsFilters = {
+  timeGranularity: 'hour',
+  range: {
+    start: new Date('2025-01-01T00:00:00'),
+    end: new Date('2025-01-02T00:00:00'),
+  },
+  topUserLimit: 10,
 }
 
-function renderAnalytics() {
+function renderAnalytics(filters: UserChartsFilters) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
 
-  function Harness() {
-    const [filters, setFilters] = useState<UserChartsFilters>({
-      timeGranularity: 'hour',
-      range: initialRange,
-      topUserLimit: 10,
-    })
-    return (
-      <AdminUsageAnalytics
-        filters={filters}
-        onFiltersChange={(next) => setFilters(next)}
-      />
-    )
-  }
-
-  return render(
+  const view = (next: UserChartsFilters) => (
     <QueryClientProvider client={queryClient}>
-      <Harness />
+      <AdminUsageAnalytics filters={next} onFiltersChange={vi.fn()} />
     </QueryClientProvider>
   )
+
+  const result = render(view(filters))
+  return {
+    rerenderWith: (next: UserChartsFilters) => result.rerender(view(next)),
+  }
 }
 
 describe('AdminUsageAnalytics', () => {
-  test('uses the parent range as the only time-range control', async () => {
+  test('queries with the parent range and exposes no local time control', async () => {
     getRankingMock.mockResolvedValue({ success: true, data: ranking })
-    renderAnalytics()
+    renderAnalytics(initialFilters)
 
     expect(await screen.findByText('alice')).toBeInTheDocument()
     expect(getRankingMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        start_timestamp: Math.floor(initialRange.start.getTime() / 1000),
-        end_timestamp: Math.floor(initialRange.end.getTime() / 1000),
+        start_timestamp: Math.floor(
+          initialFilters.range.start.getTime() / 1000
+        ),
+        end_timestamp: Math.floor(initialFilters.range.end.getTime() / 1000),
       })
     )
 
+    // The time range now lives in the dashboard filter dialog, not here.
+    expect(screen.queryByRole('button', { name: /~/ })).toBeNull()
     // The sort selector stays, but no quick-range preset tabs remain.
     expect(screen.getByRole('tab', { name: 'Cost' })).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Today' })).toBeNull()
     expect(screen.queryByRole('tab', { name: '7 Days' })).toBeNull()
   })
 
-  test('re-queries with the picked range and keeps it in parent filters', async () => {
+  test('re-queries when the parent applies a new range', async () => {
     getRankingMock.mockResolvedValue({ success: true, data: ranking })
-    renderAnalytics()
+    const nextRange = {
+      start: new Date('2025-02-01T00:00:00'),
+      end: new Date('2025-02-02T00:00:00'),
+    }
+    const { rerenderWith } = renderAnalytics(initialFilters)
     await screen.findByText('alice')
 
-    fireEvent.click(screen.getByRole('button', { name: /~/ }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Today' }))
+    rerenderWith({ ...initialFilters, range: nextRange })
 
-    const todayStart = new Date()
-    todayStart.setHours(0, 0, 0, 0)
     await waitFor(() => {
       const lastCall = getRankingMock.mock.calls.at(-1)?.[0]
       expect(lastCall?.start_timestamp).toBe(
-        Math.floor(todayStart.getTime() / 1000)
+        Math.floor(nextRange.start.getTime() / 1000)
+      )
+      expect(lastCall?.end_timestamp).toBe(
+        Math.floor(nextRange.end.getTime() / 1000)
       )
     })
   })

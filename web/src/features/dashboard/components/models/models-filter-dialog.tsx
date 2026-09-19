@@ -34,6 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { SectionDivider } from '@/features/dashboard/components/section-divider'
 import {
   TIME_GRANULARITY_OPTIONS,
   TIME_RANGE_PRESETS,
@@ -41,6 +42,7 @@ import {
 import {
   buildDefaultDashboardFilters,
   cleanFilters,
+  detectQuickRangeDays,
 } from '@/features/dashboard/lib'
 import type {
   DashboardChartPreferences,
@@ -70,44 +72,6 @@ function granularityForRangeDays(days: number): TimeGranularity {
   return 'day'
 }
 
-// Highlights the matching quick-range button when the applied range spans an
-// exact preset; custom ranges leave every quick button unselected.
-function detectQuickRangeDays(
-  filters: DashboardFilters | undefined
-): number | null {
-  const start = filters?.start_timestamp
-  const end = filters?.end_timestamp
-  if (!start || !end) return null
-  // "Today" spans from local midnight, which the day-count math below cannot
-  // detect: its length varies with the current clock time.
-  const startOfDay = new Date(start)
-  startOfDay.setHours(0, 0, 0, 0)
-  const endOfStartDay = new Date(startOfDay)
-  endOfStartDay.setDate(endOfStartDay.getDate() + 1)
-  if (
-    start.getTime() === startOfDay.getTime() &&
-    end.getTime() <= endOfStartDay.getTime()
-  ) {
-    return 0
-  }
-  const days = Math.round((end.getTime() - start.getTime()) / 86_400_000)
-  return TIME_RANGE_PRESETS.some((preset) => preset.days === days) ? days : null
-}
-
-/**
- * Section divider component for better visual organization
- */
-const SectionDivider = ({ label }: { label: string }) => (
-  <div className='relative'>
-    <div className='absolute inset-0 flex items-center'>
-      <span className='w-full border-t' />
-    </div>
-    <div className='relative flex justify-center text-xs uppercase'>
-      <span className='bg-background text-muted-foreground px-2'>{label}</span>
-    </div>
-  </div>
-)
-
 export function ModelsFilter(props: ModelsFilterProps) {
   const { t } = useTranslation()
   // 使用已缓存的用户数据，避免重复调用 API
@@ -120,7 +84,10 @@ export function ModelsFilter(props: ModelsFilterProps) {
       props.currentFilters ?? buildDefaultDashboardFilters(props.preferences)
   )
   const [selectedRange, setSelectedRange] = useState<number | null>(() =>
-    detectQuickRangeDays(props.currentFilters)
+    detectQuickRangeDays(
+      props.currentFilters?.start_timestamp,
+      props.currentFilters?.end_timestamp
+    )
   )
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -130,7 +97,9 @@ export function ModelsFilter(props: ModelsFilterProps) {
       const applied =
         props.currentFilters ?? buildDefaultDashboardFilters(props.preferences)
       setFilters(applied)
-      setSelectedRange(detectQuickRangeDays(applied))
+      setSelectedRange(
+        detectQuickRangeDays(applied.start_timestamp, applied.end_timestamp)
+      )
     }
     setOpen(nextOpen)
   }
