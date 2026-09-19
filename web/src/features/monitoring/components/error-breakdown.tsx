@@ -18,15 +18,12 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useTranslation } from 'react-i18next'
 
+import { LogsDrilldownLink } from '@/components/logs-drilldown-link'
 import { Badge } from '@/components/ui/badge'
-import { LogsDrilldownLink } from '@/features/dashboard/components/logs-drilldown-link'
-import type {
-  LogAnalysisData,
-  LogAnalysisErrorCode,
-} from '@/features/dashboard/types'
 import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
+import type { LogAnalysisData, LogAnalysisErrorCode } from '../types'
 import { ErrorTrend } from './error-trend'
 
 interface ErrorBreakdownProps {

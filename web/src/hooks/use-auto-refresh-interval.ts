@@ -25,6 +25,11 @@ import { useCallback, useState } from 'react'
  */
 export const AUTO_REFRESH_STORAGE_KEY = 'logs:auto-refresh-interval'
 
+// Shared between the dashboard analytics and the operations monitoring page so
+// an operator's cadence choice follows them across both views.
+export const DASHBOARD_AUTO_REFRESH_STORAGE_KEY =
+  'dashboard:auto-refresh-interval'
+
 export const AUTO_REFRESH_INTERVALS = [
   { value: 0, labelKey: 'Off' },
   { value: 5000, labelKey: '5 seconds' },

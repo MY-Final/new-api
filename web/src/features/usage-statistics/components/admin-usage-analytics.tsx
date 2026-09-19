@@ -23,6 +23,7 @@ import { useTranslation } from 'react-i18next'
 
 import { DataTableServerPagination } from '@/components/data-table'
 import { ErrorState } from '@/components/error-state'
+import { LogsDrilldownLink } from '@/components/logs-drilldown-link'
 import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
 import { Input } from '@/components/ui/input'
 import {
@@ -34,7 +35,6 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { LogsDrilldownLink } from '@/features/dashboard/components/logs-drilldown-link'
 import { StatDelta } from '@/features/dashboard/components/stat-delta'
 import type { UserChartsFilters } from '@/features/dashboard/types'
 import { UserUsageDialog } from '@/features/users/components/dialogs/user-usage-dialog'

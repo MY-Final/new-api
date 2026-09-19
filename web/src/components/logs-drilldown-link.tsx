@@ -21,7 +21,7 @@ import { ScrollText } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
-import { buildLogsDrilldownSearch } from '@/features/dashboard/lib/drilldown'
+import { buildLogsDrilldownSearch } from '@/lib/logs-drilldown'
 
 interface LogsDrilldownLinkProps {
   start: Date

@@ -27,12 +27,12 @@ import {
 import { render, screen } from '@testing-library/react'
 import { describe, expect, test, vi } from 'vitest'
 
-import { getLogAnalysis } from '@/features/dashboard/api'
-import type { LogAnalysisData } from '@/features/dashboard/types'
+import type { LogAnalysisData } from '@/features/monitoring/types'
 
-import { ReliabilityPanel } from '../../reliability-panel'
+import { getLogAnalysis } from '../../api'
+import { ReliabilityPanel } from '../reliability-panel'
 
-vi.mock('@/features/dashboard/api', () => ({
+vi.mock('../../api', () => ({
   getLogAnalysis: vi.fn(),
 }))
 

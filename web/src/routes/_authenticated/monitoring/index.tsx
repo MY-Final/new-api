@@ -16,23 +16,21 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-// System Configuration
-export { useSystemConfig } from './use-system-config'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
-// Navigation
-export { useTopNavLinks } from './use-top-nav-links'
+import { Monitoring } from '@/features/monitoring'
+import { ROLE } from '@/lib/roles'
+import { useAuthStore } from '@/stores/auth-store'
 
-// Notifications
-export { useNotifications } from './use-notifications'
+export const Route = createFileRoute('/_authenticated/monitoring/')({
+  beforeLoad: () => {
+    const { auth } = useAuthStore.getState()
 
-// Utils
-export { useDebounce } from './use-debounce'
-export {
-  AUTO_REFRESH_INTERVALS,
-  AUTO_REFRESH_STORAGE_KEY,
-  DASHBOARD_AUTO_REFRESH_STORAGE_KEY,
-  useAutoRefreshInterval,
-} from './use-auto-refresh-interval'
-
-// Media Query
-export { useMediaQuery } from './use-media-query'
+    if (!auth.user || auth.user.role < ROLE.ADMIN) {
+      throw redirect({
+        to: '/403',
+      })
+    }
+  },
+  component: Monitoring,
+})

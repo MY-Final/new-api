@@ -19,10 +19,11 @@ For commercial licensing, please contact support@quantumnous.com
 import { Link } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 
-import { buildLogsDrilldownSearch } from '@/features/dashboard/lib/drilldown'
-import type { LogAnalysisTrendPoint } from '@/features/dashboard/types'
 import dayjs from '@/lib/dayjs'
+import { buildLogsDrilldownSearch } from '@/lib/logs-drilldown'
 import { cn } from '@/lib/utils'
+
+import type { LogAnalysisTrendPoint } from '../types'
 
 interface ErrorTrendProps {
   points: LogAnalysisTrendPoint[]

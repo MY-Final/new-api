@@ -31,12 +31,12 @@ import {
   MODEL_ANALYTICS_CHART_OPTIONS,
 } from '@/features/dashboard/constants'
 import { processChartData } from '@/features/dashboard/lib'
-import { buildLogsDrilldownSearch } from '@/features/dashboard/lib/drilldown'
 import type {
   DashboardFilters,
   ModelAnalyticsChartTab,
   QuotaDataItem,
 } from '@/features/dashboard/types'
+import { buildLogsDrilldownSearch } from '@/lib/logs-drilldown'
 import { useThemeRadiusPx } from '@/lib/theme-radius'
 import type { TimeGranularity } from '@/lib/time'
 import { VCHART_OPTION } from '@/lib/vchart'

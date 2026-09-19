@@ -61,6 +61,9 @@ interface ModelsFilterProps {
   onReset: () => void
   titleKey?: string
   descriptionKey?: string
+  // Chart-only control; operational views hide it because they render no
+  // time-bucketed charts.
+  showGranularity?: boolean
 }
 
 // Quick-range presets imply a sensible granularity (matching the app's
@@ -234,34 +237,40 @@ export function ModelsFilter(props: ModelsFilterProps) {
             </div>
           </div>
 
-          <SectionDivider label={t('Chart Settings')} />
+          {props.showGranularity !== false && (
+            <>
+              <SectionDivider label={t('Chart Settings')} />
 
-          <div className='grid gap-2'>
-            <Label htmlFor='time_granularity'>{t('Time Granularity')}</Label>
-            <Select
-              items={TIME_GRANULARITY_OPTIONS.map((option) => ({
-                value: option.value,
-                label: t(option.label),
-              }))}
-              value={filters.time_granularity}
-              onValueChange={(value) =>
-                handleChange('time_granularity', value as TimeGranularity)
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder={t('Select time granularity')} />
-              </SelectTrigger>
-              <SelectContent alignItemWithTrigger={false}>
-                <SelectGroup>
-                  {TIME_GRANULARITY_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {t(option.label)}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </div>
+              <div className='grid gap-2'>
+                <Label htmlFor='time_granularity'>
+                  {t('Time Granularity')}
+                </Label>
+                <Select
+                  items={TIME_GRANULARITY_OPTIONS.map((option) => ({
+                    value: option.value,
+                    label: t(option.label),
+                  }))}
+                  value={filters.time_granularity}
+                  onValueChange={(value) =>
+                    handleChange('time_granularity', value as TimeGranularity)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('Select time granularity')} />
+                  </SelectTrigger>
+                  <SelectContent alignItemWithTrigger={false}>
+                    <SelectGroup>
+                      {TIME_GRANULARITY_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {t(option.label)}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          )}
 
           {/* Admin-only fields */}
           {isAdmin && (

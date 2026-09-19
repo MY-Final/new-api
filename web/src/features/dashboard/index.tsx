@@ -32,7 +32,10 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { AutoRefreshControl } from '@/features/usage-logs/components/auto-refresh-control'
-import { useAutoRefreshInterval } from '@/hooks'
+import {
+  DASHBOARD_AUTO_REFRESH_STORAGE_KEY,
+  useAutoRefreshInterval,
+} from '@/hooks'
 import { ROLE } from '@/lib/roles'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
@@ -100,12 +103,6 @@ const LazyConsumptionDistributionChart = lazy(() =>
 const LazyPerformanceOverview = lazy(() =>
   import('./components/models/performance-overview').then((m) => ({
     default: m.PerformanceOverview,
-  }))
-)
-
-const LazyReliabilityPanel = lazy(() =>
-  import('./components/models/reliability-panel').then((m) => ({
-    default: m.ReliabilityPanel,
   }))
 )
 
@@ -219,7 +216,7 @@ export function Dashboard() {
   )
   const [flowSensitiveVisible, setFlowSensitiveVisible] = useState(true)
   const { autoRefreshInterval, setAutoRefreshInterval } =
-    useAutoRefreshInterval('dashboard:auto-refresh-interval')
+    useAutoRefreshInterval(DASHBOARD_AUTO_REFRESH_STORAGE_KEY)
   const refetchInterval =
     autoRefreshInterval > 0 ? autoRefreshInterval : (false as const)
 
@@ -401,16 +398,7 @@ export function Dashboard() {
                   </Suspense>
                 </FadeIn>
               )}
-              {isAdmin && (
-                <FadeIn delay={0.08}>
-                  <Suspense fallback={<ModelChartsFallback />}>
-                    <LazyReliabilityPanel
-                      filters={modelFilters}
-                      refetchInterval={refetchInterval}
-                    />
-                  </Suspense>
-                </FadeIn>
-              )}
+
               <FadeIn delay={0.1}>
                 <Suspense fallback={<ModelChartsFallback />}>
                   <LazyConsumptionDistributionChart

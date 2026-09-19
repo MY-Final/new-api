@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useTranslation } from 'react-i18next'
 
+import { LogsDrilldownLink } from '@/components/logs-drilldown-link'
 import { StatusBadge, type StatusVariant } from '@/components/status-badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -32,8 +33,6 @@ import {
   CHANNEL_STATUS,
   CHANNEL_STATUS_LABELS,
 } from '@/features/channels/constants'
-import { LogsDrilldownLink } from '@/features/dashboard/components/logs-drilldown-link'
-import type { LogAnalysisChannelHealth } from '@/features/dashboard/types'
 import {
   formatLatency,
   formatUptimePct,
@@ -41,6 +40,8 @@ import {
 } from '@/features/performance-metrics/lib/format'
 import { formatNumber, formatTimestamp } from '@/lib/format'
 import { cn } from '@/lib/utils'
+
+import type { LogAnalysisChannelHealth } from '../types'
 
 interface ChannelHealthTableProps {
   channels: LogAnalysisChannelHealth[]

@@ -21,22 +21,20 @@ import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { ErrorState } from '@/components/error-state'
+import { LogsDrilldownLink } from '@/components/logs-drilldown-link'
 import { Skeleton } from '@/components/ui/skeleton'
-import { getLogAnalysis } from '@/features/dashboard/api'
-import { LogsDrilldownLink } from '@/features/dashboard/components/logs-drilldown-link'
-import { DEFAULT_REALTIME_WINDOW_MINUTES } from '@/features/dashboard/constants'
 import { getDefaultDays } from '@/features/dashboard/lib'
-import type {
-  DashboardFilters,
-  LogAnalysisRealtime,
-} from '@/features/dashboard/types'
+import type { DashboardFilters } from '@/features/dashboard/types'
 import { useStatus } from '@/hooks/use-status'
 import { createServerError } from '@/lib/server-error-message'
 import { computeTimeRange } from '@/lib/time'
 
-import { ChannelHealthTable } from './reliability/channel-health-table'
-import { ErrorBreakdown } from './reliability/error-breakdown'
-import { RealtimeStrip } from './reliability/realtime-strip'
+import { getLogAnalysis } from '../api'
+import { DEFAULT_REALTIME_WINDOW_MINUTES } from '../constants'
+import type { LogAnalysisRealtime } from '../types'
+import { ChannelHealthTable } from './channel-health-table'
+import { ErrorBreakdown } from './error-breakdown'
+import { RealtimeStrip } from './realtime-strip'
 
 interface ReliabilityPanelProps {
   filters?: DashboardFilters

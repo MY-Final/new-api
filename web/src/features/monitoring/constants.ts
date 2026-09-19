@@ -16,23 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-// System Configuration
-export { useSystemConfig } from './use-system-config'
+// Windows for the realtime reliability strip. Values are minutes.
+export const REALTIME_WINDOW_OPTIONS = [
+  { label: '15 minutes', value: 15 },
+  { label: '30 minutes', value: 30 },
+  { label: '1 hour', value: 60 },
+] as const
 
-// Navigation
-export { useTopNavLinks } from './use-top-nav-links'
-
-// Notifications
-export { useNotifications } from './use-notifications'
-
-// Utils
-export { useDebounce } from './use-debounce'
-export {
-  AUTO_REFRESH_INTERVALS,
-  AUTO_REFRESH_STORAGE_KEY,
-  DASHBOARD_AUTO_REFRESH_STORAGE_KEY,
-  useAutoRefreshInterval,
-} from './use-auto-refresh-interval'
-
-// Media Query
-export { useMediaQuery } from './use-media-query'
+export const DEFAULT_REALTIME_WINDOW_MINUTES = 15

@@ -25,6 +25,7 @@ import {
   CircleDollarSign,
   FileText,
   FlaskConical,
+  HeartPulse,
   History,
   Image as ImageIcon,
   Key,
@@ -191,6 +192,11 @@ export function useSidebarData(): SidebarData {
             title: t('Channels'),
             url: '/channels',
             icon: Radio,
+          },
+          {
+            title: t('Operations Monitoring'),
+            url: '/monitoring',
+            icon: HeartPulse,
           },
           {
             title: t('Models'),

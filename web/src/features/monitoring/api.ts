@@ -16,23 +16,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-// System Configuration
-export { useSystemConfig } from './use-system-config'
+import { api } from '@/lib/api'
 
-// Navigation
-export { useTopNavLinks } from './use-top-nav-links'
+import type { LogAnalysisData, LogAnalysisParams } from './types'
 
-// Notifications
-export { useNotifications } from './use-notifications'
-
-// Utils
-export { useDebounce } from './use-debounce'
-export {
-  AUTO_REFRESH_INTERVALS,
-  AUTO_REFRESH_STORAGE_KEY,
-  DASHBOARD_AUTO_REFRESH_STORAGE_KEY,
-  useAutoRefreshInterval,
-} from './use-auto-refresh-interval'
-
-// Media Query
-export { useMediaQuery } from './use-media-query'
+// Get aggregated error, channel health, and realtime metrics from usage logs.
+// Admin only.
+export async function getLogAnalysis(params: LogAnalysisParams) {
+  const res = await api.get<{
+    success: boolean
+    message?: string
+    data?: LogAnalysisData
+  }>('/api/log/analysis', { params })
+  return res.data
+}

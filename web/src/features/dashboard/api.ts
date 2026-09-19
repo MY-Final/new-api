@@ -20,8 +20,6 @@ import { api } from '@/lib/api'
 
 import type {
   FlowQuotaDataItem,
-  LogAnalysisData,
-  LogAnalysisParams,
   QuotaDataItem,
   UptimeGroupResult,
 } from './types'
@@ -83,17 +81,6 @@ export async function getFlowQuotaDates(
     data?: FlowQuotaDataItem[]
     message?: string
   }>(endpoint, { params })
-  return res.data
-}
-
-// Get aggregated error, channel health, and realtime metrics from usage logs.
-// Admin only.
-export async function getLogAnalysis(params: LogAnalysisParams) {
-  const res = await api.get<{
-    success: boolean
-    message?: string
-    data?: LogAnalysisData
-  }>('/api/log/analysis', { params })
   return res.data
 }
 

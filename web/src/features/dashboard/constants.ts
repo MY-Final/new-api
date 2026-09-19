@@ -53,15 +53,6 @@ export const TIME_RANGE_PRESETS = [
   { label: '29 Days', days: 29 },
 ] as const
 
-// Windows for the realtime reliability strip. Values are minutes.
-export const REALTIME_WINDOW_OPTIONS = [
-  { label: '15 minutes', value: 15 },
-  { label: '30 minutes', value: 30 },
-  { label: '1 hour', value: 60 },
-] as const
-
-export const DEFAULT_REALTIME_WINDOW_MINUTES = 15
-
 export const CONSUMPTION_DISTRIBUTION_CHART_OPTIONS = [
   { value: 'bar', labelKey: 'Bar Chart' },
   { value: 'area', labelKey: 'Area Chart' },

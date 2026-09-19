@@ -28,10 +28,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { REALTIME_WINDOW_OPTIONS } from '@/features/dashboard/constants'
-import type { LogAnalysisRealtime } from '@/features/dashboard/types'
 import { formatCompactNumber, formatNumber, formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
+
+import { REALTIME_WINDOW_OPTIONS } from '../constants'
+import type { LogAnalysisRealtime } from '../types'
 
 interface RealtimeStripProps {
   realtime: LogAnalysisRealtime
