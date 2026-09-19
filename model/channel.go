@@ -785,6 +785,7 @@ func UpdateChannelStatus(channelId int, usingKey string, status int, reason stri
 		if channel.Status == status {
 			return false
 		}
+		previousStatus := channel.Status
 
 		if channel.ChannelInfo.IsMultiKey {
 			beforeStatus := channel.Status
@@ -804,6 +805,9 @@ func UpdateChannelStatus(channelId int, usingKey string, status int, reason stri
 		if err != nil {
 			common.SysLog(fmt.Sprintf("failed to update channel status: channel_id=%d, status=%d, error=%v", channel.Id, status, err))
 			return false
+		}
+		if channel.Status == common.ChannelStatusAutoDisabled && previousStatus != channel.Status {
+			RecordChannelStatusEvent(channel.Id, channel.Status, reason)
 		}
 	}
 	return true

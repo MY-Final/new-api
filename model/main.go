@@ -337,6 +337,7 @@ func migrateDB() error {
 
 	err := DB.AutoMigrate(
 		&Channel{},
+		&ChannelStatusEvent{},
 		&Token{},
 		&User{},
 		&UserSession{},

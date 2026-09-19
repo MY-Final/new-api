@@ -100,3 +100,70 @@ func TestSaveStatusStateFromSingleKeySnapshotPreservesUnownedColumns(t *testing.
 	assert.Equal(t, "manual operation", otherInfo["status_reason"])
 	assert.Equal(t, float64(1234), otherInfo["status_time"])
 }
+
+func TestChannelStatusEventRecordedOnAutoDisable(t *testing.T) {
+	setupChannelStatusTest(t)
+
+	channel := Channel{
+		Name:   "event-recording",
+		Key:    "event-key",
+		Status: common.ChannelStatusEnabled,
+	}
+	require.NoError(t, DB.Create(&channel).Error)
+
+	changed := UpdateChannelStatus(channel.Id, "", common.ChannelStatusAutoDisabled, "upstream 502")
+	require.True(t, changed)
+
+	var events []ChannelStatusEvent
+	require.NoError(t, DB.Order("id").Find(&events).Error)
+	require.Len(t, events, 1)
+	assert.Equal(t, channel.Id, events[0].ChannelId)
+	assert.Equal(t, common.ChannelStatusAutoDisabled, events[0].Status)
+	assert.Equal(t, "upstream 502", events[0].Reason)
+	assert.NotZero(t, events[0].CreatedAt)
+
+	// Re-disabling an already disabled channel is a no-op and must not add an
+	// event, otherwise the ranking would count repeated API retries as outages.
+	assert.False(t, UpdateChannelStatus(channel.Id, "", common.ChannelStatusAutoDisabled, "again"))
+	require.NoError(t, DB.Order("id").Find(&events).Error)
+	assert.Len(t, events, 1)
+
+	// Manual status changes do not count as auto-disables.
+	manual := Channel{
+		Name:   "manual-recording",
+		Key:    "manual-key",
+		Status: common.ChannelStatusEnabled,
+	}
+	require.NoError(t, DB.Create(&manual).Error)
+	require.True(t, UpdateChannelStatus(manual.Id, "", common.ChannelStatusManuallyDisabled, "manual operation"))
+	require.NoError(t, DB.Order("id").Find(&events).Error)
+	assert.Len(t, events, 1)
+}
+
+func TestChannelStatusEventMigrationIsIdempotent(t *testing.T) {
+	setupChannelStatusTest(t)
+
+	event := ChannelStatusEvent{
+		ChannelId: 42,
+		Status:    common.ChannelStatusAutoDisabled,
+		Reason:    "migrated",
+		CreatedAt: 123,
+	}
+	require.NoError(t, DB.Create(&event).Error)
+
+	for range 2 {
+		require.NoError(t, DB.AutoMigrate(&ChannelStatusEvent{}))
+	}
+
+	var stored ChannelStatusEvent
+	require.NoError(t, DB.First(&stored, event.Id).Error)
+	assert.Equal(t, event.ChannelId, stored.ChannelId)
+	assert.Equal(t, event.Reason, stored.Reason)
+
+	counts, err := CountChannelAutoDisabledEvents(100, 200)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, counts[42])
+	counts, err = CountChannelAutoDisabledEvents(200, 300)
+	require.NoError(t, err)
+	assert.Empty(t, counts)
+}
