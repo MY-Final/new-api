@@ -22,6 +22,7 @@ import { AdminUsageAnalytics } from '@/features/usage-statistics/components/admi
 interface UserChartsProps {
   filters: UserChartsFilters
   onFiltersChange: (filters: UserChartsFilters) => void
+  refetchInterval?: number | false
 }
 
 export function UserCharts(props: UserChartsProps) {
@@ -29,6 +30,7 @@ export function UserCharts(props: UserChartsProps) {
     <AdminUsageAnalytics
       filters={props.filters}
       onFiltersChange={props.onFiltersChange}
+      refetchInterval={props.refetchInterval}
     />
   )
 }

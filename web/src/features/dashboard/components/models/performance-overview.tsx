@@ -84,7 +84,11 @@ function buildPerformanceSummary(rows: PerfModelSummary[]): PerformanceSummary {
   }
 }
 
-export function PerformanceOverview() {
+interface PerformanceOverviewProps {
+  refetchInterval?: number | false
+}
+
+export function PerformanceOverview(props: PerformanceOverviewProps) {
   const { t } = useTranslation()
   const metricsQuery = useQuery({
     queryKey: ['perf-metrics-summary', PERFORMANCE_WINDOW_HOURS],
@@ -92,6 +96,7 @@ export function PerformanceOverview() {
       requireServerSuccess(
         await getPerfMetricsSummary(PERFORMANCE_WINDOW_HOURS)
       ),
+    refetchInterval: props.refetchInterval,
     staleTime: 60 * 1000,
     retry: false,
   })

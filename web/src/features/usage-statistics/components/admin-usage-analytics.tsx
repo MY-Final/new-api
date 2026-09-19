@@ -34,23 +34,28 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { LogsDrilldownLink } from '@/features/dashboard/components/logs-drilldown-link'
+import { StatDelta } from '@/features/dashboard/components/stat-delta'
 import type { UserChartsFilters } from '@/features/dashboard/types'
 import { UserUsageDialog } from '@/features/users/components/dialogs/user-usage-dialog'
 import { formatNumber, formatQuota } from '@/lib/format'
 import { dateToUnixTimestamp } from '@/lib/time'
 
 import { getAdminUserUsageRanking } from '../api'
+import type { UserUsageAggregate } from '../types'
 
 type SortBy = 'user_cost' | 'total_tokens' | 'request_count'
 
 interface AdminUsageAnalyticsProps {
   filters: UserChartsFilters
   onFiltersChange: (filters: UserChartsFilters) => void
+  refetchInterval?: number | false
 }
 
 function StatCard(props: {
   label: string
   value: string
+  delta?: ReactNode
   icon: typeof Users
   tone: IconBadgeTone
 }) {
@@ -65,8 +70,11 @@ function StatCard(props: {
           {props.label}
         </span>
       </div>
-      <div className='mt-2 font-mono text-xl font-semibold tabular-nums'>
-        {props.value}
+      <div className='mt-2 flex items-baseline gap-1.5'>
+        <div className='font-mono text-xl font-semibold tabular-nums'>
+          {props.value}
+        </div>
+        {props.delta}
       </div>
     </div>
   )
@@ -113,15 +121,45 @@ export function AdminUsageAnalytics(props: AdminUsageAnalyticsProps) {
       if (!result.success || !result.data) throw new Error(result.message)
       return result.data
     },
+    refetchInterval: props.refetchInterval,
     placeholderData: (previous) => previous,
   })
   const data = rankingQuery.data
+
+  // Same-length window immediately before the selected one, used for the
+  // period-over-period deltas on the summary cards.
+  const previousParams = useMemo(() => {
+    const rangeSeconds =
+      dateToUnixTimestamp(range.end) - dateToUnixTimestamp(range.start)
+    const previousEnd = new Date(range.start.getTime() - 1000)
+    const previousStart = new Date(range.start.getTime() - rangeSeconds * 1000)
+    return {
+      start_timestamp: dateToUnixTimestamp(previousStart),
+      end_timestamp: dateToUnixTimestamp(previousEnd),
+      p: 1,
+      page_size: 1,
+      sort_by: sortBy,
+      username: username || undefined,
+      model_name: modelName || undefined,
+      channel: channel ? Number(channel) : undefined,
+    }
+  }, [channel, modelName, range, sortBy, username])
+  const previousQuery = useQuery({
+    queryKey: ['usage-statistics', 'admin', 'previous', previousParams],
+    queryFn: async () => {
+      const result = await getAdminUserUsageRanking(previousParams)
+      if (!result.success || !result.data) throw new Error(result.message)
+      return result.data
+    },
+    staleTime: 60_000,
+  })
+  const previousSummary = previousQuery.data?.summary
   let tableBody: ReactNode
   if (rankingQuery.isLoading && !data) {
     tableBody = (
       <TableRow>
         <TableCell
-          colSpan={9}
+          colSpan={10}
           className='text-muted-foreground h-20 text-center'
         >
           {t('Loading...')}
@@ -169,13 +207,20 @@ export function AdminUsageAnalytics(props: AdminUsageAnalyticsProps) {
         <TableCell className='text-right font-medium tabular-nums'>
           {formatQuota(item.user_cost)}
         </TableCell>
+        <TableCell className='w-10'>
+          <LogsDrilldownLink
+            start={range.start}
+            end={range.end}
+            username={item.username || undefined}
+          />
+        </TableCell>
       </TableRow>
     ))
   } else {
     tableBody = (
       <TableRow>
         <TableCell
-          colSpan={9}
+          colSpan={10}
           className='text-muted-foreground h-20 text-center'
         >
           {t('No usage data')}
@@ -183,6 +228,25 @@ export function AdminUsageAnalytics(props: AdminUsageAnalyticsProps) {
       </TableRow>
     )
   }
+
+  const summaryDelta = (key: keyof UserUsageAggregate) => (
+    <StatDelta
+      current={data?.summary[key] ?? 0}
+      previous={previousSummary?.[key] ?? 0}
+    />
+  )
+  const cacheTokensDelta = (
+    <StatDelta
+      current={
+        (data?.summary.cache_read_tokens ?? 0) +
+        (data?.summary.cache_write_tokens ?? 0)
+      }
+      previous={
+        (previousSummary?.cache_read_tokens ?? 0) +
+        (previousSummary?.cache_write_tokens ?? 0)
+      }
+    />
+  )
 
   return (
     <div className='space-y-3 sm:space-y-4'>
@@ -208,18 +272,21 @@ export function AdminUsageAnalytics(props: AdminUsageAnalyticsProps) {
         <StatCard
           label={t('Requests')}
           value={formatNumber(data?.summary.request_count ?? 0)}
+          delta={summaryDelta('request_count')}
           icon={Hash}
           tone='chart-4'
         />
         <StatCard
           label={t('Input Tokens')}
           value={formatNumber(data?.summary.input_tokens ?? 0)}
+          delta={summaryDelta('input_tokens')}
           icon={Hash}
           tone='chart-2'
         />
         <StatCard
           label={t('Output Tokens')}
           value={formatNumber(data?.summary.output_tokens ?? 0)}
+          delta={summaryDelta('output_tokens')}
           icon={Hash}
           tone='chart-3'
         />
@@ -229,18 +296,21 @@ export function AdminUsageAnalytics(props: AdminUsageAnalyticsProps) {
             (data?.summary.cache_read_tokens ?? 0) +
               (data?.summary.cache_write_tokens ?? 0)
           )}
+          delta={cacheTokensDelta}
           icon={Hash}
           tone='chart-4'
         />
         <StatCard
           label={t('Total Tokens')}
           value={formatNumber(data?.summary.total_tokens ?? 0)}
+          delta={summaryDelta('total_tokens')}
           icon={Hash}
           tone='chart-5'
         />
         <StatCard
           label={t('User Cost')}
           value={formatQuota(data?.summary.user_cost ?? 0)}
+          delta={summaryDelta('user_cost')}
           icon={Coins}
           tone='chart-5'
         />
@@ -316,7 +386,7 @@ export function AdminUsageAnalytics(props: AdminUsageAnalyticsProps) {
         ) : (
           <>
             <div className='overflow-x-auto'>
-              <Table className='min-w-[980px]'>
+              <Table className='min-w-[1040px]'>
                 <TableHeader>
                   <TableRow>
                     <TableHead>{t('User')}</TableHead>
@@ -344,6 +414,7 @@ export function AdminUsageAnalytics(props: AdminUsageAnalyticsProps) {
                     <TableHead className='text-right'>
                       {t('User Cost')}
                     </TableHead>
+                    <TableHead className='w-10' />
                   </TableRow>
                 </TableHeader>
                 <TableBody>{tableBody}</TableBody>

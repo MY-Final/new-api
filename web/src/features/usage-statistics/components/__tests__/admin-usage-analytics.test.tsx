@@ -17,7 +17,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
+} from '@tanstack/react-router'
+import { act, render, screen, waitFor } from '@testing-library/react'
+import { useState } from 'react'
 import { describe, expect, test, vi } from 'vitest'
 
 import type { UserChartsFilters } from '@/features/dashboard/types'
@@ -56,6 +64,20 @@ const ranking = {
   page_size: 10,
 }
 
+const previousAggregate = {
+  ...aggregate,
+  request_count: 2,
+  input_tokens: 20,
+  output_tokens: 10,
+  total_tokens: 30,
+  user_cost: 40,
+}
+
+const previousRanking = {
+  ...ranking,
+  summary: previousAggregate,
+}
+
 const initialFilters: UserChartsFilters = {
   timeGranularity: 'hour',
   range: {
@@ -65,27 +87,53 @@ const initialFilters: UserChartsFilters = {
   topUserLimit: 10,
 }
 
-function renderAnalytics(filters: UserChartsFilters) {
+const previousWindowStart = new Date('2024-12-31T00:00:00').getTime() / 1000
+
+let updateFilters: (filters: UserChartsFilters) => void = () => undefined
+
+function Harness() {
+  const [filters, setFilters] = useState(initialFilters)
+  updateFilters = setFilters
+  return <AdminUsageAnalytics filters={filters} onFiltersChange={vi.fn()} />
+}
+
+function renderAnalytics() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
+  const root = createRootRoute()
+  const auth = createRoute({
+    getParentRoute: () => root,
+    id: '_authenticated',
+  })
+  const logs = createRoute({
+    getParentRoute: () => auth,
+    path: '/usage-logs/$section',
+    component: () => null,
+    validateSearch: (search: Record<string, unknown>) => search,
+  })
+  const dashboard = createRoute({
+    getParentRoute: () => auth,
+    path: '/dashboard',
+    component: Harness,
+  })
+  const router = createRouter({
+    routeTree: root.addChildren([auth.addChildren([logs, dashboard])]),
+    history: createMemoryHistory({ initialEntries: ['/dashboard'] }),
+  })
 
-  const view = (next: UserChartsFilters) => (
+  render(
     <QueryClientProvider client={queryClient}>
-      <AdminUsageAnalytics filters={next} onFiltersChange={vi.fn()} />
+      <RouterProvider router={router} />
     </QueryClientProvider>
   )
-
-  const result = render(view(filters))
-  return {
-    rerenderWith: (next: UserChartsFilters) => result.rerender(view(next)),
-  }
+  return router
 }
 
 describe('AdminUsageAnalytics', () => {
   test('queries with the parent range and exposes no local time control', async () => {
     getRankingMock.mockResolvedValue({ success: true, data: ranking })
-    renderAnalytics(initialFilters)
+    renderAnalytics()
 
     expect(await screen.findByText('alice')).toBeInTheDocument()
     expect(getRankingMock).toHaveBeenCalledWith(
@@ -105,24 +153,55 @@ describe('AdminUsageAnalytics', () => {
     expect(screen.queryByRole('tab', { name: '7 Days' })).toBeNull()
   })
 
+  test('compares summary cards with the previous period and links to logs', async () => {
+    getRankingMock.mockImplementation(async (params) => {
+      if (params.start_timestamp === previousWindowStart) {
+        return { success: true, data: previousRanking }
+      }
+      return { success: true, data: ranking }
+    })
+    renderAnalytics()
+
+    expect(await screen.findByText('alice')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(getRankingMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          start_timestamp: previousWindowStart,
+          end_timestamp:
+            Math.floor(initialFilters.range.start.getTime() / 1000) - 1,
+        })
+      )
+    })
+
+    // Request count dropped from 2 to 1 in the comparison window.
+    expect((await screen.findAllByText('↓50.0%')).length).toBeGreaterThan(0)
+    // Each ranking row links to the usage logs for the user and window.
+    const links = screen.getAllByRole('button', { name: 'View logs' })
+    expect(links.length).toBeGreaterThan(0)
+    expect(links[0]?.getAttribute('href')).toContain('username=alice')
+    expect(links[0]?.getAttribute('href')).toContain(
+      `startTime=${initialFilters.range.start.getTime()}`
+    )
+  })
+
   test('re-queries when the parent applies a new range', async () => {
     getRankingMock.mockResolvedValue({ success: true, data: ranking })
+    renderAnalytics()
+    await screen.findByText('alice')
+
     const nextRange = {
       start: new Date('2025-02-01T00:00:00'),
       end: new Date('2025-02-02T00:00:00'),
     }
-    const { rerenderWith } = renderAnalytics(initialFilters)
-    await screen.findByText('alice')
-
-    rerenderWith({ ...initialFilters, range: nextRange })
+    act(() => updateFilters({ ...initialFilters, range: nextRange }))
 
     await waitFor(() => {
-      const lastCall = getRankingMock.mock.calls.at(-1)?.[0]
-      expect(lastCall?.start_timestamp).toBe(
-        Math.floor(nextRange.start.getTime() / 1000)
-      )
-      expect(lastCall?.end_timestamp).toBe(
-        Math.floor(nextRange.end.getTime() / 1000)
+      expect(getRankingMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          start_timestamp: Math.floor(nextRange.start.getTime() / 1000),
+          end_timestamp: Math.floor(nextRange.end.getTime() / 1000),
+          page_size: 10,
+        })
       )
     })
   })

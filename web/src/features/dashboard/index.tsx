@@ -31,6 +31,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { AutoRefreshControl } from '@/features/usage-logs/components/auto-refresh-control'
+import { useAutoRefreshInterval } from '@/hooks'
 import { ROLE } from '@/lib/roles'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
@@ -98,6 +100,12 @@ const LazyConsumptionDistributionChart = lazy(() =>
 const LazyPerformanceOverview = lazy(() =>
   import('./components/models/performance-overview').then((m) => ({
     default: m.PerformanceOverview,
+  }))
+)
+
+const LazyReliabilityPanel = lazy(() =>
+  import('./components/models/reliability-panel').then((m) => ({
+    default: m.ReliabilityPanel,
   }))
 )
 
@@ -210,6 +218,10 @@ export function Dashboard() {
     buildDefaultUserChartsFilters
   )
   const [flowSensitiveVisible, setFlowSensitiveVisible] = useState(true)
+  const { autoRefreshInterval, setAutoRefreshInterval } =
+    useAutoRefreshInterval('dashboard:auto-refresh-interval')
+  const refetchInterval =
+    autoRefreshInterval > 0 ? autoRefreshInterval : (false as const)
 
   const handleFilterChange = useCallback((filters: DashboardFilters) => {
     setModelFilters(filters)
@@ -277,15 +289,25 @@ export function Dashboard() {
           onFilterChange={handleFilterChange}
           onReset={handleResetFilters}
         />
+        <AutoRefreshControl
+          autoRefreshInterval={autoRefreshInterval}
+          onAutoRefreshIntervalChange={setAutoRefreshInterval}
+        />
       </>
     ) : null
   const userActions =
     activeSection === 'users' ? (
-      <UsersFilter
-        filters={userChartsFilters}
-        onFiltersChange={handleUserFiltersChange}
-        onReset={handleResetUserFilters}
-      />
+      <>
+        <UsersFilter
+          filters={userChartsFilters}
+          onFiltersChange={handleUserFiltersChange}
+          onReset={handleResetUserFilters}
+        />
+        <AutoRefreshControl
+          autoRefreshInterval={autoRefreshInterval}
+          onAutoRefreshIntervalChange={setAutoRefreshInterval}
+        />
+      </>
     ) : null
   const flowActions =
     activeSection === 'flow' ? (
@@ -321,6 +343,10 @@ export function Dashboard() {
           onReset={handleResetFilters}
           titleKey='Flow Filters'
           descriptionKey='Filter the traffic flow view by time range and user.'
+        />
+        <AutoRefreshControl
+          autoRefreshInterval={autoRefreshInterval}
+          onAutoRefreshIntervalChange={setAutoRefreshInterval}
         />
       </>
     ) : null
@@ -362,13 +388,26 @@ export function Dashboard() {
                   <LazyLogStatCards
                     filters={modelFilters}
                     onDataUpdate={handleDataUpdate}
+                    refetchInterval={refetchInterval}
                   />
                 </Suspense>
               </FadeIn>
               {isAdmin && (
                 <FadeIn delay={0.05}>
                   <Suspense fallback={<PerformanceOverviewFallback />}>
-                    <LazyPerformanceOverview />
+                    <LazyPerformanceOverview
+                      refetchInterval={refetchInterval}
+                    />
+                  </Suspense>
+                </FadeIn>
+              )}
+              {isAdmin && (
+                <FadeIn delay={0.08}>
+                  <Suspense fallback={<ModelChartsFallback />}>
+                    <LazyReliabilityPanel
+                      filters={modelFilters}
+                      refetchInterval={refetchInterval}
+                    />
                   </Suspense>
                 </FadeIn>
               )}
@@ -395,6 +434,7 @@ export function Dashboard() {
                     timeGranularity={
                       modelFilters.time_granularity || DEFAULT_TIME_GRANULARITY
                     }
+                    filters={modelFilters}
                   />
                 </Suspense>
               </FadeIn>
@@ -406,6 +446,7 @@ export function Dashboard() {
                 <LazyUserCharts
                   filters={userChartsFilters}
                   onFiltersChange={setUserChartsFilters}
+                  refetchInterval={refetchInterval}
                 />
               </Suspense>
             </FadeIn>
@@ -416,6 +457,7 @@ export function Dashboard() {
                 <LazyFlowCharts
                   filters={modelFilters}
                   sensitiveVisible={flowSensitiveVisible}
+                  refetchInterval={refetchInterval}
                 />
               </Suspense>
             </FadeIn>

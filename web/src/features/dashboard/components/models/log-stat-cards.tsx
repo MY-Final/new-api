@@ -16,12 +16,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { IconBadge } from '@/components/ui/icon-badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getUserQuotaDates } from '@/features/dashboard/api'
+import { StatDelta } from '@/features/dashboard/components/stat-delta'
 import { useModelStatCardsConfig } from '@/features/dashboard/hooks/use-dashboard-config'
 import {
   buildQueryParams,
@@ -29,8 +31,8 @@ import {
   getDefaultDays,
 } from '@/features/dashboard/lib'
 import type {
-  QuotaDataItem,
   DashboardFilters,
+  QuotaDataItem,
 } from '@/features/dashboard/types'
 import { toIntlLocale } from '@/i18n/languages'
 import { formatCompactNumber, formatNumber, formatQuota } from '@/lib/format'
@@ -41,6 +43,7 @@ import { useAuthStore } from '@/stores/auth-store'
 interface LogStatCardsProps {
   filters?: DashboardFilters
   onDataUpdate?: (data: QuotaDataItem[], loading: boolean) => void
+  refetchInterval?: number | false
 }
 
 const MAX_INLINE_STAT_CHARS = 9
@@ -63,62 +66,85 @@ export function LogStatCards(props: LogStatCardsProps) {
   const statCardsConfig = useModelStatCardsConfig()
   const user = useAuthStore((state) => state.auth.user)
   const isAdmin = !!(user?.role && user.role >= 10)
-  const [stats, setStats] = useState<{
-    totalQuota: number
-    totalCount: number
-    totalTokens: number
-  } | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
-
-  const [timeRangeMinutes, setTimeRangeMinutes] = useState(0)
 
   const { filters, onDataUpdate } = props
+  const timeRange = computeTimeRange(
+    getDefaultDays(filters?.time_granularity),
+    filters?.start_timestamp,
+    filters?.end_timestamp
+  )
+  const timeRangeMinutes =
+    (timeRange.end_timestamp - timeRange.start_timestamp) / 60
+  const timeRangeSeconds = timeRange.end_timestamp - timeRange.start_timestamp
+  // Same-length window immediately before the selected one, used for the
+  // period-over-period deltas shown under each card value.
+  const previousRange = {
+    start_timestamp: timeRange.start_timestamp - timeRangeSeconds,
+    end_timestamp: timeRange.start_timestamp - 1,
+  }
+
+  const quotaQuery = useQuery({
+    queryKey: [
+      'dashboard-quota-dates',
+      timeRange.start_timestamp,
+      timeRange.end_timestamp,
+      filters?.username ?? '',
+      isAdmin,
+    ],
+    queryFn: async () => {
+      const response = await getUserQuotaDates(
+        buildQueryParams(timeRange, filters),
+        isAdmin
+      )
+      return response?.data || []
+    },
+    refetchInterval: props.refetchInterval,
+    staleTime: 30_000,
+    retry: false,
+    placeholderData: (previous) => previous,
+  })
+
+  const previousQuery = useQuery({
+    queryKey: [
+      'dashboard-quota-dates-previous',
+      previousRange.start_timestamp,
+      previousRange.end_timestamp,
+      filters?.username ?? '',
+      isAdmin,
+    ],
+    queryFn: async () => {
+      const response = await getUserQuotaDates(
+        buildQueryParams(previousRange, filters),
+        isAdmin
+      )
+      return response?.data || []
+    },
+    staleTime: 60_000,
+    retry: false,
+  })
 
   useEffect(() => {
-    const abortController = new AbortController()
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLoading(true)
+    onDataUpdate?.(quotaQuery.data ?? [], quotaQuery.isFetching)
+  }, [onDataUpdate, quotaQuery.data, quotaQuery.isFetching])
 
-    setError(false)
-    onDataUpdate?.([], true)
-
-    const timeRange = computeTimeRange(
-      getDefaultDays(filters?.time_granularity),
-      filters?.start_timestamp,
-      filters?.end_timestamp
-    )
-    const timeDiff = (timeRange.end_timestamp - timeRange.start_timestamp) / 60
-    setTimeRangeMinutes(timeDiff)
-
-    void getUserQuotaDates(buildQueryParams(timeRange, filters), isAdmin)
-      .then((res) => {
-        if (abortController.signal.aborted) return
-        const data = res?.data || []
-        setStats(calculateDashboardStats(data))
-        onDataUpdate?.(data, false)
-      })
-      .catch(() => {
-        if (abortController.signal.aborted) return
-        setStats(null)
-        setError(true)
-        onDataUpdate?.([], false)
-      })
-      .finally(() => {
-        if (!abortController.signal.aborted) {
-          setLoading(false)
-        }
-      })
-
-    return () => {
-      abortController.abort()
-    }
-  }, [filters, isAdmin, onDataUpdate])
+  const loading = quotaQuery.isLoading
+  const error = quotaQuery.isError
+  const stats = quotaQuery.data
+    ? calculateDashboardStats(quotaQuery.data)
+    : null
+  const previousStats = previousQuery.data
+    ? calculateDashboardStats(previousQuery.data)
+    : null
 
   const adaptedStats = {
     rpm: stats?.totalCount ?? 0,
     quota: stats?.totalQuota ?? 0,
     tpm: stats?.totalTokens ?? 0,
+  }
+  const adaptedPreviousStats = {
+    rpm: previousStats?.totalCount ?? 0,
+    quota: previousStats?.totalQuota ?? 0,
+    tpm: previousStats?.totalTokens ?? 0,
   }
 
   const items = statCardsConfig.map((config) => {
@@ -131,6 +157,9 @@ export function LogStatCards(props: LogStatCardsProps) {
             fullValue: formatQuota(rawValue),
           }
         : formatStatNumber(rawValue, locale)
+    const previousValue = previousStats
+      ? config.getValue(adaptedPreviousStats, timeRangeMinutes)
+      : undefined
 
     return {
       title: config.title,
@@ -139,6 +168,10 @@ export function LogStatCards(props: LogStatCardsProps) {
       desc: config.description,
       icon: config.icon,
       iconTone: config.iconTone,
+      delta:
+        previousValue != null ? (
+          <StatDelta current={rawValue} previous={previousValue} />
+        ) : null,
     }
   })
 
@@ -169,11 +202,14 @@ export function LogStatCards(props: LogStatCardsProps) {
           } else {
             valueContent = (
               <>
-                <div
-                  className='text-foreground mt-1 max-w-full truncate font-mono text-base leading-tight font-bold tracking-tight tabular-nums sm:mt-2 sm:text-2xl sm:leading-normal'
-                  title={it.fullValue}
-                >
-                  {it.value}
+                <div className='mt-1 flex min-w-0 items-baseline gap-1.5 sm:mt-2'>
+                  <div
+                    className='text-foreground max-w-full truncate font-mono text-base leading-tight font-bold tracking-tight tabular-nums sm:text-2xl sm:leading-normal'
+                    title={it.fullValue}
+                  >
+                    {it.value}
+                  </div>
+                  {it.delta}
                 </div>
                 <div className='text-muted-foreground/60 mt-1 hidden text-xs md:block'>
                   {it.desc}

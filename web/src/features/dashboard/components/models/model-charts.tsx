@@ -16,9 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useNavigate } from '@tanstack/react-router'
 import { VChart } from '@visactor/react-vchart'
+import type { EventParamsDefinition } from '@visactor/vchart'
 import { PieChart as PieChartIcon } from 'lucide-react'
-import { useEffect, useMemo, useState, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { IconBadge } from '@/components/ui/icon-badge'
@@ -29,7 +31,9 @@ import {
   MODEL_ANALYTICS_CHART_OPTIONS,
 } from '@/features/dashboard/constants'
 import { processChartData } from '@/features/dashboard/lib'
+import { buildLogsDrilldownSearch } from '@/features/dashboard/lib/drilldown'
 import type {
+  DashboardFilters,
   ModelAnalyticsChartTab,
   QuotaDataItem,
 } from '@/features/dashboard/types'
@@ -54,10 +58,33 @@ interface ModelChartsProps {
   loading?: boolean
   timeGranularity?: TimeGranularity
   defaultChartTab?: ModelAnalyticsChartTab
+  filters?: DashboardFilters
+}
+
+function chartDatum(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const record = value as Record<string, unknown>
+  const datum = record.datum
+  if (datum && typeof datum === 'object') {
+    return datum as Record<string, unknown>
+  }
+  const item = record.item
+  if (item && typeof item === 'object') {
+    const itemRecord = item as Record<string, unknown>
+    if (itemRecord.datum && typeof itemRecord.datum === 'object') {
+      return itemRecord.datum as Record<string, unknown>
+    }
+    const data = itemRecord.data
+    if (Array.isArray(data) && data[0] && typeof data[0] === 'object') {
+      return data[0] as Record<string, unknown>
+    }
+  }
+  return undefined
 }
 
 export function ModelCharts(props: ModelChartsProps) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const { resolvedTheme } = useTheme()
   const { customization } = useThemeCustomization()
   const chartRadius = useThemeRadiusPx(
@@ -107,6 +134,25 @@ export function ModelCharts(props: ModelChartsProps) {
     [props.data, props.loading, timeGranularity, t, chartRadius]
   )
 
+  // Clicking a bar on the ranking tab opens the usage logs for that model and
+  // the dashboard's current time window.
+  const handleChartPointerDown = useCallback(
+    (event: EventParamsDefinition['pointerdown']) => {
+      if (activeTab !== 'top') return
+      const start = props.filters?.start_timestamp
+      const end = props.filters?.end_timestamp
+      if (!start || !end) return
+      const model = chartDatum(event)?.Model
+      if (typeof model !== 'string' || !model || model === t('Other')) return
+      void navigate({
+        to: '/usage-logs/$section',
+        params: { section: 'common' },
+        search: buildLogsDrilldownSearch({ start, end, model }),
+      })
+    },
+    [activeTab, navigate, props.filters, t]
+  )
+
   const spec = chartData[CHART_SPEC_KEYS[activeTab]]
   const specType = typeof spec?.type === 'string' ? spec.type : activeTab
   const chartKey = [
@@ -151,7 +197,13 @@ export function ModelCharts(props: ModelChartsProps) {
         </div>
       </div>
 
-      <div className='h-[300px] p-1.5 sm:h-96 sm:p-2'>
+      <div
+        className={
+          activeTab === 'top'
+            ? 'h-[300px] cursor-pointer p-1.5 sm:h-96 sm:p-2'
+            : 'h-[300px] p-1.5 sm:h-96 sm:p-2'
+        }
+      >
         {themeReady && spec && (
           <VChart
             key={chartKey}
@@ -161,6 +213,7 @@ export function ModelCharts(props: ModelChartsProps) {
               background: 'transparent',
             }}
             option={VCHART_OPTION}
+            onPointerDown={handleChartPointerDown}
           />
         )}
       </div>

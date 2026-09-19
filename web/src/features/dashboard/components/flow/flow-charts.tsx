@@ -99,6 +99,7 @@ interface FlowChartsProps {
   filters?: DashboardFilters
   // When false, sensitive node labels are masked in the rendered Sankey.
   sensitiveVisible?: boolean
+  refetchInterval?: number | false
 }
 
 const FLOW_METRIC_OPTIONS = [
@@ -341,6 +342,7 @@ export function FlowCharts(props: FlowChartsProps) {
       requireServerSuccess(await getFlowQuotaDates(flowQueryParams, isAdmin)),
     select: (res) =>
       requireSuccessfulFlowRows(res, t('Please try again later.')),
+    refetchInterval: props.refetchInterval,
     staleTime: 60_000,
   })
 
