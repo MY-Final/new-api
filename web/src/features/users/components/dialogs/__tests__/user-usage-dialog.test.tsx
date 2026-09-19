@@ -154,6 +154,20 @@ describe('UserUsageDialog', () => {
     )
   })
 
+  test('defaults the usage period to the current day', async () => {
+    getUserUsageMock.mockClear()
+    getUserUsageMock.mockResolvedValue({ success: true, data: usageData })
+    renderDialog()
+    await screen.findByText('model-a')
+
+    const startOfToday = new Date()
+    startOfToday.setHours(0, 0, 0, 0)
+    const firstCall = getUserUsageMock.mock.calls[0]
+    expect(firstCall?.[0]).toBe(7)
+    expect(firstCall?.[1]).toBe(Math.floor(startOfToday.getTime() / 1000))
+    expect(firstCall?.[2]).toBeGreaterThanOrEqual(firstCall?.[1] as number)
+  })
+
   test('requeries after changing the date range and blocks ranges over 31 days', async () => {
     getUserUsageMock.mockResolvedValue({ success: true, data: usageData })
     renderDialog()

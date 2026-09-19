@@ -108,6 +108,34 @@ func TestPenaltyAndReversalAreIdempotent(t *testing.T) {
 	assert.Equal(t, 5, restored.Quota)
 }
 
+func TestTopUpRefundKeepsBonusQuota(t *testing.T) {
+	truncateTables(t)
+	user := &User{Username: "topup-refund-bonus", Quota: 1500, BonusQuota: 500, PaidQuota: 1000}
+	require.NoError(t, DB.Create(user).Error)
+	topUp := &TopUp{
+		UserId:        user.Id,
+		Amount:        10,
+		Money:         10,
+		TradeNo:       "trade-bonus-keep",
+		Status:        common.TopUpStatusSuccess,
+		Source:        TopUpSourceTopup,
+		CreditedQuota: 1000,
+		CreateTime:    common.GetTimestamp(),
+		CompleteTime:  common.GetTimestamp(),
+	}
+	require.NoError(t, DB.Create(topUp).Error)
+
+	already, err := RefundTopUpByAdmin(topUp.TradeNo, "user requested refund", 0)
+	require.NoError(t, err)
+	require.False(t, already)
+
+	var got User
+	require.NoError(t, DB.First(&got, user.Id).Error)
+	assert.Equal(t, 500, got.Quota)
+	assert.Equal(t, 500, got.BonusQuota)
+	assert.Equal(t, 0, got.PaidQuota)
+}
+
 func afterRedeemQuota(t *testing.T, userId int) int {
 	t.Helper()
 	var user User

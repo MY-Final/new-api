@@ -46,6 +46,7 @@ import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenti
 import { Route as AuthenticatedFinanceSectionRouteImport } from './routes/_authenticated/finance/$section'
 import { Route as AuthenticatedKeysIndexRouteImport } from './routes/_authenticated/keys/index'
 import { Route as AuthenticatedKunCodeRelayPulseIndexRouteImport } from './routes/_authenticated/kun-code-relay-pulse/index'
+import { Route as AuthenticatedLedgerIndexRouteImport } from './routes/_authenticated/ledger/index'
 import { Route as AuthenticatedModelsIndexRouteImport } from './routes/_authenticated/models/index'
 import { Route as AuthenticatedModelsSectionRouteImport } from './routes/_authenticated/models/$section'
 import { Route as AuthenticatedMonitoringIndexRouteImport } from './routes/_authenticated/monitoring/index'
@@ -271,6 +272,12 @@ const AuthenticatedKunCodeRelayPulseIndexRoute =
   AuthenticatedKunCodeRelayPulseIndexRouteImport.update({
     id: '/kun-code-relay-pulse/',
     path: '/kun-code-relay-pulse/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedLedgerIndexRoute =
+  AuthenticatedLedgerIndexRouteImport.update({
+    id: '/ledger/',
+    path: '/ledger/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedModelsIndexRoute =
@@ -507,6 +514,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/keys/': typeof AuthenticatedKeysIndexRoute
   '/kun-code-relay-pulse/': typeof AuthenticatedKunCodeRelayPulseIndexRoute
+  '/ledger/': typeof AuthenticatedLedgerIndexRoute
   '/models/': typeof AuthenticatedModelsIndexRoute
   '/monitoring/': typeof AuthenticatedMonitoringIndexRoute
   '/playground/': typeof AuthenticatedPlaygroundIndexRoute
@@ -576,6 +584,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
   '/keys': typeof AuthenticatedKeysIndexRoute
   '/kun-code-relay-pulse': typeof AuthenticatedKunCodeRelayPulseIndexRoute
+  '/ledger': typeof AuthenticatedLedgerIndexRoute
   '/models': typeof AuthenticatedModelsIndexRoute
   '/monitoring': typeof AuthenticatedMonitoringIndexRoute
   '/playground': typeof AuthenticatedPlaygroundIndexRoute
@@ -649,6 +658,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/_authenticated/keys/': typeof AuthenticatedKeysIndexRoute
   '/_authenticated/kun-code-relay-pulse/': typeof AuthenticatedKunCodeRelayPulseIndexRoute
+  '/_authenticated/ledger/': typeof AuthenticatedLedgerIndexRoute
   '/_authenticated/models/': typeof AuthenticatedModelsIndexRoute
   '/_authenticated/monitoring/': typeof AuthenticatedMonitoringIndexRoute
   '/_authenticated/playground/': typeof AuthenticatedPlaygroundIndexRoute
@@ -721,6 +731,7 @@ export interface FileRouteTypes {
     | '/dashboard/'
     | '/keys/'
     | '/kun-code-relay-pulse/'
+    | '/ledger/'
     | '/models/'
     | '/monitoring/'
     | '/playground/'
@@ -790,6 +801,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/keys'
     | '/kun-code-relay-pulse'
+    | '/ledger'
     | '/models'
     | '/monitoring'
     | '/playground'
@@ -862,6 +874,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard/'
     | '/_authenticated/keys/'
     | '/_authenticated/kun-code-relay-pulse/'
+    | '/_authenticated/ledger/'
     | '/_authenticated/models/'
     | '/_authenticated/monitoring/'
     | '/_authenticated/playground/'
@@ -1173,6 +1186,13 @@ declare module '@tanstack/react-router' {
       path: '/kun-code-relay-pulse'
       fullPath: '/kun-code-relay-pulse/'
       preLoaderRoute: typeof AuthenticatedKunCodeRelayPulseIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/ledger/': {
+      id: '/_authenticated/ledger/'
+      path: '/ledger'
+      fullPath: '/ledger/'
+      preLoaderRoute: typeof AuthenticatedLedgerIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/models/': {
@@ -1509,6 +1529,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
   AuthenticatedKeysIndexRoute: typeof AuthenticatedKeysIndexRoute
   AuthenticatedKunCodeRelayPulseIndexRoute: typeof AuthenticatedKunCodeRelayPulseIndexRoute
+  AuthenticatedLedgerIndexRoute: typeof AuthenticatedLedgerIndexRoute
   AuthenticatedModelsIndexRoute: typeof AuthenticatedModelsIndexRoute
   AuthenticatedMonitoringIndexRoute: typeof AuthenticatedMonitoringIndexRoute
   AuthenticatedPlaygroundIndexRoute: typeof AuthenticatedPlaygroundIndexRoute
@@ -1545,6 +1566,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedKeysIndexRoute: AuthenticatedKeysIndexRoute,
   AuthenticatedKunCodeRelayPulseIndexRoute:
     AuthenticatedKunCodeRelayPulseIndexRoute,
+  AuthenticatedLedgerIndexRoute: AuthenticatedLedgerIndexRoute,
   AuthenticatedModelsIndexRoute: AuthenticatedModelsIndexRoute,
   AuthenticatedMonitoringIndexRoute: AuthenticatedMonitoringIndexRoute,
   AuthenticatedPlaygroundIndexRoute: AuthenticatedPlaygroundIndexRoute,

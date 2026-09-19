@@ -449,6 +449,10 @@ func postConsumeQuotaWithResult(relayInfo *relaycommon.RelayInfo, quota int, pre
 		if err != nil {
 			return result, err
 		}
+		if quota < 0 {
+			// 多扣额度退回福利桶，总账同步记负数消耗。
+			model.RecordQuotaUsage(relayInfo.UserId, model.QuotaAllocation{Bonus: quota})
+		}
 	}
 	result.FundingApplied = true
 

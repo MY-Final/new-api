@@ -2,9 +2,9 @@
 Copyright (C) 2023-2026 QuantumNous
 
 This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -43,7 +43,7 @@ interface UserUsageDialogProps {
 
 export function UserUsageDialog(props: UserUsageDialogProps) {
   const { t } = useTranslation()
-  const [range, setRange] = useState(() => getRollingDateRange(30))
+  const [range, setRange] = useState(() => getRollingDateRange(0))
   const startTimestamp = dateToUnixTimestamp(range.start)
   const endTimestamp = dateToUnixTimestamp(range.end)
 

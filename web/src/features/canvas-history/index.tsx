@@ -21,11 +21,12 @@ import {
   Download,
   ExternalLink,
   History,
+  ListChecks,
   Loader2,
   RotateCcw,
   Trash2,
 } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -35,6 +36,7 @@ import { ImagePreviewDialog } from '@/components/image-preview-dialog'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { STORAGE_KEYS, getCanvasStorageKey } from '@/features/canvas/constants'
 import {
   clearHistory,
@@ -44,12 +46,14 @@ import {
   loadHistory,
   markLegacyMigrationPromptShown,
   migrateLegacyHistory,
+  removeHistoryEntries,
   removeHistoryEntry,
   restoreHistoryEntry,
   shouldShowLegacyMigrationPrompt,
   subscribeHistoryChanges,
   type CanvasHistoryEntry,
 } from '@/features/canvas/lib/history'
+import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
 type LoadState = 'loading' | 'ready' | 'error'
@@ -68,6 +72,14 @@ export function CanvasHistory() {
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [clearOpen, setClearOpen] = useState(false)
   const [clearLoading, setClearLoading] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<CanvasHistoryEntry | null>(
+    null
+  )
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
+  const [batchDeleteLoading, setBatchDeleteLoading] = useState(false)
   const [migrationCount, setMigrationCount] = useState<number | null>(null)
   const [migrationLoading, setMigrationLoading] = useState(false)
   const busyActionRef = useRef<string | null>(null)
@@ -132,8 +144,10 @@ export function CanvasHistory() {
     }
   }
 
-  const handleDelete = async (entry: CanvasHistoryEntry) => {
-    if (!userId || busyActionRef.current) return
+  const handleConfirmDelete = async () => {
+    const entry = deleteTarget
+    if (!userId || !entry || busyActionRef.current) return
+    setDeleteLoading(true)
     setBusyActionValue(`delete:${entry.id}`)
     try {
       await removeHistoryEntry(userId, entry.id)
@@ -143,6 +157,13 @@ export function CanvasHistory() {
         next.delete(entry.id)
         return next
       })
+      setSelectedIds((current) => {
+        if (!current.has(entry.id)) return current
+        const next = new Set(current)
+        next.delete(entry.id)
+        return next
+      })
+      setDeleteTarget(null)
       toast.success(t('Drawing record deleted.'), {
         action: {
           label: t('Undo'),
@@ -153,8 +174,64 @@ export function CanvasHistory() {
       toast.error(t('Unable to delete this drawing record.'))
       void refreshHistory()
     } finally {
+      setDeleteLoading(false)
       setBusyActionValue(null)
     }
+  }
+
+  const handleBatchDelete = async () => {
+    if (!userId || busyActionRef.current || selectedIds.size === 0) return
+    const ids = [...selectedIds]
+    const idSet = new Set(ids)
+    setBatchDeleteLoading(true)
+    setBusyActionValue('batch-delete')
+    try {
+      await removeHistoryEntries(userId, ids)
+      setEntries((current) => current.filter((item) => !idSet.has(item.id)))
+      setBrokenIds((current) => {
+        const next = new Set(current)
+        for (const id of ids) next.delete(id)
+        return next
+      })
+      setSelectedIds(new Set())
+      setSelectMode(false)
+      setBatchDeleteOpen(false)
+      toast.success(t('Selected drawing records deleted.'))
+    } catch {
+      toast.error(t('Unable to delete the selected drawing records.'))
+      void refreshHistory()
+    } finally {
+      setBatchDeleteLoading(false)
+      setBusyActionValue(null)
+    }
+  }
+
+  const toggleSelectMode = () => {
+    setSelectMode((current) => {
+      if (current) setSelectedIds(new Set())
+      return !current
+    })
+  }
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  const allSelected =
+    entries.length > 0 && entries.every((item) => selectedIds.has(item.id))
+
+  const toggleSelectAll = () => {
+    setSelectedIds(
+      allSelected ? new Set() : new Set(entries.map((item) => item.id))
+    )
   }
 
   const handleUndo = async (entry: CanvasHistoryEntry) => {
@@ -253,227 +330,324 @@ export function CanvasHistory() {
   }
 
   return (
-    <div className='mx-auto max-w-6xl'>
-      <div className='flex flex-wrap items-start justify-between gap-3'>
-        <div>
-          <h1 className='text-lg font-bold'>{t('Drawing Records')}</h1>
-          <p className='text-muted-foreground text-sm'>
-            {t('Images and prompts generated in Canvas are saved here.')}
-          </p>
-        </div>
-        {entries.length > 0 && (
-          <Button
-            variant='outline'
-            onClick={() => setClearOpen(true)}
-            disabled={busyAction !== null}
-          >
-            <Trash2 className='h-4 w-4' />
-            {t('Clear')}
-          </Button>
-        )}
-      </div>
-
-      {migrationCount !== null && (
-        <Alert className='mt-6'>
-          <History className='h-4 w-4' />
-          <AlertTitle>{t('Previous drawing records found')}</AlertTitle>
-          <AlertDescription className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
-            <span>
-              {t(
-                '{{count}} previous drawing record(s) are available for import.',
-                {
-                  count: migrationCount,
-                }
+    <div
+      data-testid='canvas-history-scroll'
+      className='min-h-0 flex-1 overflow-y-auto p-6'
+    >
+      <div className='mx-auto max-w-6xl'>
+        <div className='flex flex-wrap items-start justify-between gap-3'>
+          <div>
+            <h1 className='text-lg font-bold'>{t('Drawing Records')}</h1>
+            <p className='text-muted-foreground text-sm'>
+              {t('Images and prompts generated in Canvas are saved here.')}
+            </p>
+          </div>
+          {entries.length > 0 && (
+            <div className='flex flex-wrap items-center gap-2'>
+              {selectMode ? (
+                <>
+                  <div className='text-muted-foreground flex items-center gap-2 text-sm'>
+                    <Checkbox
+                      checked={allSelected}
+                      onCheckedChange={toggleSelectAll}
+                      aria-label={t('Select all')}
+                    />
+                    {t('Selected {{count}} item(s)', {
+                      count: selectedIds.size,
+                    })}
+                  </div>
+                  <Button
+                    variant='outline'
+                    onClick={toggleSelectMode}
+                    disabled={busyAction !== null}
+                  >
+                    {t('Cancel')}
+                  </Button>
+                  <Button
+                    variant='destructive'
+                    onClick={() => setBatchDeleteOpen(true)}
+                    disabled={selectedIds.size === 0 || busyAction !== null}
+                  >
+                    <Trash2 className='h-4 w-4' />
+                    {t('Delete selected')}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant='outline'
+                    onClick={toggleSelectMode}
+                    disabled={busyAction !== null}
+                  >
+                    <ListChecks className='h-4 w-4' />
+                    {t('Select')}
+                  </Button>
+                  <Button
+                    variant='outline'
+                    onClick={() => setClearOpen(true)}
+                    disabled={busyAction !== null}
+                  >
+                    <Trash2 className='h-4 w-4' />
+                    {t('Clear')}
+                  </Button>
+                </>
               )}
-            </span>
-            <span className='flex shrink-0 gap-2'>
-              <Button
-                size='sm'
-                onClick={() => void handleImportLegacy()}
-                disabled={migrationLoading}
-              >
-                {migrationLoading && (
-                  <Loader2 className='h-4 w-4 animate-spin' />
-                )}
-                {t('Import')}
-              </Button>
-              <Button
-                variant='outline'
-                size='sm'
-                onClick={handleDiscardLegacy}
-                disabled={migrationLoading}
-              >
-                {t('Discard')}
-              </Button>
-            </span>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {entries.length === 0 ? (
-        <div className='border-border text-muted-foreground mt-6 flex h-64 flex-col items-center justify-center gap-2 rounded-xl border text-sm'>
-          <History className='h-8 w-8' />
-          <span>{t('No drawing records yet.')}</span>
+            </div>
+          )}
         </div>
-      ) : (
-        <div className='mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
-          {entries.map((entry) => {
-            const broken = brokenIds.has(entry.id)
-            const imageAlt = entry.prompt || t('Generated image')
-            return (
-              <Card key={entry.id} className='overflow-hidden'>
-                <div className='bg-muted relative aspect-square'>
-                  {broken ? (
-                    <div className='text-muted-foreground flex h-full flex-col items-center justify-center gap-2 p-4 text-center text-sm'>
-                      <History className='h-8 w-8' />
-                      <span>{t('Image unavailable')}</span>
-                    </div>
-                  ) : (
-                    <button
-                      type='button'
-                      className='h-full w-full cursor-zoom-in'
-                      aria-label={t('Preview {{name}}', { name: imageAlt })}
-                      onClick={() =>
-                        setPreview({ src: entry.image, alt: imageAlt })
-                      }
-                    >
-                      <img
-                        src={entry.image}
-                        alt={imageAlt}
-                        loading='lazy'
-                        decoding='async'
-                        onError={() => handleImageError(entry.id)}
-                        className='h-full w-full object-contain'
-                      />
-                    </button>
+
+        {migrationCount !== null && (
+          <Alert className='mt-6'>
+            <History className='h-4 w-4' />
+            <AlertTitle>{t('Previous drawing records found')}</AlertTitle>
+            <AlertDescription className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+              <span>
+                {t(
+                  '{{count}} previous drawing record(s) are available for import.',
+                  {
+                    count: migrationCount,
+                  }
+                )}
+              </span>
+              <span className='flex shrink-0 gap-2'>
+                <Button
+                  size='sm'
+                  onClick={() => void handleImportLegacy()}
+                  disabled={migrationLoading}
+                >
+                  {migrationLoading && (
+                    <Loader2 className='h-4 w-4 animate-spin' />
                   )}
-                  <div className='absolute top-2 right-2 flex gap-1'>
-                    {!broken && (
-                      <Button
-                        variant='secondary'
-                        size='icon'
-                        onClick={() => void handleDownload(entry)}
-                        disabled={busyAction !== null}
-                        aria-label={t('Download')}
-                      >
-                        {isBusy('download', entry.id) ? (
-                          <Loader2 className='h-4 w-4 animate-spin' />
-                        ) : (
-                          <Download className='h-4 w-4' />
+                  {t('Import')}
+                </Button>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  onClick={handleDiscardLegacy}
+                  disabled={migrationLoading}
+                >
+                  {t('Discard')}
+                </Button>
+              </span>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {entries.length === 0 ? (
+          <div className='border-border text-muted-foreground mt-6 flex h-64 flex-col items-center justify-center gap-2 rounded-xl border text-sm'>
+            <History className='h-8 w-8' />
+            <span>{t('No drawing records yet.')}</span>
+          </div>
+        ) : (
+          <div className='mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
+            {entries.map((entry) => {
+              const broken = brokenIds.has(entry.id)
+              const imageAlt = entry.prompt || t('Generated image')
+              const imageNode = (
+                <img
+                  src={entry.image}
+                  alt={imageAlt}
+                  loading='lazy'
+                  decoding='async'
+                  onError={() => handleImageError(entry.id)}
+                  className='h-full w-full object-contain'
+                />
+              )
+              let media: ReactNode
+              if (broken) {
+                media = (
+                  <div className='text-muted-foreground flex h-full flex-col items-center justify-center gap-2 p-4 text-center text-sm'>
+                    <History className='h-8 w-8' />
+                    <span>{t('Image unavailable')}</span>
+                  </div>
+                )
+              } else if (selectMode) {
+                media = <div className='h-full w-full'>{imageNode}</div>
+              } else {
+                media = (
+                  <button
+                    type='button'
+                    className='h-full w-full cursor-zoom-in'
+                    aria-label={t('Preview {{name}}', { name: imageAlt })}
+                    onClick={() =>
+                      setPreview({ src: entry.image, alt: imageAlt })
+                    }
+                  >
+                    {imageNode}
+                  </button>
+                )
+              }
+              return (
+                <Card
+                  key={entry.id}
+                  className={cn(
+                    'overflow-hidden',
+                    selectMode &&
+                      selectedIds.has(entry.id) &&
+                      'ring-primary ring-2'
+                  )}
+                >
+                  <div className='bg-muted relative aspect-square'>
+                    {media}
+                    {selectMode ? (
+                      <div className='absolute top-2 left-2'>
+                        <Checkbox
+                          checked={selectedIds.has(entry.id)}
+                          onCheckedChange={() => toggleSelected(entry.id)}
+                          aria-label={t('Select {{name}}', { name: imageAlt })}
+                          className='bg-background'
+                        />
+                      </div>
+                    ) : (
+                      <div className='absolute top-2 right-2 flex gap-1'>
+                        {!broken && (
+                          <Button
+                            variant='secondary'
+                            size='icon'
+                            onClick={() => void handleDownload(entry)}
+                            disabled={busyAction !== null}
+                            aria-label={t('Download')}
+                          >
+                            {isBusy('download', entry.id) ? (
+                              <Loader2 className='h-4 w-4 animate-spin' />
+                            ) : (
+                              <Download className='h-4 w-4' />
+                            )}
+                          </Button>
                         )}
-                      </Button>
+                        <Button
+                          variant='secondary'
+                          size='icon-sm'
+                          onClick={() => setDeleteTarget(entry)}
+                          disabled={busyAction !== null}
+                          aria-label={t('Delete')}
+                        >
+                          <Trash2 className='h-4 w-4' />
+                        </Button>
+                      </div>
                     )}
-                    <Button
-                      variant='secondary'
-                      size='icon-sm'
-                      onClick={() => void handleDelete(entry)}
-                      disabled={busyAction !== null}
-                      aria-label={t('Delete')}
-                    >
-                      {isBusy('delete', entry.id) ? (
-                        <Loader2 className='h-4 w-4 animate-spin' />
-                      ) : (
-                        <Trash2 className='h-4 w-4' />
+                  </div>
+                  <CardContent className='space-y-2 p-3'>
+                    <div className='flex items-start gap-1'>
+                      <p className='text-muted-foreground line-clamp-2 min-w-0 flex-1 text-xs'>
+                        {entry.prompt || t('No prompt')}
+                      </p>
+                      {entry.prompt && (
+                        <CopyButton
+                          value={entry.prompt}
+                          size='icon'
+                          tooltip={t('Copy prompt')}
+                        />
                       )}
-                    </Button>
-                  </div>
-                </div>
-                <CardContent className='space-y-2 p-3'>
-                  <div className='flex items-start gap-1'>
-                    <p className='text-muted-foreground line-clamp-2 min-w-0 flex-1 text-xs'>
-                      {entry.prompt || t('No prompt')}
-                    </p>
-                    {entry.prompt && (
-                      <CopyButton
-                        value={entry.prompt}
-                        size='icon'
-                        tooltip={t('Copy prompt')}
-                      />
-                    )}
-                  </div>
-                  <div className='text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 text-[11px]'>
-                    <span>{entry.model}</span>
-                    <span>{entry.group}</span>
-                    <span>{entry.size}</span>
-                    <span>{new Date(entry.createdAt).toLocaleString()}</span>
-                  </div>
-                  {entry.temporary && (
-                    <p className='text-warning text-xs'>
-                      {t('Temporary image link may expire.')}
-                    </p>
-                  )}
-                  <div className='flex flex-wrap gap-2'>
-                    <Button
-                      variant='ghost'
-                      size='sm'
-                      onClick={() => {
-                        try {
-                          sessionStorage.setItem(
-                            getCanvasStorageKey(
-                              STORAGE_KEYS.RESTORE,
-                              userId ?? 0
-                            ),
-                            JSON.stringify({
-                              userId,
-                              prompt: entry.prompt,
-                              model: entry.model,
-                              group: entry.group,
-                              size: entry.size,
-                              n: entry.n,
-                            })
-                          )
-                          void navigate({ to: '/canvas' })
-                        } catch {
-                          toast.error(t('Unable to prepare this prompt.'))
-                        }
-                      }}
-                      disabled={busyAction !== null || !userId}
-                    >
-                      <RotateCcw className='h-3.5 w-3.5' />
-                      {t('Reuse prompt')}
-                    </Button>
+                    </div>
+                    <div className='text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 text-[11px]'>
+                      <span>{entry.model}</span>
+                      <span>{entry.group}</span>
+                      <span>{entry.size}</span>
+                      <span>{new Date(entry.createdAt).toLocaleString()}</span>
+                    </div>
                     {entry.temporary && (
+                      <p className='text-warning text-xs'>
+                        {t('Temporary image link may expire.')}
+                      </p>
+                    )}
+                    <div className='flex flex-wrap gap-2'>
                       <Button
                         variant='ghost'
                         size='sm'
-                        onClick={() =>
-                          window.open(
-                            entry.image,
-                            '_blank',
-                            'noopener,noreferrer'
-                          )
-                        }
-                        disabled={busyAction !== null}
+                        onClick={() => {
+                          try {
+                            sessionStorage.setItem(
+                              getCanvasStorageKey(
+                                STORAGE_KEYS.RESTORE,
+                                userId ?? 0
+                              ),
+                              JSON.stringify({
+                                userId,
+                                prompt: entry.prompt,
+                                model: entry.model,
+                                group: entry.group,
+                                size: entry.size,
+                                n: entry.n,
+                              })
+                            )
+                            void navigate({ to: '/canvas' })
+                          } catch {
+                            toast.error(t('Unable to prepare this prompt.'))
+                          }
+                        }}
+                        disabled={busyAction !== null || !userId}
                       >
-                        <ExternalLink className='h-3.5 w-3.5' />
-                        {t('Open original')}
+                        <RotateCcw className='h-3.5 w-3.5' />
+                        {t('Reuse prompt')}
                       </Button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })}
-        </div>
-      )}
-
-      <ImagePreviewDialog
-        src={preview?.src ?? null}
-        alt={preview?.alt}
-        onClose={() => setPreview(null)}
-      />
-      <ConfirmDialog
-        open={clearOpen}
-        onOpenChange={setClearOpen}
-        title={t('Clear drawing records?')}
-        desc={t(
-          'This action will permanently remove all saved drawing records.'
+                      {entry.temporary && (
+                        <Button
+                          variant='ghost'
+                          size='sm'
+                          onClick={() =>
+                            window.open(
+                              entry.image,
+                              '_blank',
+                              'noopener,noreferrer'
+                            )
+                          }
+                          disabled={busyAction !== null}
+                        >
+                          <ExternalLink className='h-3.5 w-3.5' />
+                          {t('Open original')}
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
         )}
-        confirmText={t('Clear')}
-        destructive
-        isLoading={clearLoading}
-        handleConfirm={() => void handleClear()}
-      />
+
+        <ImagePreviewDialog
+          src={preview?.src ?? null}
+          alt={preview?.alt}
+          onClose={() => setPreview(null)}
+        />
+        <ConfirmDialog
+          open={clearOpen}
+          onOpenChange={setClearOpen}
+          title={t('Clear drawing records?')}
+          desc={t(
+            'This action will permanently remove all saved drawing records.'
+          )}
+          confirmText={t('Clear')}
+          destructive
+          isLoading={clearLoading}
+          handleConfirm={() => void handleClear()}
+        />
+        <ConfirmDialog
+          open={deleteTarget !== null}
+          onOpenChange={(open) => {
+            if (!open) setDeleteTarget(null)
+          }}
+          title={t('Delete drawing record?')}
+          desc={t('This action will permanently remove this drawing record.')}
+          confirmText={t('Delete')}
+          destructive
+          isLoading={deleteLoading}
+          handleConfirm={() => void handleConfirmDelete()}
+        />
+        <ConfirmDialog
+          open={batchDeleteOpen}
+          onOpenChange={setBatchDeleteOpen}
+          title={t('Delete selected drawing records?')}
+          desc={t(
+            'This action will permanently remove the selected drawing records.'
+          )}
+          confirmText={t('Delete')}
+          destructive
+          isLoading={batchDeleteLoading}
+          handleConfirm={() => void handleBatchDelete()}
+        />
+      </div>
     </div>
   )
 }

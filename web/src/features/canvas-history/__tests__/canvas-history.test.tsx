@@ -39,6 +39,7 @@ const mocks = vi.hoisted(() => ({
   loadHistory: vi.fn(),
   markLegacyMigrationPromptShown: vi.fn(),
   migrateLegacyHistory: vi.fn(),
+  removeHistoryEntries: vi.fn(),
   removeHistoryEntry: vi.fn(),
   restoreHistoryEntry: vi.fn(),
   shouldShowLegacyMigrationPrompt: vi.fn(() => false),
@@ -68,6 +69,7 @@ vi.mock('@/features/canvas/lib/history', () => ({
   loadHistory: mocks.loadHistory,
   markLegacyMigrationPromptShown: mocks.markLegacyMigrationPromptShown,
   migrateLegacyHistory: mocks.migrateLegacyHistory,
+  removeHistoryEntries: mocks.removeHistoryEntries,
   removeHistoryEntry: mocks.removeHistoryEntry,
   restoreHistoryEntry: mocks.restoreHistoryEntry,
   shouldShowLegacyMigrationPrompt: mocks.shouldShowLegacyMigrationPrompt,
@@ -91,6 +93,7 @@ beforeEach(() => {
   mocks.clearHistory.mockReset().mockResolvedValue(undefined)
   mocks.copyToClipboard.mockReset().mockResolvedValue(true)
   mocks.downloadImage.mockReset().mockResolvedValue(true)
+  mocks.removeHistoryEntries.mockReset().mockResolvedValue(undefined)
   mocks.removeHistoryEntry.mockReset().mockResolvedValue(undefined)
   mocks.restoreHistoryEntry.mockReset().mockResolvedValue({ success: true })
   mocks.toast.error.mockReset()
@@ -163,11 +166,18 @@ describe('CanvasHistory', () => {
     await waitFor(() => expect(mocks.clearHistory).toHaveBeenCalledWith(7))
   })
 
-  test('deletes immediately and offers an undo action', async () => {
+  test('requires confirmation before deleting a record and offers undo', async () => {
     mocks.loadHistory.mockResolvedValueOnce([entry])
     render(<CanvasHistory />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    expect(mocks.removeHistoryEntry).not.toHaveBeenCalled()
+    const dialog = await screen.findByRole('alertdialog')
+    expect(
+      within(dialog).getByText('Delete drawing record?')
+    ).toBeInTheDocument()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
     await waitFor(() =>
       expect(mocks.removeHistoryEntry).toHaveBeenCalledWith(7, entry.id)
     )
@@ -178,6 +188,69 @@ describe('CanvasHistory', () => {
     await waitFor(() =>
       expect(mocks.restoreHistoryEntry).toHaveBeenCalledWith(7, entry)
     )
+  })
+
+  test('cancels the delete confirmation without removing the record', async () => {
+    mocks.loadHistory.mockResolvedValueOnce([entry])
+    render(<CanvasHistory />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    const dialog = await screen.findByRole('alertdialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() =>
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    )
+    expect(mocks.removeHistoryEntry).not.toHaveBeenCalled()
+    expect(screen.getByAltText(entry.prompt)).toBeInTheDocument()
+  })
+
+  test('selects individual records for batch deletion', async () => {
+    mocks.loadHistory.mockResolvedValueOnce([entry])
+    render(<CanvasHistory />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Select' }))
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: `Select ${entry.prompt}` })
+    )
+    expect(screen.getByText('Selected 1 item(s)')).toBeInTheDocument()
+  })
+
+  test('selects all records and deletes them in one batch', async () => {
+    const secondEntry = { ...entry, id: 'entry-2', prompt: 'a red boat' }
+    mocks.loadHistory.mockResolvedValueOnce([entry, secondEntry])
+    render(<CanvasHistory />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Select' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all' }))
+    expect(screen.getByText('Selected 2 item(s)')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete selected' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(
+      within(dialog).getByText('Delete selected drawing records?')
+    ).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() =>
+      expect(mocks.removeHistoryEntries).toHaveBeenCalledWith(7, [
+        entry.id,
+        secondEntry.id,
+      ])
+    )
+    expect(screen.queryByAltText(entry.prompt)).not.toBeInTheDocument()
+    expect(screen.queryByAltText(secondEntry.prompt)).not.toBeInTheDocument()
+  })
+
+  test('keeps the record grid inside a vertical scroll container', async () => {
+    mocks.loadHistory.mockResolvedValueOnce([entry])
+    render(<CanvasHistory />)
+    await screen.findByText(entry.prompt)
+
+    const scrollContainer = screen.getByTestId('canvas-history-scroll')
+    expect(scrollContainer.className).toContain('overflow-y-auto')
+    expect(scrollContainer.className).toContain('flex-1')
+    expect(scrollContainer.className).toContain('min-h-0')
   })
 
   test('labels temporary image links clearly', async () => {

@@ -101,6 +101,11 @@ func userCheckinWithTransaction(checkin *Checkin, userId int, quotaAwarded int) 
 		}
 
 		// 步骤2: 在事务中增加用户额度
+		// 签到额度属于福利额度，必须先归一化历史钱包（仅有 quota、无分桶），
+		// 否则 quota = bonus_quota + paid_quota 不变式会被破坏。
+		if err := normalizeUserQuotaSourcesTx(tx, userId); err != nil {
+			return errors.New("签到失败：更新额度出错")
+		}
 		if err := tx.Model(&User{}).Where("id = ?", userId).
 			Updates(map[string]interface{}{
 				"quota":       gorm.Expr("quota + ?", quotaAwarded),

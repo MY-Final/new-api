@@ -84,6 +84,12 @@ func batchUpdate() {
 	}
 
 	if !hasData {
+		quotaUsageDailyLock.Lock()
+		hasData = len(quotaUsageDailyStore) > 0
+		quotaUsageDailyLock.Unlock()
+	}
+
+	if !hasData {
 		return
 	}
 
@@ -138,6 +144,7 @@ func batchUpdate() {
 	for key := range userIDs {
 		updateUserQuotaUsedQuotaAndRequestCount(key, userQuotaStore[key], bonusQuotaStore[key], paidQuotaStore[key], usedQuotaStore[key], requestCountStore[key])
 	}
+	flushQuotaUsageDaily()
 	common.SysLog("batch update finished")
 }
 

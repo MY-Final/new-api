@@ -112,7 +112,12 @@ func taskAdjustFunding(task *model.Task, delta int) error {
 	if delta > 0 {
 		return model.DecreaseUserQuota(task.UserId, delta, false)
 	}
-	return model.IncreaseUserQuota(task.UserId, -delta, false)
+	if err := model.IncreaseUserQuota(task.UserId, -delta, false); err != nil {
+		return err
+	}
+	// 退还进入福利桶，总账按同一分桶记一笔负数消耗。
+	model.RecordQuotaUsage(task.UserId, model.QuotaAllocation{Bonus: delta})
+	return nil
 }
 
 // taskAdjustTokenQuota 调整任务的令牌额度，delta > 0 表示扣费，delta < 0 表示退还。

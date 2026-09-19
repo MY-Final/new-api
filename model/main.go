@@ -354,6 +354,7 @@ func migrateDB() error {
 		&AffiliateRebate{},
 		&FinancialOperation{},
 		&QuotaData{},
+		&QuotaUsageDaily{},
 		&Task{},
 		&TaskPlugin{},
 		&Model{},

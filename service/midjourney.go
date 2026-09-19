@@ -104,6 +104,7 @@ func RefundMidjourneyQuota(ctx context.Context, task *model.Midjourney, reason s
 		logger.LogWarn(ctx, fmt.Sprintf("退还 Midjourney 用户额度失败 task %s: %s", task.MjId, err.Error()))
 		return false
 	}
+	model.RecordQuotaUsage(task.UserId, model.QuotaAllocation{Bonus: -quota})
 
 	if task.TokenId > 0 {
 		tokenKey := resolveTokenKey(ctx, task.TokenId, task.MjId)

@@ -24,6 +24,7 @@ import {
   downloadImage,
   loadHistory,
   persistImageSource,
+  removeHistoryEntries,
   removeHistoryEntry,
   saveHistoryEntries,
   type CanvasHistoryEntry,
@@ -215,5 +216,19 @@ describe('Canvas history storage', () => {
 
     await expect(loadHistory(1)).resolves.toEqual([])
     await expect(loadHistory(2)).resolves.toEqual([userTwoEntry])
+  })
+
+  test('removes multiple requested entries for one user only', async () => {
+    const first = createEntry('first', 3)
+    const second = createEntry('second', 2)
+    const kept = createEntry('kept', 1)
+    const otherUser = createEntry('first', 9)
+    await saveHistoryEntries(1, [first, second, kept])
+    await saveHistoryEntries(2, [otherUser])
+
+    await removeHistoryEntries(1, [first.id, second.id])
+
+    await expect(loadHistory(1)).resolves.toEqual([kept])
+    await expect(loadHistory(2)).resolves.toEqual([otherUser])
   })
 })

@@ -447,6 +447,29 @@ export async function removeHistoryEntry(
   }
 }
 
+export async function removeHistoryEntries(
+  userId: number,
+  ids: string[]
+): Promise<void> {
+  if (!isValidUserId(userId) || ids.length === 0) return
+  const database = await openHistoryDatabase()
+  try {
+    const transaction = database.transaction(HISTORY_STORE_NAME, 'readwrite')
+    const transactionDone = transactionResult(transaction)
+    const store = transaction.objectStore(HISTORY_STORE_NAME)
+    for (const id of ids) {
+      if (!id) continue
+      store.delete([userId, id])
+    }
+    await transactionDone
+    publishHistoryEvent('removed', userId)
+  } catch (cause) {
+    throw new HistoryStorageError('failed', cause)
+  } finally {
+    database.close()
+  }
+}
+
 export async function restoreHistoryEntry(
   userId: number,
   entry: CanvasHistoryEntry

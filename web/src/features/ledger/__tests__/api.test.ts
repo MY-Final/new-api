@@ -16,25 +16,20 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import dayjs from 'dayjs'
+import { describe, expect, test } from 'vitest'
 
-import { Main } from '@/components/layout'
-import { CanvasHistory } from '@/features/canvas-history'
-import { isSidebarModuleEnabled } from '@/lib/nav-modules'
+import { createDefaultLedgerFilters } from '../api'
 
-export const Route = createFileRoute('/_authenticated/canvas-history/')({
-  beforeLoad: () => {
-    if (!isSidebarModuleEnabled('chat', 'history')) {
-      throw redirect({ to: '/dashboard' })
-    }
-  },
-  component: CanvasHistoryPage,
+describe('createDefaultLedgerFilters', () => {
+  test('defaults the ledger range to the current day', () => {
+    const filters = createDefaultLedgerFilters()
+    const today = dayjs().format('YYYY-MM-DD')
+
+    expect(filters.startDate).toBe(today)
+    expect(filters.endDate).toBe(today)
+    expect(filters.page).toBe(1)
+    expect(filters.pageSize).toBeGreaterThan(0)
+    expect(filters.username).toBe('')
+  })
 })
-
-function CanvasHistoryPage() {
-  return (
-    <Main className='p-0'>
-      <CanvasHistory />
-    </Main>
-  )
-}

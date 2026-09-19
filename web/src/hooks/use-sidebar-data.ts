@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import {
   Activity,
   BarChart3,
+  BookOpen,
   Box,
   ClipboardList,
   CreditCard,
@@ -224,6 +225,11 @@ export function useSidebarData(): SidebarData {
             activeUrls: ['/finance'],
             configUrls: ['/finance'],
             icon: CreditCard,
+          },
+          {
+            title: t('General Ledger'),
+            url: '/ledger',
+            icon: BookOpen,
           },
           {
             title: t('System Info'),

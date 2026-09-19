@@ -18,23 +18,16 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { createFileRoute, redirect } from '@tanstack/react-router'
 
-import { Main } from '@/components/layout'
-import { CanvasHistory } from '@/features/canvas-history'
-import { isSidebarModuleEnabled } from '@/lib/nav-modules'
+import { Ledger } from '@/features/ledger'
+import { ROLE } from '@/lib/roles'
+import { useAuthStore } from '@/stores/auth-store'
 
-export const Route = createFileRoute('/_authenticated/canvas-history/')({
+export const Route = createFileRoute('/_authenticated/ledger/')({
   beforeLoad: () => {
-    if (!isSidebarModuleEnabled('chat', 'history')) {
-      throw redirect({ to: '/dashboard' })
+    const { auth } = useAuthStore.getState()
+    if (!auth.user || auth.user.role < ROLE.ADMIN) {
+      throw redirect({ to: '/403' })
     }
   },
-  component: CanvasHistoryPage,
+  component: Ledger,
 })
-
-function CanvasHistoryPage() {
-  return (
-    <Main className='p-0'>
-      <CanvasHistory />
-    </Main>
-  )
-}

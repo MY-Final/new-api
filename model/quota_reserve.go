@@ -219,10 +219,14 @@ func persistTokenQuotaDelta(id int, delta int) error {
 	return nil
 }
 
-func normalizeUserQuotaSources(id int) error {
-	return DB.Model(&User{}).
+func normalizeUserQuotaSourcesTx(tx *gorm.DB, id int) error {
+	return tx.Model(&User{}).
 		Where("id = ? AND bonus_quota = 0 AND paid_quota = 0 AND quota <> 0", id).
 		Update("paid_quota", gorm.Expr("quota")).Error
+}
+
+func normalizeUserQuotaSources(id int) error {
+	return normalizeUserQuotaSourcesTx(DB, id)
 }
 
 func reserveUserQuotaDB(id int, quota int, allowDebt bool) (bool, QuotaAllocation, error) {
@@ -289,7 +293,12 @@ func TryReserveUserQuotaAllocation(id int, quota int) (bool, QuotaAllocation, er
 		return true, QuotaAllocation{}, nil
 	}
 	if !common.RedisEnabled {
-		return reserveUserQuotaDB(id, quota, false)
+		reserved, allocation, err := reserveUserQuotaDB(id, quota, false)
+		if err != nil || !reserved {
+			return reserved, allocation, err
+		}
+		RecordQuotaUsage(id, allocation)
+		return true, allocation, nil
 	}
 
 	result, allocation, err := cacheTryReserveUserQuota(id, int64(quota), false)
@@ -302,7 +311,12 @@ func TryReserveUserQuotaAllocation(id int, quota int) (bool, QuotaAllocation, er
 		if err != nil {
 			common.SysLog("user quota cache reserve unavailable, falling back to database: " + err.Error())
 		}
-		return reserveUserQuotaDB(id, quota, false)
+		reserved, allocation, dbErr := reserveUserQuotaDB(id, quota, false)
+		if dbErr != nil || !reserved {
+			return reserved, allocation, dbErr
+		}
+		RecordQuotaUsage(id, allocation)
+		return true, allocation, nil
 	}
 	if result == cacheQuotaInsufficient {
 		return false, QuotaAllocation{}, nil
@@ -314,6 +328,7 @@ func TryReserveUserQuotaAllocation(id int, quota int) (bool, QuotaAllocation, er
 		}
 		return false, QuotaAllocation{}, err
 	}
+	RecordQuotaUsage(id, allocation)
 	return true, allocation, nil
 }
 
@@ -335,6 +350,7 @@ func ConsumeUserQuota(id int, quota int, allowDebt bool) (QuotaAllocation, error
 		if !reserved {
 			return QuotaAllocation{}, errors.New("quota insufficient")
 		}
+		RecordQuotaUsage(id, allocation)
 		return allocation, nil
 	}
 	result, allocation, err := cacheTryReserveUserQuota(id, int64(quota), allowDebt)
@@ -352,6 +368,7 @@ func ConsumeUserQuota(id int, quota int, allowDebt bool) (QuotaAllocation, error
 			if !reserved {
 				return QuotaAllocation{}, errors.New("quota insufficient")
 			}
+			RecordQuotaUsage(id, allocation)
 			return allocation, nil
 		}()
 	}
@@ -365,6 +382,7 @@ func ConsumeUserQuota(id int, quota int, allowDebt bool) (QuotaAllocation, error
 		}
 		return QuotaAllocation{}, err
 	}
+	RecordQuotaUsage(id, allocation)
 	return allocation, nil
 }
 
@@ -372,8 +390,11 @@ func AdjustUserQuotaAllocation(id int, allocation QuotaAllocation, db bool) erro
 	if allocation.Total() == 0 {
 		return nil
 	}
+	// 该函数用于退回预扣/多扣的额度，对账单记一笔负数消耗（退款）。
+	usage := QuotaAllocation{Bonus: -allocation.Bonus, Paid: -allocation.Paid}
 	if !db && common.BatchUpdateEnabled {
 		addUserQuotaSourceRecord(id, allocation)
+		RecordQuotaUsage(id, usage)
 		if common.RedisEnabled {
 			if _, err := cacheApplyUserQuotaSourceDelta(id, allocation); err != nil {
 				common.SysLog("failed to sync user quota source cache: " + err.Error())
@@ -384,6 +405,7 @@ func AdjustUserQuotaAllocation(id int, allocation QuotaAllocation, db bool) erro
 	if err := persistUserQuotaAllocationDelta(id, allocation, db); err != nil {
 		return err
 	}
+	RecordQuotaUsage(id, usage)
 	if common.RedisEnabled {
 		if _, err := cacheApplyUserQuotaSourceDelta(id, allocation); err != nil {
 			common.SysLog("failed to sync user quota source cache: " + err.Error())

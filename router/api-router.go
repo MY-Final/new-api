@@ -189,6 +189,13 @@ func SetApiRouter(router *gin.Engine) {
 			financeRoute.POST("/penalties/reverse", controller.ReverseFinancePenalty)
 		}
 
+		ledgerRoute := apiRouter.Group("/ledger")
+		ledgerRoute.Use(middleware.AdminAuth())
+		{
+			ledgerRoute.GET("/daily", controller.GetQuotaLedgerDaily)
+			ledgerRoute.GET("/summary", controller.GetQuotaLedgerSummary)
+		}
+
 		// Subscription billing (plans, purchase, admin management)
 		subscriptionRoute := apiRouter.Group("/subscription")
 		subscriptionRoute.Use(middleware.UserAuth())
