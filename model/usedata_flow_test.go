@@ -194,6 +194,40 @@ func TestLogQuotaDataSplitsRowsByUseGroupTokenChannelAndNode(t *testing.T) {
 	require.Equal(t, 25, rows[1].Quota)
 }
 
+func TestQuotaDataTimeRangeIncludesBucketContainingStart(t *testing.T) {
+	truncateTables(t)
+
+	// quota_data rows are bucketed at the start of the hour by LogQuotaData.
+	seedFlowQuotaData(t, QuotaData{
+		UserID:    1,
+		Username:  "alice",
+		UseGroup:  "vip",
+		ModelName: "gpt-a",
+		CreatedAt: 3600,
+		Count:     1,
+		Quota:     10,
+		TokenUsed: 5,
+	})
+
+	dashboardRows, err := GetAllQuotaDates(3661, 3900, "")
+	require.NoError(t, err)
+	require.Len(t, dashboardRows, 1)
+	require.Equal(t, 5, dashboardRows[0].TokenUsed)
+
+	flowRows, err := GetFlowQuotaData(3661, 3900, "", 0, common.RoleRootUser)
+	require.NoError(t, err)
+	require.Len(t, flowRows, 1)
+
+	rankingTotals, err := GetRankingQuotaTotals(3661, 3900)
+	require.NoError(t, err)
+	require.Len(t, rankingTotals, 1)
+	require.Equal(t, int64(5), rankingTotals[0].TotalTokens)
+
+	outsideRows, err := GetAllQuotaDates(7201, 7300, "")
+	require.NoError(t, err)
+	require.Empty(t, outsideRows)
+}
+
 func TestRecordConsumeLogDashboardTokensIncludeCacheInput(t *testing.T) {
 	truncateTables(t)
 	common.DataExportEnabled = true

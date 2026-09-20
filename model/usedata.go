@@ -38,6 +38,16 @@ type QuotaDataLogParams struct {
 	NodeName  string
 }
 
+// quotaDataBucketStart floors a query start time to the hour bucket used when
+// quota_data rows are written, so a range starting mid-hour still includes the
+// bucket holding its first requests.
+func quotaDataBucketStart(startTime int64) int64 {
+	if startTime <= 0 {
+		return startTime
+	}
+	return startTime - startTime%3600
+}
+
 func UpdateQuotaData() {
 	for {
 		if common.DataExportEnabled {
@@ -140,6 +150,7 @@ func increaseQuotaData(quotaData *QuotaData) {
 
 func GetQuotaDataByUsername(username string, startTime int64, endTime int64) (quotaData []*QuotaData, err error) {
 	var quotaDatas []*QuotaData
+	startTime = quotaDataBucketStart(startTime)
 	// 从quota_data表中查询数据
 	err = DB.Table("quota_data").
 		Select("user_id, username, model_name, created_at, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used").
@@ -151,6 +162,7 @@ func GetQuotaDataByUsername(username string, startTime int64, endTime int64) (qu
 
 func GetQuotaDataByUserId(userId int, startTime int64, endTime int64) (quotaData []*QuotaData, err error) {
 	var quotaDatas []*QuotaData
+	startTime = quotaDataBucketStart(startTime)
 	// 从quota_data表中查询数据
 	err = DB.Table("quota_data").
 		Select("user_id, username, model_name, created_at, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used").
@@ -162,6 +174,7 @@ func GetQuotaDataByUserId(userId int, startTime int64, endTime int64) (quotaData
 
 func GetQuotaDataGroupByUser(startTime int64, endTime int64) (quotaData []*QuotaData, err error) {
 	var quotaDatas []*QuotaData
+	startTime = quotaDataBucketStart(startTime)
 	err = DB.Table("quota_data").
 		Select("username, created_at, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used").
 		Where("created_at >= ? and created_at <= ?", startTime, endTime).
@@ -175,6 +188,7 @@ func GetAllQuotaDates(startTime int64, endTime int64, username string) (quotaDat
 		return GetQuotaDataByUsername(username, startTime, endTime)
 	}
 	var quotaDatas []*QuotaData
+	startTime = quotaDataBucketStart(startTime)
 	// 从quota_data表中查询数据
 	// only select model_name, sum(count) as count, sum(quota) as quota, model_name, created_at from quota_data group by model_name, created_at;
 	//err = DB.Table("quota_data").Where("created_at >= ? and created_at <= ?", startTime, endTime).Find(&quotaDatas).Error

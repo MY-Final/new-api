@@ -57,7 +57,7 @@ func rankingBucketExpr(bucketSize int64) string {
 
 func applyRankingQuotaTimeRange(query *gorm.DB, startTime int64, endTime int64) *gorm.DB {
 	if startTime > 0 {
-		query = query.Where("created_at >= ?", startTime)
+		query = query.Where("created_at >= ?", quotaDataBucketStart(startTime))
 	}
 	if endTime > 0 {
 		query = query.Where("created_at <= ?", endTime)
