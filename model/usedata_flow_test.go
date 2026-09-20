@@ -1,9 +1,11 @@
 package model
 
 import (
+	"net/http/httptest"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
 
@@ -190,4 +192,53 @@ func TestLogQuotaDataSplitsRowsByUseGroupTokenChannelAndNode(t *testing.T) {
 	require.Equal(t, 60, rows[0].TokenUsed)
 	require.Equal(t, "default", rows[1].UseGroup)
 	require.Equal(t, 25, rows[1].Quota)
+}
+
+func TestRecordConsumeLogDashboardTokensIncludeCacheInput(t *testing.T) {
+	truncateTables(t)
+	common.DataExportEnabled = true
+	t.Cleanup(func() {
+		common.DataExportEnabled = true
+		CacheQuotaDataLock.Lock()
+		CacheQuotaData = make(map[string]*QuotaData)
+		CacheQuotaDataLock.Unlock()
+	})
+
+	record := func(t *testing.T, userId int, username string, params RecordConsumeLogParams) {
+		t.Helper()
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Set("username", username)
+		RecordConsumeLog(c, userId, params)
+	}
+
+	// Anthropic-style usage: prompt_tokens excludes cache reads/writes, while
+	// InputTokens is the cache-inclusive total shown by the usage views.
+	record(t, 1, "alice", RecordConsumeLogParams{
+		PromptTokens:     1000,
+		InputTokens:      9000,
+		CompletionTokens: 50,
+		ModelName:        "claude-sonnet",
+		Quota:            123,
+	})
+	// OpenAI-style usage: no separate total, so prompt + completion is kept.
+	record(t, 2, "bob", RecordConsumeLogParams{
+		PromptTokens:     700,
+		CompletionTokens: 30,
+		ModelName:        "gpt-a",
+		Quota:            45,
+	})
+	SaveQuotaDataCache()
+
+	var rows []QuotaData
+	require.NoError(t, DB.Order("user_id ASC").Find(&rows).Error)
+	require.Len(t, rows, 2)
+	require.Equal(t, 9050, rows[0].TokenUsed)
+	require.Equal(t, 730, rows[1].TokenUsed)
+
+	var logs []Log
+	require.NoError(t, DB.Order("user_id ASC").Find(&logs).Error)
+	require.Len(t, logs, 2)
+	require.Equal(t, 1000, logs[0].PromptTokens)
+	require.Equal(t, 50, logs[0].CompletionTokens)
+	require.Equal(t, 700, logs[1].PromptTokens)
 }

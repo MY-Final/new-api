@@ -324,6 +324,7 @@ func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string,
 type RecordConsumeLogParams struct {
 	ChannelId        int       `json:"channel_id"`
 	PromptTokens     int       `json:"prompt_tokens"`
+	InputTokens      int       `json:"input_tokens"`
 	CompletionTokens int       `json:"completion_tokens"`
 	ModelName        string    `json:"model_name"`
 	TokenName        string    `json:"token_name"`
@@ -384,13 +385,19 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 		logger.LogError(c, "failed to record log: "+err.Error())
 	}
 	if common.DataExportEnabled {
+		// Dashboard totals use the cache-inclusive input total so cache
+		// reads/writes are not dropped from the stat cards.
+		tokenUsed := params.PromptTokens + params.CompletionTokens
+		if params.InputTokens > 0 {
+			tokenUsed = params.InputTokens + params.CompletionTokens
+		}
 		LogQuotaData(QuotaDataLogParams{
 			UserID:    userId,
 			Username:  username,
 			ModelName: params.ModelName,
 			Quota:     params.Quota,
 			CreatedAt: createdAt,
-			TokenUsed: params.PromptTokens + params.CompletionTokens,
+			TokenUsed: tokenUsed,
 			UseGroup:  params.Group,
 			TokenID:   params.TokenId,
 			ChannelID: params.ChannelId,
