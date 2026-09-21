@@ -377,6 +377,38 @@ describe('Intelligence test page', () => {
     ).toContain('pedal-spin')
   })
 
+  test('opens larger previews for the animation and the screenshot', async () => {
+    installFetchMock()
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: { success: true, data: ['gpt-test'] },
+    } as never)
+
+    renderPage()
+    await selectDefaultPlatformConnection()
+
+    const user = userEvent.setup()
+    await user.click(
+      screen.getByRole('button', { name: /Start test|Run again/ })
+    )
+    expect(await screen.findByText('Generated')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Preview animation' }))
+    expect(await screen.findByText('Animation preview')).toBeInTheDocument()
+    expect(screen.getAllByTitle('Drawing animation preview')).toHaveLength(2)
+
+    await user.keyboard('{Escape}')
+    await waitFor(() =>
+      expect(screen.getAllByTitle('Drawing animation preview')).toHaveLength(1)
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Preview screenshot' }))
+    await waitFor(() =>
+      expect(
+        screen.getAllByAltText('Rendered drawing screenshot')
+      ).toHaveLength(2)
+    )
+  })
+
   test('runs only the selected tasks and skips the rest', async () => {
     const fetchMock = installFetchMock()
     vi.spyOn(api, 'get').mockResolvedValue({

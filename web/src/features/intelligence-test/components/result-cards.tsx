@@ -34,6 +34,7 @@ import {
   WebPreview,
   WebPreviewBody,
 } from '@/components/ai-elements/web-preview'
+import { ImagePreviewDialog } from '@/components/image-preview-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -61,6 +62,7 @@ import type {
   TaskResult,
   TaskStatus,
 } from '../types'
+import { AnimationPreviewDialog } from './animation-preview-dialog'
 
 function formatDuration(durationMs: number, unit: string): string {
   if (durationMs < 1000) return `${Math.max(1, Math.round(durationMs))}ms`
@@ -301,6 +303,10 @@ export function DrawingResultCard(props: {
   const { t, i18n } = useTranslation()
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const [playbackKey, setPlaybackKey] = useState(0)
+  const [animationPreviewOpen, setAnimationPreviewOpen] = useState(false)
+  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(
+    null
+  )
   const data = props.result.data
   const previewHtml = data ? buildSandboxedPreviewHtml(data.html) : ''
 
@@ -347,7 +353,7 @@ export function DrawingResultCard(props: {
 
         {data && (
           <>
-            <div className='bg-muted/20 aspect-[3/2] w-full overflow-hidden rounded-lg border'>
+            <div className='bg-muted/20 relative aspect-[3/2] w-full overflow-hidden rounded-lg border'>
               <WebPreview className='rounded-none border-0'>
                 <WebPreviewBody
                   key={playbackKey}
@@ -357,6 +363,13 @@ export function DrawingResultCard(props: {
                   className='h-full w-full'
                 />
               </WebPreview>
+              <Button
+                type='button'
+                variant='ghost'
+                className='absolute inset-0 z-10 h-full w-full cursor-zoom-in rounded-lg p-0 hover:bg-transparent'
+                aria-label={t('Preview animation')}
+                onClick={() => setAnimationPreviewOpen(true)}
+              />
             </div>
             <div className='grid gap-3 sm:grid-cols-[1fr_150px]'>
               <div className='space-y-2'>
@@ -374,11 +387,19 @@ export function DrawingResultCard(props: {
                 </div>
               </div>
               {data.screenshot && (
-                <img
-                  src={data.screenshot}
-                  alt={t('Rendered drawing screenshot')}
-                  className='bg-muted aspect-[3/2] w-full rounded-md border object-contain'
-                />
+                <Button
+                  type='button'
+                  variant='ghost'
+                  className='h-auto w-full cursor-zoom-in p-0'
+                  aria-label={t('Preview screenshot')}
+                  onClick={() => setScreenshotPreview(data.screenshot)}
+                >
+                  <img
+                    src={data.screenshot}
+                    alt={t('Rendered drawing screenshot')}
+                    className='bg-muted aspect-[3/2] w-full rounded-md border object-contain'
+                  />
+                </Button>
               )}
             </div>
             <SourceCode html={data.html} />
@@ -386,6 +407,16 @@ export function DrawingResultCard(props: {
         )}
         <TaskEmptyState result={props.result} />
         <RawResponse rawResponse={props.result.rawResponse} language='html' />
+        <AnimationPreviewDialog
+          open={animationPreviewOpen}
+          onOpenChange={setAnimationPreviewOpen}
+          html={previewHtml}
+        />
+        <ImagePreviewDialog
+          src={screenshotPreview}
+          alt={t('Rendered drawing screenshot')}
+          onClose={() => setScreenshotPreview(null)}
+        />
       </CardContent>
     </Card>
   )
