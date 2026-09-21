@@ -57,6 +57,10 @@ import { ApiKeysProvider } from '../api-keys-provider'
 import { ApiKeysTable } from '../api-keys-table'
 
 const now = 1_700_000_000_000
+const testCurrency = {
+  ...DEFAULT_CURRENCY_CONFIG,
+  quotaDisplayType: 'USD' as const,
+}
 const key = apiKeySchema.parse({
   id: 7,
   name: 'production',
@@ -136,9 +140,7 @@ function renderQuota(apiKey: ApiKey = key) {
 beforeEach(() => {
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   localStorage.clear()
-  useSystemConfigStore
-    .getState()
-    .setConfig({ currency: { ...DEFAULT_CURRENCY_CONFIG } })
+  useSystemConfigStore.getState().setConfig({ currency: testCurrency })
   vi.spyOn(api, 'get').mockResolvedValue({ data: { success: true, data: {} } })
 })
 afterEach(() => {
@@ -146,9 +148,7 @@ afterEach(() => {
   toast.dismiss()
   localStorage.clear()
   clients.splice(0).forEach((client) => client.clear())
-  useSystemConfigStore
-    .getState()
-    .setConfig({ currency: { ...DEFAULT_CURRENCY_CONFIG } })
+  useSystemConfigStore.getState().setConfig({ currency: testCurrency })
 })
 
 it('shows desktop remaining and used amounts side by side without labels, with the currency only in the header', () => {
@@ -477,6 +477,28 @@ it.each([true, false])(
     }
   }
 )
+
+it('keeps CC Switch and Canvas import outside the overflow menu', async () => {
+  const { post } = await renderKeysPage()
+  const user = userEvent.setup()
+
+  expect(screen.getByRole('button', { name: 'CC Switch' })).toBeInTheDocument()
+  expect(
+    screen.getByRole('button', { name: 'Import to Canvas' })
+  ).toBeInTheDocument()
+
+  await user.click(screen.getByRole('button', { name: 'Open menu' }))
+  expect(
+    screen.queryByRole('menuitem', { name: 'CC Switch' })
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('menuitem', { name: 'Import to Canvas' })
+  ).not.toBeInTheDocument()
+  await user.keyboard('{Escape}')
+
+  await user.click(screen.getByRole('button', { name: 'CC Switch' }))
+  await waitFor(() => expect(post).toHaveBeenCalledWith('/api/token/7/key'))
+})
 
 it('keeps full mobile information without group or quota section headings', async () => {
   const matchMedia = window.matchMedia

@@ -144,6 +144,38 @@ export function DataTableRowActions<TData>({
     [resolveRealKey, apiKey.id, serverAddress, t]
   )
 
+  const handleOpenCCSwitch = async () => {
+    const realKey = await resolveRealKey(apiKey.id)
+    if (!realKey) return
+    setResolvedKey(realKey)
+    setCurrentRow(apiKey)
+    setOpen('cc-switch')
+  }
+
+  const handleImportToCanvas = async () => {
+    const realKey = await resolveRealKey(apiKey.id)
+    if (!realKey) return
+    if (!userId) {
+      toast.error(t('Please sign in before importing an API key.'))
+      return
+    }
+    try {
+      sessionStorage.setItem(
+        getCanvasStorageKey(STORAGE_KEYS.API_KEY, userId),
+        realKey
+      )
+      sessionStorage.setItem(
+        getCanvasStorageKey(STORAGE_KEYS.GROUP, userId),
+        apiKey.group || ''
+      )
+    } catch {
+      toast.error(t('Unable to import the API key to Canvas.'))
+      return
+    }
+    toast.success(t('Imported to Canvas'))
+    void navigate({ to: '/canvas' })
+  }
+
   const handleToggleStatus = async (
     event?: React.MouseEvent<HTMLButtonElement>
   ) => {
@@ -221,6 +253,40 @@ export function DataTableRowActions<TData>({
         <TooltipContent>{t('Edit')}</TooltipContent>
       </Tooltip>
 
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant='ghost'
+              size='icon-sm'
+              onClick={handleOpenCCSwitch}
+              disabled={isRealKeyLoading}
+              aria-label={t('CC Switch')}
+            />
+          }
+        >
+          <ArrowRightLeft />
+        </TooltipTrigger>
+        <TooltipContent>{t('CC Switch')}</TooltipContent>
+      </Tooltip>
+
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant='ghost'
+              size='icon-sm'
+              onClick={handleImportToCanvas}
+              disabled={isRealKeyLoading}
+              aria-label={t('Import to Canvas')}
+            />
+          }
+        >
+          <ImagePlus />
+        </TooltipTrigger>
+        <TooltipContent>{t('Import to Canvas')}</TooltipContent>
+      </Tooltip>
+
       <DataTableRowActionMenu
         ariaLabel={t('Open menu')}
         contentClassName='w-[200px]'
@@ -258,70 +324,28 @@ export function DataTableRowActions<TData>({
             <Link size={16} />
           </DropdownMenuShortcut>
         </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={async () => {
-            const realKey = await resolveRealKey(apiKey.id)
-            if (!realKey) return
-            setResolvedKey(realKey)
-            setCurrentRow(apiKey)
-            setOpen('cc-switch')
-          }}
-        >
-          {t('CC Switch')}
-          <DropdownMenuShortcut>
-            <ArrowRightLeft size={16} />
-          </DropdownMenuShortcut>
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={async () => {
-            const realKey = await resolveRealKey(apiKey.id)
-            if (!realKey) return
-            if (!userId) {
-              toast.error(t('Please sign in before importing an API key.'))
-              return
-            }
-            try {
-              sessionStorage.setItem(
-                getCanvasStorageKey(STORAGE_KEYS.API_KEY, userId),
-                realKey
-              )
-              sessionStorage.setItem(
-                getCanvasStorageKey(STORAGE_KEYS.GROUP, userId),
-                apiKey.group || ''
-              )
-            } catch {
-              toast.error(t('Unable to import the API key to Canvas.'))
-              return
-            }
-            toast.success(t('Imported to Canvas'))
-            void navigate({ to: '/canvas' })
-          }}
-        >
-          {t('Import to Canvas')}
-          <DropdownMenuShortcut>
-            <ImagePlus size={16} />
-          </DropdownMenuShortcut>
-        </DropdownMenuItem>
         {hasChatPresets && (
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>{t('Chat')}</DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-              {chatPresets.map((preset) => (
-                <DropdownMenuItem
-                  key={preset.id}
-                  onClick={() => handleOpenChatPreset(preset)}
-                >
-                  {preset.name}
-                  {preset.type !== 'web' && (
-                    <DropdownMenuShortcut>
-                      <ExternalLink size={16} />
-                    </DropdownMenuShortcut>
-                  )}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>{t('Chat')}</DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                {chatPresets.map((preset) => (
+                  <DropdownMenuItem
+                    key={preset.id}
+                    onClick={() => handleOpenChatPreset(preset)}
+                  >
+                    {preset.name}
+                    {preset.type !== 'web' && (
+                      <DropdownMenuShortcut>
+                        <ExternalLink size={16} />
+                      </DropdownMenuShortcut>
+                    )}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          </>
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem
