@@ -59,6 +59,7 @@ export const SIDEBAR_MODULES_DEFAULT: SidebarModulesAdminConfig = {
   chat: {
     enabled: true,
     playground: true,
+    intelligence: true,
     canvas: true,
     history: true,
     chat: true,

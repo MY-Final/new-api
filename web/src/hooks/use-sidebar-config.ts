@@ -40,6 +40,7 @@ const DEFAULT_SIDEBAR_MODULES: SidebarModulesAdminConfig = {
   chat: {
     enabled: true,
     playground: true,
+    intelligence: true,
     canvas: true,
     history: true,
     chat: true,
@@ -104,6 +105,7 @@ const mergeWithDefaultSidebarModules = (
  */
 const URL_TO_CONFIG_MAP: Record<string, { section: string; module: string }> = {
   '/playground': { section: 'chat', module: 'playground' },
+  '/intelligence-test': { section: 'chat', module: 'intelligence' },
   '/canvas': { section: 'chat', module: 'canvas' },
   '/canvas-history': { section: 'chat', module: 'history' },
   '/dashboard': { section: 'console', module: 'detail' },

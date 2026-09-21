@@ -21,6 +21,7 @@ import {
   BarChart3,
   BookOpen,
   Box,
+  Brain,
   ClipboardList,
   CreditCard,
   CircleDollarSign,
@@ -78,6 +79,11 @@ export function useSidebarData(): SidebarData {
             title: t('Playground'),
             url: '/playground',
             icon: FlaskConical,
+          },
+          {
+            title: t('Intelligence Test'),
+            url: '/intelligence-test',
+            icon: Brain,
           },
           {
             title: t('Canvas'),

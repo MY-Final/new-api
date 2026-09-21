@@ -92,6 +92,10 @@ export function SidebarModulesSection({
         title: t('Playground'),
         description: t('Experiment with prompts and models in real time.'),
       },
+      intelligence: {
+        title: t('Intelligence Test'),
+        description: t('Run reasoning, drawing, and knowledge checks.'),
+      },
       canvas: {
         title: t('Canvas'),
         description: t(

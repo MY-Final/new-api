@@ -44,6 +44,7 @@ import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authe
 import { Route as AuthenticatedDashboardSectionRouteImport } from './routes/_authenticated/dashboard/$section'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedFinanceSectionRouteImport } from './routes/_authenticated/finance/$section'
+import { Route as AuthenticatedIntelligenceTestIndexRouteImport } from './routes/_authenticated/intelligence-test/index'
 import { Route as AuthenticatedKeysIndexRouteImport } from './routes/_authenticated/keys/index'
 import { Route as AuthenticatedKunCodeRelayPulseIndexRouteImport } from './routes/_authenticated/kun-code-relay-pulse/index'
 import { Route as AuthenticatedLedgerIndexRouteImport } from './routes/_authenticated/ledger/index'
@@ -263,6 +264,12 @@ const AuthenticatedFinanceSectionRoute =
   AuthenticatedFinanceSectionRouteImport.update({
     id: '/finance/$section',
     path: '/finance/$section',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedIntelligenceTestIndexRoute =
+  AuthenticatedIntelligenceTestIndexRouteImport.update({
+    id: '/intelligence-test/',
+    path: '/intelligence-test/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedKeysIndexRoute = AuthenticatedKeysIndexRouteImport.update({
@@ -526,6 +533,7 @@ export interface FileRoutesByFullPath {
   '/canvas/': typeof AuthenticatedCanvasIndexRoute
   '/channels/': typeof AuthenticatedChannelsIndexRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
+  '/intelligence-test/': typeof AuthenticatedIntelligenceTestIndexRoute
   '/keys/': typeof AuthenticatedKeysIndexRoute
   '/kun-code-relay-pulse/': typeof AuthenticatedKunCodeRelayPulseIndexRoute
   '/ledger/': typeof AuthenticatedLedgerIndexRoute
@@ -598,6 +606,7 @@ export interface FileRoutesByTo {
   '/canvas': typeof AuthenticatedCanvasIndexRoute
   '/channels': typeof AuthenticatedChannelsIndexRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
+  '/intelligence-test': typeof AuthenticatedIntelligenceTestIndexRoute
   '/keys': typeof AuthenticatedKeysIndexRoute
   '/kun-code-relay-pulse': typeof AuthenticatedKunCodeRelayPulseIndexRoute
   '/ledger': typeof AuthenticatedLedgerIndexRoute
@@ -674,6 +683,7 @@ export interface FileRoutesById {
   '/_authenticated/canvas/': typeof AuthenticatedCanvasIndexRoute
   '/_authenticated/channels/': typeof AuthenticatedChannelsIndexRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
+  '/_authenticated/intelligence-test/': typeof AuthenticatedIntelligenceTestIndexRoute
   '/_authenticated/keys/': typeof AuthenticatedKeysIndexRoute
   '/_authenticated/kun-code-relay-pulse/': typeof AuthenticatedKunCodeRelayPulseIndexRoute
   '/_authenticated/ledger/': typeof AuthenticatedLedgerIndexRoute
@@ -749,6 +759,7 @@ export interface FileRouteTypes {
     | '/canvas/'
     | '/channels/'
     | '/dashboard/'
+    | '/intelligence-test/'
     | '/keys/'
     | '/kun-code-relay-pulse/'
     | '/ledger/'
@@ -821,6 +832,7 @@ export interface FileRouteTypes {
     | '/canvas'
     | '/channels'
     | '/dashboard'
+    | '/intelligence-test'
     | '/keys'
     | '/kun-code-relay-pulse'
     | '/ledger'
@@ -896,6 +908,7 @@ export interface FileRouteTypes {
     | '/_authenticated/canvas/'
     | '/_authenticated/channels/'
     | '/_authenticated/dashboard/'
+    | '/_authenticated/intelligence-test/'
     | '/_authenticated/keys/'
     | '/_authenticated/kun-code-relay-pulse/'
     | '/_authenticated/ledger/'
@@ -1198,6 +1211,13 @@ declare module '@tanstack/react-router' {
       path: '/finance/$section'
       fullPath: '/finance/$section'
       preLoaderRoute: typeof AuthenticatedFinanceSectionRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/intelligence-test/': {
+      id: '/_authenticated/intelligence-test/'
+      path: '/intelligence-test'
+      fullPath: '/intelligence-test/'
+      preLoaderRoute: typeof AuthenticatedIntelligenceTestIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/keys/': {
@@ -1573,6 +1593,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCanvasIndexRoute: typeof AuthenticatedCanvasIndexRoute
   AuthenticatedChannelsIndexRoute: typeof AuthenticatedChannelsIndexRoute
   AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
+  AuthenticatedIntelligenceTestIndexRoute: typeof AuthenticatedIntelligenceTestIndexRoute
   AuthenticatedKeysIndexRoute: typeof AuthenticatedKeysIndexRoute
   AuthenticatedKunCodeRelayPulseIndexRoute: typeof AuthenticatedKunCodeRelayPulseIndexRoute
   AuthenticatedLedgerIndexRoute: typeof AuthenticatedLedgerIndexRoute
@@ -1609,6 +1630,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCanvasIndexRoute: AuthenticatedCanvasIndexRoute,
   AuthenticatedChannelsIndexRoute: AuthenticatedChannelsIndexRoute,
   AuthenticatedDashboardIndexRoute: AuthenticatedDashboardIndexRoute,
+  AuthenticatedIntelligenceTestIndexRoute:
+    AuthenticatedIntelligenceTestIndexRoute,
   AuthenticatedKeysIndexRoute: AuthenticatedKeysIndexRoute,
   AuthenticatedKunCodeRelayPulseIndexRoute:
     AuthenticatedKunCodeRelayPulseIndexRoute,
