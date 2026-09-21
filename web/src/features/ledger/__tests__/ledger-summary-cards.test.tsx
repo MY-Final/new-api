@@ -37,22 +37,26 @@ const summary: QuotaLedgerSummary = {
 }
 
 describe('LedgerSummaryCards', () => {
-  test('renders site-level consumption and balance cards', () => {
+  test('renders the four ledger overview cards with quota breakdowns', () => {
     render(
       <LedgerSummaryCards summary={summary} loading={false} error={false} />
     )
 
-    expect(screen.getByText('Total consumed')).toBeInTheDocument()
     expect(
       screen.getByText('Consumption in selected period')
     ).toBeInTheDocument()
     expect(screen.getByText('Remaining quota')).toBeInTheDocument()
-    expect(screen.getByText('Remaining welfare quota')).toBeInTheDocument()
-    expect(screen.getByText('Remaining paid quota')).toBeInTheDocument()
     expect(screen.getByText('Debt users')).toBeInTheDocument()
     expect(
       screen.getByText('Check-in welfare issued today')
     ).toBeInTheDocument()
+    expect(screen.getAllByText('Paid quota')).toHaveLength(2)
+    expect(screen.getAllByText('Welfare quota')).toHaveLength(2)
+    expect(screen.queryByText('Total consumed')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Remaining welfare quota')
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Remaining paid quota')).not.toBeInTheDocument()
     expect(screen.getByText('2')).toBeInTheDocument()
     expect(screen.getByText('3 user(s) checked in today')).toBeInTheDocument()
   })

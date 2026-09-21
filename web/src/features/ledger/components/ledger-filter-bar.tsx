@@ -37,7 +37,12 @@ export function LedgerFilterBar(props: {
   const hasActiveFilters = Boolean(props.start || props.end || props.username)
 
   return (
-    <div className={cn('flex flex-wrap items-center gap-2', props.className)}>
+    <div
+      className={cn(
+        'bg-muted/20 flex flex-wrap items-center gap-2 rounded-lg border p-2',
+        props.className
+      )}
+    >
       <Input
         className='w-full sm:w-56'
         value={props.username}

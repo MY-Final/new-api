@@ -19,9 +19,6 @@ For commercial licensing, please contact support@quantumnous.com
 import {
   AlertTriangle,
   CalendarCheck,
-  Coins,
-  Flame,
-  Gift,
   TrendingUp,
   Wallet,
   type LucideIcon,
@@ -58,32 +55,6 @@ export function LedgerSummaryCards(props: {
   const format = (value?: number) => formatQuota(value ?? 0)
   const cards: LedgerSummaryCard[] = [
     {
-      key: 'consumed',
-      title: t('Total consumed'),
-      value: format(props.summary?.total_consumed_quota),
-      description: t('All-time consumption of this site'),
-      icon: Flame,
-      tone: 'accent-1' as const,
-    },
-    {
-      key: 'range',
-      title: t('Consumption in selected period'),
-      value: format(props.summary?.range_quota),
-      description: t('Paid quota + welfare quota'),
-      icon: TrendingUp,
-      tone: 'accent-2' as const,
-      details: [
-        {
-          label: t('Paid quota'),
-          value: format(props.summary?.range_paid_quota),
-        },
-        {
-          label: t('Welfare quota'),
-          value: format(props.summary?.range_bonus_quota),
-        },
-      ],
-    },
-    {
       key: 'remaining',
       title: t('Remaining quota'),
       value: format(props.summary?.remaining_quota),
@@ -98,34 +69,28 @@ export function LedgerSummaryCards(props: {
         {
           label: t('Welfare quota'),
           value: format(props.summary?.remaining_bonus_quota),
+          tone: 'success',
         },
       ],
     },
     {
-      key: 'remaining-bonus',
-      title: t('Remaining welfare quota'),
-      value: format(props.summary?.remaining_bonus_quota),
-      description: t('Grants such as check-in rewards'),
-      icon: Gift,
-      tone: 'accent-2' as const,
-    },
-    {
-      key: 'remaining-paid',
-      title: t('Remaining paid quota'),
-      value: format(props.summary?.remaining_paid_quota),
-      description: t('Top-ups and admin grants'),
-      icon: Coins,
+      key: 'range',
+      title: t('Consumption in selected period'),
+      value: format(props.summary?.range_quota),
+      description: t('Paid quota + welfare quota'),
+      icon: TrendingUp,
       tone: 'accent-1' as const,
-    },
-    {
-      key: 'debt',
-      title: t('Debt users'),
-      value: props.summary?.debt_users ?? 0,
-      description: t('Outstanding debt: {{quota}}', {
-        quota: format(-(props.summary?.debt_quota ?? 0)),
-      }),
-      icon: AlertTriangle,
-      tone: 'accent-3' as const,
+      details: [
+        {
+          label: t('Paid quota'),
+          value: format(props.summary?.range_paid_quota),
+        },
+        {
+          label: t('Welfare quota'),
+          value: format(props.summary?.range_bonus_quota),
+          tone: 'success',
+        },
+      ],
     },
     {
       key: 'checkin',
@@ -137,14 +102,24 @@ export function LedgerSummaryCards(props: {
       icon: CalendarCheck,
       tone: 'accent-2' as const,
     },
+    {
+      key: 'debt',
+      title: t('Debt users'),
+      value: props.summary?.debt_users ?? 0,
+      description: t('Outstanding debt: {{quota}}', {
+        quota: format(-(props.summary?.debt_quota ?? 0)),
+      }),
+      icon: AlertTriangle,
+      tone: 'accent-3' as const,
+    },
   ]
 
   return (
-    <div className='grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4'>
+    <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-4'>
       {cards.map((card) => (
         <div
           key={card.key}
-          className='bg-card rounded-xl border p-3 shadow-xs sm:p-4'
+          className='bg-card rounded-xl border p-3.5 shadow-xs sm:p-4'
         >
           <StatCard
             title={card.title}

@@ -37,9 +37,15 @@ import { useSystemConfigStore } from '@/stores/system-config-store'
 import type { LedgerFilters, QuotaLedgerDailyItem } from '../types'
 import { LedgerFilterBar } from './ledger-filter-bar'
 
-function QuotaValue(props: { value: number }) {
+function QuotaValue(props: { value: number; emphasis?: boolean }) {
   return (
-    <span className={cn('tabular-nums', props.value < 0 && 'text-destructive')}>
+    <span
+      className={cn(
+        'block text-right tabular-nums',
+        props.emphasis && 'font-semibold',
+        props.value < 0 && 'text-destructive'
+      )}
+    >
       {formatQuota(props.value)}
     </span>
   )
@@ -75,8 +81,11 @@ export function LedgerTable(props: {
         ),
         meta: { label: t('Date') },
         cell: ({ row }) => (
-          <span className='tabular-nums'>{row.original.date}</span>
+          <span className='text-muted-foreground font-medium tabular-nums'>
+            {row.original.date}
+          </span>
         ),
+        size: 120,
       },
       {
         id: 'username',
@@ -86,40 +95,57 @@ export function LedgerTable(props: {
         ),
         meta: { label: t('Username') },
         cell: ({ row }) => (
-          <span className='truncate'>
+          <span className='truncate font-medium'>
             {row.original.username || `#${row.original.user_id}`}
           </span>
         ),
+        size: 180,
       },
       {
         id: 'bonus_quota',
         accessorKey: 'bonus_quota',
         header: ({ column }) => (
-          <DataTableColumnHeader column={column} title={t('Welfare quota')} />
+          <DataTableColumnHeader
+            column={column}
+            title={t('Welfare quota')}
+            className='justify-end'
+          />
         ),
         meta: { label: t('Welfare quota') },
         cell: ({ row }) => <QuotaValue value={row.original.bonus_quota} />,
+        size: 140,
       },
       {
         id: 'paid_quota',
         accessorKey: 'paid_quota',
         header: ({ column }) => (
-          <DataTableColumnHeader column={column} title={t('Paid quota')} />
+          <DataTableColumnHeader
+            column={column}
+            title={t('Paid quota')}
+            className='justify-end'
+          />
         ),
         meta: { label: t('Paid quota') },
         cell: ({ row }) => <QuotaValue value={row.original.paid_quota} />,
+        size: 140,
       },
       {
         id: 'quota',
         header: ({ column }) => (
-          <DataTableColumnHeader column={column} title={t('Total')} />
+          <DataTableColumnHeader
+            column={column}
+            title={t('Total')}
+            className='justify-end'
+          />
         ),
         meta: { label: t('Total') },
         cell: ({ row }) => (
           <QuotaValue
+            emphasis
             value={row.original.bonus_quota + row.original.paid_quota}
           />
         ),
+        size: 140,
       },
       {
         id: 'updated_at',
@@ -129,10 +155,11 @@ export function LedgerTable(props: {
         ),
         meta: { label: t('Updated at') },
         cell: ({ row }) => (
-          <span className='text-muted-foreground text-xs'>
+          <span className='text-muted-foreground text-xs whitespace-nowrap tabular-nums'>
             {formatUpdatedAt(row.original.updated_at)}
           </span>
         ),
+        size: 180,
       },
     ],
     [t]
@@ -177,7 +204,7 @@ export function LedgerTable(props: {
       skeletonKeyPrefix='ledger-skeleton'
       className={props.className}
       toolbar={
-        <div className='flex flex-wrap items-start gap-2'>
+        <div className='flex flex-wrap items-center gap-2'>
           <LedgerFilterBar
             start={props.range.start}
             end={props.range.end}
