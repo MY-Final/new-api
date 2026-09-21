@@ -46,16 +46,11 @@ import {
 import { StyleDialog } from './components/style-dialog'
 import { MAX_OUTPUT_TOKENS } from './constants'
 import { useIntelligenceRun } from './hooks/use-intelligence-run'
-import type { ConnectionConfig, TaskId, TaskStatus } from './types'
+import { isTerminalStatus } from './lib/task-status'
+import type { ConnectionConfig, TaskId } from './types'
 
 const ALL_TASKS: TaskId[] = ['logic', 'drawing', 'knowledge']
 const SCORED_TASKS = new Set<TaskId>(['logic', 'knowledge'])
-
-function isTerminalStatus(status: TaskStatus): boolean {
-  return (
-    status === 'passed' || status === 'failed' || status === 'technical_error'
-  )
-}
 
 function getConnectionLabel(connection: ConnectionConfig | null): string {
   if (!connection) return ''
@@ -74,7 +69,7 @@ export function IntelligenceTest() {
   const [selectedTasks, setSelectedTasks] = useState<TaskId[]>(ALL_TASKS)
   const [styleDialogOpen, setStyleDialogOpen] = useState(false)
   const [customStyleDescription, setCustomStyleDescription] = useState('')
-  const { snapshot, isRunning, run, reset, cancelRun } = useIntelligenceRun()
+  const { snapshot, isRunning, run, cancelRun } = useIntelligenceRun()
 
   const taskEntries = [
     { id: 'logic' as const, result: snapshot.logic },
@@ -122,7 +117,6 @@ export function IntelligenceTest() {
 
   const handleUseConnection = (nextConnection: ConnectionConfig) => {
     setConnection(nextConnection)
-    reset()
   }
 
   return (
@@ -299,12 +293,28 @@ export function IntelligenceTest() {
             </>
           ) : (
             <>
-              <LogicResultCard result={snapshot.logic} />
+              <LogicResultCard
+                result={snapshot.logic}
+                fromPreviousRun={
+                  !runTasks.includes('logic') &&
+                  isTerminalStatus(snapshot.logic.status)
+                }
+              />
               <DrawingResultCard
                 result={snapshot.drawing}
                 styleName={snapshot.styleName}
+                fromPreviousRun={
+                  !runTasks.includes('drawing') &&
+                  isTerminalStatus(snapshot.drawing.status)
+                }
               />
-              <KnowledgeResultCard result={snapshot.knowledge} />
+              <KnowledgeResultCard
+                result={snapshot.knowledge}
+                fromPreviousRun={
+                  !runTasks.includes('knowledge') &&
+                  isTerminalStatus(snapshot.knowledge.status)
+                }
+              />
             </>
           )}
         </div>

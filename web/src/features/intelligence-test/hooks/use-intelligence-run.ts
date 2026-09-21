@@ -39,6 +39,7 @@ import {
   renderDrawingScreenshot,
   validateDrawingHtml,
 } from '../lib/evaluation'
+import { isTerminalStatus } from '../lib/task-status'
 import type {
   ConnectionConfig,
   DrawingEvaluation,
@@ -78,9 +79,12 @@ function runningTask<T>(): TaskResult<T> {
 function taskForSelection<T>(
   tasks: TaskId[],
   id: TaskId,
-  run: () => TaskResult<T>
+  run: () => TaskResult<T>,
+  previous?: TaskResult<T>
 ): TaskResult<T> {
-  return tasks.includes(id) ? run() : skippedTask<T>()
+  if (tasks.includes(id)) return run()
+  if (previous && isTerminalStatus(previous.status)) return previous
+  return skippedTask<T>()
 }
 
 function createEmptySnapshot(): RunSnapshot {
@@ -98,7 +102,8 @@ function createEmptySnapshot(): RunSnapshot {
 function createRunningSnapshot(
   runNumber: number,
   styleName: string,
-  tasks: TaskId[]
+  tasks: TaskId[],
+  previous: RunSnapshot
 ): RunSnapshot {
   const startedAt = Date.now()
 
@@ -107,12 +112,23 @@ function createRunningSnapshot(
     styleName,
     tasks,
     startedAt,
-    logic: taskForSelection(tasks, 'logic', runningTask<LogicResult>),
-    drawing: taskForSelection(tasks, 'drawing', runningTask<DrawingEvaluation>),
+    logic: taskForSelection(
+      tasks,
+      'logic',
+      runningTask<LogicResult>,
+      previous.logic
+    ),
+    drawing: taskForSelection(
+      tasks,
+      'drawing',
+      runningTask<DrawingEvaluation>,
+      previous.drawing
+    ),
     knowledge: taskForSelection(
       tasks,
       'knowledge',
-      runningTask<KnowledgeResult>
+      runningTask<KnowledgeResult>,
+      previous.knowledge
     ),
   }
 }
@@ -322,7 +338,8 @@ function createTechnicalSnapshot(
   runNumber: number,
   styleName: string,
   tasks: TaskId[],
-  message: string
+  message: string,
+  previous: RunSnapshot
 ): RunSnapshot {
   const failed = <T>(): TaskResult<T> => ({
     status: 'technical_error',
@@ -340,27 +357,37 @@ function createTechnicalSnapshot(
     tasks,
     startedAt: Date.now(),
     completedAt: Date.now(),
-    logic: taskForSelection(tasks, 'logic', () => failedLogic),
-    drawing: taskForSelection(tasks, 'drawing', () => failedDrawing),
-    knowledge: taskForSelection(tasks, 'knowledge', () => failedKnowledge),
+    logic: taskForSelection(tasks, 'logic', () => failedLogic, previous.logic),
+    drawing: taskForSelection(
+      tasks,
+      'drawing',
+      () => failedDrawing,
+      previous.drawing
+    ),
+    knowledge: taskForSelection(
+      tasks,
+      'knowledge',
+      () => failedKnowledge,
+      previous.knowledge
+    ),
   }
 }
 
 export function useIntelligenceRun() {
   const [snapshot, setSnapshot] = useState<RunSnapshot>(createEmptySnapshot)
+  const snapshotRef = useRef(snapshot)
   const abortControllerRef = useRef<AbortController | null>(null)
   const generationRef = useRef(0)
+
+  useEffect(() => {
+    snapshotRef.current = snapshot
+  }, [snapshot])
 
   const cancel = useCallback(() => {
     generationRef.current += 1
     abortControllerRef.current?.abort()
     abortControllerRef.current = null
   }, [])
-
-  const reset = useCallback(() => {
-    cancel()
-    setSnapshot(createEmptySnapshot())
-  }, [cancel])
 
   const cancelRun = useCallback(() => {
     cancel()
@@ -398,10 +425,12 @@ export function useIntelligenceRun() {
       abortControllerRef.current = controller
       const style =
         customStyle ?? DRAWING_STYLES[(runNumber - 1) % DRAWING_STYLES.length]
+      const previous = snapshotRef.current
       const runningSnapshot = createRunningSnapshot(
         runNumber,
         style.name,
-        tasks
+        tasks,
+        previous
       )
       setSnapshot(runningSnapshot)
 
@@ -415,7 +444,8 @@ export function useIntelligenceRun() {
             runNumber,
             style.name,
             tasks,
-            getErrorMessage(error)
+            getErrorMessage(error),
+            previous
           )
         )
         return
@@ -424,7 +454,7 @@ export function useIntelligenceRun() {
       const [logic, drawing, knowledge] = await Promise.all([
         tasks.includes('logic')
           ? executeLogicTask(resolvedConnection, controller.signal)
-          : Promise.resolve(skippedTask<LogicResult>()),
+          : Promise.resolve(runningSnapshot.logic),
         tasks.includes('drawing')
           ? executeDrawingTask(
               resolvedConnection,
@@ -447,10 +477,10 @@ export function useIntelligenceRun() {
                 )
               }
             )
-          : Promise.resolve(skippedTask<DrawingEvaluation>()),
+          : Promise.resolve(runningSnapshot.drawing),
         tasks.includes('knowledge')
           ? executeKnowledgeTask(resolvedConnection, controller.signal)
-          : Promise.resolve(skippedTask<KnowledgeResult>()),
+          : Promise.resolve(runningSnapshot.knowledge),
       ])
 
       if (generation !== generationRef.current) return
@@ -476,7 +506,6 @@ export function useIntelligenceRun() {
       snapshot.drawing.status === 'running' ||
       snapshot.knowledge.status === 'running',
     run,
-    reset,
     cancelRun,
   }
 }

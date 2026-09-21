@@ -144,6 +144,7 @@ function TaskCardHeader(props: {
   status: TaskStatus
   durationMs: number
   statusLabels?: Partial<Record<TaskStatus, string>>
+  fromPreviousRun?: boolean
 }) {
   const { t } = useTranslation()
   return (
@@ -155,6 +156,9 @@ function TaskCardHeader(props: {
       <CardDescription>{props.subtitle}</CardDescription>
       <CardAction className='flex flex-col items-end gap-2'>
         <StatusBadge status={props.status} labels={props.statusLabels} />
+        {props.fromPreviousRun && (
+          <Badge variant='outline'>{t('Previous run')}</Badge>
+        )}
         {props.status === 'running' ? (
           <RunningElapsed />
         ) : (
@@ -245,7 +249,10 @@ function SourceCode(props: { html: string }) {
   )
 }
 
-export function LogicResultCard(props: { result: TaskResult<LogicResult> }) {
+export function LogicResultCard(props: {
+  result: TaskResult<LogicResult>
+  fromPreviousRun?: boolean
+}) {
   const { t, i18n } = useTranslation()
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const data = props.result.data
@@ -258,6 +265,7 @@ export function LogicResultCard(props: { result: TaskResult<LogicResult> }) {
         subtitle={t('Candy combination and guarantee')}
         status={props.result.status}
         durationMs={props.result.durationMs}
+        fromPreviousRun={props.fromPreviousRun}
       />
       <CardContent className='flex flex-1 flex-col gap-5'>
         {data ? (
@@ -299,6 +307,7 @@ export function LogicResultCard(props: { result: TaskResult<LogicResult> }) {
 export function DrawingResultCard(props: {
   result: TaskResult<DrawingEvaluation>
   styleName: string
+  fromPreviousRun?: boolean
 }) {
   const { t, i18n } = useTranslation()
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
@@ -322,6 +331,7 @@ export function DrawingResultCard(props: {
           passed: t('Generated'),
           failed: t('Generation failed'),
         }}
+        fromPreviousRun={props.fromPreviousRun}
       />
       <CardContent className='flex flex-1 flex-col gap-4'>
         <div className='flex items-center justify-between gap-3'>
@@ -424,6 +434,7 @@ export function DrawingResultCard(props: {
 
 export function KnowledgeResultCard(props: {
   result: TaskResult<KnowledgeResult>
+  fromPreviousRun?: boolean
 }) {
   const { t } = useTranslation()
   const data = props.result.data
@@ -436,6 +447,7 @@ export function KnowledgeResultCard(props: {
         subtitle={t('Three-question knowledge check')}
         status={props.result.status}
         durationMs={props.result.durationMs}
+        fromPreviousRun={props.fromPreviousRun}
       />
       <CardContent className='flex flex-1 flex-col gap-4'>
         {data ? (

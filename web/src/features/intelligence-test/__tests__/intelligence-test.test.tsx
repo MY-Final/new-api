@@ -377,6 +377,47 @@ describe('Intelligence test page', () => {
     ).toContain('pedal-spin')
   })
 
+  test('keeps results from earlier runs when a task is not selected', async () => {
+    const fetchMock = installFetchMock()
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: { success: true, data: ['gpt-test'] },
+    } as never)
+
+    renderPage()
+    await selectDefaultPlatformConnection()
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Logical reasoning' }))
+    await user.click(
+      screen.getByRole('button', { name: 'Knowledge freshness' })
+    )
+    await user.click(
+      screen.getByRole('button', { name: /Start test|Run again/ })
+    )
+
+    expect(await screen.findByText('Generated')).toBeInTheDocument()
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    expect(
+      screen.getByTitle('Drawing animation preview').getAttribute('srcdoc')
+    ).toContain('pedal-spin')
+
+    await user.click(
+      screen.getByRole('button', { name: 'Drawing and animation' })
+    )
+    await user.click(screen.getByRole('button', { name: 'Logical reasoning' }))
+    await user.click(
+      screen.getByRole('button', { name: /Start test|Run again/ })
+    )
+
+    expect(await screen.findAllByText('21')).toHaveLength(2)
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    expect(screen.getByText('Previous run')).toBeInTheDocument()
+    expect(
+      screen.getByTitle('Drawing animation preview').getAttribute('srcdoc')
+    ).toContain('pedal-spin')
+    expect(screen.getByText('1/1 completed')).toBeInTheDocument()
+  })
+
   test('opens larger previews for the animation and the screenshot', async () => {
     installFetchMock()
     vi.spyOn(api, 'get').mockResolvedValue({
