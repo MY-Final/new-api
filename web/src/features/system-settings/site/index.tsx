@@ -35,6 +35,7 @@ const defaultSiteSettings: SiteSettings = {
   ApiBaseURLs: '',
   TaskPublicAddress: '',
   KunCodeRelayPulseUrl: '',
+  'general_setting.docs_link': '',
   'legal.user_agreement': '',
   'legal.privacy_policy': '',
   HeaderNavModules: '',

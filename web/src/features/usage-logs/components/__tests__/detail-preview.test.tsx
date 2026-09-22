@@ -198,6 +198,25 @@ test('token column shows the cache breakdown below the totals', () => {
   expect(screen.getByText('97.7%')).toBeInTheDocument()
 })
 
+test('keeps log details open when the parent refreshes with unchanged data', async () => {
+  const other = { model_price: 0.25 }
+  useSystemConfigStore.getState().setConfig({
+    currency: { ...DEFAULT_CURRENCY_CONFIG, quotaDisplayType: 'USD' },
+  })
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
+    <I18nextProvider i18n={i18n}>
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    </I18nextProvider>
+  )
+  const { rerender } = render(<DetailPreview other={other} isAdmin />, {
+    wrapper,
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Per-call · $0.25' }))
+  expect(await screen.findByRole('dialog')).toBeVisible()
+  rerender(<DetailPreview other={other} isAdmin />)
+  expect(screen.getByRole('dialog')).toBeVisible()
+})
+
 test.each([
   {
     name: 'fixed expression zero price',
