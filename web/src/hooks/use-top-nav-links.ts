@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { useContactSettings } from '@/features/contact/use-contact-settings'
 import { useStatus } from '@/hooks/use-status'
 import { parseHeaderNavModulesFromStatus } from '@/lib/nav-modules'
 import { useAuthStore } from '@/stores/auth-store'
@@ -47,6 +48,7 @@ export function useTopNavLinks(): TopNavLink[] {
   const { t } = useTranslation()
   const { status } = useStatus()
   const { auth } = useAuthStore()
+  const { configured: contactConfigured } = useContactSettings()
 
   // Parse HeaderNavModules
   const modules = useMemo(() => {
@@ -100,8 +102,8 @@ export function useTopNavLinks(): TopNavLink[] {
     links.push({ title: t('About'), href: '/about' })
   }
 
-  // Contact Us
-  if (modules?.contact !== false) {
+  // Contact Us (hidden until an administrator configures contact details)
+  if (modules?.contact !== false && contactConfigured) {
     links.push({ title: t('Contact Us'), href: '/contact' })
   }
 

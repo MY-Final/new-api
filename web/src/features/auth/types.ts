@@ -87,6 +87,14 @@ export interface ApiResponse<T = unknown> {
 // System Status
 // ============================================================================
 
+export interface ContactStatus {
+  title?: string
+  description?: string
+  qq_group_number?: string
+  qq_group_url?: string
+  qrcode_version?: string
+}
+
 export interface SystemStatus {
   success?: boolean
   message?: string
@@ -137,6 +145,7 @@ export interface SystemStatus {
     custom_oauth_providers?: CustomOAuthProviderInfo[]
     kuncode_relay_pulse_url?: string
     api_base_urls?: string[]
+    contact?: ContactStatus
     [key: string]: unknown
   }
   // Allow direct access to common properties
@@ -186,6 +195,7 @@ export interface SystemStatus {
   custom_oauth_providers?: CustomOAuthProviderInfo[]
   kuncode_relay_pulse_url?: string
   api_base_urls?: string[]
+  contact?: ContactStatus
   [key: string]: unknown
 }
 

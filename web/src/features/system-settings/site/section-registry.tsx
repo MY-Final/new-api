@@ -28,6 +28,7 @@ import { NoticeSection } from '../maintenance/notice-section'
 import { SidebarModulesSection } from '../maintenance/sidebar-modules-section'
 import type { SiteSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
+import { ContactSection } from './contact-section'
 
 const SITE_SECTIONS = [
   {
@@ -51,6 +52,23 @@ const SITE_SECTIONS = [
           legal: {
             user_agreement: settings['legal.user_agreement'],
             privacy_policy: settings['legal.privacy_policy'],
+          },
+        }}
+      />
+    ),
+  },
+  {
+    id: 'contact',
+    titleKey: 'Contact Information',
+    build: (settings: SiteSettings) => (
+      <ContactSection
+        defaultValues={{
+          contact: {
+            title: settings['contact.title'],
+            description: settings['contact.description'],
+            qq_group_number: settings['contact.qq_group_number'],
+            qq_group_url: settings['contact.qq_group_url'],
+            qrcode: settings['contact.qrcode'],
           },
         }}
       />

@@ -49,6 +49,7 @@ func GetStatus(c *gin.Context) {
 	defer common.OptionMapRWMutex.RUnlock()
 
 	legalSetting := system_setting.GetLegalSettings()
+	contactSetting := system_setting.GetContactSettings()
 
 	data := gin.H{
 		"version":                     common.Version,
@@ -130,6 +131,15 @@ func GetStatus(c *gin.Context) {
 		"user_agreement_enabled":      legalSetting.UserAgreement != "",
 		"privacy_policy_enabled":      legalSetting.PrivacyPolicy != "",
 		"checkin_enabled":             operation_setting.GetCheckinSetting().Enabled,
+
+		// 联系我们配置：图片本身通过 /api/contact/qrcode 提供，避免 status 体积膨胀
+		"contact": gin.H{
+			"title":           contactSetting.Title,
+			"description":     contactSetting.Description,
+			"qq_group_number": contactSetting.QQGroupNumber,
+			"qq_group_url":    contactSetting.QQGroupURL,
+			"qrcode_version":  contactSetting.QRCodeVersion(),
+		},
 	}
 
 	// 根据启用状态注入可选内容
@@ -199,6 +209,26 @@ func GetUserAgreement(c *gin.Context) {
 
 func GetPrivacyPolicy(c *gin.Context) {
 	serveRevalidatedJSON(c, system_setting.GetLegalSettings().PrivacyPolicy)
+}
+
+// GetContactQRCode serves the admin-uploaded contact QR image. The image lives
+// in the options table as a data URI; it is decoded and re-sent here so public
+// pages can display it without embedding base64 in /api/status.
+func GetContactQRCode(c *gin.Context) {
+	qrcode := system_setting.GetContactSettings().QRCode
+	if qrcode == "" {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	mediaType, data, err := system_setting.DecodeContactQRCode(qrcode)
+	if err != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	c.Header("Cache-Control", "public, max-age=3600")
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Header("Content-Security-Policy", "default-src 'none'; sandbox")
+	c.Data(http.StatusOK, mediaType, data)
 }
 
 func GetMidjourney(c *gin.Context) {

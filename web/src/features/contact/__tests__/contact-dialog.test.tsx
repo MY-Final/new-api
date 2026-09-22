@@ -16,10 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import { createInstance } from 'i18next'
 import { I18nextProvider, initReactI18next } from 'react-i18next'
-import { describe, expect, test, vi } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { ContactDialog } from '../contact-dialog'
 
@@ -42,27 +43,67 @@ await i18n.use(initReactI18next).init({
   },
 })
 
-function renderDialog() {
+const clients: QueryClient[] = []
+
+function renderDialog(status: Record<string, unknown>) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  clients.push(client)
+  client.setQueryData(['status'], status, { updatedAt: Date.now() + 60_000 })
   return render(
-    <I18nextProvider i18n={i18n}>
-      <ContactDialog open onOpenChange={vi.fn()} />
-    </I18nextProvider>
+    <QueryClientProvider client={client}>
+      <I18nextProvider i18n={i18n}>
+        <ContactDialog open onOpenChange={vi.fn()} />
+      </I18nextProvider>
+    </QueryClientProvider>
   )
 }
 
+afterEach(() => {
+  for (const client of clients) client.clear()
+  clients.length = 0
+})
+
 describe('contact dialog', () => {
-  test('shows the QQ group QR code and join link when opened', () => {
-    renderDialog()
+  test('shows an empty state until contact details are configured', () => {
+    renderDialog({})
 
     expect(
       screen.getByRole('dialog', { name: 'Contact Us' })
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('img', { name: 'QQ group QR code' })
+      screen.getByText('No contact information has been configured.')
     ).toBeInTheDocument()
-    expect(screen.getByText('1072957415')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('img', { name: 'QQ group QR code' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Join QQ Group' })
+    ).not.toBeInTheDocument()
+  })
+
+  test('renders the configured contact details and uploaded QR image', () => {
+    renderDialog({
+      contact: {
+        title: 'Need help?',
+        description: 'Reach us on QQ.',
+        qq_group_number: '123456789',
+        qq_group_url: 'https://example.com/qq',
+        qrcode_version: 'deadbeef',
+      },
+    })
+
+    expect(
+      screen.getByRole('dialog', { name: 'Need help?' })
+    ).toBeInTheDocument()
+    expect(screen.getByText('Reach us on QQ.')).toBeInTheDocument()
+    expect(screen.getByText('123456789')).toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: 'Join QQ Group' })
-    ).toHaveAttribute('target', '_blank')
+    ).toHaveAttribute('href', 'https://example.com/qq')
+    expect(
+      screen.getByRole('img', { name: 'QQ group QR code' })
+    ).toHaveAttribute('src', '/api/contact/qrcode?v=deadbeef')
   })
 })

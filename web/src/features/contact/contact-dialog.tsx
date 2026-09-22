@@ -16,11 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useTranslation } from 'react-i18next'
-
 import { Dialog } from '@/components/dialog'
 
 import { ContactDetails } from './contact-details'
+import { useContactSettings } from './use-contact-settings'
 
 type ContactDialogProps = {
   open: boolean
@@ -28,14 +27,14 @@ type ContactDialogProps = {
 }
 
 export function ContactDialog({ open, onOpenChange }: ContactDialogProps) {
-  const { t } = useTranslation()
+  const { title, description } = useContactSettings()
 
   return (
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
-      title={t('Contact Us')}
-      description={t('Questions, announcements and communication are welcome.')}
+      title={title}
+      description={description}
       contentClassName='sm:max-w-md'
       contentHeight='auto'
     >

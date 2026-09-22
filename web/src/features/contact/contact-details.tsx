@@ -19,51 +19,70 @@ For commercial licensing, please contact support@quantumnous.com
 import { MessageCircle, Users } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import qqGroupImage from '@/assets/contact/qq-group.jpg'
 import { Button } from '@/components/ui/button'
 
-export const QQ_GROUP_NUMBER = '1072957415'
-export const QQ_GROUP_JOIN_URL =
-  'https://qun.qq.com/universal-share/share?ac=1&svctype=5&tempid=h5_group_info&busi_data=eyJncm91cENvZGUiOiIxMDcyOTU3NDE1In0%3D'
+import { useContactSettings } from './use-contact-settings'
 
 export function ContactDetails() {
   const { t } = useTranslation()
+  const { configured, qqGroupNumber, qqGroupURL, qrcodeSrc } =
+    useContactSettings()
+
+  if (!configured) {
+    return (
+      <div className='bg-muted/40 text-muted-foreground rounded-lg p-6 text-center text-sm'>
+        {t('No contact information has been configured.')}
+      </div>
+    )
+  }
 
   return (
     <div className='space-y-5'>
-      <div className='border-border bg-muted/20 flex justify-center rounded-xl border p-3 sm:p-5'>
-        <img
-          src={qqGroupImage}
-          alt={t('QQ group QR code')}
-          className='h-auto max-h-[min(60vh,34rem)] w-auto max-w-full rounded-lg object-contain'
-        />
-      </div>
+      {qrcodeSrc && (
+        <div className='border-border bg-muted/20 flex justify-center rounded-xl border p-3 sm:p-5'>
+          <img
+            src={qrcodeSrc}
+            alt={t('QQ group QR code')}
+            className='h-auto max-h-[min(60vh,34rem)] w-auto max-w-full rounded-lg object-contain'
+          />
+        </div>
+      )}
 
-      <div className='border-border flex flex-col items-center gap-2 rounded-xl border p-4 text-center'>
-        <div className='text-muted-foreground flex items-center gap-2 text-sm'>
-          <Users className='size-4' aria-hidden='true' />
-          {t('QQ Group Number')}
+      {(qqGroupNumber || qqGroupURL) && (
+        <div className='border-border flex flex-col items-center gap-2 rounded-xl border p-4 text-center'>
+          {qqGroupNumber && (
+            <>
+              <div className='text-muted-foreground flex items-center gap-2 text-sm'>
+                <Users className='size-4' aria-hidden='true' />
+                {t('QQ Group Number')}
+              </div>
+              <div className='font-mono text-xl font-semibold tracking-widest sm:text-2xl'>
+                {qqGroupNumber}
+              </div>
+            </>
+          )}
+          {qrcodeSrc && qqGroupURL && (
+            <p className='text-muted-foreground text-xs'>
+              {t('Scan the QR code to join, or use the link below.')}
+            </p>
+          )}
+          {qqGroupURL && (
+            <Button
+              render={
+                <a
+                  href={qqGroupURL}
+                  target='_blank'
+                  rel='noopener noreferrer'
+                />
+              }
+              className='mt-2'
+            >
+              <MessageCircle className='size-4' aria-hidden='true' />
+              {t('Join QQ Group')}
+            </Button>
+          )}
         </div>
-        <div className='font-mono text-xl font-semibold tracking-widest sm:text-2xl'>
-          {QQ_GROUP_NUMBER}
-        </div>
-        <p className='text-muted-foreground text-xs'>
-          {t('Scan the QR code to join, or use the link below.')}
-        </p>
-        <Button
-          render={
-            <a
-              href={QQ_GROUP_JOIN_URL}
-              target='_blank'
-              rel='noopener noreferrer'
-            />
-          }
-          className='mt-2'
-        >
-          <MessageCircle className='size-4' aria-hidden='true' />
-          {t('Join QQ Group')}
-        </Button>
-      </div>
+      )}
     </div>
   )
 }

@@ -16,25 +16,20 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useTranslation } from 'react-i18next'
-
 import { PublicLayout } from '@/components/layout'
 
 import { ContactDetails } from './contact-details'
+import { useContactSettings } from './use-contact-settings'
 
 export function Contact() {
-  const { t } = useTranslation()
+  const { title, description } = useContactSettings()
 
   return (
     <PublicLayout>
       <div className='mx-auto max-w-3xl'>
         <div className='mb-8 text-center'>
-          <h1 className='text-3xl font-bold tracking-tight'>
-            {t('Contact Us')}
-          </h1>
-          <p className='text-muted-foreground mt-2 text-sm'>
-            {t('Questions, announcements and communication are welcome.')}
-          </p>
+          <h1 className='text-3xl font-bold tracking-tight'>{title}</h1>
+          <p className='text-muted-foreground mt-2 text-sm'>{description}</p>
         </div>
 
         <div className='border-border bg-card rounded-2xl border p-5 shadow-sm sm:p-8'>

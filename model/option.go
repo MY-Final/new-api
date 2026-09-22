@@ -249,6 +249,9 @@ func validateOptionValue(key string, value string) error {
 	if key == system_setting.APIBaseURLsOptionKey {
 		return system_setting.ValidateAPIBaseURLs(value)
 	}
+	if err := system_setting.ValidateContactOption(key, value); err != nil {
+		return err
+	}
 	if key == "LiandongShopUrl" || key == "KunCodeRelayPulseUrl" {
 		trimmed := strings.TrimSpace(value)
 		if trimmed == "" {

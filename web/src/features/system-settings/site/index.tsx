@@ -38,6 +38,11 @@ const defaultSiteSettings: SiteSettings = {
   'general_setting.docs_link': '',
   'legal.user_agreement': '',
   'legal.privacy_policy': '',
+  'contact.title': '',
+  'contact.description': '',
+  'contact.qq_group_number': '',
+  'contact.qq_group_url': '',
+  'contact.qrcode': '',
   HeaderNavModules: '',
   SidebarModulesAdmin: '',
 }

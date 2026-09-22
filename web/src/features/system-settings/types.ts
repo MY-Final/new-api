@@ -154,6 +154,11 @@ export type SiteSettings = {
   'general_setting.docs_link': string
   'legal.user_agreement': string
   'legal.privacy_policy': string
+  'contact.title': string
+  'contact.description': string
+  'contact.qq_group_number': string
+  'contact.qq_group_url': string
+  'contact.qrcode': string
   HeaderNavModules: string
   SidebarModulesAdmin: string
 }
