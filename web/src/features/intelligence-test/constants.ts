@@ -67,7 +67,9 @@ export const DRAWING_STYLES = [
   },
 ] as const
 
-export const LOGIC_PROMPT = `袋中有三种口味、两种形状的糖。可以凭手感主动选择圆形或五角星形，但不能辨认口味。数量：圆形苹果7、桃子9、西瓜8；五角星苹果7、桃子6、西瓜4。活动前要固定选择两种形状各取多少颗。最少取多少颗，能保证“圆形苹果+五角星桃子”或“圆形桃子+五角星苹果”至少一种配对？
+export const LOGIC_QUESTION = `袋中有三种口味、两种形状的糖。可以凭手感主动选择圆形或五角星形，但不能辨认口味。数量：圆形苹果7、桃子9、西瓜8；五角星苹果7、桃子6、西瓜4。活动前要固定选择两种形状各取多少颗。最少取多少颗，能保证“圆形苹果+五角星桃子”或“圆形桃子+五角星苹果”至少一种配对？`
+
+export const LOGIC_PROMPT = `${LOGIC_QUESTION}
 
 只返回 JSON，不要解释 JSON 之外的任何内容：
 {"answer":最少总数整数,"round":圆形取数整数,"star":五角星取数整数,"explanation":"保证性和最小性的理由"}
@@ -90,6 +92,12 @@ ${styleLine}动画加载后必须自动播放，并且必须使用 CSS animation
 只返回完整 HTML 源码，不要代码块，不要解释。`
 }
 
-export const KNOWLEDGE_PROMPT = `完成三题知识抽查，独立回答，不联网、不调用工具。只给答案，不要猜测或自报知识截止日期。 q1: 2023 年诺贝尔物理学奖的全部获奖者是谁？按官方英文姓名返回列表。 q2: Python 3.12.0 正式版实际发布日期是哪一天（不是预发布或计划日期）？返回 YYYY-MM-DD。 q3: 2023 年诺贝尔文学奖的获奖者是谁？返回官方英文姓名。
+export const KNOWLEDGE_QUESTIONS = {
+  q1: '2023 年诺贝尔物理学奖的全部获奖者是谁？按官方英文姓名返回列表。',
+  q2: 'Python 3.12.0 正式版实际发布日期是哪一天（不是预发布或计划日期）？返回 YYYY-MM-DD。',
+  q3: '2023 年诺贝尔文学奖的获奖者是谁？返回官方英文姓名。',
+} as const
+
+export const KNOWLEDGE_PROMPT = `完成三题知识抽查，独立回答，不联网、不调用工具。只给答案，不要猜测或自报知识截止日期。 q1: ${KNOWLEDGE_QUESTIONS.q1} q2: ${KNOWLEDGE_QUESTIONS.q2} q3: ${KNOWLEDGE_QUESTIONS.q3}
 
 只返回JSON：{"answers":[{"id":"q1","answer":["简短答案"]}]}。 每题都返回，用q1到q3标识。answer必须为数组，实体分别放入，名字/作品按题目要求使用英文；日期使用YYYY-MM-DD。 无法回答时answer为null。不要输出解释或省略题目。`

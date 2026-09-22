@@ -91,6 +91,7 @@ function createEmptySnapshot(): RunSnapshot {
   return {
     runNumber: 0,
     styleName: '',
+    drawingPrompt: '',
     tasks: [],
     startedAt: 0,
     logic: emptyTask<LogicResult>(),
@@ -101,7 +102,7 @@ function createEmptySnapshot(): RunSnapshot {
 
 function createRunningSnapshot(
   runNumber: number,
-  styleName: string,
+  style: DrawingStyle,
   tasks: TaskId[],
   previous: RunSnapshot
 ): RunSnapshot {
@@ -109,7 +110,8 @@ function createRunningSnapshot(
 
   return {
     runNumber,
-    styleName,
+    styleName: style.name,
+    drawingPrompt: buildDrawingPrompt(style.name, style.description),
     tasks,
     startedAt,
     logic: taskForSelection(
@@ -240,6 +242,7 @@ async function executeDrawingTask(
   onProgress?: (receivedChars: number) => void
 ): Promise<TaskResult<DrawingEvaluation>> {
   const startedAt = Date.now()
+  const prompt = buildDrawingPrompt(styleName, styleDescription)
   let drawingRawResponse = ''
   let html = ''
   let validation: DrawingValidationResult | null = null
@@ -258,12 +261,7 @@ async function executeDrawingTask(
       connection,
       {
         model: connection.model,
-        messages: [
-          {
-            role: 'user',
-            content: buildDrawingPrompt(styleName, styleDescription),
-          },
-        ],
+        messages: [{ role: 'user', content: prompt }],
         stream: true,
         max_tokens: MAX_OUTPUT_TOKENS.drawing,
       },
@@ -303,6 +301,8 @@ async function executeDrawingTask(
 
     const evaluation: DrawingEvaluation = {
       passed: true,
+      styleName,
+      prompt,
       html,
       svg: htmlValidation.svg,
       screenshot,
@@ -321,6 +321,8 @@ async function executeDrawingTask(
       data: validation
         ? {
             passed: false,
+            styleName,
+            prompt,
             html,
             svg: validation.svg,
             screenshot,
@@ -336,7 +338,7 @@ async function executeDrawingTask(
 
 function createTechnicalSnapshot(
   runNumber: number,
-  styleName: string,
+  style: DrawingStyle,
   tasks: TaskId[],
   message: string,
   previous: RunSnapshot
@@ -353,7 +355,8 @@ function createTechnicalSnapshot(
 
   return {
     runNumber,
-    styleName,
+    styleName: style.name,
+    drawingPrompt: buildDrawingPrompt(style.name, style.description),
     tasks,
     startedAt: Date.now(),
     completedAt: Date.now(),
@@ -428,7 +431,7 @@ export function useIntelligenceRun() {
       const previous = snapshotRef.current
       const runningSnapshot = createRunningSnapshot(
         runNumber,
-        style.name,
+        style,
         tasks,
         previous
       )
@@ -442,7 +445,7 @@ export function useIntelligenceRun() {
         setSnapshot(
           createTechnicalSnapshot(
             runNumber,
-            style.name,
+            style,
             tasks,
             getErrorMessage(error),
             previous
@@ -451,36 +454,68 @@ export function useIntelligenceRun() {
         return
       }
 
+      // Publish each task result as soon as it settles so a slow task does
+      // not keep the finished ones waiting behind the same Promise.all.
+      const publishResult = <K extends TaskId>(
+        key: K,
+        result: RunSnapshot[K]
+      ) => {
+        if (generation !== generationRef.current) return
+        setSnapshot((current) =>
+          current.runNumber === runNumber
+            ? { ...current, [key]: result }
+            : current
+        )
+      }
+
+      const trackResult = <K extends TaskId>(
+        key: K,
+        promise: Promise<RunSnapshot[K]>
+      ): Promise<RunSnapshot[K]> =>
+        promise.then((result) => {
+          publishResult(key, result)
+          return result
+        })
+
       const [logic, drawing, knowledge] = await Promise.all([
-        tasks.includes('logic')
-          ? executeLogicTask(resolvedConnection, controller.signal)
-          : Promise.resolve(runningSnapshot.logic),
-        tasks.includes('drawing')
-          ? executeDrawingTask(
-              resolvedConnection,
-              controller.signal,
-              style.name,
-              style.description,
-              (receivedChars) => {
-                if (generation !== generationRef.current) return
-                setSnapshot((current) =>
-                  current.runNumber === runNumber &&
-                  current.drawing.status === 'running'
-                    ? {
-                        ...current,
-                        drawing: {
-                          ...current.drawing,
-                          progress: receivedChars,
-                        },
-                      }
-                    : current
-                )
-              }
-            )
-          : Promise.resolve(runningSnapshot.drawing),
-        tasks.includes('knowledge')
-          ? executeKnowledgeTask(resolvedConnection, controller.signal)
-          : Promise.resolve(runningSnapshot.knowledge),
+        trackResult(
+          'logic',
+          tasks.includes('logic')
+            ? executeLogicTask(resolvedConnection, controller.signal)
+            : Promise.resolve(runningSnapshot.logic)
+        ),
+        trackResult(
+          'drawing',
+          tasks.includes('drawing')
+            ? executeDrawingTask(
+                resolvedConnection,
+                controller.signal,
+                style.name,
+                style.description,
+                (receivedChars) => {
+                  if (generation !== generationRef.current) return
+                  setSnapshot((current) =>
+                    current.runNumber === runNumber &&
+                    current.drawing.status === 'running'
+                      ? {
+                          ...current,
+                          drawing: {
+                            ...current.drawing,
+                            progress: receivedChars,
+                          },
+                        }
+                      : current
+                  )
+                }
+              )
+            : Promise.resolve(runningSnapshot.drawing)
+        ),
+        trackResult(
+          'knowledge',
+          tasks.includes('knowledge')
+            ? executeKnowledgeTask(resolvedConnection, controller.signal)
+            : Promise.resolve(runningSnapshot.knowledge)
+        ),
       ])
 
       if (generation !== generationRef.current) return

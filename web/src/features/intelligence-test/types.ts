@@ -82,6 +82,8 @@ export interface DrawingStyle {
 
 export interface DrawingEvaluation {
   passed: boolean
+  styleName: string
+  prompt: string
   html: string
   svg: string
   screenshot: string
@@ -100,6 +102,7 @@ export interface TaskResult<T> {
 export interface RunSnapshot {
   runNumber: number
   styleName: string
+  drawingPrompt: string
   tasks: TaskId[]
   startedAt: number
   completedAt?: number

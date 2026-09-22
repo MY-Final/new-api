@@ -303,6 +303,7 @@ export function IntelligenceTest() {
               <DrawingResultCard
                 result={snapshot.drawing}
                 styleName={snapshot.styleName}
+                prompt={snapshot.drawingPrompt}
                 fromPreviousRun={
                   !runTasks.includes('drawing') &&
                   isTerminalStatus(snapshot.drawing.status)

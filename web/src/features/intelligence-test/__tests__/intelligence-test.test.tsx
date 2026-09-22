@@ -195,6 +195,11 @@ describe('Intelligence test page', () => {
     expect(await screen.findByText('Generated')).toBeInTheDocument()
     expect(screen.getByText('3/3 completed')).toBeInTheDocument()
 
+    expect(screen.getByText(/袋中有三种口味/)).toBeInTheDocument()
+    expect(screen.getByText(/2023 年诺贝尔物理学奖/)).toBeInTheDocument()
+    expect(screen.getByText(/2023 年诺贝尔文学奖/)).toBeInTheDocument()
+    expect(screen.getByText(/本轮鹈鹕造型：Iron Man/)).toBeInTheDocument()
+
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3))
     const prompts = fetchMock.mock.calls.map((call) => promptOf(call[1]))
     expect(prompts.some((prompt) => prompt.includes('视觉作品评审'))).toBe(
@@ -299,6 +304,55 @@ describe('Intelligence test page', () => {
     expect(await screen.findByText('Technical failure')).toBeInTheDocument()
     expect(screen.queryByText('Round 9 / Star 12')).not.toBeInTheDocument()
     expect(screen.queryByText('21')).not.toBeInTheDocument()
+  })
+
+  test('shows finished task results before the slow task completes', async () => {
+    const fetchMock = vi.fn((_url: string, init: RequestInit) => {
+      const prompt = promptOf(init)
+      if (prompt.includes('袋中有三种口味')) {
+        return Promise.resolve(logicContentResponse(LOGIC_JSON))
+      }
+      if (prompt.includes('知识抽查')) {
+        return Promise.resolve(okResponse(KNOWLEDGE_JSON))
+      }
+      if (prompt.includes('鹈鹕骑自行车')) {
+        return new Promise<never>((_resolve, reject) => {
+          init.signal?.addEventListener(
+            'abort',
+            () => reject(new DOMException('Aborted', 'AbortError')),
+            { once: true }
+          )
+        })
+      }
+      return Promise.reject(
+        new Error(`Unexpected request: ${prompt.slice(0, 80)}`)
+      )
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: { success: true, data: ['gpt-test'] },
+    } as never)
+
+    renderPage()
+    await selectDefaultPlatformConnection()
+
+    const user = userEvent.setup()
+    await user.click(
+      screen.getByRole('button', { name: /Start test|Run again/ })
+    )
+
+    expect(await screen.findByText('2023-10-02')).toBeInTheDocument()
+    expect(screen.getAllByText('21').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Running')).toHaveLength(1)
+    expect(screen.getByText(/本轮鹈鹕造型：Iron Man/)).toBeInTheDocument()
+    expect(screen.queryByText('Waiting')).not.toBeInTheDocument()
+    expect(screen.queryByText('3/3 completed')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(await screen.findByText('The run was canceled.')).toBeInTheDocument()
+    expect(screen.getByText('2023-10-02')).toBeInTheDocument()
+    expect(screen.getAllByText('21').length).toBeGreaterThan(0)
   })
 
   test('keeps the animation when the static screenshot cannot be rendered', async () => {
@@ -515,6 +569,9 @@ describe('Intelligence test page', () => {
     if (!drawingCall) throw new Error('drawing request was not sent')
     expect(promptOf(drawingCall[1])).toContain('赛博朋克鹈鹕，霓虹翅膀')
     expect(screen.getByText('赛博朋克鹈鹕，霓虹翅膀')).toBeInTheDocument()
+    expect(
+      screen.getByText(/本轮鹈鹕造型由用户指定：赛博朋克鹈鹕，霓虹翅膀。/)
+    ).toBeInTheDocument()
   })
 
   test('exposes the pressed task state and disables the run button when empty', async () => {

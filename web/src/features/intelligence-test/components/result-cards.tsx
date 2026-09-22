@@ -53,7 +53,11 @@ import {
 import { toIntlLocale } from '@/i18n/languages'
 import { formatNumber } from '@/lib/format'
 
-import { LOGIC_EXPECTED } from '../constants'
+import {
+  KNOWLEDGE_QUESTIONS,
+  LOGIC_EXPECTED,
+  LOGIC_QUESTION,
+} from '../constants'
 import { buildSandboxedPreviewHtml } from '../lib/evaluation'
 import type {
   DrawingEvaluation,
@@ -268,6 +272,12 @@ export function LogicResultCard(props: {
         fromPreviousRun={props.fromPreviousRun}
       />
       <CardContent className='flex flex-1 flex-col gap-5'>
+        <div className='bg-muted/40 rounded-lg p-3'>
+          <p className='text-muted-foreground mb-1 text-xs font-medium'>
+            {t('Question')}
+          </p>
+          <p className='text-sm leading-6'>{LOGIC_QUESTION}</p>
+        </div>
         {data ? (
           <>
             <div>
@@ -307,6 +317,7 @@ export function LogicResultCard(props: {
 export function DrawingResultCard(props: {
   result: TaskResult<DrawingEvaluation>
   styleName: string
+  prompt: string
   fromPreviousRun?: boolean
 }) {
   const { t, i18n } = useTranslation()
@@ -317,6 +328,7 @@ export function DrawingResultCard(props: {
     null
   )
   const data = props.result.data
+  const prompt = data?.prompt || props.prompt
   const previewHtml = data ? buildSandboxedPreviewHtml(data.html) : ''
 
   return (
@@ -336,7 +348,7 @@ export function DrawingResultCard(props: {
       <CardContent className='flex flex-1 flex-col gap-4'>
         <div className='flex items-center justify-between gap-3'>
           <Badge variant='outline'>
-            {props.styleName || t('Pending style')}
+            {data?.styleName || props.styleName || t('Pending style')}
           </Badge>
           {data && (
             <Button
@@ -360,6 +372,15 @@ export function DrawingResultCard(props: {
               })}
             </div>
           )}
+
+        {prompt && (
+          <div className='bg-muted/40 rounded-lg p-3'>
+            <p className='text-muted-foreground mb-1 text-xs font-medium'>
+              {t('Prompt')}
+            </p>
+            <p className='text-xs leading-5 whitespace-pre-wrap'>{prompt}</p>
+          </div>
+        )}
 
         {data && (
           <>
@@ -450,30 +471,37 @@ export function KnowledgeResultCard(props: {
         fromPreviousRun={props.fromPreviousRun}
       />
       <CardContent className='flex flex-1 flex-col gap-4'>
-        {data ? (
-          <div className='space-y-3'>
-            {data.answers.map((answer) => (
-              <div key={answer.id} className='rounded-lg border p-3 text-sm'>
+        <div className='space-y-3'>
+          {Object.entries(KNOWLEDGE_QUESTIONS).map(([id, question]) => {
+            const answer = data?.answers.find((entry) => entry.id === id)
+            return (
+              <div key={id} className='rounded-lg border p-3 text-sm'>
                 <div className='mb-2 flex items-center justify-between gap-3'>
-                  <span className='font-medium uppercase'>{answer.id}</span>
-                  <Badge variant={answer.passed ? 'default' : 'destructive'}>
-                    {answer.passed ? t('Passed') : t('Failed')}
-                  </Badge>
+                  <span className='font-medium uppercase'>{id}</span>
+                  {answer && (
+                    <Badge variant={answer.passed ? 'default' : 'destructive'}>
+                      {answer.passed ? t('Passed') : t('Failed')}
+                    </Badge>
+                  )}
                 </div>
-                <p className='break-words'>
-                  {answer.answer?.join(', ') || t('No answer')}
+                <p className='text-muted-foreground mb-2 text-xs leading-5'>
+                  {question}
                 </p>
-                {!answer.passed && (
+                {answer && (
+                  <p className='break-words'>
+                    {answer.answer?.join(', ') || t('No answer')}
+                  </p>
+                )}
+                {answer && !answer.passed && (
                   <p className='text-muted-foreground mt-2 text-xs'>
                     {t('Expected')}: {answer.expected.join(', ')}
                   </p>
                 )}
               </div>
-            ))}
-          </div>
-        ) : (
-          <TaskEmptyState result={props.result} />
-        )}
+            )
+          })}
+        </div>
+        {!data && <TaskEmptyState result={props.result} />}
         <RawResponse rawResponse={props.result.rawResponse} language='json' />
       </CardContent>
     </Card>
