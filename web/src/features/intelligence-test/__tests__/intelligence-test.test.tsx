@@ -595,15 +595,18 @@ describe('Intelligence test page', () => {
     expect(screen.getByRole('button', { name: 'Start test' })).toBeDisabled()
   })
 
-  test('keeps the page scrollable on small screens', () => {
+  test('scrolls in a full-width container that wraps the centered content', () => {
     renderPage()
 
     const heading = screen.getByRole('heading', { name: 'Intelligence Test' })
-    const pageRoot = heading.closest('div.mx-auto')
+    const content = heading.closest('div.mx-auto')
+    const scrollContainer = content?.parentElement
 
-    expect(pageRoot).not.toBeNull()
-    expect(pageRoot?.className).toContain('overflow-y-auto')
-    expect(pageRoot?.className).toContain('min-h-0')
+    expect(content).not.toBeNull()
+    expect(scrollContainer).not.toBeNull()
+    expect(scrollContainer?.className).toContain('overflow-y-auto')
+    expect(scrollContainer?.className).toContain('min-h-0')
+    expect(scrollContainer?.className).not.toContain('mx-auto')
   })
 
   test('cancels a long-running test and marks unfinished cards', async () => {
