@@ -77,6 +77,10 @@ export function UserInfoDialog({
     }
   }, [open, userId, fetchUserInfo])
 
+  // `aff_count` counts the users this account invited; `inviter_id` records who
+  // invited this account. Both belong to the invitation section.
+  const inviterId = userInfo?.inviter_id ?? 0
+
   return (
     <Dialog
       open={open}
@@ -133,6 +137,7 @@ export function UserInfoDialog({
           {/* Invitation Info */}
           {(userInfo.aff_code ||
             userInfo.aff_count !== undefined ||
+            inviterId > 0 ||
             (userInfo.aff_quota !== undefined && userInfo.aff_quota > 0)) && (
             <>
               <div className='grid grid-cols-2 gap-4'>
@@ -147,6 +152,9 @@ export function UserInfoDialog({
                     label={t('Invited Users')}
                     value={formatCompactNumber(userInfo.aff_count)}
                   />
+                )}
+                {inviterId > 0 && (
+                  <InfoItem label={t('Inviter ID')} value={inviterId} />
                 )}
               </div>
 

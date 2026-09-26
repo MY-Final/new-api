@@ -525,5 +525,6 @@ export interface UserInfo {
   aff_code?: string
   aff_count?: number
   aff_quota?: number
+  inviter_id?: number
   remark?: string
 }
