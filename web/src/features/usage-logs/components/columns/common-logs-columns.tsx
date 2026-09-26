@@ -651,7 +651,7 @@ export function useCommonLogsColumns(
                     label={sensitiveVisible ? undefined : '••••'}
                     type='text'
                     size='sm'
-                    className='inline align-baseline text-xs leading-none [&>span]:leading-none'
+                    className='inline align-baseline text-xs leading-none'
                   />
                 ) : null}
                 {group && groupRatio != null ? ' ' : null}

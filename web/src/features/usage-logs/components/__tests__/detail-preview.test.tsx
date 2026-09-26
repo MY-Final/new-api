@@ -36,6 +36,7 @@ import {
 import type { UsageLog } from '../../data/schema'
 import type { LogOtherData } from '../../types'
 import { useCommonLogsColumns } from '../columns/common-logs-columns'
+import { UsageLogsProvider } from '../usage-logs-provider'
 
 vi.mock('@lobehub/icons', () => ({}))
 vi.hoisted(() => {
@@ -100,6 +101,20 @@ function TokenPreview(props: { log: UsageLog }) {
   if (!cell) throw new Error('The log must have a token column')
   return flexRender(cell.column.columnDef.cell, cell.getContext())
 }
+
+function TokenNamePreview(props: { log: UsageLog }) {
+  const table = useReactTable({
+    data: [props.log],
+    columns: useCommonLogsColumns(true, false),
+    getCoreRowModel: getCoreRowModel(),
+  })
+  const cell = table
+    .getRowModel()
+    .rows[0].getAllCells()
+    .find((item) => item.column.id === 'token_name')
+  if (!cell) throw new Error('The log must have a token name column')
+  return flexRender(cell.column.columnDef.cell, cell.getContext())
+}
 const plugin = {
   key: 'incho',
   name: 'Incho',
@@ -157,6 +172,18 @@ function renderTokenPreview(overrides: Partial<UsageLog> = {}) {
   )
 }
 
+function renderTokenNamePreview(overrides: Partial<UsageLog> = {}) {
+  render(
+    <I18nextProvider i18n={i18n}>
+      <QueryClientProvider client={client}>
+        <UsageLogsProvider>
+          <TokenNamePreview log={{ ...makeLog({}), ...overrides }} />
+        </UsageLogsProvider>
+      </QueryClientProvider>
+    </I18nextProvider>
+  )
+}
+
 test('token column labels input and output counts', () => {
   renderTokenPreview()
 
@@ -196,6 +223,22 @@ test('token column shows the cache breakdown below the totals', () => {
   expect(bar?.children).toHaveLength(3)
 
   expect(screen.getByText('97.7%')).toBeInTheDocument()
+})
+
+test('token column keeps the group label line box tall enough for underscore descenders', () => {
+  renderTokenNamePreview({
+    token_name: 'gpt_pro_0.25',
+    group: 'gpt_pro_0.25分组',
+  })
+
+  // The group badge sits inside `truncate` (overflow:hidden). A content span
+  // pinned to `leading-none` is exactly 1em tall, so the underscore glyph below
+  // the baseline is clipped and the name renders with spaces instead. The badge
+  // must not reach into that span with an arbitrary-variant line-height
+  // override; `text-xs` on the caller already keeps the row compact.
+  const groupLabel = screen.getByText('gpt_pro_0.25分组')
+  expect(groupLabel).toHaveClass('leading-normal')
+  expect(groupLabel.parentElement).not.toHaveClass('[&>span]:leading-none')
 })
 
 test('keeps log details open when the parent refreshes with unchanged data', async () => {
