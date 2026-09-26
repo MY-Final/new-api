@@ -16,13 +16,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { render, screen } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 
 const { createInstance } = await import('i18next')
 const { I18nextProvider, initReactI18next } = await import('react-i18next')
-const { TooltipProvider } = await import('@/components/ui/tooltip')
+const { api } = await import('@/lib/api')
 const { ApiKeyGroupCell } = await import('../api-key-group-cell')
 
 const i18n = createInstance()
@@ -33,7 +34,13 @@ await i18n.use(initReactI18next).init({
       translation: {
         Auto: 'Auto',
         'Cross-group': 'Cross-group',
+        'Change group': 'Change group',
+        'Follow user group': 'Follow user group',
+        'Group updated': 'Group updated',
+        'Failed to update group': 'Failed to update group',
+        'No group found.': 'No group found.',
         Ratio: 'Ratio',
+        'Search...': 'Search...',
         'Automatically selects the best available group with circuit breaker mechanism':
           'Automatically selects the best available group with circuit breaker mechanism',
       },
@@ -41,31 +48,54 @@ await i18n.use(initReactI18next).init({
   },
 })
 
-function CellHarness(props: {
+const groupOptions = [
+  { value: 'default', label: 'default', desc: 'User group', ratio: 1 },
+  { value: 'vip', label: 'vip', desc: 'Priority group', ratio: 3 },
+  { value: 'auto', label: 'auto', desc: 'Automatic routing', ratio: '自动' },
+]
+
+function renderCell(props: {
   group: string
   ratio?: number | string
   crossGroupRetry?: boolean
   shouldReduceMotion?: boolean
 }) {
-  return (
-    <I18nextProvider i18n={i18n}>
-      <TooltipProvider>
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <I18nextProvider i18n={i18n}>
         <ApiKeyGroupCell
+          apiKeyId={7}
+          options={groupOptions}
           group={props.group}
           ratio={props.ratio}
           crossGroupRetry={props.crossGroupRetry ?? false}
           shouldReduceMotion={props.shouldReduceMotion ?? false}
         />
-      </TooltipProvider>
-    </I18nextProvider>
+      </I18nextProvider>
+    </QueryClientProvider>
   )
+}
+
+function getCommandItem(label: string): HTMLElement {
+  const item = [
+    ...document.querySelectorAll<HTMLElement>('[data-slot="command-item"]'),
+  ].find((candidate) => candidate.textContent?.includes(label))
+  if (!item) {
+    throw new Error(`Expected a command item containing "${label}"`)
+  }
+  return item
 }
 
 describe('API key group table cell', () => {
   test('keeps the group and compact localized multiplier together with one subtle flowing edge', () => {
-    const { container } = render(
-      <CellHarness group='auto' ratio='自动' crossGroupRetry />
-    )
+    const { container } = renderCell({
+      group: 'auto',
+      ratio: '自动',
+      crossGroupRetry: true,
+    })
     const group = screen.getByText('Cross-group')
     const multiplier = screen
       .getByText('Auto')
@@ -84,15 +114,17 @@ describe('API key group table cell', () => {
   })
 
   test('keeps the automatic tag visible but static when reduced motion is requested', () => {
-    const { container } = render(
-      <CellHarness group='auto' ratio='Auto' shouldReduceMotion />
-    )
+    const { container } = renderCell({
+      group: 'auto',
+      ratio: 'Auto',
+      shouldReduceMotion: true,
+    })
     expect(screen.getByText('Auto')).toBeInTheDocument()
     expect(container.querySelector('[data-auto-group-flow-border]')).toBeNull()
   })
 
   test('does not invent a multiplier while automatic ratio data is unavailable', () => {
-    render(<CellHarness group='auto' />)
+    renderCell({ group: 'auto' })
     expect(screen.getByText('Cross-group')).toBeInTheDocument()
     expect(screen.queryByText('Auto')).not.toBeInTheDocument()
   })
@@ -104,9 +136,7 @@ describe('API key group table cell', () => {
   ])(
     'preserves the original %s multiplier color in the compact layout',
     (ratio, background, color, border) => {
-      const { container } = render(
-        <CellHarness group='default' ratio={ratio} />
-      )
+      const { container } = renderCell({ group: 'default', ratio })
       const multiplier = screen.getByText(`${ratio}x`).parentElement
       expect(multiplier).toHaveClass(
         background,
@@ -123,8 +153,8 @@ describe('API key group table cell', () => {
     }
   )
 
-  test('labels the user group multiplier as inherited without inventing a numeric value', async () => {
-    render(<CellHarness group='' />)
+  test('labels the user group multiplier as inherited without inventing a numeric value', () => {
+    renderCell({ group: '' })
     expect(screen.getByText('User Group')).toBeInTheDocument()
     expect(screen.getByText('Inherited')).toBeInTheDocument()
     expect(screen.getByText('Inherited').parentElement).toHaveClass(
@@ -132,29 +162,66 @@ describe('API key group table cell', () => {
       'rounded-full'
     )
     expect(screen.queryByText('1x')).not.toBeInTheDocument()
-    await userEvent.tab()
-    expect(await screen.findByText('Follow user group')).toBeVisible()
+    // The switch affordance replaces the old read-only tooltip; the full
+    // fallback name stays reachable without hover.
+    expect(
+      screen.getByRole('button', { name: 'Change group' })
+    ).toHaveAttribute('title', 'Follow user group')
   })
 
-  test('keeps a long group name and exact multiplier available through keyboard focus', async () => {
+  test('keeps a long group name reachable through the switch trigger', async () => {
     const groupName = 'production-with-a-very-long-custom-group-name'
-    render(<CellHarness group={groupName} ratio={12.345678} />)
-    expect(
-      screen.getByText(groupName).closest('[data-slot="tooltip-trigger"]')
-    ).toHaveClass('max-w-50')
+    renderCell({ group: groupName, ratio: 12.345678 })
+    const trigger = screen.getByRole('button', { name: 'Change group' })
+    expect(trigger).toHaveClass('max-w-50')
+    expect(trigger).toHaveAttribute('title', groupName)
     expect(screen.getByText('12.345678x')).toBeInTheDocument()
-    await userEvent.tab()
-    expect(
-      await screen.findByText(groupName, {
-        selector: '[data-slot="tooltip-content"]',
-      })
-    ).toBeVisible()
+
+    await userEvent.click(trigger)
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    expect(getCommandItem('Priority group')).toBeInTheDocument()
   })
 
   test('never turns a string-valued normal group ratio into an automatic multiplier', () => {
-    render(<CellHarness group='vip' ratio='自动' />)
+    renderCell({ group: 'vip', ratio: '自动' })
     expect(screen.getByText('vip')).toBeInTheDocument()
     expect(screen.queryByText('Auto')).not.toBeInTheDocument()
     expect(screen.queryByText('自动')).not.toBeInTheDocument()
+  })
+
+  test('switches the group inline through the group-only update', async () => {
+    const put = vi
+      .spyOn(api, 'put')
+      .mockResolvedValue({ data: { success: true } })
+    renderCell({ group: 'vip', ratio: 3 })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Change group' }))
+    fireEvent.click(getCommandItem('User group'))
+
+    await waitFor(() =>
+      expect(put).toHaveBeenCalledWith('/api/token/?group_only=true', {
+        id: 7,
+        group: 'default',
+      })
+    )
+    put.mockRestore()
+  })
+
+  test('does not write when the selected group is the current one', async () => {
+    const put = vi
+      .spyOn(api, 'put')
+      .mockResolvedValue({ data: { success: true } })
+    renderCell({ group: 'vip', ratio: 3 })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Change group' }))
+    fireEvent.click(getCommandItem('Priority group'))
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Change group' })
+      ).toHaveAttribute('aria-expanded', 'false')
+    )
+    expect(put).not.toHaveBeenCalled()
+    put.mockRestore()
   })
 })

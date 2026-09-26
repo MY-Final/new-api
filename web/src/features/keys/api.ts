@@ -108,6 +108,15 @@ export async function updateApiKeyStatus(
   return res.data
 }
 
+// Switch only an API key's group, leaving quota, expiry, and limits untouched.
+export async function updateApiKeyGroup(
+  id: number,
+  group: string
+): Promise<ApiResponse<ApiKey>> {
+  const res = await api.put('/api/token/?group_only=true', { id, group })
+  return res.data
+}
+
 // Fetch the real (unmasked) key for a token by ID
 export async function fetchTokenKey(
   id: number

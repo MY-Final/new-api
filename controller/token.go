@@ -127,6 +127,36 @@ func setTokenAutoGroups(c *gin.Context, token *model.Token, groups []string) boo
 	return true
 }
 
+// setTokenGroup applies an inline group switch. It only touches the group plus
+// the Auto fields that must stay consistent with it, so quota, expiry, and
+// limits are never rewritten from the possibly stale snapshot a list row holds.
+func setTokenGroup(c *gin.Context, token *model.Token, group string) bool {
+	if group != "" && group != "auto" {
+		userGroup, err := getTokenRequestUserGroup(c)
+		if err != nil {
+			common.ApiError(c, err)
+			return false
+		}
+		if !service.IsUserSelectableGroup(userGroup, group) {
+			common.ApiErrorI18n(c, i18n.MsgTokenGroupInvalid, map[string]any{"Group": group})
+			return false
+		}
+	}
+	token.Group = group
+	if group == "auto" {
+		// Mirror the edit drawer: choosing Auto enables cross-group retry.
+		// Any stored Auto order is kept so re-selecting Auto stays harmless.
+		token.CrossGroupRetry = true
+		return true
+	}
+	token.CrossGroupRetry = false
+	if err := token.SetAutoGroups(nil); err != nil {
+		common.ApiError(c, err)
+		return false
+	}
+	return true
+}
+
 func GetAllTokens(c *gin.Context) {
 	userId := c.GetInt("id")
 	pageInfo := common.GetPageQuery(c)
@@ -383,6 +413,7 @@ func DeleteToken(c *gin.Context) {
 func UpdateToken(c *gin.Context) {
 	userId := c.GetInt("id")
 	statusOnly := c.Query("status_only")
+	groupOnly := c.Query("group_only")
 	request := tokenRequest{}
 	err := c.ShouldBindJSON(&request)
 	if err != nil {
@@ -428,6 +459,10 @@ func UpdateToken(c *gin.Context) {
 	}
 	if statusOnly != "" {
 		cleanToken.Status = token.Status
+	} else if groupOnly != "" {
+		if !setTokenGroup(c, cleanToken, token.Group) {
+			return
+		}
 	} else {
 		// If you add more fields, please also update token.Update()
 		cleanToken.Name = token.Name

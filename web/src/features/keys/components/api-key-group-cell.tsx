@@ -16,87 +16,149 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useQueryClient } from '@tanstack/react-query'
+import { ChevronDown, Loader2 } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
-import { BadgeCell, TruncatedCell } from '@/components/data-table'
 import { GroupBadge } from '@/components/group-badge'
 import { StatusBadge } from '@/components/status-badge'
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { useMediaQuery } from '@/hooks'
+import { handleServerError } from '@/lib/handle-server-error'
 import { cn } from '@/lib/utils'
 
+import { updateApiKeyGroup } from '../api'
+import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
+import {
+  ApiKeyGroupOptions,
+  type ApiKeyGroupOption,
+} from './api-key-group-combobox'
 import { GroupRatioBadge, type GroupRatio } from './auto-group-visuals'
 
 type ApiKeyGroupCellProps = {
+  apiKeyId: number
   crossGroupRetry: boolean
   group: string
+  options: ApiKeyGroupOption[]
   ratio?: GroupRatio
   shouldReduceMotion: boolean
 }
 
 export function ApiKeyGroupCell(props: ApiKeyGroupCellProps) {
   const { t } = useTranslation()
+  const queryClient = useQueryClient()
   const isMobile = useMediaQuery('(max-width: 640px)')
+  const [open, setOpen] = useState(false)
+  const [searchValue, setSearchValue] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
 
   const group = props.group?.trim() || ''
-  if (group !== 'auto') {
-    const ratio =
-      group && typeof props.ratio === 'number' ? props.ratio : undefined
-    return (
-      <TruncatedCell
-        className={isMobile ? 'w-full' : 'max-w-50'}
-        tabIndex={0}
-        tooltipContent={group || t('Follow user group')}
-        tooltipClassName='break-all'
-      >
-        <GroupBadge
-          group={group}
-          ratio={ratio}
-          ratioLabel={group ? undefined : t('Inherited')}
-          className='px-0'
-          containerClassName={cn('gap-3', isMobile && 'w-full justify-between')}
-        />
-      </TruncatedCell>
+  const isAuto = group === 'auto'
+  const ratio =
+    group && typeof props.ratio === 'number' ? props.ratio : undefined
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen)
+    if (!nextOpen) setSearchValue('')
+  }
+
+  const handleSelect = async (nextGroup: string) => {
+    handleOpenChange(false)
+    if (nextGroup === group) return
+
+    setIsSaving(true)
+    try {
+      const result = await updateApiKeyGroup(props.apiKeyId, nextGroup)
+      if (result.success) {
+        toast.success(t(SUCCESS_MESSAGES.API_KEY_GROUP_UPDATED))
+        await queryClient.invalidateQueries({ queryKey: ['keys'] })
+      } else {
+        handleServerError(result, t(ERROR_MESSAGES.GROUP_UPDATE_FAILED))
+      }
+    } catch (error) {
+      handleServerError(error, t(ERROR_MESSAGES.UNEXPECTED))
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  let indicator = (
+    <ChevronDown aria-hidden='true' className='size-3.5 shrink-0 opacity-50' />
+  )
+  if (isSaving) {
+    indicator = (
+      <Loader2
+        aria-hidden='true'
+        className='size-3.5 shrink-0 animate-spin opacity-50'
+      />
     )
   }
 
   return (
-    <Tooltip>
-      <TooltipTrigger
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger
         render={
-          <BadgeCell
-            data-api-key-group-cell='auto'
-            tabIndex={0}
+          <button
+            type='button'
+            aria-label={t('Change group')}
+            aria-expanded={open}
+            disabled={isSaving}
+            title={group || t('Follow user group')}
             className={cn(
-              'ml-0 gap-3 overflow-visible text-xs',
+              'focus-visible:ring-ring/40 hover:bg-muted/60 flex max-w-full min-w-0 items-center gap-3 rounded-md px-1 py-0.5 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:opacity-60',
               isMobile ? 'w-full justify-between' : 'max-w-50'
             )}
           />
         }
       >
-        <StatusBadge
-          label={t('Cross-group')}
-          variant='info'
-          copyable={false}
-          className='px-0'
+        {isAuto ? (
+          <span
+            data-api-key-group-cell='auto'
+            className='flex min-w-0 items-center gap-3'
+          >
+            <StatusBadge
+              label={t('Cross-group')}
+              variant='info'
+              copyable={false}
+              className='px-0'
+            />
+            <GroupRatioBadge
+              ratio={props.ratio}
+              isAuto
+              shouldReduceMotion={props.shouldReduceMotion}
+            />
+          </span>
+        ) : (
+          <span
+            data-api-key-group-cell='group'
+            className='min-w-0 overflow-hidden'
+          >
+            <GroupBadge
+              group={group}
+              ratio={ratio}
+              ratioLabel={group ? undefined : t('Inherited')}
+              className='px-0'
+              containerClassName='gap-3'
+            />
+          </span>
+        )}
+        {indicator}
+      </PopoverTrigger>
+      <PopoverContent align='start' className='w-64 overflow-hidden p-0'>
+        <ApiKeyGroupOptions
+          options={props.options}
+          value={group}
+          onSelect={handleSelect}
+          searchValue={searchValue}
+          onSearchValueChange={setSearchValue}
         />
-        <GroupRatioBadge
-          ratio={props.ratio}
-          isAuto
-          shouldReduceMotion={props.shouldReduceMotion}
-        />
-      </TooltipTrigger>
-      <TooltipContent>
-        <span className='text-xs'>
-          {t(
-            'Automatically selects the best available group with circuit breaker mechanism'
-          )}
-        </span>
-      </TooltipContent>
-    </Tooltip>
+      </PopoverContent>
+    </Popover>
   )
 }

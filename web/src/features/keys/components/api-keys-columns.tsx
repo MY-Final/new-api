@@ -33,6 +33,7 @@ import { useSystemConfigStore } from '@/stores/system-config-store'
 import { API_KEY_STATUSES } from '../constants'
 import type { ApiKey } from '../types'
 import { ApiKeyGroupCell } from './api-key-group-cell'
+import type { ApiKeyGroupOption } from './api-key-group-combobox'
 import { ApiKeyQuotaCell } from './api-key-quota-cell'
 import {
   ApiKeyActivityCell,
@@ -45,26 +46,38 @@ import {
 } from './api-keys-cells'
 import { DataTableRowActions } from './data-table-row-actions'
 
-const EMPTY_GROUP_RATIOS: Record<string, number | string> = {}
+type ApiKeyGroupData = {
+  options: ApiKeyGroupOption[]
+  ratios: Record<string, number | string>
+}
 
-function useGroupRatios(): Record<string, number | string> {
+const EMPTY_GROUP_DATA: ApiKeyGroupData = { options: [], ratios: {} }
+
+function useApiKeyGroupData(): ApiKeyGroupData {
   const { data } = useQuery({
     queryKey: ['user-groups'],
     queryFn: async () => requireServerSuccess(await getUserGroups()),
     staleTime: 0,
     select: (res) => {
-      if (!res.success || !res.data) return {}
+      if (!res.success || !res.data) return EMPTY_GROUP_DATA
+      const options: ApiKeyGroupOption[] = []
       const ratios: Record<string, number | string> = {}
       for (const [group, info] of Object.entries(res.data)) {
         if (typeof info.ratio === 'number' || typeof info.ratio === 'string') {
           ratios[group] = info.ratio
         }
+        options.push({
+          value: group,
+          label: group,
+          desc: info.desc || group,
+          ratio: info.ratio,
+        })
       }
-      return ratios
+      return { options, ratios }
     },
   })
 
-  return data ?? EMPTY_GROUP_RATIOS
+  return data ?? EMPTY_GROUP_DATA
 }
 
 export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
@@ -72,7 +85,7 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
   useSystemConfigStore((state) => state.config.currency)
   const { meta: currency } = getCurrencyDisplay()
   const quotaUnit = currency.kind === 'tokens' ? t('Tokens') : currency.symbol
-  const groupRatios = useGroupRatios()
+  const { options: groupOptions, ratios: groupRatios } = useApiKeyGroupData()
   const shouldReduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const justNowLabel = t('Just now')
@@ -156,7 +169,9 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
           const group = row.getValue('group') as string
           return (
             <ApiKeyGroupCell
+              apiKeyId={apiKey.id}
               group={group}
+              options={groupOptions}
               ratio={groupRatios[group]}
               crossGroupRetry={apiKey.cross_group_retry}
               shouldReduceMotion={shouldReduceMotion}
@@ -233,6 +248,15 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
         meta: { pinned: 'right' as const },
       },
     ],
-    [t, quotaUnit, now, groupRatios, shouldReduceMotion, locale, justNowLabel]
+    [
+      t,
+      quotaUnit,
+      now,
+      groupOptions,
+      groupRatios,
+      shouldReduceMotion,
+      locale,
+      justNowLabel,
+    ]
   )
 }
