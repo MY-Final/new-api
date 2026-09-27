@@ -130,9 +130,9 @@ beforeEach(async () => {
     resources: { en },
     interpolation: { escapeValue: false },
   })
-  useSystemConfigStore
-    .getState()
-    .setConfig({ currency: { ...DEFAULT_CURRENCY_CONFIG } })
+  useSystemConfigStore.getState().setConfig({
+    currency: { ...DEFAULT_CURRENCY_CONFIG, quotaDisplayType: 'USD' },
+  })
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   client.setQueryData(['status'], {}, { updatedAt: Date.now() + 60_000 })
   client.setQueryData(

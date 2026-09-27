@@ -20,7 +20,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen, cleanup, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import i18next from 'i18next'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 import { api } from '@/lib/api'
 import {
@@ -42,7 +42,18 @@ import {
 } from '../lib/task-price-display'
 import type { PricingModel, BillingUsageSchema } from '../types'
 
+// The shipped default currency is the deployment's custom currency, so these
+// assertions state the unit they expect instead of inheriting that default.
+const testCurrency = {
+  ...DEFAULT_CURRENCY_CONFIG,
+  quotaDisplayType: 'USD' as const,
+}
+
 vi.mock('@visactor/react-vchart', () => ({ VChart: () => null }))
+
+beforeEach(() => {
+  useSystemConfigStore.getState().setConfig({ currency: testCurrency })
+})
 
 it('shows an explicit free request price alongside token prices with distinct units', () => {
   render(
@@ -278,9 +289,9 @@ afterEach(async () => {
 
 it('refreshes memoized provider prices when the group or display currency changes', () => {
   const previous = useSystemConfigStore.getState().config.currency
-  useSystemConfigStore
-    .getState()
-    .setConfig({ currency: DEFAULT_CURRENCY_CONFIG })
+  useSystemConfigStore.getState().setConfig({
+    currency: { ...DEFAULT_CURRENCY_CONFIG, quotaDisplayType: 'USD' },
+  })
   try {
     const shared = {
       ...model,

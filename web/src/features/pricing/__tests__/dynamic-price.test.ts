@@ -18,7 +18,12 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import assert from 'node:assert/strict'
 
-import { describe, expect, test } from 'vitest'
+import { beforeAll, describe, expect, test } from 'vitest'
+
+import {
+  DEFAULT_CURRENCY_CONFIG,
+  useSystemConfigStore,
+} from '@/stores/system-config-store'
 
 import { parseTiersFromExpr } from '../lib/billing-expr'
 import { getBillingModeLabelKey } from '../lib/billing-mode'
@@ -33,6 +38,14 @@ import {
 } from '../lib/dynamic-price'
 import { isTokenBasedModel } from '../lib/model-helpers'
 import type { PricingModel } from '../types'
+
+// The shipped default currency is the deployment's custom currency, so these
+// assertions state the unit they expect instead of inheriting that default.
+beforeAll(() => {
+  useSystemConfigStore.getState().setConfig({
+    currency: { ...DEFAULT_CURRENCY_CONFIG, quotaDisplayType: 'USD' },
+  })
+})
 
 function pricingModel(overrides: Partial<PricingModel>): PricingModel {
   return {

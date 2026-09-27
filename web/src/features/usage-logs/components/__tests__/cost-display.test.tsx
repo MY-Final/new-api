@@ -29,9 +29,19 @@ import {
   test,
 } from 'vitest'
 
-import { useSystemConfigStore } from '@/stores/system-config-store'
+import {
+  DEFAULT_CURRENCY_CONFIG,
+  useSystemConfigStore,
+} from '@/stores/system-config-store'
 
 import { LogCostDisplay } from '../log-cost-display'
+
+// The shipped default currency is the deployment's custom currency, so these
+// assertions state the unit they expect instead of inheriting that default.
+const testCurrency = {
+  ...DEFAULT_CURRENCY_CONFIG,
+  quotaDisplayType: 'USD' as const,
+}
 
 function renderCost(
   props: React.ComponentProps<typeof LogCostDisplay>
@@ -50,6 +60,7 @@ describe('log cost display', () => {
 
   beforeEach(() => {
     useSystemConfigStore.setState(useSystemConfigStore.getInitialState(), true)
+    useSystemConfigStore.getState().setConfig({ currency: testCurrency })
   })
 
   afterEach(() => {
@@ -115,7 +126,9 @@ describe('log cost display', () => {
 
     expect(screen.getByText('$0.025')).toBeVisible()
     expect(screen.getByRole('img', { name: 'Subscription' })).toBeVisible()
-    expect(screen.queryByRole('img', { name: 'Wallet' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('img', { name: 'Wallet' })
+    ).not.toBeInTheDocument()
   })
 
   test('keeps legacy cost visible without inventing a funding source', () => {

@@ -31,11 +31,21 @@ import { afterEach, expect, test, vi } from 'vitest'
 import { api } from '@/lib/api'
 import { ROLE } from '@/lib/roles'
 import { useAuthStore } from '@/stores/auth-store'
-import { useSystemConfigStore } from '@/stores/system-config-store'
+import {
+  DEFAULT_CURRENCY_CONFIG,
+  useSystemConfigStore,
+} from '@/stores/system-config-store'
 
 import { usageLogSchema } from '../../data/schema'
 import { UsageLogsProvider, useUsageLogsContext } from '../usage-logs-provider'
 import { UsageLogsTable } from '../usage-logs-table'
+
+// The shipped default currency is the deployment's custom currency, so these
+// assertions state the unit they expect instead of inheriting that default.
+const testCurrency = {
+  ...DEFAULT_CURRENCY_CONFIG,
+  quotaDisplayType: 'USD' as const,
+}
 
 function LogsFixture() {
   const { viewScope, setViewScope } = useUsageLogsContext()
@@ -60,6 +70,7 @@ async function renderLogs(props: {
   useAuthStore
     .getState()
     .auth.setUser({ id: 1, username: 'tester', role: props.role })
+  useSystemConfigStore.getState().setConfig({ currency: testCurrency })
   const records = ['wallet', 'subscription'].map((source, index) =>
     usageLogSchema.parse({
       id: index + 1,
