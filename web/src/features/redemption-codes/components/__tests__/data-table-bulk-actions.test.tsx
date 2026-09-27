@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -75,12 +76,17 @@ function tableFixture(): Table<Redemption> {
 describe('redemption batch action editor', () => {
   test('shows full-width select controls below their field labels', async () => {
     const user = userEvent.setup()
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
     render(
-      <I18nextProvider i18n={i18n}>
-        <RedemptionsProvider>
-          <DataTableBulkActions table={tableFixture()} />
-        </RedemptionsProvider>
-      </I18nextProvider>
+      <QueryClientProvider client={client}>
+        <I18nextProvider i18n={i18n}>
+          <RedemptionsProvider>
+            <DataTableBulkActions table={tableFixture()} />
+          </RedemptionsProvider>
+        </I18nextProvider>
+      </QueryClientProvider>
     )
 
     await user.click(screen.getByRole('button', { name: 'Edit' }))

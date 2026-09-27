@@ -58,7 +58,11 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
+import {
+  formatQuotaWithCurrency,
+  getCurrencyDisplay,
+  getCurrencyLabel,
+} from '@/lib/currency'
 import {
   formatQuota,
   getEditableQuotaStep,
@@ -77,6 +81,10 @@ import {
   transformRedemptionToFormDefaults,
 } from '../lib'
 import type { Redemption } from '../types'
+import {
+  RedemptionsExportDialog,
+  type RedemptionExportData,
+} from './redemptions-export-dialog'
 import { useRedemptions } from './redemptions-provider'
 
 type RedemptionsMutateDrawerProps = {
@@ -95,6 +103,9 @@ export function RedemptionsMutateDrawer({
   const redemptionId = currentRow?.id
   const { triggerRefresh } = useRedemptions()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [createdCodes, setCreatedCodes] = useState<RedemptionExportData | null>(
+    null
+  )
   const [redemptionLoadState, setRedemptionLoadState] = useState<
     'idle' | 'loading' | 'ready' | 'error'
   >('idle')
@@ -209,6 +220,17 @@ export function RedemptionsMutateDrawer({
           )
           onOpenChange(false)
           triggerRefresh()
+          // Offer the created codes for export, mirroring the batch flow.
+          if (result.data?.length) {
+            setCreatedCodes({
+              keys: result.data,
+              name: basePayload.name,
+              quota: formatQuotaWithCurrency(
+                basePayload.paid_quota + basePayload.bonus_quota,
+                { abbreviate: false }
+              ),
+            })
+          }
         }
       }
     } finally {
@@ -260,286 +282,297 @@ export function RedemptionsMutateDrawer({
   }
 
   return (
-    <Sheet
-      open={open}
-      onOpenChange={(v) => {
-        onOpenChange(v)
-        if (!v) {
-          form.reset()
-        }
-      }}
-    >
-      <SheetContent className={sideDrawerContentClassName('sm:max-w-[600px]')}>
-        <SheetHeader className={sideDrawerHeaderClassName()}>
-          <SheetTitle>
-            {isUpdate
-              ? t('Update Redemption Code')
-              : t('Create Redemption Code')}
-          </SheetTitle>
-          <SheetDescription>
-            {isUpdate
-              ? t('Update the redemption code by providing necessary info.')
-              : t(
-                  'Add new redemption code(s) by providing necessary info.'
-                )}{' '}
-            {t('Click save when you&apos;re done.')}
-          </SheetDescription>
-        </SheetHeader>
-        <Form {...form}>
-          <form
-            id='redemption-form'
-            onSubmit={handleSubmit}
-            className={sideDrawerFormClassName()}
-            aria-busy={isLoadingRedemption}
-          >
-            <fieldset
-              disabled={!isUpdateReady || isSubmitting}
-              className='contents'
+    <>
+      <Sheet
+        open={open}
+        onOpenChange={(v) => {
+          onOpenChange(v)
+          if (!v) {
+            form.reset()
+          }
+        }}
+      >
+        <SheetContent
+          className={sideDrawerContentClassName('sm:max-w-[600px]')}
+        >
+          <SheetHeader className={sideDrawerHeaderClassName()}>
+            <SheetTitle>
+              {isUpdate
+                ? t('Update Redemption Code')
+                : t('Create Redemption Code')}
+            </SheetTitle>
+            <SheetDescription>
+              {isUpdate
+                ? t('Update the redemption code by providing necessary info.')
+                : t(
+                    'Add new redemption code(s) by providing necessary info.'
+                  )}{' '}
+              {t('Click save when you&apos;re done.')}
+            </SheetDescription>
+          </SheetHeader>
+          <Form {...form}>
+            <form
+              id='redemption-form'
+              onSubmit={handleSubmit}
+              className={sideDrawerFormClassName()}
+              aria-busy={isLoadingRedemption}
             >
-              <SideDrawerSection>
-                <FormField
-                  control={form.control}
-                  name='name'
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t('Name')}</FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder={t('Enter a name')} />
-                      </FormControl>
-                      <FormDescription>
-                        {t('Name for this redemption code (1-20 characters)')}
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className='grid gap-4 sm:grid-cols-2'>
+              <fieldset
+                disabled={!isUpdateReady || isSubmitting}
+                className='contents'
+              >
+                <SideDrawerSection>
                   <FormField
                     control={form.control}
-                    name='paid_quota_dollars'
+                    name='name'
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{paidQuotaLabel}</FormLabel>
+                        <FormLabel>{t('Name')}</FormLabel>
                         <FormControl>
-                          <Input
-                            {...field}
-                            type='number'
-                            min='0'
-                            step={quotaStep}
-                            disabled={selectedType === 'reward'}
-                            placeholder={quotaPlaceholder}
-                            onChange={(e) =>
-                              field.onChange(
-                                Number.parseFloat(e.target.value) || 0
-                              )
-                            }
-                          />
+                          <Input {...field} placeholder={t('Enter a name')} />
                         </FormControl>
                         <FormDescription>
-                          {t('Paid portion of the code balance')}
+                          {t('Name for this redemption code (1-20 characters)')}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
 
+                  <div className='grid gap-4 sm:grid-cols-2'>
+                    <FormField
+                      control={form.control}
+                      name='paid_quota_dollars'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{paidQuotaLabel}</FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              type='number'
+                              min='0'
+                              step={quotaStep}
+                              disabled={selectedType === 'reward'}
+                              placeholder={quotaPlaceholder}
+                              onChange={(e) =>
+                                field.onChange(
+                                  Number.parseFloat(e.target.value) || 0
+                                )
+                              }
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            {t('Paid portion of the code balance')}
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name='bonus_quota_dollars'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{bonusQuotaLabel}</FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              type='number'
+                              min='0'
+                              step={quotaStep}
+                              placeholder={quotaPlaceholder}
+                              onChange={(e) =>
+                                field.onChange(
+                                  Number.parseFloat(e.target.value) || 0
+                                )
+                              }
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            {t('Bonus portion of the code balance')}
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormDescription>
+                    {t('Total quota')}:{' '}
+                    {formatQuota(parseQuotaFromDollars(paidQuota + bonusQuota))}
+                  </FormDescription>
+
                   <FormField
                     control={form.control}
-                    name='bonus_quota_dollars'
+                    name='type'
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{bonusQuotaLabel}</FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            type='number'
-                            min='0'
-                            step={quotaStep}
-                            placeholder={quotaPlaceholder}
-                            onChange={(e) =>
-                              field.onChange(
-                                Number.parseFloat(e.target.value) || 0
+                        <FormLabel>{t('Redemption Code Type')}</FormLabel>
+                        <Select
+                          items={[
+                            { value: 'paid', label: t('Paid code') },
+                            { value: 'reward', label: t('Reward code') },
+                          ]}
+                          value={field.value}
+                          onValueChange={(value) => {
+                            const nextType =
+                              value === 'paid' ? 'paid' : 'reward'
+                            if (nextType === 'reward') {
+                              form.setValue(
+                                'bonus_quota_dollars',
+                                paidQuota + bonusQuota,
+                                { shouldValidate: true }
                               )
+                              form.setValue('paid_quota_dollars', 0, {
+                                shouldValidate: true,
+                              })
                             }
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          {t('Bonus portion of the code balance')}
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <FormDescription>
-                  {t('Total quota')}:{' '}
-                  {formatQuota(parseQuotaFromDollars(paidQuota + bonusQuota))}
-                </FormDescription>
-
-                <FormField
-                  control={form.control}
-                  name='type'
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t('Redemption Code Type')}</FormLabel>
-                      <Select
-                        items={[
-                          { value: 'paid', label: t('Paid code') },
-                          { value: 'reward', label: t('Reward code') },
-                        ]}
-                        value={field.value}
-                        onValueChange={(value) => {
-                          const nextType = value === 'paid' ? 'paid' : 'reward'
-                          if (nextType === 'reward') {
-                            form.setValue(
-                              'bonus_quota_dollars',
-                              paidQuota + bonusQuota,
-                              { shouldValidate: true }
-                            )
-                            form.setValue('paid_quota_dollars', 0, {
-                              shouldValidate: true,
-                            })
-                          }
-                          field.onChange(nextType)
-                        }}
-                      >
-                        <FormControl>
-                          <SelectTrigger className='w-full'>
-                            <SelectValue className='min-w-0 truncate'>
-                              {field.value === 'paid'
-                                ? t('Paid code')
-                                : t('Reward code')}
-                            </SelectValue>
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent alignItemWithTrigger={false}>
-                          <SelectGroup>
-                            <SelectItem value='paid'>
-                              {t('Paid code')}
-                            </SelectItem>
-                            <SelectItem value='reward'>
-                              {t('Reward code')}
-                            </SelectItem>
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                      <FormDescription>
-                        {t(
-                          'Only paid codes generate referral rebates; reward and raffle codes do not.'
-                        )}
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name='expired_time'
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t('Expiration Time')}</FormLabel>
-                      <div className='flex flex-col gap-2'>
-                        <FormControl>
-                          <DateTimePicker
-                            value={field.value}
-                            onChange={field.onChange}
-                            placeholder={t('Never expires')}
-                          />
-                        </FormControl>
-                        <div className='grid grid-cols-4 gap-1.5 sm:flex sm:gap-2'>
-                          <Button
-                            type='button'
-                            variant='outline'
-                            size='sm'
-                            onClick={() => handleSetExpiry(0, 0, 0)}
-                          >
-                            {t('Never')}
-                          </Button>
-                          <Button
-                            type='button'
-                            variant='outline'
-                            size='sm'
-                            onClick={() => handleSetExpiry(1, 0, 0)}
-                          >
-                            {t('1M')}
-                          </Button>
-                          <Button
-                            type='button'
-                            variant='outline'
-                            size='sm'
-                            onClick={() => handleSetExpiry(0, 7, 0)}
-                          >
-                            {t('1W')}
-                          </Button>
-                          <Button
-                            type='button'
-                            variant='outline'
-                            size='sm'
-                            onClick={() => handleSetExpiry(0, 1, 0)}
-                          >
-                            {t('1 Day')}
-                          </Button>
-                        </div>
-                      </div>
-                      <FormDescription>
-                        {t('Leave empty for never expires')}
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                {!isUpdate && (
-                  <FormField
-                    control={form.control}
-                    name='count'
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{t('Quantity')}</FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            type='number'
-                            min='1'
-                            max='100'
-                            placeholder={t('Number of codes to create')}
-                            onChange={(e) =>
-                              field.onChange(
-                                Number.parseInt(e.target.value, 10) || 1
-                              )
-                            }
-                          />
-                        </FormControl>
+                            field.onChange(nextType)
+                          }}
+                        >
+                          <FormControl>
+                            <SelectTrigger className='w-full'>
+                              <SelectValue className='min-w-0 truncate'>
+                                {field.value === 'paid'
+                                  ? t('Paid code')
+                                  : t('Reward code')}
+                              </SelectValue>
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent alignItemWithTrigger={false}>
+                            <SelectGroup>
+                              <SelectItem value='paid'>
+                                {t('Paid code')}
+                              </SelectItem>
+                              <SelectItem value='reward'>
+                                {t('Reward code')}
+                              </SelectItem>
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
                         <FormDescription>
                           {t(
-                            'Create multiple redemption codes at once (1-100)'
+                            'Only paid codes generate referral rebates; reward and raffle codes do not.'
                           )}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                )}
-              </SideDrawerSection>
-            </fieldset>
-          </form>
-        </Form>
-        <SheetFooter className={sideDrawerFooterClassName()}>
-          <SheetClose render={<Button variant='outline' />}>
-            {t('Close')}
-          </SheetClose>
-          <Button
-            form='redemption-form'
-            type='submit'
-            disabled={isSubmitting || !isUpdateReady}
-          >
-            {submitButtonLabel}
-          </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+
+                  <FormField
+                    control={form.control}
+                    name='expired_time'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Expiration Time')}</FormLabel>
+                        <div className='flex flex-col gap-2'>
+                          <FormControl>
+                            <DateTimePicker
+                              value={field.value}
+                              onChange={field.onChange}
+                              placeholder={t('Never expires')}
+                            />
+                          </FormControl>
+                          <div className='grid grid-cols-4 gap-1.5 sm:flex sm:gap-2'>
+                            <Button
+                              type='button'
+                              variant='outline'
+                              size='sm'
+                              onClick={() => handleSetExpiry(0, 0, 0)}
+                            >
+                              {t('Never')}
+                            </Button>
+                            <Button
+                              type='button'
+                              variant='outline'
+                              size='sm'
+                              onClick={() => handleSetExpiry(1, 0, 0)}
+                            >
+                              {t('1M')}
+                            </Button>
+                            <Button
+                              type='button'
+                              variant='outline'
+                              size='sm'
+                              onClick={() => handleSetExpiry(0, 7, 0)}
+                            >
+                              {t('1W')}
+                            </Button>
+                            <Button
+                              type='button'
+                              variant='outline'
+                              size='sm'
+                              onClick={() => handleSetExpiry(0, 1, 0)}
+                            >
+                              {t('1 Day')}
+                            </Button>
+                          </div>
+                        </div>
+                        <FormDescription>
+                          {t('Leave empty for never expires')}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {!isUpdate && (
+                    <FormField
+                      control={form.control}
+                      name='count'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t('Quantity')}</FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              type='number'
+                              min='1'
+                              max='100'
+                              placeholder={t('Number of codes to create')}
+                              onChange={(e) =>
+                                field.onChange(
+                                  Number.parseInt(e.target.value, 10) || 1
+                                )
+                              }
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            {t(
+                              'Create multiple redemption codes at once (1-100)'
+                            )}
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                </SideDrawerSection>
+              </fieldset>
+            </form>
+          </Form>
+          <SheetFooter className={sideDrawerFooterClassName()}>
+            <SheetClose render={<Button variant='outline' />}>
+              {t('Close')}
+            </SheetClose>
+            <Button
+              form='redemption-form'
+              type='submit'
+              disabled={isSubmitting || !isUpdateReady}
+            >
+              {submitButtonLabel}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+      {createdCodes && (
+        <RedemptionsExportDialog
+          data={createdCodes}
+          onClose={() => setCreatedCodes(null)}
+        />
+      )}
+    </>
   )
 }

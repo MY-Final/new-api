@@ -201,7 +201,9 @@ test('successful batch creation opens export with returned codes and the configu
   fireEvent.change(within(createDialog).getByLabelText('Quantity'), {
     target: { value: '2' },
   })
-  fireEvent.change(within(createDialog).getByLabelText('Quota (CNY)'), {
+  // The drawer splits the wallet sources, so the paid input carries this
+  // amount and the exported quota reports the combined total.
+  fireEvent.change(within(createDialog).getByLabelText('Paid quota (CNY)'), {
     target: { value: '2000' },
   })
   await user.click(

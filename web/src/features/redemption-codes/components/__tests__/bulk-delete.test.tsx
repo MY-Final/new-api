@@ -92,7 +92,8 @@ async function setup() {
       const { ids } = body as { ids: number[] }
       const count = remaining.filter((code) => ids.includes(code.id)).length
       remaining = remaining.filter((code) => !ids.includes(code.id))
-      return { data: { success: true, data: count } }
+      // The batch endpoint reports the operation and how many rows it removed.
+      return { data: { success: true, data: { operation: 'delete', count } } }
     })
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -172,7 +173,7 @@ test('confirmation deletes only selected codes, disables repeat submissions and 
     ).not.toBeInTheDocument()
   )
   expect(remove.mock.calls).toEqual([
-    ['/api/redemption/batch', { ids: [11, 22] }],
+    ['/api/redemption/batch', { ids: [11, 22], operation: 'delete' }],
   ])
   expect(screen.getByRole('checkbox', { name: 'code-33' })).not.toBeChecked()
   expect(screen.queryByRole('toolbar')).not.toBeInTheDocument()
@@ -212,8 +213,8 @@ test.each(['server', 'network'])(
       expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     )
     expect(remove.mock.calls).toEqual([
-      ['/api/redemption/batch', { ids: [11, 22] }],
-      ['/api/redemption/batch', { ids: [11, 22] }],
+      ['/api/redemption/batch', { ids: [11, 22], operation: 'delete' }],
+      ['/api/redemption/batch', { ids: [11, 22], operation: 'delete' }],
     ])
     expect(screen.queryByRole('toolbar')).not.toBeInTheDocument()
   }

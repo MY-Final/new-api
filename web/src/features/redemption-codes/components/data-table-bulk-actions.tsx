@@ -1,3 +1,4 @@
+import { useMutation } from '@tanstack/react-query'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -22,17 +23,9 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { CopyButton } from '@/components/copy-button'
 import { DataTableBulkActions as BulkActionsToolbar } from '@/components/data-table'
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -61,6 +54,8 @@ import {
 } from '@/components/ui/tooltip'
 import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
 import { getEditableQuotaStep, parseQuotaFromDollars } from '@/lib/format'
+import { handleServerError } from '@/lib/handle-server-error'
+import { createServerError } from '@/lib/server-error-message'
 
 import { batchRedemptionOperation } from '../api'
 import { REDEMPTION_STATUS } from '../constants'
@@ -82,9 +77,8 @@ export function DataTableBulkActions<TData>({
     [selectedRows]
   )
   const [editOpen, setEditOpen] = useState(false)
-  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteTargets, setDeleteTargets] = useState<Redemption[] | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isDeleting, setIsDeleting] = useState(false)
   const [fields, setFields] = useState({
     name: false,
     type: false,
@@ -193,28 +187,38 @@ export function DataTableBulkActions<TData>({
     }
   }
 
-  const handleDelete = async () => {
-    setIsDeleting(true)
-    try {
+  const deletion = useMutation({
+    mutationFn: async (targets: Redemption[]) => {
+      // The batch endpoint dispatches on `operation`, so deletion still has to
+      // name it even though the ids are the whole payload.
       const result = await batchRedemptionOperation({
-        ids: selectedRedemptions.map((redemption) => redemption.id),
+        ids: targets.map((redemption) => redemption.id),
         operation: 'delete',
       })
-      if (!result.success) {
-        throw new Error(result.message || t('Batch delete failed'))
-      }
-      toast.success(t('Redemption codes deleted successfully'))
-      table.resetRowSelection()
-      setDeleteOpen(false)
-      triggerRefresh()
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t('Batch delete failed')
+      if (!result.success) throw createServerError(result)
+      return result.data?.count ?? targets.length
+    },
+    onSuccess: (count, targets) => {
+      toast.success(
+        t('Successfully deleted {{count}} redemption codes', { count })
       )
-    } finally {
-      setIsDeleting(false)
-    }
-  }
+      table.setRowSelection((previous) => {
+        const next = { ...previous }
+        for (const redemption of targets) delete next[String(redemption.id)]
+        return next
+      })
+      setDeleteTargets(null)
+      triggerRefresh()
+    },
+    onError: (error, targets) => {
+      handleServerError(
+        error,
+        t('Failed to delete {{count}} redemption codes', {
+          count: targets.length,
+        })
+      )
+    },
+  })
 
   const openEditor = () => {
     if (hasLockedSelection) {
@@ -233,7 +237,7 @@ export function DataTableBulkActions<TData>({
       )
       return
     }
-    setDeleteOpen(true)
+    setDeleteTargets(selectedRedemptions)
   }
 
   return (
@@ -274,13 +278,15 @@ export function DataTableBulkActions<TData>({
                 className='text-destructive hover:text-destructive size-8'
                 onClick={openDeleteDialog}
                 disabled={hasLockedSelection}
-                aria-label={t('Delete')}
+                aria-label={t('Delete selected redemption codes')}
               />
             }
           >
-            <Trash2 />
+            <Trash2 aria-hidden='true' />
           </TooltipTrigger>
-          <TooltipContent>{t('Delete')}</TooltipContent>
+          <TooltipContent>
+            {t('Delete selected redemption codes')}
+          </TooltipContent>
         </Tooltip>
       </BulkActionsToolbar>
 
@@ -493,34 +499,25 @@ export function DataTableBulkActions<TData>({
         </SheetContent>
       </Sheet>
 
-      <AlertDialog
-        open={deleteOpen}
-        onOpenChange={(open) => !open && !isDeleting && setDeleteOpen(false)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t('Are you sure?')}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t('This will permanently delete redemption codes')} (
-              {selectedRedemptions.length})
-              {t('. This action cannot be undone.')}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>
-              {t('Cancel')}
-            </AlertDialogCancel>
-            <Button
-              variant='destructive'
-              onClick={handleDelete}
-              disabled={isDeleting}
-            >
-              {isDeleting && <Loader2 className='animate-spin' />}
-              {t('Delete')}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        destructive
+        open={deleteTargets !== null}
+        onOpenChange={(open) => {
+          if (!open && !deletion.isPending) setDeleteTargets(null)
+        }}
+        title={t('Delete {{count}} redemption codes?', {
+          count: deleteTargets?.length ?? 0,
+        })}
+        desc={t('This action cannot be undone.')}
+        confirmText={deletion.isPending ? t('Deleting...') : t('Delete')}
+        isLoading={deletion.isPending}
+        disabled={!deleteTargets?.length}
+        handleConfirm={() => {
+          if (deleteTargets?.length && !deletion.isPending) {
+            deletion.mutate(deleteTargets)
+          }
+        }}
+      />
     </>
   )
 }

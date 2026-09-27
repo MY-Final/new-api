@@ -151,7 +151,10 @@ export function getEditableQuotaStep(): number {
     return 1
   }
 
-  return 10 ** -getCurrencyFractionDigits(0)
+  // Use the decimal literal rather than `10 ** -digits`: exponentiation lands
+  // one ULP off for some precisions (10 ** -4 is 0.00009999999999999999), which
+  // leaks into the input's `step` and the editable amount shown to the user.
+  return Number(`1e-${getCurrencyFractionDigits(0)}`)
 }
 
 // ============================================================================
