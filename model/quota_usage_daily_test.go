@@ -79,6 +79,31 @@ func TestRecordQuotaUsageFlushesBatchStore(t *testing.T) {
 	assert.Equal(t, 3, row.PaidQuota)
 }
 
+func TestSumQuotaUsageDailyByUsersAggregatesWholeHistoryPerUser(t *testing.T) {
+	truncateTables(t)
+	today := time.Now().Format("2006-01-02")
+	earlier := time.Now().AddDate(0, 0, -40).Format("2006-01-02")
+
+	require.NoError(t, applyQuotaUsageDaily(1, today, QuotaAllocation{Bonus: 100, Paid: 50}))
+	require.NoError(t, applyQuotaUsageDaily(1, earlier, QuotaAllocation{Bonus: -20, Paid: 10}))
+	require.NoError(t, applyQuotaUsageDaily(2, earlier, QuotaAllocation{Paid: 30}))
+
+	usage, err := SumQuotaUsageDailyByUsers([]int{1, 2, 3})
+	require.NoError(t, err)
+	// Days earlier than any requested range still count: the list shows the
+	// user's whole history, not a period.
+	require.Equal(t, QuotaAllocation{Bonus: 80, Paid: 60}, usage[1])
+	require.Equal(t, QuotaAllocation{Paid: 30}, usage[2])
+	// A user without ledger rows reports no allocation so callers can treat the
+	// absence as zero consumption.
+	_, hasUser3 := usage[3]
+	require.False(t, hasUser3)
+
+	empty, err := SumQuotaUsageDailyByUsers(nil)
+	require.NoError(t, err)
+	require.Empty(t, empty)
+}
+
 func TestGetQuotaLedgerSummary(t *testing.T) {
 	truncateTables(t)
 	today := time.Now().Format("2006-01-02")

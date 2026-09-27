@@ -606,3 +606,68 @@ func TestManageUserQuotaCacheUsesCommittedIntegerDifference(t *testing.T) {
 		})
 	}
 }
+
+// The user list feeds its quota breakdown straight to the table, so the fields
+// must survive the handler and cover the search path too: filtering switches
+// the frontend to the search endpoint.
+func TestListAndSearchUsersReturnQuotaUsageBySource(t *testing.T) {
+	db := setupManageUserTestDB(t)
+	require.NoError(t, db.AutoMigrate(&model.QuotaUsageDaily{}))
+	today := time.Now().Format("2006-01-02")
+	consumed := model.User{Username: "quota-source-consumer", Password: "password", Role: common.RoleCommonUser, Quota: 1000, AffCode: "quota-src-consumer"}
+	untouched := model.User{Username: "quota-source-untouched", Password: "password", Role: common.RoleCommonUser, Quota: 1000, AffCode: "quota-src-untouched"}
+	require.NoError(t, db.Create(&consumed).Error)
+	require.NoError(t, db.Create(&untouched).Error)
+	require.NoError(t, db.Create(&model.QuotaUsageDaily{
+		UserId: consumed.Id, Date: today, BonusQuota: 40, PaidQuota: 70,
+	}).Error)
+
+	for _, endpoint := range []struct {
+		name  string
+		path  string
+		call  func(*gin.Context)
+		users []*model.User
+	}{
+		{name: "list", path: "/api/user/?p=1&page_size=10", call: GetAllUsers},
+		{name: "search", path: "/api/user/search?keyword=quota-source&p=1&page_size=10", call: SearchUsers},
+	} {
+		t.Run(endpoint.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			context, _ := gin.CreateTestContext(recorder)
+			context.Request = httptest.NewRequest(http.MethodGet, endpoint.path, nil)
+			endpoint.call(context)
+			require.Equal(t, http.StatusOK, recorder.Code)
+
+			var response struct {
+				Success bool `json:"success"`
+				Data    struct {
+					Items []*model.User `json:"items"`
+				} `json:"data"`
+			}
+			require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+			require.True(t, response.Success)
+
+			byName := map[string]*model.User{}
+			for _, user := range response.Data.Items {
+				byName[user.Username] = user
+			}
+			require.Contains(t, byName, consumed.Username)
+			require.NotNil(t, byName[consumed.Username].BonusUsedQuota)
+			assert.Equal(t, 40, *byName[consumed.Username].BonusUsedQuota)
+			require.NotNil(t, byName[consumed.Username].PaidUsedQuota)
+			assert.Equal(t, 70, *byName[consumed.Username].PaidUsedQuota)
+
+			// A user without ledger rows omits the fields entirely; the client
+			// relies on that absence to hide the breakdown row.
+			if _, ok := byName[untouched.Username]; ok {
+				assert.Nil(t, byName[untouched.Username].BonusUsedQuota)
+				assert.Nil(t, byName[untouched.Username].PaidUsedQuota)
+			}
+			// The synthetic fields must never be persisted on the user row.
+			var stored model.User
+			require.NoError(t, db.First(&stored, consumed.Id).Error)
+			assert.Nil(t, stored.BonusUsedQuota)
+			assert.Nil(t, stored.PaidUsedQuota)
+		})
+	}
+}

@@ -115,6 +115,10 @@ type User struct {
 	LastLoginAt          int64                      `json:"last_login_at" gorm:"default:0;column:last_login_at"`
 	AuthVersion          int64                      `json:"-" gorm:"type:bigint;not null;default:1;column:auth_version"`
 	AdminPermissions     map[string]map[string]bool `json:"admin_permissions,omitempty" gorm:"-:all"`
+	// BonusUsedQuota / PaidUsedQuota 是全时段实充/赠送累计消耗，来自
+	// quota_usage_daily 账单，仅供列表展示，不落 users 表。
+	BonusUsedQuota *int `json:"bonus_used_quota,omitempty" gorm:"-:all"`
+	PaidUsedQuota  *int `json:"paid_used_quota,omitempty" gorm:"-:all"`
 }
 
 func (user *User) ToBaseUser() *UserBase {

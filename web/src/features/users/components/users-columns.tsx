@@ -194,6 +194,8 @@ export function useUsersColumns(): ColumnDef<User>[] {
               remaining={user.quota}
               bonus={user.bonus_quota}
               paid={user.paid_quota}
+              bonusUsed={user.bonus_used_quota}
+              paidUsed={user.paid_used_quota}
             />
           )
         },

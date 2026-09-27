@@ -65,7 +65,14 @@ await i18n.init({
   initAsync: false,
 })
 
-function QuotaTable(props: { remaining: number; used: number }) {
+function QuotaTable(props: {
+  remaining: number
+  used: number
+  bonus?: number
+  paid?: number
+  bonusUsed?: number
+  paidUsed?: number
+}) {
   const columns = useUsersColumns().filter((column) =>
     ['quota', 'used_quota'].includes(
       column.id ?? ('accessorKey' in column ? String(column.accessorKey) : '')
@@ -82,6 +89,10 @@ function QuotaTable(props: { remaining: number; used: number }) {
         status: 1,
         quota: props.remaining,
         used_quota: props.used,
+        bonus_quota: props.bonus,
+        paid_quota: props.paid,
+        bonus_used_quota: props.bonusUsed,
+        paid_used_quota: props.paidUsed,
         request_count: 0,
         group: 'default',
       } as User,
@@ -441,4 +452,77 @@ it('labels raw quota mode as tokens without introducing a currency symbol', () =
   expect(
     within(screen.getAllByRole('cell')[0]).getByText('200')
   ).toBeInTheDocument()
+})
+
+function renderQuotaCell(props: {
+  remaining: number
+  used: number
+  bonus?: number
+  paid?: number
+  bonusUsed?: number
+  paidUsed?: number
+}) {
+  return render(
+    <I18nextProvider i18n={i18n}>
+      <TooltipProvider>
+        <QuotaTable {...props} />
+      </TooltipProvider>
+    </I18nextProvider>
+  )
+}
+
+function valueOf(label: string): string {
+  const labelNode = screen.getByText(label)
+  return labelNode.parentElement?.textContent ?? ''
+}
+
+it('shows paid and bonus balances without hovering', () => {
+  renderQuotaCell({ remaining: 1900, used: 1100, bonus: 600, paid: 1300 })
+  // 1300 and 600 quota units at 500000 per unit.
+  expect(valueOf('Paid Balance')).toContain('0.0026')
+  expect(valueOf('Bonus Balance')).toContain('0.0012')
+  expect(screen.getByRole('progressbar')).toBeInTheDocument()
+})
+
+it('shows how much paid and bonus quota was consumed without hovering', () => {
+  renderQuotaCell({
+    remaining: 1900,
+    used: 1100,
+    bonus: 600,
+    paid: 1300,
+    bonusUsed: 400,
+    paidUsed: 700,
+  })
+  expect(valueOf('Paid used')).toContain('0.0014')
+  expect(valueOf('Bonus used')).toContain('0.0008')
+})
+
+it('omits the per-source usage row when the ledger reports nothing', () => {
+  renderQuotaCell({ remaining: 1900, used: 1100, bonus: 600, paid: 1300 })
+  // Balances are known from the user row, but a missing ledger must not be
+  // rendered as "used zero" for both sources.
+  expect(screen.getByText('Paid Balance')).toBeInTheDocument()
+  expect(screen.queryByText('Paid used')).not.toBeInTheDocument()
+  expect(screen.queryByText('Bonus used')).not.toBeInTheDocument()
+})
+
+it('keeps a negative balance readable and clamps the progress value', () => {
+  const { container } = renderQuotaCell({ remaining: -500000, used: 1000000 })
+  const balance = container.querySelector('[data-slot="user-quota-balance"]')
+  expect(balance).toHaveTextContent('-1')
+  expect(balance).toHaveClass('text-destructive')
+  expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '0')
+})
+
+it('reaches the full breakdown from the keyboard', async () => {
+  renderQuotaCell({
+    remaining: 1900,
+    used: 1100,
+    bonus: 600,
+    paid: 1300,
+    bonusUsed: 400,
+    paidUsed: 700,
+  })
+  await userEvent.tab()
+  expect(screen.getByRole('progressbar').closest('[tabindex]')).toHaveFocus()
 })

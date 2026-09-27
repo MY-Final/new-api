@@ -185,6 +185,34 @@ func SumQuotaUsageDaily(startDate, endDate, username string) (bonus int64, paid 
 	return row.Bonus, row.Paid, nil
 }
 
+type quotaUsageDailyUserSum struct {
+	UserId int `gorm:"column:user_id"`
+	Bonus  int `gorm:"column:bonus_quota"`
+	Paid   int `gorm:"column:paid_quota"`
+}
+
+// SumQuotaUsageDailyByUsers 汇总一批用户全时段的付费/福利额度净消耗。
+// 用户列表用它一次性取得当页所有用户的实充与赠送累计用量，避免逐行查询。
+// 返回的 map 只包含有账单记录的用户，缺失即代表没有消耗。
+func SumQuotaUsageDailyByUsers(userIds []int) (map[int]QuotaAllocation, error) {
+	if len(userIds) == 0 {
+		return map[int]QuotaAllocation{}, nil
+	}
+	var rows []quotaUsageDailyUserSum
+	if err := DB.Table("quota_usage_daily").
+		Select("user_id, COALESCE(SUM(bonus_quota), 0) AS bonus_quota, COALESCE(SUM(paid_quota), 0) AS paid_quota").
+		Where("user_id IN ?", userIds).
+		Group("user_id").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	usage := make(map[int]QuotaAllocation, len(rows))
+	for _, row := range rows {
+		usage[row.UserId] = QuotaAllocation{Bonus: row.Bonus, Paid: row.Paid}
+	}
+	return usage, nil
+}
+
 func GetQuotaLedgerSummary(startDate, endDate string) (*QuotaLedgerSummary, error) {
 	summary := &QuotaLedgerSummary{}
 	row := DB.Table("users").

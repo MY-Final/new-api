@@ -46,6 +46,9 @@ export const userSchema = z.object({
   bonus_quota: z.number().optional(),
   paid_quota: z.number().optional(),
   used_quota: z.number(),
+  // 全时段实充/赠送累计消耗，来自额度账单；缺省表示该用户没有账单记录。
+  bonus_used_quota: z.number().optional(),
+  paid_used_quota: z.number().optional(),
   request_count: z.number(),
   group: z.string(),
   aff_code: z.string().optional(),

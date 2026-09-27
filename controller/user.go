@@ -334,6 +334,33 @@ func Register(c *gin.Context) {
 	return
 }
 
+// attachQuotaUsageBySource 为当页用户批量附加全时段的实充/赠送累计消耗，
+// 让列表无需逐行查询即可展示额度来源用量。查询失败不影响用户列表本身，
+// 此时字段留空，前端按「无消耗」降级展示。
+func attachQuotaUsageBySource(users []*model.User) {
+	if len(users) == 0 {
+		return
+	}
+	userIds := make([]int, 0, len(users))
+	for _, user := range users {
+		userIds = append(userIds, user.Id)
+	}
+	usage, err := model.SumQuotaUsageDailyByUsers(userIds)
+	if err != nil {
+		common.SysError("failed to load user quota usage by source: " + err.Error())
+		return
+	}
+	for _, user := range users {
+		allocation, ok := usage[user.Id]
+		if !ok {
+			continue
+		}
+		bonusUsed, paidUsed := allocation.Bonus, allocation.Paid
+		user.BonusUsedQuota = &bonusUsed
+		user.PaidUsedQuota = &paidUsed
+	}
+}
+
 func GetAllUsers(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	sortOptions := model.NewUserSortOptions(c.Query("sort_by"), c.Query("sort_order"))
@@ -343,6 +370,7 @@ func GetAllUsers(c *gin.Context) {
 		return
 	}
 
+	attachQuotaUsageBySource(users)
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(users)
 
@@ -373,6 +401,7 @@ func SearchUsers(c *gin.Context) {
 		return
 	}
 
+	attachQuotaUsageBySource(users)
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(users)
 	common.ApiSuccess(c, pageInfo)
