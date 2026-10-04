@@ -104,6 +104,13 @@ const CHANNEL_FIELD_LABELS: Record<string, string> = {
   key: 'Key',
 }
 
+const BILLING_PREFERENCE_LABELS: Record<string, string> = {
+  subscription_first: 'Subscription First',
+  wallet_first: 'Wallet First',
+  subscription_only: 'Subscription Only',
+  wallet_only: 'Wallet Only',
+}
+
 function timingTextColorClass(
   variant: 'success' | 'warning' | 'danger'
 ): string {
@@ -325,6 +332,16 @@ function BillingBreakdown(props: {
     rows.push({
       label: t('Audio Input Price'),
       value: fmtPrice(other.audio_input_price),
+    })
+  }
+
+  if (other.billing_preference) {
+    rows.push({
+      label: t('Billing Preference'),
+      value: t(
+        BILLING_PREFERENCE_LABELS[other.billing_preference] ||
+          other.billing_preference
+      ),
     })
   }
 

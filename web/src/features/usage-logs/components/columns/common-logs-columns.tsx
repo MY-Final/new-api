@@ -691,6 +691,31 @@ export function useCommonLogsColumns(
         meta: { mobileTitle: true },
       },
       {
+        id: 'endpoint',
+        header: t('Endpoint'),
+        accessorFn: (row) => parseLogOther(row.other)?.request_path ?? '',
+        cell: ({ row }) => {
+          const log = row.original
+          if (!isDisplayableLogType(log.type)) return null
+
+          const endpoint = parseLogOther(log.other)?.request_path?.trim()
+          if (!endpoint) {
+            return <span className='text-muted-foreground/40'>—</span>
+          }
+
+          return (
+            <span
+              className='text-muted-foreground block truncate font-mono text-xs'
+              title={endpoint}
+            >
+              {endpoint}
+            </span>
+          )
+        },
+        meta: { label: t('Endpoint') },
+        size: 150,
+      },
+      {
         id: 'reasoning_effort',
         header: t('Reasoning Effort'),
         accessorFn: (row) => parseLogOther(row.other)?.reasoning_effort ?? '',

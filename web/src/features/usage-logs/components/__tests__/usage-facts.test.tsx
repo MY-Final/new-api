@@ -35,6 +35,8 @@ const i18nKeys = {
   'Matched Tier': 'Matched Tier',
   'Group Ratio': 'Group Ratio',
   'Total Cost': 'Total Cost',
+  'Billing Preference': 'Billing Preference',
+  'Wallet Only': 'Wallet Only',
   'Usage parameters': 'Usage parameters',
 }
 
@@ -212,6 +214,19 @@ describe('usage facts billing details', () => {
       usageHeader.compareDocumentPosition(totalCost) &
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
+  })
+
+  test('shows the recorded billing preference in billing details', () => {
+    queryClients.push(renderDetails({ billing_preference: 'wallet_only' }))
+
+    expect(screen.getByText('Billing Preference')).toBeInTheDocument()
+    expect(rowValue('Billing Preference')).toBe('Wallet Only')
+  })
+
+  test('does not render a billing preference row when it is absent', () => {
+    queryClients.push(renderDetails({}))
+
+    expect(screen.queryByText('Billing Preference')).toBeNull()
   })
 
   test('does not render usage parameter rows when usage_facts is absent', () => {

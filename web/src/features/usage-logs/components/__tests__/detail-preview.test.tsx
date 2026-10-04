@@ -116,6 +116,20 @@ function TokenNamePreview(props: { log: UsageLog }) {
   return flexRender(cell.column.columnDef.cell, cell.getContext())
 }
 
+function EndpointPreview(props: { other: LogOtherData }) {
+  const table = useReactTable({
+    data: [makeLog(props.other)],
+    columns: useCommonLogsColumns(true, false),
+    getCoreRowModel: getCoreRowModel(),
+  })
+  const cell = table
+    .getRowModel()
+    .rows[0].getAllCells()
+    .find((item) => item.column.id === 'endpoint')
+  if (!cell) throw new Error('The log must have an endpoint column')
+  return flexRender(cell.column.columnDef.cell, cell.getContext())
+}
+
 function ReasoningEffortPreview(props: { other: LogOtherData }) {
   const table = useReactTable({
     data: [makeLog(props.other)],
@@ -197,6 +211,16 @@ function renderTokenNamePreview(overrides: Partial<UsageLog> = {}) {
     </I18nextProvider>
   )
 }
+
+test('common log rows expose the inbound endpoint', () => {
+  render(
+    <I18nextProvider i18n={i18n}>
+      <EndpointPreview other={{ request_path: '/v1/responses' }} />
+    </I18nextProvider>
+  )
+
+  expect(screen.getByText('/v1/responses')).toBeVisible()
+})
 
 test('common log rows expose the request reasoning effort', () => {
   render(

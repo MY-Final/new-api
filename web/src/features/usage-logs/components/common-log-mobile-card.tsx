@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { flexRender, type Cell } from '@tanstack/react-table'
-import { ChevronRight, KeyRound } from 'lucide-react'
+import { ChevronRight, KeyRound, Route } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -137,6 +137,7 @@ export function CommonLogMobileCard<TData>(props: {
     other
   )
   const showCacheMiss = missed > 0 && missed < (log.prompt_tokens || 0)
+  const endpoint = other?.request_path?.trim()
   const reasoningEffort = other?.reasoning_effort?.trim()
   const showTokens =
     displayable &&
@@ -166,6 +167,20 @@ export function CommonLogMobileCard<TData>(props: {
           </div>
         )}
       </div>
+      {displayable && endpoint && props.cells.has('endpoint') && (
+        <div className='flex min-w-0 items-center gap-1.5 text-xs'>
+          <Route
+            className='text-muted-foreground size-3 shrink-0'
+            aria-hidden='true'
+          />
+          <span className='text-muted-foreground shrink-0'>
+            {t('Endpoint')}
+          </span>
+          <span className='text-foreground min-w-0 truncate font-mono'>
+            {endpoint}
+          </span>
+        </div>
+      )}
       {displayable &&
         reasoningEffort &&
         props.cells.has('reasoning_effort') && (
