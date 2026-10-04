@@ -16,9 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Search, Copy, Check, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+import { CopyButton } from '@/components/copy-button'
 import { Dialog } from '@/components/dialog'
 import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
@@ -33,7 +34,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { formatCurrencyFromUSD } from '@/lib/currency'
 import { formatNumber, formatQuota } from '@/lib/format'
 
@@ -68,7 +68,6 @@ export function BillingHistoryDialog({
     handlePageSizeChange,
     handleSearch,
   } = useBillingHistory()
-  const { copyToClipboard, copiedText } = useCopyToClipboard({ notify: false })
 
   const totalPages = Math.ceil(total / pageSize)
 
@@ -191,18 +190,12 @@ export function BillingHistoryDialog({
                           <code className='text-foreground truncate font-mono text-sm'>
                             {identifier}
                           </code>
-                          <Button
-                            variant='ghost'
+                          <CopyButton
+                            value={identifier}
                             size='sm'
                             className='h-5 w-5 p-0'
-                            onClick={() => copyToClipboard(identifier)}
-                          >
-                            {copiedText === identifier ? (
-                              <Check className='h-3 w-3' />
-                            ) : (
-                              <Copy className='h-3 w-3' />
-                            )}
-                          </Button>
+                            iconClassName='h-3 w-3'
+                          />
                         </div>
                         <div className='text-muted-foreground text-xs'>
                           {formatTimestamp(
@@ -211,7 +204,7 @@ export function BillingHistoryDialog({
                         </div>
                       </div>
                       <StatusBadge
-                        label={statusConfig.label}
+                        label={t(statusConfig.label)}
                         variant={statusConfig.variant}
                         showDot
                         copyable={false}

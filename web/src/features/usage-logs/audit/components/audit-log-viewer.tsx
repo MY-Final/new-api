@@ -38,12 +38,15 @@ export function AuditLogViewer(props: {
   scope: 'all' | 'self'
   accessOnly?: boolean
   currentTokenRef?: string
+  // The token scope the viewer opens with and returns to on reset.
+  defaultTokenScope?: 'all' | 'current'
   onAccessDenied?: () => Promise<void>
 }) {
   const { t } = useTranslation()
   const userId = useAuthStore((state) => state.auth.user?.id)
   const [filters, setFilters] = useState<AuditFilters>({ p: 1, page_size: 20 })
-  const [tokenScope, setTokenScope] = useState('all')
+  const defaultTokenScope = props.defaultTokenScope ?? 'all'
+  const [tokenScope, setTokenScope] = useState<string>(defaultTokenScope)
   const { autoRefreshInterval, setAutoRefreshInterval } =
     useAutoRefreshInterval()
   const params = { ...filters }
@@ -134,6 +137,7 @@ export function AuditLogViewer(props: {
               scope={props.scope}
               accessOnly={props.accessOnly}
               tokenScope={tokenScope}
+              defaultTokenScope={defaultTokenScope}
               currentTokenRef={props.currentTokenRef}
               onTokenScopeChange={(value) => {
                 setTokenScope(value)
@@ -146,7 +150,7 @@ export function AuditLogViewer(props: {
                 if (!invalidRange && canQuery) void query.refetch()
               }}
               onReset={() => {
-                setTokenScope('all')
+                setTokenScope(defaultTokenScope)
                 setFilters({ p: 1, page_size: filters.page_size })
               }}
             />
