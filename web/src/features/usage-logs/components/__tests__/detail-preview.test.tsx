@@ -115,6 +115,20 @@ function TokenNamePreview(props: { log: UsageLog }) {
   if (!cell) throw new Error('The log must have a token name column')
   return flexRender(cell.column.columnDef.cell, cell.getContext())
 }
+
+function ReasoningEffortPreview(props: { other: LogOtherData }) {
+  const table = useReactTable({
+    data: [makeLog(props.other)],
+    columns: useCommonLogsColumns(true, false),
+    getCoreRowModel: getCoreRowModel(),
+  })
+  const cell = table
+    .getRowModel()
+    .rows[0].getAllCells()
+    .find((item) => item.column.id === 'reasoning_effort')
+  if (!cell) throw new Error('The log must have a reasoning effort column')
+  return flexRender(cell.column.columnDef.cell, cell.getContext())
+}
 const plugin = {
   key: 'incho',
   name: 'Incho',
@@ -183,6 +197,16 @@ function renderTokenNamePreview(overrides: Partial<UsageLog> = {}) {
     </I18nextProvider>
   )
 }
+
+test('common log rows expose the request reasoning effort', () => {
+  render(
+    <I18nextProvider i18n={i18n}>
+      <ReasoningEffortPreview other={{ reasoning_effort: 'xhigh' }} />
+    </I18nextProvider>
+  )
+
+  expect(screen.getByText('xhigh')).toBeVisible()
+})
 
 test('token column labels input and output counts', () => {
   renderTokenPreview()

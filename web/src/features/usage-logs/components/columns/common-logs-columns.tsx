@@ -59,6 +59,7 @@ import {
   formatModelName,
   decodeBillingExprB64,
   getInputTokenBreakdown,
+  getReasoningEffortVariant,
   getTieredBillingSummary,
   hasAnyCacheTokens,
   parseLogOther,
@@ -688,6 +689,31 @@ export function useCommonLogsColumns(
           )
         },
         meta: { mobileTitle: true },
+      },
+      {
+        id: 'reasoning_effort',
+        header: t('Reasoning Effort'),
+        accessorFn: (row) => parseLogOther(row.other)?.reasoning_effort ?? '',
+        cell: ({ row }) => {
+          const log = row.original
+          if (!isDisplayableLogType(log.type)) return null
+
+          const effort = parseLogOther(log.other)?.reasoning_effort?.trim()
+          if (!effort) {
+            return <span className='text-muted-foreground/40'>—</span>
+          }
+
+          return (
+            <StatusBadge
+              label={effort}
+              variant={getReasoningEffortVariant(effort)}
+              size='sm'
+              copyable={false}
+            />
+          )
+        },
+        meta: { label: t('Reasoning Effort') },
+        size: 110,
       },
       {
         accessorKey: 'is_stream',

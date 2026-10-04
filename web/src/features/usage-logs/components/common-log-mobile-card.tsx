@@ -35,6 +35,7 @@ import type { UsageLog } from '../data/schema'
 import {
   formatModelName,
   getInputTokenBreakdown,
+  getReasoningEffortVariant,
   parseLogOther,
 } from '../lib/format'
 import {
@@ -136,6 +137,7 @@ export function CommonLogMobileCard<TData>(props: {
     other
   )
   const showCacheMiss = missed > 0 && missed < (log.prompt_tokens || 0)
+  const reasoningEffort = other?.reasoning_effort?.trim()
   const showTokens =
     displayable &&
     props.cells.has('prompt_tokens') &&
@@ -164,6 +166,21 @@ export function CommonLogMobileCard<TData>(props: {
           </div>
         )}
       </div>
+      {displayable &&
+        reasoningEffort &&
+        props.cells.has('reasoning_effort') && (
+          <div className='flex min-w-0 items-center gap-2 text-xs'>
+            <span className='text-muted-foreground shrink-0'>
+              {t('Reasoning Effort')}
+            </span>
+            <StatusBadge
+              label={reasoningEffort}
+              variant={getReasoningEffortVariant(reasoningEffort)}
+              size='sm'
+              copyable={false}
+            />
+          </div>
+        )}
       <div
         className='grid min-w-0 grid-cols-2 items-stretch gap-x-3'
         data-slot='log-time-and-timing'
