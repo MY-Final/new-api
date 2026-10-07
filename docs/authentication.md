@@ -197,3 +197,61 @@ Proof 同时绑定用户、登录会话、用户鉴权版本、会话版本和 s
 - 旧版 PAT 保留在 `users.access_token` 中，自新版首次启动起 30 天内照常可用，之后自动停用并返回 401 `ACCESS_TOKEN_LEGACY_RETIRED`。停用日期记录在 `options` 表的 `LegacyAccessTokenRetireAt`，由服务端写入，不能通过设置接口修改。过渡期内不能再生成旧版令牌，但可以撤销。
 - 删除了 `/api/user/token*` 接口，改为 `/api/user/access_tokens`。
 - 降级到旧版本后，新令牌不可用；未撤销的旧版令牌会重新可用，因为旧版本不认停用日期。
+
+## KunCode Setup 桌面授权
+
+固定公开客户端为 `kuncode-setup`，不使用嵌入式客户端秘密。沿用网页登录、现有安全验证策略和 `auth_flows`，只新增授权桥接及受限工具配置接口。
+
+| 接口 | 鉴权与用途 |
+| --- | --- |
+| `POST /api/desktop/auth/start` | 公开、限流，创建 5 分钟授权请求 |
+| `GET /api/desktop/auth/request?flow=…` | 浏览器 Session，读取设备及权限说明 |
+| `POST /api/desktop/auth/authorize` | 浏览器 Session，批准需 `desktop.authorize` Proof，context 为 `{"request_id":…}`；拒绝不需 Proof |
+| `POST /api/desktop/auth/exchange` | 60 秒一次性授权码、PKCE S256 verifier 和原始回调地址 |
+| `POST /api/desktop/auth/logout` | 桌面专用 PAT，只撤销自身 |
+| `PUT /api/desktop/tools/:agent` | 桌面专用 PAT，只配置所属安装实例的工具，body 为 `{"model":"实际可用模型"}` |
+
+`start` 接受 `client_id`、安装实例 UUID `installation_id`、`device_name`、`redirect_uri`、`state`、`code_challenge` 和固定 `code_challenge_method: S256`。返回的 `authorization_url` 指向网站 `/desktop/authorize`，使用受信任的 `ServerAddress` 构造，不信任请求 Host 或转发头。
+回调仅允许 `http://127.0.0.1:<1024–65535>/callback`，不能携带预设查询、用户信息或 fragment。
+批准后回调只携带授权码和 state，不携带真实 Token。交换再次验证批准者 Session、安全版本、PKCE 和精确回调地址，并在事务中原子消费授权码。
+
+签发的 `nap_` 有效期 30 天，不提供刷新令牌，权限固定为 `profile:read`、`coding_tools:configure`。
+额外路由白名单禁止桌面 PAT 调用普通 API 密钥读取、账户安全或后台接口；不能使用 PAT 取得网页批准 Proof。
+`desktop_installations` 记录用户、安装实例、当前 PAT 和安全版本；`desktop_tool_keys` 记录安装实例、工具与 API Key 的关系，密钥名称不作为授权依据。
+重新授权替换同账户、同安装实例的旧 PAT，保留工具密钥；账户安全版本变化后，旧桌面授权立即无效。
+
+工具仅允许 `codex`、`claude`、`opencode`，模型必须属于用户默认分组实际启用的模型。
+每个工具使用独立密钥，重复配置复用有效密钥并更新模型限制；已失效时才创建新密钥。
+工具密钥不增加额外额度上限，仍受账户余额、普通密钥数量限制、站点限流及计费约束。退出桌面账户保留工具密钥。
+
+### 本地开发
+
+本地启动网站和后端后，在站点设置将 `ServerAddress` 设为 `http://127.0.0.1:3000`。
+Setup 的 **设置 → KunCode 账户 → 授权服务地址（高级）** 填写相同根地址，端口随实际服务调整。
+不要在根地址后添加 `/api` 或 `/v1`。开发 HTTP 使用 `SESSION_COOKIE_SECURE=false`，不配置 `SESSION_COOKIE_TRUSTED_URL`；仍需固定且非空的本地 `SESSION_SECRET`。
+两端必须使用完全相同的协议、主机名和端口；`localhost` 和 `127.0.0.1` 不属于同源地址。默认 `ServerAddress` 为 `http://localhost:3000` 时，Setup 也应填写这个地址，或同时修改两端。
+生产使用 HTTPS。第三方手动 Token 和 API Key 连接不需要这些桌面专用接口。
+
+### 回归验证记录（2026-10-08）
+
+安全依据：[OWASP ASVS 5.0.0](https://github.com/OWASP/ASVS/tree/v5.0.0)、[Authentication Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html)、[Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)、[OAuth 2.0 Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/OAuth2_Cheat_Sheet.html)。本次控制包含服务器权限约束、安全验证绑定、授权码单次消费与过期、会话撤销、安全版本失效、PKCE、回调限制和凭据不进入审计日志；此记录不是完整 ASVS 合规认证。
+
+`controller/desktop_auth_test.go` 使用真实 SQLite **3.50.4**、MySQL **9.7.1** 和 PostgreSQL **16.8**。
+建库及代表性旧结构升级均调用生产 `model.InitDB()`，连续启动至少两次；升级前保留普通 PAT 和普通 API Key、去除桌面新增列及关联表，验证迁移后数据和关联唯一约束仍成立。
+测试库仅创建在回环测试实例，不使用开发者现有数据库。未覆盖 MySQL 5.7.8、PostgreSQL 9.6 最低版本或生产数据副本。
+
+```powershell
+$env:GOMAXPROCS='4'
+$env:DESKTOP_MYSQL_DSN='root@tcp(127.0.0.1:23306)/mysql?parseTime=true'
+$env:DESKTOP_POSTGRES_DSN='postgres://desktop_test@127.0.0.1:25432/postgres?sslmode=disable'
+go test ./controller -run '^TestDesktop' -count=1 -v
+```
+
+用例包含批准、拒绝、请求/授权码失效、重复交换、错误 PKCE/回调、原 Session 撤销、安全验证缺失或绑定错误、账户安全版本变更、普通 PAT 拒绝、账户/安装实例/工具隔离、密钥复用及失效后替换、退出保留工具。网站测试验证安全验证组件、批准/拒绝和回调边界；本地浏览器批准和真实 Coding Agent 调用仍需部署者人工验收。
+
+结果：桌面授权专项及六个真实数据库子用例通过；`go test -p 1 ./controller ./middleware ./service ./router ./model -count=1` 中 controller、middleware、router、model 通过，service 全量的 `TestObserveChannelAffinityUsageCacheByRelayFormat_MixedMode` 和 `…_UnsupportedModeKeepsEmpty` 缓存统计断言失败。使用 `go test -p 1 -overlay <HEAD源码覆盖文件> ./service -count=1` 在改动前源码复现了后者；MixedMode 单独运行通过。`go test -p 1 ./service -run 'Security|AccessToken|AuthSession' -count=1` 通过。这些渠道缓存文件未在本次改动中修改，不能将全量 service 测试记为通过。
+
+网站：`bun run typecheck`、修改文件 `oxlint`、`bun run build` 通过；`bun run test src/features/auth/desktop/__tests__/authorization.test.tsx src/features/auth/secure-verification/__tests__/verification-api.test.ts src/features/auth/secure-verification/__tests__/verification-flow.test.tsx --maxWorkers=1` 共 32 项通过。
+Setup：5 项前端交互测试、TypeScript 检查、Vite 构建、16 项 Rust 测试及 Clippy `-D warnings` 通过；`CARGO_BUILD_JOBS=2` 下 `pnpm tauri build --debug --no-bundle --target x86_64-pc-windows-msvc` 构建成功。Windows 本机资源不足时需限制构建并发，避免页面文件耗尽。未执行生产部署或付费推理。
+
+当前功能单独保存在 `codex/desktop-authorization` 分支，尚未合并上线。上线前仍需完成真实浏览器授权 → 三个工具配置与启动 → 退出后继续使用的完整验收，并在生产数据库副本演练迁移；上述自动化结果不代表已完成生产验收。
