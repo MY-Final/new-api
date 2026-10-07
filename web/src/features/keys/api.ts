@@ -25,6 +25,7 @@ import type {
   GetApiKeysResponse,
   SearchApiKeysParams,
   ApiKeyFormData,
+  CreatedApiKey,
   TokenAutoGroupsConfig,
 } from './types'
 
@@ -69,10 +70,11 @@ export async function getTokenAutoGroups(): Promise<
   return res.data
 }
 
-// Create a new API key
+// Create a new API key. The create endpoint returns the raw key exactly once so
+// the post-create dialog can offer it for copying without a second request.
 export async function createApiKey(
   data: ApiKeyFormData
-): Promise<ApiResponse<ApiKey>> {
+): Promise<ApiResponse<CreatedApiKey>> {
   const res = await api.post('/api/token/', data)
   return res.data
 }

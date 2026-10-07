@@ -382,9 +382,16 @@ func AddToken(c *gin.Context) {
 	}
 	params["id"] = cleanToken.Id
 	common.SetContextKey(c, constant.ContextKeyTokenAuditSucceeded, true)
+	// The raw key is returned once so the creator can copy it immediately; it
+	// is never written to the audit log, which stores only allowlisted params.
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
+		"data": gin.H{
+			"id":   cleanToken.Id,
+			"name": cleanToken.Name,
+			"key":  cleanToken.GetFullKey(),
+		},
 	})
 }
 

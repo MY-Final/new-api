@@ -53,6 +53,8 @@ import {
 import { apiKeySchema, type ApiKey } from '../../types'
 import { ApiKeyQuotaCell } from '../api-key-quota-cell'
 import { useApiKeysColumns } from '../api-keys-columns'
+import { ApiKeysDialogs } from '../api-keys-dialogs'
+import { ApiKeysPrimaryButtons } from '../api-keys-primary-buttons'
 import { ApiKeysProvider } from '../api-keys-provider'
 import { ApiKeysTable } from '../api-keys-table'
 
@@ -297,7 +299,9 @@ it('keeps a long amount within its column while showing the full amount in detai
 function KeysPage() {
   return (
     <ApiKeysProvider>
+      <ApiKeysPrimaryButtons />
       <ApiKeysTable />
+      <ApiKeysDialogs />
       <Toaster />
     </ApiKeysProvider>
   )
@@ -306,13 +310,36 @@ function KeysPage() {
 async function renderKeysPage(
   status = 1,
   overrides: Partial<ApiKey> = {},
-  statusData: Record<string, unknown> = {}
+  statusData: Record<string, unknown> = {},
+  initialItems?: ApiKey[]
 ) {
   let currentKey = { ...key, status, ...overrides }
   vi.mocked(api.get).mockImplementation(async (url) => {
-    if (url.startsWith('/api/token/')) {
+    if (url.startsWith('/api/token/search')) {
       return {
-        data: { success: true, data: { items: [currentKey], total: 1 } },
+        data: { success: true, data: { items: [], total: 0 } },
+      }
+    }
+    if (url === '/api/token/auto-groups') {
+      return {
+        data: { success: true, data: { groups: [], max_count: 3 } },
+      }
+    }
+    if (url.startsWith('/api/token/')) {
+      const items = initialItems ?? [currentKey]
+      return {
+        data: { success: true, data: { items, total: items.length } },
+      }
+    }
+    if (url === '/api/user/models') {
+      return { data: { success: true, data: [] } }
+    }
+    if (url === '/api/user/self/groups') {
+      return {
+        data: {
+          success: true,
+          data: { default: { desc: 'Standard', ratio: 1 } },
+        },
       }
     }
     return { data: { success: true, data: { default: { ratio: 1 } } } }
@@ -349,7 +376,15 @@ async function renderKeysPage(
       </QueryClientProvider>
     </I18nextProvider>
   )
-  await screen.findByText(currentKey.name)
+  if (initialItems) {
+    await waitFor(() =>
+      expect(api.get).toHaveBeenCalledWith(
+        expect.stringContaining('/api/token/')
+      )
+    )
+  } else {
+    await screen.findByText(currentKey.name)
+  }
   return { post, put }
 }
 
@@ -578,4 +613,86 @@ it('keeps mobile quota readable and opens complete model and IP restrictions by 
   details = await screen.findByRole('dialog')
   expect(within(details).getByText('192.0.2.1')).toBeVisible()
   expect(within(details).getByText('2001:db8::1')).toBeVisible()
+})
+
+it('offers the create drawer from the empty state when there are no keys or active filters', async () => {
+  await renderKeysPage(1, {}, {}, [])
+  await screen.findByText('No API Keys Found')
+
+  const emptyState = document.querySelector('[data-slot="empty"]')
+  expect(emptyState).not.toBeNull()
+  const emptyAction = within(emptyState as HTMLElement).getByRole('button', {
+    name: 'Create API Key',
+  })
+  const user = userEvent.setup()
+  await user.click(emptyAction)
+
+  const drawer = await screen.findByRole('dialog', { name: 'Create API Key' })
+  expect(within(drawer).getByLabelText('Name')).toBeVisible()
+})
+
+it('does not offer the empty-state create action while a search filter is active', async () => {
+  await renderKeysPage(1, {}, {}, [])
+  await screen.findByText('No API Keys Found')
+  const user = userEvent.setup()
+
+  await user.type(
+    screen.getByPlaceholderText('Filter by name...'),
+    'missing-key'
+  )
+
+  const emptyState = document.querySelector('[data-slot="empty"]')
+  expect(emptyState).not.toBeNull()
+  await waitFor(() =>
+    expect(
+      within(emptyState as HTMLElement).queryByRole('button', {
+        name: 'Create API Key',
+      })
+    ).not.toBeInTheDocument()
+  )
+})
+
+it('shows the created key with a copy action and configured addresses', async () => {
+  await renderKeysPage(
+    1,
+    {},
+    {
+      api_base_urls: ['https://kuncode.120403.xyz', 'https://wcnmb.fun'],
+    }
+  )
+  const user = userEvent.setup()
+  const writeText = vi.spyOn(navigator.clipboard, 'writeText')
+
+  await user.click(screen.getByRole('button', { name: 'Create API Key' }))
+  const drawer = await screen.findByRole('dialog', { name: 'Create API Key' })
+  const nameInput = within(drawer).getByLabelText('Name')
+  await user.type(nameInput, 'first-key')
+  await waitFor(() =>
+    expect(
+      within(drawer).getByRole('button', { name: 'Save changes' })
+    ).toBeEnabled()
+  )
+  await user.click(within(drawer).getByRole('button', { name: 'Save changes' }))
+
+  const nextStep = await screen.findByRole('dialog', {
+    name: 'API Key created',
+  })
+  expect(within(nextStep).getByText('fake-key-for-test-only')).toBeVisible()
+  await user.click(
+    within(nextStep).getByRole('button', {
+      name: 'Copy API key: first-key',
+    })
+  )
+  expect(writeText).toHaveBeenCalledWith('fake-key-for-test-only')
+  expect(within(nextStep).getByRole('button', { name: 'Done' })).toBeVisible()
+  expect(
+    within(nextStep).queryByRole('button', { name: 'Open Playground' })
+  ).not.toBeInTheDocument()
+  for (const url of ['https://kuncode.120403.xyz', 'https://wcnmb.fun']) {
+    expect(
+      within(nextStep).getByRole('button', {
+        name: `Copy API URL: ${url}`,
+      })
+    ).toBeVisible()
+  }
 })

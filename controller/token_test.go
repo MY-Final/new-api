@@ -895,3 +895,34 @@ func verifyAPITokenAudit(t *testing.T) {
 		assert.EqualValues(t, 1, count)
 	})
 }
+func TestAddTokenReturnsRawKeyOnceForImmediateCopy(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+
+	body := map[string]any{
+		"name":            "copy-once",
+		"expired_time":    -1,
+		"remain_quota":    0,
+		"unlimited_quota": true,
+		"group":           "default",
+	}
+	ctx, recorder := newAuthenticatedContext(t, http.MethodPost, "/api/token/", body, 1)
+	AddToken(ctx)
+
+	response := decodeAPIResponse(t, recorder)
+	require.True(t, response.Success, response.Message)
+
+	var created struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+		Key  string `json:"key"`
+	}
+	require.NoError(t, common.Unmarshal(response.Data, &created))
+	assert.Equal(t, "copy-once", created.Name)
+	assert.NotZero(t, created.ID)
+	assert.NotEmpty(t, created.Key)
+
+	var token model.Token
+	require.NoError(t, db.Where("id = ?", created.ID).First(&token).Error)
+	assert.Equal(t, token.GetFullKey(), created.Key)
+}
+

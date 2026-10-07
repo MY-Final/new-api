@@ -24,7 +24,7 @@ import { handleServerError } from '@/lib/handle-server-error'
 
 import { fetchTokenKey, fetchTokenKeysBatch } from '../api'
 import { ERROR_MESSAGES } from '../constants'
-import type { ApiKey, ApiKeysDialogType } from '../types'
+import type { ApiKey, ApiKeysDialogType, CreatedApiKey } from '../types'
 
 type ApiKeysContextType = {
   open: ApiKeysDialogType | null
@@ -33,6 +33,8 @@ type ApiKeysContextType = {
   setCurrentRow: React.Dispatch<React.SetStateAction<ApiKey | null>>
   refreshTrigger: number
   triggerRefresh: () => void
+  createdKeys: CreatedApiKey[]
+  setCreatedKeys: React.Dispatch<React.SetStateAction<CreatedApiKey[]>>
   resolvedKey: string
   setResolvedKey: React.Dispatch<React.SetStateAction<string>>
   resolveRealKey: (id: number) => Promise<string | null>
@@ -50,6 +52,7 @@ export function ApiKeysProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useDialogState<ApiKeysDialogType>(null)
   const [currentRow, setCurrentRow] = useState<ApiKey | null>(null)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const [createdKeys, setCreatedKeys] = useState<CreatedApiKey[]>([])
   const [resolvedKey, setResolvedKey] = useState('')
 
   const [resolvedKeys, setResolvedKeys] = useState<Record<number, string>>({})
@@ -163,6 +166,8 @@ export function ApiKeysProvider({ children }: { children: React.ReactNode }) {
         setCurrentRow,
         refreshTrigger,
         triggerRefresh,
+        createdKeys,
+        setCreatedKeys,
         resolvedKey,
         setResolvedKey,
         resolveRealKey,

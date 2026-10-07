@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
 import { flexRender, type Table as TanstackTable } from '@tanstack/react-table'
-import { Database, Globe2 } from 'lucide-react'
+import { Database, Globe2, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -32,6 +32,7 @@ import {
   useDataTable,
 } from '@/components/data-table'
 import { StatusBadge } from '@/components/status-badge'
+import { Button } from '@/components/ui/button'
 import {
   Empty,
   EmptyDescription,
@@ -53,6 +54,7 @@ import {
   API_KEY_STATUSES,
   ERROR_MESSAGES,
 } from '../constants'
+import { getAPIBaseURLs } from '../lib/api-addresses'
 import type { ApiKey } from '../types'
 import { ApiKeyQuotaCell } from './api-key-quota-cell'
 import { ApiKeyActivityCell } from './api-key-timestamp-cell'
@@ -75,28 +77,6 @@ const API_KEYS_MOBILE_SKELETON_IDS = Array.from(
 
 function isDisabledApiKeyRow(apiKey: ApiKey) {
   return apiKey.status !== API_KEY_STATUS.ENABLED
-}
-
-function getAPIBaseURLs(value: unknown): string[] {
-  if (!Array.isArray(value)) return []
-
-  const urls = value.filter((item): item is string => {
-    if (typeof item !== 'string') return false
-    try {
-      const url = new URL(item)
-      return (
-        (url.protocol === 'http:' || url.protocol === 'https:') &&
-        !url.username &&
-        !url.password &&
-        !url.search &&
-        !url.hash
-      )
-    } catch {
-      return false
-    }
-  })
-
-  return [...new Set(urls)]
 }
 
 function APIEndpointList(props: { urls: string[] }) {
@@ -159,10 +139,12 @@ function ApiKeysMobileList({
   table,
   isLoading,
   now,
+  emptyAction,
 }: {
   table: TanstackTable<ApiKey>
   isLoading: boolean
   now: number
+  emptyAction?: React.ReactNode
 }) {
   const { t } = useTranslation()
   const rows = table.getRowModel().rows
@@ -183,6 +165,7 @@ function ApiKeysMobileList({
                 'No API keys available. Create your first API key to get started.'
               )}
             </EmptyDescription>
+            {emptyAction}
           </EmptyHeader>
         </Empty>
       </div>
@@ -275,7 +258,7 @@ function ApiKeysMobileList({
 export function ApiKeysTable() {
   const { t } = useTranslation()
   const { status } = useStatus()
-  const { refreshTrigger } = useApiKeys()
+  const { refreshTrigger, setOpen } = useApiKeys()
   const [now, setNow] = useState(() => Date.now())
   const columns = useApiKeysColumns(now)
 
@@ -362,7 +345,24 @@ export function ApiKeysTable() {
 
   const apiKeys = data?.items || []
   const apiBaseURLs = getAPIBaseURLs(status?.api_base_urls)
-
+  const hasActiveFilters = Boolean(
+    globalFilter?.trim() ||
+    tokenFilter.trim() ||
+    columnFilters.some(
+      (filter) =>
+        filter.id === 'status' &&
+        Array.isArray(filter.value) &&
+        filter.value.length > 0
+    )
+  )
+  const isEmpty =
+    !isLoading && Boolean(data) && !hasActiveFilters && (data?.total || 0) === 0
+  const emptyAction = isEmpty ? (
+    <Button onClick={() => setOpen('create')}>
+      <Plus aria-hidden='true' />
+      {t('Create API Key')}
+    </Button>
+  ) : undefined
   const { table } = useDataTable({
     data: apiKeys,
     columns,
@@ -407,6 +407,7 @@ export function ApiKeysTable() {
       emptyDescription={t(
         'No API keys available. Create your first API key to get started.'
       )}
+      emptyAction={emptyAction}
       skeletonKeyPrefix='api-keys-skeleton'
       applyHeaderSize
       toolbarProps={{
@@ -434,7 +435,12 @@ export function ApiKeysTable() {
         ) : undefined,
       }}
       mobile={
-        <ApiKeysMobileList table={table} isLoading={isLoading} now={now} />
+        <ApiKeysMobileList
+          table={table}
+          isLoading={isLoading}
+          now={now}
+          emptyAction={emptyAction}
+        />
       }
       getRowClassName={(row) =>
         isDisabledApiKeyRow(row.original) ? DISABLED_ROW_DESKTOP : undefined

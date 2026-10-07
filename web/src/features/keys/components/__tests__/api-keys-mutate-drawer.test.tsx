@@ -184,8 +184,14 @@ function selectComboboxOption(
   optionDescription: string
 ): void {
   fireEvent.click(trigger)
+  // Scope to the popup this trigger controls; several comboboxes stay mounted
+  // at once, so a document-wide query would click another popover's option.
+  const popupId = trigger.getAttribute('aria-controls')
+  const popup = popupId ? document.getElementById(popupId) : null
   const option = [
-    ...document.querySelectorAll<HTMLElement>('[data-slot="command-item"]'),
+    ...(popup ?? document).querySelectorAll<HTMLElement>(
+      '[data-slot="command-item"]'
+    ),
   ].find((candidate) => candidate.textContent?.includes(optionDescription))
   if (!option) {
     throw new Error(`Expected option containing "${optionDescription}"`)

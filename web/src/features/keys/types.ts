@@ -83,6 +83,11 @@ export interface SearchApiKeysParams {
   size?: number
 }
 
+export interface CreatedApiKey {
+  name: string
+  key: string
+}
+
 export interface ApiKeyFormData {
   name: string
   remain_quota: number
@@ -111,3 +116,4 @@ export type ApiKeysDialogType =
   | 'delete'
   | 'batch-delete'
   | 'cc-switch'
+  | 'created'

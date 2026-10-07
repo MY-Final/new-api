@@ -84,7 +84,7 @@ import {
   transformFormDataToPayload,
   transformApiKeyToFormDefaults,
 } from '../lib'
-import type { ApiKey } from '../types'
+import type { ApiKey, CreatedApiKey } from '../types'
 import {
   ApiKeyGroupCombobox,
   type ApiKeyGroupOption,
@@ -106,7 +106,7 @@ export function ApiKeysMutateDrawer({
   const { t } = useTranslation()
   const isUpdate = !!currentRow
   const currentRowId = currentRow?.id
-  const { triggerRefresh } = useApiKeys()
+  const { triggerRefresh, setOpen, setCreatedKeys } = useApiKeys()
   const { status, loading: statusLoading } = useStatus()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
@@ -302,6 +302,7 @@ export function ApiKeysMutateDrawer({
         // Create mode - handle batch creation
         const count = data.tokenCount || 1
         let successCount = 0
+        const created: CreatedApiKey[] = []
 
         for (let i = 0; i < count; i++) {
           const result = await createApiKey({
@@ -313,6 +314,12 @@ export function ApiKeysMutateDrawer({
           })
           if (result.success) {
             successCount++
+            if (result.data?.key) {
+              created.push({
+                name: result.data.name || data.name || '',
+                key: result.data.key,
+              })
+            }
           } else {
             handleServerError(result, t(ERROR_MESSAGES.CREATE_FAILED))
             break
@@ -325,7 +332,8 @@ export function ApiKeysMutateDrawer({
               count: successCount,
             })
           )
-          onOpenChange(false)
+          setCreatedKeys(created)
+          setOpen('created')
           triggerRefresh()
         }
       }
