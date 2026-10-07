@@ -42,6 +42,7 @@ func accessTokenScopeRule(scope string) accessTokenRouteRule {
 // Casbin-guarded routes declare themselves through
 // DeclareAccessTokenPermissionRoute when they are registered.
 var accessTokenRouteRules = map[string]accessTokenRouteRule{
+	"GET /api/desktop/profile":         accessTokenScopeRule("profile:read"),
 	"GET /api/desktop/auth/request":    accessTokenSessionRule,
 	"POST /api/desktop/auth/authorize": accessTokenSessionRule,
 	"POST /api/desktop/auth/logout":    accessTokenScopeRule(model.DesktopConfigureScope),

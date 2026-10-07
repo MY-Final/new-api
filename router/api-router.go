@@ -32,6 +32,7 @@ func SetApiRouter(router *gin.Engine) {
 		desktopRoute.POST("/auth/exchange", middleware.CriticalRateLimit(), anonymousRequestBodyLimit, controller.DesktopAuthExchange)
 		desktopRoute.GET("/auth/request", middleware.UserAuth(), controller.DesktopAuthRequest)
 		desktopRoute.POST("/auth/authorize", middleware.UserAuth(), middleware.CriticalRateLimit(), middleware.UserCriticalRateLimit("desktop-auth"), anonymousRequestBodyLimit, controller.DesktopAuthAuthorize)
+		desktopRoute.GET("/profile", middleware.UserAuth(), controller.DesktopProfile)
 		desktopRoute.POST("/auth/logout", middleware.UserAuth(), controller.DesktopAuthLogout)
 		desktopRoute.PUT("/tools/:agent", middleware.UserAuth(), middleware.UserCriticalRateLimit("desktop-config"), anonymousRequestBodyLimit, controller.DesktopConfigureTool)
 		apiRouter.GET("/uptime/status", controller.GetUptimeKumaStatus)

@@ -297,7 +297,7 @@ func enforceAccessTokenRoute(c *gin.Context, lookup *accessTokenLookup, abort bo
 	if lookup.token != nil && lookup.token.DesktopInstallationId != 0 {
 		switch key {
 		case "GET /api/user/self", "GET /api/user/self/groups", "GET /api/user/models", "GET /api/models",
-			"POST /api/desktop/auth/logout", "PUT /api/desktop/tools/:agent":
+			"GET /api/desktop/profile", "POST /api/desktop/auth/logout", "PUT /api/desktop/tools/:agent":
 		default:
 			if abort {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"success": false, "code": "ACCESS_TOKEN_SCOPE_DENIED", "message": "Desktop authorization cannot access this route."})

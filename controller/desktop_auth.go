@@ -228,3 +228,70 @@ func DesktopConfigureTool(c *gin.Context) {
 	recordUserSecurityAudit(c, installation.UserId, "desktop.tool.configure", map[string]any{"installation_id": installation.Id, "agent": c.Param("agent"), "token_id": token.Id, "model": input.Model})
 	common.ApiSuccess(c, gin.H{"id": token.Id, "key": token.GetFullKey(), "model": input.Model})
 }
+
+// DesktopProfile is the stable account contract for the desktop app. It reuses
+// the dashboard self DTO and returns display-ready quota values so Setup does
+// not re-implement billing rules. Other compatible sites (for example a future
+// sub2api implementation) may return the same shape; the desktop app depends
+// only on these fields.
+func DesktopProfile(c *gin.Context) {
+	setAuthNoStore(c)
+	installation, err := model.GetDesktopInstallation(c.GetInt("access_token_id"), c.GetInt("id"))
+	if err != nil {
+		writeAccessTokenError(c, 401, "DESKTOP_AUTH_INVALID", "Desktop authorization is invalid.")
+		return
+	}
+	user, err := model.GetUserById(installation.UserId, false)
+	if err != nil {
+		writeSecurityOperationError(c, err)
+		return
+	}
+	// Deliberately narrower than the dashboard self DTO: the desktop app only
+	// needs identity and display values, so billing/affiliate/permission fields
+	// are not exposed through a long-lived desktop token.
+	common.ApiSuccess(c, gin.H{
+		"provider": "newapi",
+		"user": gin.H{
+			"id":            user.Id,
+			"username":      user.Username,
+			"display_name":  user.DisplayName,
+			"email":         user.Email,
+			"role":          user.Role,
+			"status":        user.Status,
+			"group":         user.Group,
+			"request_count": user.RequestCount,
+			"created_at":    user.CreatedAt,
+			"last_login_at": user.LastLoginAt,
+		},
+		"quota": desktopQuotaDisplay(user.Quota, user.UsedQuota),
+	})
+}
+
+// desktopQuotaDisplay converts internal quota to the value and unit the site
+// would show in its own dashboard, so desktop and web stay consistent.
+func desktopQuotaDisplay(balance, used int) map[string]any {
+	perUnit := common.QuotaPerUnit
+	if perUnit <= 0 {
+		perUnit = 500000
+	}
+	displayType := operation_setting.GetQuotaDisplayType()
+	symbol := operation_setting.GetCurrencySymbol()
+	if !operation_setting.IsCurrencyDisplay() {
+		return map[string]any{
+			"display_type": "TOKENS",
+			"symbol":       "",
+			"balance":      float64(balance),
+			"used":         float64(used),
+		}
+	}
+	rate := operation_setting.GetUsdToCurrencyRate(operation_setting.USDExchangeRate)
+	convert := func(value int) float64 {
+		return float64(value) / perUnit * rate
+	}
+	return map[string]any{
+		"display_type": displayType,
+		"symbol":       symbol,
+		"balance":      convert(balance),
+		"used":         convert(used),
+	}
+}
