@@ -278,10 +278,11 @@ func desktopQuotaDisplay(balance, used int) map[string]any {
 	symbol := operation_setting.GetCurrencySymbol()
 	if !operation_setting.IsCurrencyDisplay() {
 		return map[string]any{
-			"display_type": "TOKENS",
-			"symbol":       "",
-			"balance":      float64(balance),
-			"used":         float64(used),
+			"display_type":   "TOKENS",
+			"symbol":         "",
+			"balance":        float64(balance),
+			"used":           float64(used),
+			"quota_per_unit": perUnit,
 		}
 	}
 	rate := operation_setting.GetUsdToCurrencyRate(operation_setting.USDExchangeRate)
@@ -289,9 +290,10 @@ func desktopQuotaDisplay(balance, used int) map[string]any {
 		return float64(value) / perUnit * rate
 	}
 	return map[string]any{
-		"display_type": displayType,
-		"symbol":       symbol,
-		"balance":      convert(balance),
-		"used":         convert(used),
+		"display_type":   displayType,
+		"symbol":         symbol,
+		"balance":        convert(balance),
+		"used":           convert(used),
+		"quota_per_unit": perUnit,
 	}
 }

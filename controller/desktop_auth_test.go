@@ -176,7 +176,16 @@ func TestDesktopAuthorizationLifecycle(t *testing.T) {
 	assert.Equal(t, 200, accessTokenRequest(router, "GET", "/api/user/self", pat, "", "").Code)
 	profile := desktopResponseData(t, accessTokenRequest(router, "GET", "/api/desktop/profile", pat, "", ""))
 	assert.Equal(t, "newapi", profile["provider"])
-	assert.Equal(t, "desktop-owner", profile["user"].(map[string]any)["username"])
+	profileUser := profile["user"].(map[string]any)
+	assert.Equal(t, "desktop-owner", profileUser["username"])
+	// The desktop contract is intentionally narrower than the dashboard DTO.
+	for _, omitted := range []string{"permissions", "aff_code", "setting", "stripe_customer"} {
+		assert.NotContains(t, profileUser, omitted)
+	}
+	quota := profile["quota"].(map[string]any)
+	assert.Positive(t, quota["quota_per_unit"])
+	assert.Contains(t, quota, "balance")
+	assert.Contains(t, quota, "used")
 	assert.Equal(t, 403, accessTokenRequest(router, "GET", "/api/token/", pat, "", "").Code)
 	first := desktopResponseData(t, accessTokenRequest(router, "PUT", "/api/desktop/tools/codex", pat, "", `{"model":"coding-model"}`))
 	second := desktopResponseData(t, accessTokenRequest(router, "PUT", "/api/desktop/tools/codex", pat, "", `{"model":"coding-model"}`))
