@@ -31,6 +31,7 @@ const (
 	VerificationScopeAccessTokenGenerate = "access_token.generate"
 	VerificationScopeAccessTokenRevoke   = "access_token.revoke"
 	VerificationScopeAccessTokenUpdate   = "access_token.update"
+	VerificationScopeDesktopAuthorize    = "desktop.authorize"
 	VerificationScopeAccountBind         = "account.binding.bind"
 	VerificationScopeAccountUnbind       = "account.binding.unbind"
 	VerificationScopePasswordSet         = "account.password.set"
@@ -110,6 +111,10 @@ type AccessTokenGenerateContext struct {
 	ExpiresAt int64    `json:"expires_at"`
 }
 
+type DesktopAuthorizeContext struct {
+	RequestID int64 `json:"request_id"`
+}
+
 // AccessTokenUpdateContext binds a grant change to one token and the exact new
 // grant, compared as a sorted, de-duplicated set.
 type AccessTokenUpdateContext struct {
@@ -163,6 +168,12 @@ func BindVerificationOperation(operation VerificationOperation) (VerificationBin
 	}
 	var normalized any
 	switch operation.Scope {
+	case VerificationScopeDesktopAuthorize:
+		var context DesktopAuthorizeContext
+		if len(fields) != 1 || common.Unmarshal(operation.Context, &context) != nil || context.RequestID <= 0 {
+			return VerificationBinding{}, ErrVerificationContextInvalid
+		}
+		normalized = context
 	case VerificationScopeChannelKeyRead:
 		var context ChannelKeyReadContext
 		if len(fields) != 1 || common.Unmarshal(fields["channel_id"], &context.ChannelID) != nil || context.ChannelID <= 0 {
@@ -325,7 +336,7 @@ func securityVerificationPolicy(scope string, state model.UserVerificationState)
 			return nil, model.ErrTwoFANotEnabled
 		}
 	case VerificationScopePasskeyRegister, VerificationScopeTwoFASetup,
-		VerificationScopeAccessTokenGenerate, VerificationScopeAccessTokenUpdate, VerificationScopeAccessTokenRevoke,
+		VerificationScopeAccessTokenGenerate, VerificationScopeAccessTokenUpdate, VerificationScopeAccessTokenRevoke, VerificationScopeDesktopAuthorize,
 		VerificationScopeAccountBind, VerificationScopeAccountUnbind,
 		VerificationScopePasswordSet, VerificationScopePasswordChange, VerificationScopeAccountDelete,
 		VerificationScopeAdminUserCreate, VerificationScopeAdminUserUpdate, VerificationScopeAdminUserDelete,

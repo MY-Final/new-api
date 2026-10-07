@@ -53,6 +53,9 @@ func accessTokenEdit(description string) authz.ActionDefinition {
 // Casbin permission. Casbin resources come from authz.Catalog() at runtime and
 // must never be duplicated here.
 var accessTokenStaticResources = []AccessTokenResource{
+	{Resource: "coding_tools", LabelKey: "Coding tools", group: AccessTokenGroupPersonal, minRole: common.RoleCommonUser, Actions: []authz.ActionDefinition{
+		{Action: "configure", LabelKey: "Configure", DescriptionKey: "Configure only this desktop installation's coding tools."},
+	}},
 	{Resource: "profile", LabelKey: "Profile", group: AccessTokenGroupPersonal, minRole: common.RoleCommonUser, Actions: []authz.ActionDefinition{
 		accessTokenView("View your profile, groups, and available models."),
 		accessTokenEdit("Change your display name and personal settings."),
@@ -236,6 +239,7 @@ var accessTokenVerificationScopes = map[string]string{
 	VerificationScopeAccountUnbind:         "account_security:write",
 	VerificationScopeAccountDelete:         "account_security:write",
 	VerificationScopeAccessTokenGenerate:   "",
+	VerificationScopeDesktopAuthorize:      "",
 	VerificationScopeAccessTokenUpdate:     "",
 	VerificationScopeAccessTokenRevoke:     "",
 	VerificationScopeLogin:                 "",

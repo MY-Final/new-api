@@ -21,6 +21,8 @@ import (
 // accessTokenExemptRoutes are /api routes that never reach dashboard
 // authentication, so a personal access token has no rule to satisfy there.
 var accessTokenExemptRoutes = []string{
+	"POST /api/desktop/auth/start",
+	"POST /api/desktop/auth/exchange",
 	// Anonymous pages and setup.
 	"GET /api/setup",
 	"POST /api/setup",

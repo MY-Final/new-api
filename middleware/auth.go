@@ -269,6 +269,12 @@ func lookupAccessToken(c *gin.Context, raw string) *accessTokenLookup {
 		return lookup
 	}
 	lookup.token = token
+	if token.DesktopInstallationId != 0 {
+		if err := model.ValidateDesktopAccessToken(token.Id, token.UserId); err != nil {
+			lookup.err = err
+			return lookup
+		}
+	}
 	lookup.user, lookup.err = model.GetUserCache(token.UserId)
 	if lookup.err == nil && token.Expired(common.GetTimestamp()) {
 		// Keep the owner so the rejected attempt is still audited.
@@ -288,6 +294,17 @@ func requestAccessTokenLookup(c *gin.Context) *accessTokenLookup {
 // 403 response and records the reason in the access audit.
 func enforceAccessTokenRoute(c *gin.Context, lookup *accessTokenLookup, abort bool) bool {
 	key := c.Request.Method + " " + c.FullPath()
+	if lookup.token != nil && lookup.token.DesktopInstallationId != 0 {
+		switch key {
+		case "GET /api/user/self", "GET /api/user/self/groups", "GET /api/user/models", "GET /api/models",
+			"POST /api/desktop/auth/logout", "PUT /api/desktop/tools/:agent":
+		default:
+			if abort {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"success": false, "code": "ACCESS_TOKEN_SCOPE_DENIED", "message": "Desktop authorization cannot access this route."})
+			}
+			return false
+		}
+	}
 	rule, declared := AccessTokenRouteRule(key)
 	code, reason, message := "", "", ""
 	switch {
@@ -371,6 +388,10 @@ func setDashboardAuthContext(c *gin.Context, user *model.UserBase, identity serv
 }
 
 func writeDashboardAuthError(c *gin.Context, err error) {
+	if errors.Is(err, model.ErrDesktopAuthorization) {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"success": false, "code": "DESKTOP_AUTH_INVALID", "message": "Desktop authorization is invalid or expired."})
+		return
+	}
 	if errors.Is(err, model.ErrAccessTokenExpired) {
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"success": false, "code": "ACCESS_TOKEN_EXPIRED", "message": common.TranslateMessage(c, i18n.MsgAuthAccessTokenExpired)})
 		return

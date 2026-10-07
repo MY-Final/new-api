@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
 )
@@ -41,6 +42,10 @@ func accessTokenScopeRule(scope string) accessTokenRouteRule {
 // Casbin-guarded routes declare themselves through
 // DeclareAccessTokenPermissionRoute when they are registered.
 var accessTokenRouteRules = map[string]accessTokenRouteRule{
+	"GET /api/desktop/auth/request":    accessTokenSessionRule,
+	"POST /api/desktop/auth/authorize": accessTokenSessionRule,
+	"POST /api/desktop/auth/logout":    accessTokenScopeRule(model.DesktopConfigureScope),
+	"PUT /api/desktop/tools/:agent":    accessTokenScopeRule(model.DesktopConfigureScope),
 	// router/api-router.go: top level
 	"GET /api/models":                     accessTokenScopeRule("profile:read"),
 	"GET /api/status/test":                accessTokenScopeRule("log:read"),
