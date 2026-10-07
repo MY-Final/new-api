@@ -551,6 +551,37 @@ func TestUpdateTokenMasksKeyInResponse(t *testing.T) {
 	}
 }
 
+func TestAddTokenReturnsRawKeyOnceForImmediateCopy(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+
+	body := map[string]any{
+		"name":            "copy-once",
+		"expired_time":    -1,
+		"remain_quota":    0,
+		"unlimited_quota": true,
+		"group":           "default",
+	}
+	ctx, recorder := newAuthenticatedContext(t, http.MethodPost, "/api/token/", body, 1)
+	AddToken(ctx)
+
+	response := decodeAPIResponse(t, recorder)
+	require.True(t, response.Success, response.Message)
+
+	var created struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+		Key  string `json:"key"`
+	}
+	require.NoError(t, common.Unmarshal(response.Data, &created))
+	assert.Equal(t, "copy-once", created.Name)
+	assert.NotZero(t, created.ID)
+	assert.NotEmpty(t, created.Key)
+
+	var token model.Token
+	require.NoError(t, db.Where("id = ?", created.ID).First(&token).Error)
+	assert.Equal(t, token.GetFullKey(), created.Key)
+}
+
 func TestGetTokenKeyRequiresOwnershipAndReturnsFullKey(t *testing.T) {
 	db := setupTokenControllerTestDB(t)
 	token := seedToken(t, db, 1, "owned-token", "owner1234token5678")
@@ -614,7 +645,11 @@ func TestAPITokenAuditDatabaseMatrix(t *testing.T) {
 				db, _ := newAuditTestDatabase(t, database.name, dsn)
 				model.DB = db
 				common.SetDatabaseTypes(database.typ, database.typ)
-				require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.Token{}))
+				require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.Token{}, &model.Option{}))
+				// The PAT case authenticates with a legacy opaque token, so the
+				// deployment-wide retire deadline must be initialized here
+				// instead of relying on another test having set it.
+				require.NoError(t, model.EnsureLegacyAccessTokenRetireAt(time.Now().Unix()))
 				// Initialize production column quoting as well as the existing audit table.
 				require.NoError(t, model.InitLogDB())
 				if separateLog {
@@ -895,34 +930,3 @@ func verifyAPITokenAudit(t *testing.T) {
 		assert.EqualValues(t, 1, count)
 	})
 }
-func TestAddTokenReturnsRawKeyOnceForImmediateCopy(t *testing.T) {
-	db := setupTokenControllerTestDB(t)
-
-	body := map[string]any{
-		"name":            "copy-once",
-		"expired_time":    -1,
-		"remain_quota":    0,
-		"unlimited_quota": true,
-		"group":           "default",
-	}
-	ctx, recorder := newAuthenticatedContext(t, http.MethodPost, "/api/token/", body, 1)
-	AddToken(ctx)
-
-	response := decodeAPIResponse(t, recorder)
-	require.True(t, response.Success, response.Message)
-
-	var created struct {
-		ID   int    `json:"id"`
-		Name string `json:"name"`
-		Key  string `json:"key"`
-	}
-	require.NoError(t, common.Unmarshal(response.Data, &created))
-	assert.Equal(t, "copy-once", created.Name)
-	assert.NotZero(t, created.ID)
-	assert.NotEmpty(t, created.Key)
-
-	var token model.Token
-	require.NoError(t, db.Where("id = ?", created.ID).First(&token).Error)
-	assert.Equal(t, token.GetFullKey(), created.Key)
-}
-

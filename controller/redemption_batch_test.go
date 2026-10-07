@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/middleware"
@@ -86,11 +87,15 @@ func TestDeleteRedemptionBatch(t *testing.T) {
 				common.SetDatabaseTypes(previousMain, previousLog)
 				common.RedisEnabled = previousRedis
 			})
-			for _, table := range []any{&model.User{}, &model.Redemption{}} {
+			for _, table := range []any{&model.User{}, &model.Redemption{}, &model.Option{}} {
 				require.False(t, db.Migrator().HasTable(table), "use an empty test database")
 				require.NoError(t, db.AutoMigrate(table))
 				t.Cleanup(func() { require.NoError(t, db.Migrator().DropTable(table)) })
 			}
+			// AdminAuth resolves this test's legacy opaque token, so the
+			// deployment-wide retire deadline must be initialized here instead
+			// of relying on another test having set it.
+			require.NoError(t, model.EnsureLegacyAccessTokenRetireAt(time.Now().Unix()))
 			require.False(t, logDB.Migrator().HasTable(&model.AuditLog{}), "use an empty test log database")
 			require.NoError(t, logDB.AutoMigrate(&model.AuditLog{}))
 			t.Cleanup(func() { require.NoError(t, logDB.Migrator().DropTable(&model.AuditLog{})) })
@@ -138,65 +143,82 @@ func TestDeleteRedemptionBatch(t *testing.T) {
 			}
 			_, err = model.BatchDeleteRedemptions(nil)
 			require.Error(t, err)
-			requestedIDs := make([]int, 0, 17)
-			for _, code := range codes[:15] {
-				requestedIDs = append(requestedIDs, code.Id)
-			}
-			requestedIDs = append(requestedIDs, codes[0].Id, 999999)
+
+			// Batch deletion is transactional and deduplicates ids: the two
+			// distinct deletable codes are removed, the duplicate is ignored.
+			requestedIDs := []int{codes[0].Id, codes[0].Id, codes[2].Id}
 			payload, err := common.Marshal(map[string]any{"ids": requestedIDs})
 			require.NoError(t, err)
-			for _, expectedCount := range []int64{15, 0} {
-				response := httptest.NewRecorder()
-				request := httptest.NewRequest(http.MethodPost, "/api/redemption/batch", bytes.NewReader(payload))
-				request.Header.Set("Authorization", "Bearer "+token)
-				router.ServeHTTP(response, request)
-				assert.Equal(t, http.StatusOK, response.Code)
-				var result struct {
-					Success bool  `json:"success"`
-					Data    int64 `json:"data"`
-				}
-				require.NoError(t, common.Unmarshal(response.Body.Bytes(), &result))
-				assert.True(t, result.Success)
-				assert.Equal(t, expectedCount, result.Data)
-				var events []model.AuditLog
-				require.NoError(t, logDB.Where("request_id = ? AND category = ?", response.Header().Get(common.RequestIdKey), model.AuditCategoryOperation).Find(&events).Error)
-				require.Len(t, events, 1, "one operation event, without a duplicate single-delete fallback")
-				event := events[0]
-				assert.Equal(t, "redemption.delete_batch", event.Action)
-				assert.Equal(t, fmt.Sprintf("Batch deleted %d redemption codes", expectedCount), event.Content)
-				assert.True(t, event.Success)
-				assert.Equal(t, admin.Id, event.UserId)
-				assert.Equal(t, "/api/redemption/batch", event.Route)
-				require.NotNil(t, event.Other.Op)
-				encoded, err := common.Marshal(event.Other.Op.Params)
-				require.NoError(t, err)
-				var params struct {
-					Count int64 `json:"count"`
-					Total int   `json:"total"`
-					IDs   []int `json:"requested_redemption_ids"`
-				}
-				require.NoError(t, common.Unmarshal(encoded, &params))
-				assert.Equal(t, expectedCount, params.Count)
-				assert.Equal(t, len(requestedIDs), params.Total)
-				assert.Equal(t, requestedIDs, params.IDs)
-				encoded, err = common.Marshal(event)
-				require.NoError(t, err)
-				assert.NotContains(t, string(encoded), token)
-				for _, code := range codes {
-					assert.NotContains(t, string(encoded), code.Key)
-				}
+			response := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, "/api/redemption/batch", bytes.NewReader(payload))
+			request.Header.Set("Authorization", "Bearer "+token)
+			router.ServeHTTP(response, request)
+			assert.Equal(t, http.StatusOK, response.Code)
+			var result struct {
+				Success bool  `json:"success"`
+				Data    int64 `json:"data"`
 			}
+			require.NoError(t, common.Unmarshal(response.Body.Bytes(), &result))
+			assert.True(t, result.Success)
+			assert.Equal(t, int64(2), result.Data)
+			var events []model.AuditLog
+			require.NoError(t, logDB.Where("request_id = ? AND category = ?", response.Header().Get(common.RequestIdKey), model.AuditCategoryOperation).Find(&events).Error)
+			require.Len(t, events, 1, "one operation event, without a duplicate single-delete fallback")
+			event := events[0]
+			assert.Equal(t, "redemption.delete_batch", event.Action)
+			assert.Equal(t, "Batch deleted 2 redemption codes", event.Content)
+			assert.True(t, event.Success)
+			assert.Equal(t, admin.Id, event.UserId)
+			assert.Equal(t, "/api/redemption/batch", event.Route)
+			require.NotNil(t, event.Other.Op)
+			encoded, err := common.Marshal(event.Other.Op.Params)
+			require.NoError(t, err)
+			var params struct {
+				Count int64 `json:"count"`
+				Total int   `json:"total"`
+				IDs   []int `json:"requested_redemption_ids"`
+			}
+			require.NoError(t, common.Unmarshal(encoded, &params))
+			assert.Equal(t, int64(2), params.Count)
+			assert.Equal(t, len(requestedIDs), params.Total)
+			assert.Equal(t, requestedIDs, params.IDs)
+			encoded, err = common.Marshal(event)
+			require.NoError(t, err)
+			assert.NotContains(t, string(encoded), token)
+			for _, code := range codes {
+				assert.NotContains(t, string(encoded), code.Key)
+			}
+
+			// Selecting a used code fails the whole batch and rolls back the
+			// other deletion, so no partially deleted state is left behind.
+			lockedIDs := []int{codes[3].Id, codes[1].Id}
+			payload, err = common.Marshal(map[string]any{"ids": lockedIDs})
+			require.NoError(t, err)
+			response = httptest.NewRecorder()
+			request = httptest.NewRequest(http.MethodPost, "/api/redemption/batch", bytes.NewReader(payload))
+			request.Header.Set("Authorization", "Bearer "+token)
+			router.ServeHTTP(response, request)
+			require.NoError(t, common.Unmarshal(response.Body.Bytes(), &result))
+			assert.False(t, result.Success)
+			require.NoError(t, model.DB.First(&model.Redemption{}, codes[3].Id).Error, "failed batch must not delete any code")
+			var lockedEvents []model.AuditLog
+			require.NoError(t, logDB.Where("request_id = ? AND category = ?", response.Header().Get(common.RequestIdKey), model.AuditCategoryOperation).Find(&lockedEvents).Error)
+			require.Len(t, lockedEvents, 1)
+			assert.False(t, lockedEvents[0].Success)
+			assert.Equal(t, "redemption.delete_batch", lockedEvents[0].Action)
+
 			var active []model.Redemption
 			require.NoError(t, model.DB.Find(&active).Error)
-			require.Len(t, active, 1)
-			assert.Equal(t, codes[15], active[0])
+			require.Len(t, active, 14)
 			var all []model.Redemption
 			require.NoError(t, model.DB.Unscoped().Order("id").Find(&all).Error)
 			require.Len(t, all, 16)
-			for _, code := range all[:15] {
-				assert.True(t, code.DeletedAt.Valid)
+			for _, index := range []int{0, 2} {
+				assert.True(t, all[index].DeletedAt.Valid)
 			}
-			assert.False(t, all[15].DeletedAt.Valid)
+			for _, index := range []int{1, 3, 15} {
+				assert.False(t, all[index].DeletedAt.Valid)
+			}
 		})
 	}
 }
