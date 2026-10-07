@@ -208,6 +208,7 @@ Proof 同时绑定用户、登录会话、用户鉴权版本、会话版本和 s
 | `GET /api/desktop/auth/request?flow=…` | 浏览器 Session，读取设备及权限说明 |
 | `POST /api/desktop/auth/authorize` | 浏览器 Session，批准需 `desktop.authorize` Proof，context 为 `{"request_id":…}`；拒绝不需 Proof |
 | `POST /api/desktop/auth/exchange` | 60 秒一次性授权码、PKCE S256 verifier 和原始回调地址 |
+| `GET /api/desktop/profile` | 桌面专用 PAT，返回账户资料与展示用额度；字段为 Setup 与未来 sub2api 共用的稳定契约 |
 | `POST /api/desktop/auth/logout` | 桌面专用 PAT，只撤销自身 |
 | `PUT /api/desktop/tools/:agent` | 桌面专用 PAT，只配置所属安装实例的工具，body 为 `{"model":"实际可用模型"}` |
 
