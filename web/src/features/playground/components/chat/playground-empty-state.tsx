@@ -27,6 +27,8 @@ import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
 
+import { PlaygroundSetupGuidance } from './playground-setup-guidance'
+
 type PlaygroundEmptyStateProps = {
   onSelectPrompt: (prompt: string) => void
 }
@@ -60,6 +62,8 @@ export function PlaygroundEmptyState({
             )}
           </p>
         </div>
+
+        <PlaygroundSetupGuidance />
 
         <div className='grid gap-2 sm:grid-cols-2'>
           {starterPrompts.map(({ icon: Icon, text }) => {
