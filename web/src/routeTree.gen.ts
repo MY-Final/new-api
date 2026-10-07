@@ -34,6 +34,7 @@ import { Route as OauthProviderRouteImport } from './routes/oauth/$provider'
 import { Route as PricingIndexRouteImport } from './routes/pricing/index'
 import { Route as RankingsIndexRouteImport } from './routes/rankings/index'
 import { Route as SetupIndexRouteImport } from './routes/setup/index'
+import { Route as authDesktopAuthorizeRouteImport } from './routes/(auth)/desktop/authorize'
 import { Route as authUserResetRouteImport } from './routes/(auth)/user/reset'
 import { Route as AuthenticatedAffiliateRebatesIndexRouteImport } from './routes/_authenticated/affiliate-rebates/index'
 import { Route as AuthenticatedCanvasHistoryIndexRouteImport } from './routes/_authenticated/canvas-history/index'
@@ -207,6 +208,11 @@ const SetupIndexRoute = SetupIndexRouteImport.update({
   id: '/setup/',
   path: '/setup/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const authDesktopAuthorizeRoute = authDesktopAuthorizeRouteImport.update({
+  id: '/desktop/authorize',
+  path: '/desktop/authorize',
+  getParentRoute: () => authRouteRoute,
 } as any)
 const authUserResetRoute = authUserResetRouteImport.update({
   id: '/user/reset',
@@ -520,6 +526,7 @@ export interface FileRoutesByFullPath {
   '/pricing/': typeof PricingIndexRoute
   '/rankings/': typeof RankingsIndexRoute
   '/setup/': typeof SetupIndexRoute
+  '/desktop/authorize': typeof authDesktopAuthorizeRoute
   '/user/reset': typeof authUserResetRoute
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
@@ -593,6 +600,7 @@ export interface FileRoutesByTo {
   '/pricing': typeof PricingIndexRoute
   '/rankings': typeof RankingsIndexRoute
   '/setup': typeof SetupIndexRoute
+  '/desktop/authorize': typeof authDesktopAuthorizeRoute
   '/user/reset': typeof authUserResetRoute
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
@@ -670,6 +678,7 @@ export interface FileRoutesById {
   '/pricing/': typeof PricingIndexRoute
   '/rankings/': typeof RankingsIndexRoute
   '/setup/': typeof SetupIndexRoute
+  '/(auth)/desktop/authorize': typeof authDesktopAuthorizeRoute
   '/(auth)/user/reset': typeof authUserResetRoute
   '/_authenticated/chat/$chatId': typeof AuthenticatedChatChatIdRoute
   '/_authenticated/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
@@ -746,6 +755,7 @@ export interface FileRouteTypes {
     | '/pricing/'
     | '/rankings/'
     | '/setup/'
+    | '/desktop/authorize'
     | '/user/reset'
     | '/chat/$chatId'
     | '/dashboard/$section'
@@ -819,6 +829,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/rankings'
     | '/setup'
+    | '/desktop/authorize'
     | '/user/reset'
     | '/chat/$chatId'
     | '/dashboard/$section'
@@ -895,6 +906,7 @@ export interface FileRouteTypes {
     | '/pricing/'
     | '/rankings/'
     | '/setup/'
+    | '/(auth)/desktop/authorize'
     | '/(auth)/user/reset'
     | '/_authenticated/chat/$chatId'
     | '/_authenticated/dashboard/$section'
@@ -1142,6 +1154,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/setup/'
       preLoaderRoute: typeof SetupIndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/(auth)/desktop/authorize': {
+      id: '/(auth)/desktop/authorize'
+      path: '/desktop/authorize'
+      fullPath: '/desktop/authorize'
+      preLoaderRoute: typeof authDesktopAuthorizeRouteImport
+      parentRoute: typeof authRouteRoute
     }
     '/(auth)/user/reset': {
       id: '/(auth)/user/reset'
@@ -1497,6 +1516,7 @@ interface authRouteRouteChildren {
   authResetRoute: typeof authResetRoute
   authSignInRoute: typeof authSignInRoute
   authSignUpRoute: typeof authSignUpRoute
+  authDesktopAuthorizeRoute: typeof authDesktopAuthorizeRoute
   authUserResetRoute: typeof authUserResetRoute
 }
 
@@ -1508,6 +1528,7 @@ const authRouteRouteChildren: authRouteRouteChildren = {
   authResetRoute: authResetRoute,
   authSignInRoute: authSignInRoute,
   authSignUpRoute: authSignUpRoute,
+  authDesktopAuthorizeRoute: authDesktopAuthorizeRoute,
   authUserResetRoute: authUserResetRoute,
 }
 

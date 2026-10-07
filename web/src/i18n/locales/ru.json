@@ -1,5 +1,13 @@
 {
   "translation": {
+    "Authorize KunCode Setup": "Authorize KunCode Setup",
+    "Invalid desktop callback.": "Invalid desktop callback.",
+    "Desktop authorization failed. Please try again.": "Desktop authorization failed. Please try again.",
+    "This authorization request is invalid or expired. Start again in the desktop app.": "This authorization request is invalid or expired. Start again in the desktop app.",
+    "Device": "Device",
+    "Setup can read your profile and available models, and configure only this desktop installation’s coding tools.": "Setup can read your profile and available models, and configure only this desktop installation’s coding tools.",
+    "Authorization lasts 30 days. Signing out of Setup keeps your configured tools available.": "Authorization lasts 30 days. Signing out of Setup keeps your configured tools available.",
+    "Returning to KunCode Setup…": "Returning to KunCode Setup…",
     "360": "360",
     "1000": "1000",
     "10000": "10000",

@@ -1,5 +1,13 @@
 {
   "translation": {
+    "Authorize KunCode Setup": "授权 KunCode Setup",
+    "Invalid desktop callback.": "桌面授权回调无效。",
+    "Desktop authorization failed. Please try again.": "桌面授权失败，请重试。",
+    "This authorization request is invalid or expired. Start again in the desktop app.": "授权请求无效或已过期，请返回桌面应用重新登录。",
+    "Device": "设备",
+    "Setup can read your profile and available models, and configure only this desktop installation’s coding tools.": "Setup 可以读取你的资料和可用模型，并且只能配置本次桌面安装的编程工具。",
+    "Authorization lasts 30 days. Signing out of Setup keeps your configured tools available.": "授权有效期为 30 天。退出 Setup 后，已配置的工具仍可使用。",
+    "Returning to KunCode Setup…": "正在返回 KunCode Setup…",
     "360": "360",
     "1000": "1000",
     "10000": "10000",
