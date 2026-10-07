@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useNavigate } from '@tanstack/react-router'
 import { Crown, CalendarClock, Package } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -64,6 +65,7 @@ interface Props {
 
 export function SubscriptionPurchaseDialog(props: Props) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const { currency } = useSystemConfig()
   const [paying, setPaying] = useState(false)
   const [selectedEpayMethod, setSelectedEpayMethod] = useState('')
@@ -202,6 +204,11 @@ export function SubscriptionPurchaseDialog(props: Props) {
     }
   }
 
+  const handleAddFunds = () => {
+    props.onOpenChange(false)
+    void navigate({ to: '/wallet' })
+  }
+
   const handlePayBalance = async () => {
     if (!allowBalancePay) {
       toast.error(t('This plan does not allow balance redemption'))
@@ -317,7 +324,12 @@ export function SubscriptionPurchaseDialog(props: Props) {
           ) : (
             insufficientBalance && (
               <Alert variant='destructive'>
-                <AlertDescription>{t('Insufficient balance')}</AlertDescription>
+                <AlertDescription className='flex flex-wrap items-center justify-between gap-2'>
+                  <span>{t('Insufficient balance')}</span>
+                  <Button size='sm' variant='outline' onClick={handleAddFunds}>
+                    {t('Add Funds')}
+                  </Button>
+                </AlertDescription>
               </Alert>
             )
           )}

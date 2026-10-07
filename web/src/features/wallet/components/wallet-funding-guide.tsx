@@ -33,15 +33,22 @@ import { cn } from '@/lib/utils'
 import type { TopupInfo } from '../types'
 
 interface WalletFundingGuideProps {
+  quota?: number | null
   topupInfo: TopupInfo | null
   onStartTopup: () => void
 }
 
 export function WalletFundingGuide({
+  quota,
   topupInfo,
   onStartTopup,
 }: WalletFundingGuideProps) {
   const { t } = useTranslation()
+  if (quota == null || !Number.isFinite(quota) || quota > 0) {
+    return null
+  }
+
+  const hasDebt = quota < 0
   const redemptionEnabled = topupInfo?.enable_redemption !== false
   const hasOnlineTopup =
     topupInfo?.enable_online_topup ||
@@ -74,7 +81,9 @@ export function WalletFundingGuide({
           <div className='min-w-0 space-y-1'>
             <div className='flex flex-wrap items-center gap-2'>
               <h2 className='text-base font-semibold'>
-                {t('Need balance to get started?')}
+                {hasDebt
+                  ? t('Recharge to settle debt')
+                  : t('Need balance to get started?')}
               </h2>
               <span className='bg-primary/10 text-primary inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium'>
                 <Sparkles className='size-3' />

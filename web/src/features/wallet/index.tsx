@@ -30,6 +30,7 @@ import { BillingHistoryDialog } from './components/dialogs/billing-history-dialo
 import { CreemConfirmDialog } from './components/dialogs/creem-confirm-dialog'
 import { PaymentConfirmDialog } from './components/dialogs/payment-confirm-dialog'
 import { TransferDialog } from './components/dialogs/transfer-dialog'
+import { PaymentRecoveryNotice } from './components/payment-recovery-notice'
 import { RechargeFormCard } from './components/recharge-form-card'
 import { SubscriptionPlansCard } from './components/subscription-plans-card'
 import { WalletFundingGuide } from './components/wallet-funding-guide'
@@ -297,7 +298,18 @@ export function Wallet(props: WalletProps) {
             <WalletStatsCard user={user} loading={userLoading} />
 
             <WalletFundingGuide
+              quota={user?.quota}
               topupInfo={topupInfo}
+              onStartTopup={() => {
+                walletFundingGuideRef.current?.scrollIntoView({
+                  behavior: 'smooth',
+                  block: 'start',
+                })
+              }}
+            />
+
+            <PaymentRecoveryNotice
+              onViewHistory={() => setBillingDialogOpen(true)}
               onStartTopup={() => {
                 walletFundingGuideRef.current?.scrollIntoView({
                   behavior: 'smooth',

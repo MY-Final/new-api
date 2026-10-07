@@ -127,11 +127,35 @@ it.each([
   }
 )
 
-it('shows the funding guide actions for online top-up', () => {
+it('hides the funding guide for a positive wallet balance', () => {
+  render(
+    <I18nextProvider i18n={i18n}>
+      <WalletFundingGuide
+        quota={1}
+        topupInfo={{
+          enable_online_topup: true,
+          enable_stripe_topup: false,
+          pay_methods: [],
+          min_topup: 1,
+          stripe_min_topup: 1,
+          amount_options: [],
+          discount: {},
+          enable_redemption: true,
+        }}
+        onStartTopup={vi.fn()}
+      />
+    </I18nextProvider>
+  )
+
+  expect(screen.queryByText('需要余额才能开始使用？')).not.toBeInTheDocument()
+})
+
+it('shows the funding guide actions for a zero balance', () => {
   const onStartTopup = vi.fn()
   render(
     <I18nextProvider i18n={i18n}>
       <WalletFundingGuide
+        quota={0}
         topupInfo={{
           enable_online_topup: true,
           enable_stripe_topup: false,
@@ -153,11 +177,39 @@ it('shows the funding guide actions for online top-up', () => {
   expect(onStartTopup).toHaveBeenCalledTimes(1)
 })
 
+it('shows the debt heading and online top-up action for a negative balance', () => {
+  const onStartTopup = vi.fn()
+  render(
+    <I18nextProvider i18n={i18n}>
+      <WalletFundingGuide
+        quota={-1}
+        topupInfo={{
+          enable_online_topup: true,
+          enable_stripe_topup: false,
+          pay_methods: [],
+          min_topup: 1,
+          stripe_min_topup: 1,
+          amount_options: [],
+          discount: {},
+          enable_redemption: true,
+        }}
+        onStartTopup={onStartTopup}
+      />
+    </I18nextProvider>
+  )
+
+  expect(screen.getByText('充值以偿还欠款')).toBeVisible()
+  expect(screen.getByRole('button', { name: '添加资金' })).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '添加资金' }))
+  expect(onStartTopup).toHaveBeenCalledTimes(1)
+})
+
 it('shows redemption actions when online top-up is unavailable', () => {
   const onStartTopup = vi.fn()
   render(
     <I18nextProvider i18n={i18n}>
       <WalletFundingGuide
+        quota={0}
         topupInfo={{
           enable_online_topup: false,
           enable_stripe_topup: false,

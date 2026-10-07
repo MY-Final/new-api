@@ -67,7 +67,7 @@ export function BillingHistoryDialog({
     handlePageChange,
     handlePageSizeChange,
     handleSearch,
-  } = useBillingHistory()
+  } = useBillingHistory({ enabled: open })
 
   const totalPages = Math.ceil(total / pageSize)
 

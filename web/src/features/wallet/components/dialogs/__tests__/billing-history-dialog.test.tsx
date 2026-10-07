@@ -73,4 +73,63 @@ describe('BillingHistoryDialog', () => {
     expect(screen.getByText('🥚 5')).toBeInTheDocument()
     expect(screen.getByText('🥚 1')).toBeInTheDocument()
   })
+
+  test('renders pending and failed top-up states honestly', async () => {
+    useBillingHistory.mockReturnValue({
+      records: [
+        {
+          id: 1,
+          record_type: 'topup',
+          user_id: 1,
+          amount: 10,
+          money: 10,
+          trade_no: 'pending-order',
+          payment_method: 'stripe',
+          create_time: 1,
+          status: 'pending',
+        },
+        {
+          id: 2,
+          record_type: 'topup',
+          user_id: 1,
+          amount: 10,
+          money: 10,
+          trade_no: 'failed-order',
+          payment_method: 'stripe',
+          create_time: 2,
+          status: 'failed',
+        },
+        {
+          id: 3,
+          record_type: 'topup',
+          user_id: 1,
+          amount: 10,
+          money: 10,
+          trade_no: 'refunded-order',
+          payment_method: 'stripe',
+          create_time: 3,
+          status: 'refunded',
+        },
+      ],
+      total: 3,
+      page: 1,
+      pageSize: 10,
+      keyword: '',
+      loading: false,
+      handlePageChange: vi.fn(),
+      handlePageSizeChange: vi.fn(),
+      handleSearch: vi.fn(),
+    })
+
+    render(
+      <I18nextProvider i18n={i18next}>
+        <BillingHistoryDialog open onOpenChange={vi.fn()} />
+      </I18nextProvider>
+    )
+
+    expect(await screen.findByText('pending-order')).toBeVisible()
+    expect(screen.getByText('Pending')).toBeVisible()
+    expect(screen.getByText('Failed')).toBeVisible()
+    expect(screen.getByText('Refunded')).toBeVisible()
+  })
 })
