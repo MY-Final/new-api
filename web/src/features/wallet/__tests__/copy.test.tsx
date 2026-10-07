@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { act, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { createInstance } from 'i18next'
 import { I18nextProvider, initReactI18next } from 'react-i18next'
 import { beforeEach, expect, it, vi } from 'vitest'
@@ -27,6 +27,7 @@ import zh from '@/i18n/locales/zh.json'
 import { api } from '@/lib/api'
 
 import { RechargeFormCard } from '../components/recharge-form-card'
+import { WalletFundingGuide } from '../components/wallet-funding-guide'
 
 const i18n = createInstance()
 
@@ -125,3 +126,57 @@ it.each([
     expect(screen.getByPlaceholderText('Minimum 1')).toBeVisible()
   }
 )
+
+it('shows the funding guide actions for online top-up', () => {
+  const onStartTopup = vi.fn()
+  render(
+    <I18nextProvider i18n={i18n}>
+      <WalletFundingGuide
+        topupInfo={{
+          enable_online_topup: true,
+          enable_stripe_topup: false,
+          pay_methods: [],
+          min_topup: 1,
+          stripe_min_topup: 1,
+          amount_options: [],
+          discount: {},
+          enable_redemption: true,
+        }}
+        onStartTopup={onStartTopup}
+      />
+    </I18nextProvider>
+  )
+
+  expect(screen.getByText('需要余额才能开始使用？')).toBeVisible()
+  expect(screen.getByRole('button', { name: '添加资金' })).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '添加资金' }))
+  expect(onStartTopup).toHaveBeenCalledTimes(1)
+})
+
+it('shows redemption actions when online top-up is unavailable', () => {
+  const onStartTopup = vi.fn()
+  render(
+    <I18nextProvider i18n={i18n}>
+      <WalletFundingGuide
+        topupInfo={{
+          enable_online_topup: false,
+          enable_stripe_topup: false,
+          pay_methods: [],
+          min_topup: 1,
+          stripe_min_topup: 1,
+          amount_options: [],
+          discount: {},
+          enable_redemption: true,
+          topup_link: 'https://example.com/redeem',
+        }}
+        onStartTopup={onStartTopup}
+      />
+    </I18nextProvider>
+  )
+
+  expect(screen.getByRole('button', { name: '使用兑换码' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: /点此获取/ })).toHaveAttribute(
+    'href',
+    'https://example.com/redeem'
+  )
+})

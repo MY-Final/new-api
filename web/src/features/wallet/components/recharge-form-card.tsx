@@ -55,6 +55,7 @@ import { CreemProductsSection } from './creem-products-section'
 
 interface RechargeFormCardProps {
   topupInfo: TopupInfo | null
+  highlighted?: boolean
   presetAmounts: PresetAmount[]
   selectedPreset: number | null
   onSelectPreset: (preset: PresetAmount) => void
@@ -85,6 +86,7 @@ interface RechargeFormCardProps {
 
 export function RechargeFormCard({
   topupInfo,
+  highlighted,
   presetAmounts,
   selectedPreset,
   onSelectPreset,
@@ -201,6 +203,10 @@ export function RechargeFormCard({
       icon={<WalletCards className='h-4 w-4' />}
       iconTone='success'
       disableHoverEffect
+      className={cn(
+        highlighted &&
+          'ring-primary/35 shadow-primary/10 border-primary/40 shadow-lg'
+      )}
       action={
         onOpenBilling ? (
           <Button
