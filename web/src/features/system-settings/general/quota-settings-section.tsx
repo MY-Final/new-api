@@ -57,7 +57,11 @@ const quotaSchema = z.object({
   QuotaForInvitee: z.coerce.number().min(0),
   AffiliateTopupRebateRate: z.coerce.number().int().min(0).max(10000),
   AffiliateRedemptionRebateRate: z.coerce.number().int().min(0).max(10000),
-  TopUpLink: z.string(),
+  TopUpLink: z.string().refine((value) => {
+    const trimmed = value.trim()
+    if (!trimmed) return true
+    return /^https?:\/\//.test(trimmed)
+  }, 'Provide a valid URL starting with http:// or https://'),
   quota_setting: z.object({
     enable_free_model_pre_consume: z.boolean(),
     trust_quota_usd: z.preprocess(
@@ -378,6 +382,7 @@ export function QuotaSettingsSection({
                   <FormLabel>{t('Top-Up Link')}</FormLabel>
                   <FormControl>
                     <Input
+                      type='url'
                       placeholder={t('https://example.com/topup')}
                       {...field}
                     />

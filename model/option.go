@@ -255,12 +255,15 @@ func validateOptionValue(key string, value string) error {
 	if err := system_setting.ValidateContactOption(key, value); err != nil {
 		return err
 	}
-	if key == "LiandongShopUrl" || key == "KunCodeRelayPulseUrl" {
+	if key == "LiandongShopUrl" || key == "KunCodeRelayPulseUrl" || key == "TopUpLink" {
 		trimmed := strings.TrimSpace(value)
 		if trimmed == "" {
 			return nil
 		}
 		if !strings.HasPrefix(trimmed, "http://") && !strings.HasPrefix(trimmed, "https://") {
+			if key == "TopUpLink" {
+				return fmt.Errorf("TopUpLink must start with http:// or https://")
+			}
 			if key == "LiandongShopUrl" {
 				return fmt.Errorf("LiandongShopUrl must start with http:// or https://")
 			}

@@ -134,6 +134,35 @@ test('zero threshold disables bypass and saves as zero', async () => {
   )
 })
 
+test('saves a valid top-up link', async () => {
+  const user = userEvent.setup()
+  await renderSettings()
+  const input = screen.getByLabelText('Top-Up Link')
+  await user.clear(input)
+  await user.type(input, 'https://example.com/redeem')
+  await user.tab()
+  await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+  await waitFor(() =>
+    expect(api.put).toHaveBeenCalledWith('/api/option/', {
+      key: 'TopUpLink',
+      value: 'https://example.com/redeem',
+    })
+  )
+})
+
+test('rejects an invalid top-up link', async () => {
+  const user = userEvent.setup()
+  await renderSettings()
+  const input = screen.getByLabelText('Top-Up Link')
+  await user.type(input, 'example.com/redeem')
+  await user.tab()
+  await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+  await waitFor(() => expect(input).toHaveAttribute('aria-invalid', 'true'))
+  expect(
+    screen.getByText('Provide a valid URL starting with http:// or https://')
+  ).toBeInTheDocument()
+  expect(api.put).not.toHaveBeenCalled()
+})
 test.each(['', '-1'])(
   'invalid threshold "%s" prevents saving',
   async (value) => {
