@@ -248,11 +248,11 @@ $env:DESKTOP_POSTGRES_DSN='postgres://desktop_test@127.0.0.1:25432/postgres?sslm
 go test ./controller -run '^TestDesktop' -count=1 -v
 ```
 
-用例包含批准、拒绝、请求/授权码失效、重复交换、错误 PKCE/回调、原 Session 撤销、安全验证缺失或绑定错误、账户安全版本变更、普通 PAT 拒绝、账户/安装实例/工具隔离、密钥复用及失效后替换、退出保留工具。网站测试验证安全验证组件、批准/拒绝和回调边界；本地浏览器批准和真实 Coding Agent 调用仍需部署者人工验收。
+用例包含批准、拒绝、请求/授权码失效、重复交换、错误 PKCE/回调、原 Session 撤销、安全验证缺失或绑定错误、账户安全版本变更、普通 PAT 拒绝、账户/安装实例/工具隔离、密钥复用及失效后替换、退出保留工具，以及桌面账户资料接口的字段与额度换算。网站测试验证安全验证组件、批准/拒绝和回调边界；本地浏览器批准和真实 Coding Agent 调用仍需部署者人工验收。
 
 结果：桌面授权专项及六个真实数据库子用例通过；`go test -p 1 ./controller ./middleware ./service ./router ./model -count=1` 中 controller、middleware、router、model 通过，service 全量的 `TestObserveChannelAffinityUsageCacheByRelayFormat_MixedMode` 和 `…_UnsupportedModeKeepsEmpty` 缓存统计断言失败。使用 `go test -p 1 -overlay <HEAD源码覆盖文件> ./service -count=1` 在改动前源码复现了后者；MixedMode 单独运行通过。`go test -p 1 ./service -run 'Security|AccessToken|AuthSession' -count=1` 通过。这些渠道缓存文件未在本次改动中修改，不能将全量 service 测试记为通过。
 
 网站：`bun run typecheck`、修改文件 `oxlint`、`bun run build` 通过；`bun run test src/features/auth/desktop/__tests__/authorization.test.tsx src/features/auth/secure-verification/__tests__/verification-api.test.ts src/features/auth/secure-verification/__tests__/verification-flow.test.tsx --maxWorkers=1` 共 32 项通过。
-Setup：5 项前端交互测试、TypeScript 检查、Vite 构建、16 项 Rust 测试及 Clippy `-D warnings` 通过；`CARGO_BUILD_JOBS=2` 下 `pnpm tauri build --debug --no-bundle --target x86_64-pc-windows-msvc` 构建成功。Windows 本机资源不足时需限制构建并发，避免页面文件耗尽。未执行生产部署或付费推理。
+Setup：7 项前端交互测试、TypeScript 检查、Vite 构建、18 项 Rust 测试及 Clippy `-D warnings` 通过；`CARGO_BUILD_JOBS=2` 下 `pnpm tauri build --debug --no-bundle --target x86_64-pc-windows-msvc` 构建成功。Windows 本机资源不足时需限制构建并发，避免页面文件耗尽。未执行生产部署或付费推理。
 
 当前功能单独保存在 `codex/desktop-authorization` 分支，尚未合并上线。上线前仍需完成真实浏览器授权 → 三个工具配置与启动 → 退出后继续使用的完整验收，并在生产数据库副本演练迁移；上述自动化结果不代表已完成生产验收。
