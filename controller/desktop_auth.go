@@ -86,7 +86,7 @@ func DesktopAuthRequest(c *gin.Context) {
 		writeAccessTokenError(c, 400, "DESKTOP_FLOW_INVALID", "Invalid authorization request.")
 		return
 	}
-	common.ApiSuccess(c, gin.H{"device_name": request.DeviceName, "expires_at": flow.ExpiresAt.Unix(), "request_id": flow.Id, "scopes": []string{"profile:read", model.DesktopConfigureScope}})
+	common.ApiSuccess(c, gin.H{"device_name": request.DeviceName, "expires_at": flow.ExpiresAt.Unix(), "request_id": flow.Id, "scopes": model.DesktopGrantedScopes()})
 }
 
 func DesktopAuthAuthorize(c *gin.Context) {
@@ -199,9 +199,12 @@ func DesktopConfigureTool(c *gin.Context) {
 		return
 	}
 	var input struct {
-		Model string `json:"model"`
+		Model   string   `json:"model"`
+		TokenId int      `json:"token_id"`
+		Group   string   `json:"group"`
+		Models  []string `json:"models"`
 	}
-	if common.DecodeJson(c.Request.Body, &input) != nil || len(input.Model) == 0 || len(input.Model) > 256 || strings.ContainsAny(input.Model, ",\r\n") {
+	if common.DecodeJson(c.Request.Body, &input) != nil {
 		writeAccessTokenError(c, 400, "DESKTOP_MODEL_INVALID", "Select an available model.")
 		return
 	}
@@ -210,7 +213,51 @@ func DesktopConfigureTool(c *gin.Context) {
 		writeSecurityOperationError(c, err)
 		return
 	}
-	// Use the default group consistently for model selection and issuance.
+	// Binding an existing key: the user already chose the key, group, and model
+	// set in the key center, so the server validates them instead of issuing a
+	// new key.
+	if input.TokenId > 0 {
+		group := strings.TrimSpace(input.Group)
+		if group == "" {
+			group = user.Group
+		}
+		if !service.IsUserSelectableGroup(user.Group, group) {
+			writeAccessTokenError(c, 400, "DESKTOP_GROUP_INVALID", "This group is not available for your account.")
+			return
+		}
+		var allowed []string
+		if err := model.DB.Model(&model.Ability{}).Where(&model.Ability{Group: group, Enabled: true}).Distinct("model").Pluck("model", &allowed).Error; err != nil {
+			writeSecurityOperationError(c, err)
+			return
+		}
+		models, ok := normalizeDesktopModels(input.Models, allowed)
+		if !ok {
+			writeAccessTokenError(c, 400, "DESKTOP_MODEL_INVALID", "One or more selected models are not available in this group.")
+			return
+		}
+		token, err := model.BindDesktopTool(model.DesktopToolBindingInput{
+			InstallationID: installation.Id,
+			AccessTokenID:  installation.AccessTokenId,
+			Agent:          c.Param("agent"),
+			TokenID:        input.TokenId,
+			Group:          group,
+			Models:         models,
+			OwnerGroup:     user.Group,
+			AllowedModels:  allowed,
+		})
+		if err != nil {
+			writeAccessTokenError(c, 409, "DESKTOP_CONFIG_FAILED", "Unable to bind this key. Check the key, group, and model selection.")
+			return
+		}
+		recordUserSecurityAudit(c, installation.UserId, "desktop.tool.bind", map[string]any{"installation_id": installation.Id, "agent": c.Param("agent"), "token_id": token.Id, "group": group})
+		common.ApiSuccess(c, gin.H{"id": token.Id, "key": token.GetFullKey(), "group": group, "models": models})
+		return
+	}
+	if len(input.Model) == 0 || len(input.Model) > 256 || strings.ContainsAny(input.Model, ",\r\n") {
+		writeAccessTokenError(c, 400, "DESKTOP_MODEL_INVALID", "Select an available model.")
+		return
+	}
+	// Legacy path: issue a dedicated key on the user's default group.
 	var models []string
 	if err := model.DB.Model(&model.Ability{}).Where(&model.Ability{Group: user.Group, Enabled: true}).Distinct("model").Pluck("model", &models).Error; err != nil {
 		writeSecurityOperationError(c, err)
@@ -227,6 +274,28 @@ func DesktopConfigureTool(c *gin.Context) {
 	}
 	recordUserSecurityAudit(c, installation.UserId, "desktop.tool.configure", map[string]any{"installation_id": installation.Id, "agent": c.Param("agent"), "token_id": token.Id, "model": input.Model})
 	common.ApiSuccess(c, gin.H{"id": token.Id, "key": token.GetFullKey(), "model": input.Model})
+}
+
+// normalizeDesktopModels trims and de-duplicates a requested model set,
+// rejecting anything the chosen group does not enable.
+func normalizeDesktopModels(requested, allowed []string) ([]string, bool) {
+	if len(requested) == 0 {
+		return nil, true
+	}
+	seen := map[string]struct{}{}
+	result := make([]string, 0, len(requested))
+	for _, name := range requested {
+		name = strings.TrimSpace(name)
+		if name == "" || strings.ContainsAny(name, ",\r\n") || !slices.Contains(allowed, name) {
+			return nil, false
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		result = append(result, name)
+	}
+	return result, true
 }
 
 // DesktopProfile is the stable account contract for the desktop app. It reuses

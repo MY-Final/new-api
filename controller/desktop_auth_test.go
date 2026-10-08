@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -87,6 +88,12 @@ func setupDesktopAuth(t *testing.T, kind, dsn string, upgrade, fullStartup bool)
 	router.GET("/api/desktop/profile", middleware.UserAuth(), DesktopProfile)
 	router.POST("/api/desktop/auth/logout", middleware.UserAuth(), DesktopAuthLogout)
 	router.PUT("/api/desktop/tools/:agent", middleware.UserAuth(), DesktopConfigureTool)
+	router.GET("/api/desktop/keys", middleware.UserAuth(), DesktopListKeys)
+	router.POST("/api/desktop/keys", middleware.UserAuth(), DesktopCreateKey)
+	router.GET("/api/desktop/keys/:id", middleware.UserAuth(), DesktopGetKey)
+	router.PUT("/api/desktop/keys/:id", middleware.UserAuth(), DesktopUpdateKey)
+	router.DELETE("/api/desktop/keys/:id", middleware.UserAuth(), DesktopDeleteKey)
+	router.POST("/api/desktop/keys/:id/reveal", middleware.UserAuth(), DesktopRevealKey)
 	router.GET("/api/user/self", middleware.UserAuth(), func(c *gin.Context) { common.ApiSuccess(c, gin.H{"id": c.GetInt("id")}) })
 	router.GET("/api/token/", middleware.UserAuth(), func(c *gin.Context) { common.ApiSuccess(c, nil) })
 	return user, router
@@ -346,4 +353,108 @@ func TestDesktopToolKeysAreIsolatedByAccountInstallationAndAgent(t *testing.T) {
 	var ordinary model.Token
 	require.NoError(t, model.DB.Where("name = ?", "existing unrelated key").First(&ordinary).Error)
 	assert.Equal(t, "existing-key-must-remain", ordinary.Key)
+}
+
+func TestDesktopKeyCenterLifecycle(t *testing.T) {
+	user, router := setupDesktopAuth(t, "sqlite", "", false, false)
+	code, verifier := desktopAuthorizationCode(t, router, user, uuid.NewString())
+	pat := desktopExchange(t, router, code, verifier)
+
+	// Listing starts with only the unrelated key created by the fixture.
+	list := desktopResponseData(t, accessTokenRequest(router, "GET", "/api/desktop/keys", pat, "", ""))
+	items := list["items"].([]any)
+	require.Len(t, items, 1)
+	first := items[0].(map[string]any)
+	assert.Equal(t, "existing unrelated key", first["name"])
+	assert.NotContains(t, first["masked_key"].(string), "existing-key-must-remain")
+
+	// Creating a key returns the plaintext exactly once.
+	created := desktopResponseData(t, accessTokenRequest(router, "POST", "/api/desktop/keys", pat, "", `{"name":"my key","group":"default","model_limits":["coding-model"]}`))
+	raw := created["key"].(string)
+	assert.NotEmpty(t, raw)
+	keyID := int(created["id"].(float64))
+
+	// The list must never expose the plaintext again.
+	list = desktopResponseData(t, accessTokenRequest(router, "GET", "/api/desktop/keys", pat, "", ""))
+	encoded, err := common.Marshal(list)
+	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), raw)
+
+	// Reveal is a separate, explicit action.
+	revealed := desktopResponseData(t, accessTokenRequest(router, "POST", "/api/desktop/keys/"+strconv.Itoa(keyID)+"/reveal", pat, "", ""))
+	assert.Equal(t, raw, revealed["key"])
+
+	// Renaming and regrouping through the desktop API.
+	updated := desktopResponseData(t, accessTokenRequest(router, "PUT", "/api/desktop/keys/"+strconv.Itoa(keyID), pat, "", `{"name":"renamed","group":"default","model_limits":[]}`))
+	assert.Equal(t, "renamed", updated["name"])
+	assert.EqualValues(t, false, updated["model_limits_enabled"])
+
+	// Binding the key to a coding tool marks it as in use.
+	bound := desktopResponseData(t, accessTokenRequest(router, "PUT", "/api/desktop/tools/codex", pat, "", `{"token_id":`+strconv.Itoa(keyID)+`,"group":"default","models":["coding-model"]}`))
+	assert.Equal(t, raw, bound["key"])
+	var binding model.DesktopToolKey
+	require.NoError(t, model.DB.Where("agent = ?", "codex").First(&binding).Error)
+	assert.Equal(t, keyID, binding.TokenId)
+
+	// A key that is still bound cannot be deleted.
+	inUse := accessTokenRequest(router, "DELETE", "/api/desktop/keys/"+strconv.Itoa(keyID), pat, "", "")
+	assert.Equal(t, 409, inUse.Code)
+	assert.Contains(t, inUse.Body.String(), "DESKTOP_KEY_IN_USE")
+
+	// After unbinding the key it can be deleted.
+	require.NoError(t, model.DB.Where("agent = ?", "codex").Delete(&model.DesktopToolKey{}).Error)
+	assert.Equal(t, 200, accessTokenRequest(router, "DELETE", "/api/desktop/keys/"+strconv.Itoa(keyID), pat, "", "").Code)
+	var remaining int64
+	require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", keyID).Count(&remaining).Error)
+	assert.EqualValues(t, 0, remaining)
+}
+
+func TestDesktopKeysAreIsolatedByOwner(t *testing.T) {
+	user, router := setupDesktopAuth(t, "sqlite", "", false, false)
+	other := &model.User{Username: "desktop-other", Password: "placeholder", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AffCode: "desktop-other", AuthVersion: 1}
+	require.NoError(t, model.DB.Create(other).Error)
+
+	ownerCode, ownerVerifier := desktopAuthorizationCode(t, router, user, uuid.NewString())
+	ownerPat := desktopExchange(t, router, ownerCode, ownerVerifier)
+	created := desktopResponseData(t, accessTokenRequest(router, "POST", "/api/desktop/keys", ownerPat, "", `{"name":"owner key","group":"default","model_limits":[]}`))
+	keyID := int(created["id"].(float64))
+
+	otherCode, otherVerifier := desktopAuthorizationCode(t, router, other, uuid.NewString())
+	otherPat := desktopExchange(t, router, otherCode, otherVerifier)
+
+	// Another account cannot see, reveal, rename, delete, or bind the key.
+	otherList := desktopResponseData(t, accessTokenRequest(router, "GET", "/api/desktop/keys", otherPat, "", ""))
+	assert.Empty(t, otherList["items"].([]any))
+	assert.Equal(t, 404, accessTokenRequest(router, "POST", "/api/desktop/keys/"+strconv.Itoa(keyID)+"/reveal", otherPat, "", "").Code)
+	assert.Equal(t, 404, accessTokenRequest(router, "PUT", "/api/desktop/keys/"+strconv.Itoa(keyID), otherPat, "", `{"name":"stolen","group":"default"}`).Code)
+	assert.Equal(t, 404, accessTokenRequest(router, "DELETE", "/api/desktop/keys/"+strconv.Itoa(keyID), otherPat, "", "").Code)
+	assert.Equal(t, 409, accessTokenRequest(router, "PUT", "/api/desktop/tools/codex", otherPat, "", `{"token_id":`+strconv.Itoa(keyID)+`,"group":"default","models":[]}`).Code)
+}
+
+func TestDesktopKeyGroupAndModelValidation(t *testing.T) {
+	user, router := setupDesktopAuth(t, "sqlite", "", false, false)
+	code, verifier := desktopAuthorizationCode(t, router, user, uuid.NewString())
+	pat := desktopExchange(t, router, code, verifier)
+
+	// Unknown group is rejected.
+	assert.Equal(t, 400, accessTokenRequest(router, "POST", "/api/desktop/keys", pat, "", `{"name":"k","group":"nope","model_limits":[]}`).Code)
+	// A model that the group does not enable is rejected.
+	assert.Equal(t, 400, accessTokenRequest(router, "POST", "/api/desktop/keys", pat, "", `{"name":"k","group":"default","model_limits":["unavailable-model"]}`).Code)
+	// Binding with a model the group does not enable is rejected too.
+	created := desktopResponseData(t, accessTokenRequest(router, "POST", "/api/desktop/keys", pat, "", `{"name":"k","group":"default","model_limits":[]}`))
+	keyID := int(created["id"].(float64))
+	assert.Equal(t, 400, accessTokenRequest(router, "PUT", "/api/desktop/tools/codex", pat, "", `{"token_id":`+strconv.Itoa(keyID)+`,"group":"default","models":["unavailable-model"]}`).Code)
+}
+
+func TestDesktopKeyRoutesRequireWriteScope(t *testing.T) {
+	user, router := setupDesktopAuth(t, "sqlite", "", false, false)
+	readOnly, _ := createScopedAccessToken(t, user.Id, time.Now().Unix()+3600, "desktop_keys:read")
+	// The route rule rejects a write call that lacks the write scope before the
+	// handler runs, even though the token carries the read scope.
+	writeDenied := accessTokenRequest(router, "POST", "/api/desktop/keys", readOnly, "", `{"name":"k","group":"default","model_limits":[]}`)
+	assert.Equal(t, 403, writeDenied.Code, writeDenied.Body.String())
+	// A read call passes the scope gate but fails closed because this PAT is not
+	// a desktop installation token.
+	readAllowed := accessTokenRequest(router, "GET", "/api/desktop/keys", readOnly, "", "")
+	assert.Equal(t, 401, readAllowed.Code, readAllowed.Body.String())
 }
