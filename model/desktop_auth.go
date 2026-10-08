@@ -19,7 +19,26 @@ const (
 	DesktopRequestPurpose = "desktop_request"
 	DesktopCodePurpose    = "desktop_code"
 	DesktopConfigureScope = "coding_tools:configure"
+
+	// Desktop key-management scopes. Reveal is deliberately separate from read
+	// so the long-lived desktop token can list keys without being able to read
+	// their plaintext unless that is explicitly granted.
+	DesktopKeysReadScope   = "desktop_keys:read"
+	DesktopKeysWriteScope  = "desktop_keys:write"
+	DesktopKeysRevealScope = "desktop_keys:reveal"
 )
+
+// DesktopGrantedScopes is the fixed grant written into every desktop access
+// token at exchange time and echoed on the authorization screen.
+func DesktopGrantedScopes() []string {
+	return []string{
+		"profile:read",
+		DesktopConfigureScope,
+		DesktopKeysReadScope,
+		DesktopKeysWriteScope,
+		DesktopKeysRevealScope,
+	}
+}
 
 var ErrDesktopAuthorization = errors.New("desktop authorization is invalid or expired")
 
@@ -133,7 +152,7 @@ func ExchangeDesktopCode(raw, verifier, redirectURI string) (string, *UserAccess
 			}
 		}
 		token = UserAccessToken{UserId: payload.Identity.UserID, DesktopInstallationId: installation.Id, Name: "KunCode Setup · " + payload.Request.DeviceName, TokenHash: AccessTokenFingerprint(credential), TokenHint: AccessTokenHint(credential), CreatedAt: now, ExpiresAt: now + 30*24*60*60}
-		if err := token.SetScopes([]string{"profile:read", DesktopConfigureScope}); err != nil {
+		if err := token.SetScopes(DesktopGrantedScopes()); err != nil {
 			return err
 		}
 		if err := tx.Create(&token).Error; err != nil {

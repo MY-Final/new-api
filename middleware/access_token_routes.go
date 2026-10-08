@@ -42,11 +42,17 @@ func accessTokenScopeRule(scope string) accessTokenRouteRule {
 // Casbin-guarded routes declare themselves through
 // DeclareAccessTokenPermissionRoute when they are registered.
 var accessTokenRouteRules = map[string]accessTokenRouteRule{
-	"GET /api/desktop/profile":         accessTokenScopeRule("profile:read"),
-	"GET /api/desktop/auth/request":    accessTokenSessionRule,
-	"POST /api/desktop/auth/authorize": accessTokenSessionRule,
-	"POST /api/desktop/auth/logout":    accessTokenScopeRule(model.DesktopConfigureScope),
-	"PUT /api/desktop/tools/:agent":    accessTokenScopeRule(model.DesktopConfigureScope),
+	"GET /api/desktop/profile":          accessTokenScopeRule("profile:read"),
+	"GET /api/desktop/auth/request":     accessTokenSessionRule,
+	"POST /api/desktop/auth/authorize":  accessTokenSessionRule,
+	"POST /api/desktop/auth/logout":     accessTokenScopeRule(model.DesktopConfigureScope),
+	"PUT /api/desktop/tools/:agent":     accessTokenScopeRule(model.DesktopConfigureScope),
+	"GET /api/desktop/keys":             accessTokenScopeRule(model.DesktopKeysReadScope),
+	"POST /api/desktop/keys":            accessTokenScopeRule(model.DesktopKeysWriteScope),
+	"GET /api/desktop/keys/:id":         accessTokenScopeRule(model.DesktopKeysReadScope),
+	"PUT /api/desktop/keys/:id":         accessTokenScopeRule(model.DesktopKeysWriteScope),
+	"DELETE /api/desktop/keys/:id":      accessTokenScopeRule(model.DesktopKeysWriteScope),
+	"POST /api/desktop/keys/:id/reveal": accessTokenScopeRule(model.DesktopKeysRevealScope),
 	// router/api-router.go: top level
 	"GET /api/models":                     accessTokenScopeRule("profile:read"),
 	"GET /api/status/test":                accessTokenScopeRule("log:read"),
