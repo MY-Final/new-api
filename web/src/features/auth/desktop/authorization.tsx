@@ -145,7 +145,7 @@ export function DesktopAuthorization(props: {
           </p>
           <p className='text-muted-foreground text-sm'>
             {t(
-              'Setup can read your profile and available models, and configure only this desktop installation’s coding tools.'
+              'Setup can read your profile and available models, manage your API keys, and configure only this desktop installation’s coding tools.'
             )}
           </p>
           <p className='text-muted-foreground text-sm'>
@@ -172,3 +172,4 @@ export function DesktopAuthorization(props: {
     </main>
   )
 }
+

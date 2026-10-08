@@ -210,18 +210,24 @@ Proof 同时绑定用户、登录会话、用户鉴权版本、会话版本和 s
 | `POST /api/desktop/auth/exchange` | 60 秒一次性授权码、PKCE S256 verifier 和原始回调地址 |
 | `GET /api/desktop/profile` | 桌面专用 PAT，返回账户资料与展示用额度；字段为 Setup 与未来 sub2api 共用的稳定契约 |
 | `POST /api/desktop/auth/logout` | 桌面专用 PAT，只撤销自身 |
-| `PUT /api/desktop/tools/:agent` | 桌面专用 PAT，只配置所属安装实例的工具，body 为 `{"model":"实际可用模型"}` |
+| `PUT /api/desktop/tools/:agent` | 桌面专用 PAT，配置所属安装实例的工具；body 支持 `{"model":"实际可用模型"}`（自动建密钥，旧行为）或 `{"token_id":…,"group":…,"models":[…]}`（绑定已有密钥） |
+| `GET /api/desktop/keys` | 桌面专用 PAT，列出本账户密钥（掩码），含分组、额度与绑定工具 |
+| `POST /api/desktop/keys` | 桌面专用 PAT，新建密钥，明文 key 仅返回一次 |
+| `GET /api/desktop/keys/:id` | 桌面专用 PAT，读取单个密钥（掩码） |
+| `PUT /api/desktop/keys/:id` | 桌面专用 PAT，修改名称、分组与模型限制 |
+| `DELETE /api/desktop/keys/:id` | 桌面专用 PAT，删除未被工具引用的密钥 |
+| `POST /api/desktop/keys/:id/reveal` | 桌面专用 PAT，读取完整密钥（独立高危 scope） |
 
 `start` 接受 `client_id`、安装实例 UUID `installation_id`、`device_name`、`redirect_uri`、`state`、`code_challenge` 和固定 `code_challenge_method: S256`。返回的 `authorization_url` 指向网站 `/desktop/authorize`，使用受信任的 `ServerAddress` 构造，不信任请求 Host 或转发头。
 回调仅允许 `http://127.0.0.1:<1024–65535>/callback`，不能携带预设查询、用户信息或 fragment。
 批准后回调只携带授权码和 state，不携带真实 Token。交换再次验证批准者 Session、安全版本、PKCE 和精确回调地址，并在事务中原子消费授权码。
 
-签发的 `nap_` 有效期 30 天，不提供刷新令牌，权限固定为 `profile:read`、`coding_tools:configure`。
+签发的 `nap_` 有效期 30 天，不提供刷新令牌，权限固定为 `profile:read`、`coding_tools:configure`、`desktop_keys:read`、`desktop_keys:write`、`desktop_keys:reveal`。
 额外路由白名单禁止桌面 PAT 调用普通 API 密钥读取、账户安全或后台接口；不能使用 PAT 取得网页批准 Proof。
 `desktop_installations` 记录用户、安装实例、当前 PAT 和安全版本；`desktop_tool_keys` 记录安装实例、工具与 API Key 的关系，密钥名称不作为授权依据。
 重新授权替换同账户、同安装实例的旧 PAT，保留工具密钥；账户安全版本变化后，旧桌面授权立即无效。
 
-工具仅允许 `codex`、`claude`、`opencode`，模型必须属于用户默认分组实际启用的模型。
+工具仅允许 `codex`、`claude`、`opencode`，模型必须属于所选分组实际启用的模型。密钥管理接口只操作本账户密钥：列表/读取返回掩码，创建只在响应中返回一次明文，reveal 需要独立 scope，删除前会拒绝仍被工具引用的密钥。
 每个工具使用独立密钥，重复配置复用有效密钥并更新模型限制；已失效时才创建新密钥。
 工具密钥不增加额外额度上限，仍受账户余额、普通密钥数量限制、站点限流及计费约束。退出桌面账户保留工具密钥。
 
@@ -256,3 +262,4 @@ go test ./controller -run '^TestDesktop' -count=1 -v
 Setup：7 项前端交互测试、TypeScript 检查、Vite 构建、18 项 Rust 测试及 Clippy `-D warnings` 通过；`CARGO_BUILD_JOBS=2` 下 `pnpm tauri build --debug --no-bundle --target x86_64-pc-windows-msvc` 构建成功。Windows 本机资源不足时需限制构建并发，避免页面文件耗尽。未执行生产部署或付费推理。
 
 当前功能单独保存在 `codex/desktop-authorization` 分支，尚未合并上线。上线前仍需完成真实浏览器授权 → 三个工具配置与启动 → 退出后继续使用的完整验收，并在生产数据库副本演练迁移；上述自动化结果不代表已完成生产验收。
+

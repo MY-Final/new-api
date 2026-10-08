@@ -5,7 +5,7 @@
     "Desktop authorization failed. Please try again.": "Desktop authorization failed. Please try again.",
     "This authorization request is invalid or expired. Start again in the desktop app.": "This authorization request is invalid or expired. Start again in the desktop app.",
     "Device": "Device",
-    "Setup can read your profile and available models, and configure only this desktop installation’s coding tools.": "Setup can read your profile and available models, and configure only this desktop installation’s coding tools.",
+    "Setup can read your profile and available models, manage your API keys, and configure only this desktop installation’s coding tools.": "Setup peut lire votre profil et les modèles disponibles, gérer vos clés API et configurer uniquement les outils de codage de cette installation.",
     "Authorization lasts 30 days. Signing out of Setup keeps your configured tools available.": "Authorization lasts 30 days. Signing out of Setup keeps your configured tools available.",
     "Returning to KunCode Setup…": "Returning to KunCode Setup…",
     "360": "360",

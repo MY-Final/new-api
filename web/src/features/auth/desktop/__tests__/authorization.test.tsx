@@ -30,7 +30,7 @@ import { DesktopAuthorization } from '../authorization'
 const request = {
   request_id: 42,
   device_name: 'Windows 桌面',
-  scopes: ['profile:read', 'coding_tools:configure'],
+  scopes: ['profile:read', 'coding_tools:configure', 'desktop_keys:read', 'desktop_keys:write', 'desktop_keys:reveal'],
   expires_at: 2000000000,
 }
 const proof = {
@@ -182,3 +182,4 @@ it('rejects an external callback instead of forwarding authorization to it', asy
   expect(returned).not.toHaveBeenCalled()
   expect(screen.getByRole('button', { name: 'Authorize' })).toBeEnabled()
 })
+
