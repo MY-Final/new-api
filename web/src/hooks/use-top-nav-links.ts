@@ -21,6 +21,7 @@ import { useTranslation } from 'react-i18next'
 
 import { useContactSettings } from '@/features/contact/use-contact-settings'
 import { useStatus } from '@/hooks/use-status'
+import { KUNCODE_SETUP_RELEASE_URL } from '@/lib/kuncode-setup'
 import { parseHeaderNavModulesFromStatus } from '@/lib/nav-modules'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -95,6 +96,14 @@ export function useTopNavLinks(): TopNavLink[] {
     } else {
       links.push({ title: t('Docs'), href: '/docs' })
     }
+  }
+
+  if (modules.setupDownload) {
+    links.push({
+      title: t('Download Setup'),
+      href: KUNCODE_SETUP_RELEASE_URL,
+      external: true,
+    })
   }
 
   // About

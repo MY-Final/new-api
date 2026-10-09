@@ -1,5 +1,8 @@
 {
   "translation": {
+    "Show KunCode Setup downloads in navigation, the home page, API keys, and the key creation dialog.": "控制導覽、首頁、金鑰管理頁和建立成功彈窗中的 KunCode Setup 下載入口。",
+    "Download Setup": "下載配置助手",
+    "Configure Codex, Claude Code, and OpenCode with KunCode Setup. Windows x64.": "使用 KunCode Setup 配置 Codex、Claude Code 和 OpenCode，支援 Windows x64。",
     "Authorize KunCode Setup": "Authorize KunCode Setup",
     "Invalid desktop callback.": "Invalid desktop callback.",
     "Desktop authorization failed. Please try again.": "Desktop authorization failed. Please try again.",

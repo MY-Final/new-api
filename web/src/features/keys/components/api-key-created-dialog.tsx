@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { CircleCheckBig, KeyRound } from 'lucide-react'
+import { CircleCheckBig, Download, KeyRound } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { CopyButton } from '@/components/copy-button'
@@ -29,6 +29,8 @@ import {
   ItemGroup,
   ItemTitle,
 } from '@/components/ui/item'
+import { useSetupDownload } from '@/hooks/use-setup-download'
+import { KUNCODE_SETUP_RELEASE_URL } from '@/lib/kuncode-setup'
 
 import { ApiAddressList } from './api-address-list'
 import { useApiKeys } from './api-keys-provider'
@@ -46,6 +48,7 @@ interface ApiKeyCreatedDialogProps {
 export function ApiKeyCreatedDialog(props: ApiKeyCreatedDialogProps) {
   const { t } = useTranslation()
   const { createdKeys } = useApiKeys()
+  const showSetupDownload = useSetupDownload()
 
   return (
     <Dialog
@@ -112,6 +115,31 @@ export function ApiKeyCreatedDialog(props: ApiKeyCreatedDialogProps) {
             {t('Keep this key secret. Anyone with it can use your account.')}
           </p>
         </div>
+
+        {showSetupDownload && (
+          <div className='bg-muted/30 space-y-3 rounded-lg border p-3'>
+            <p className='text-muted-foreground text-sm leading-relaxed'>
+              {t(
+                'Configure Codex, Claude Code, and OpenCode with KunCode Setup. Windows x64.'
+              )}
+            </p>
+            <Button
+              variant='outline'
+              role='link'
+              size='sm'
+              render={
+                <a
+                  href={KUNCODE_SETUP_RELEASE_URL}
+                  target='_blank'
+                  rel='noopener noreferrer'
+                />
+              }
+            >
+              <Download aria-hidden='true' />
+              {t('Download Setup')}
+            </Button>
+          </div>
+        )}
 
         <div className='space-y-2'>
           <p className='text-sm font-medium'>{t('API Addresses')}</p>

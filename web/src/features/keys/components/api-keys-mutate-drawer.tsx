@@ -317,7 +317,9 @@ export function ApiKeysMutateDrawer({
             if (result.data?.key) {
               created.push({
                 name: result.data.name || data.name || '',
-                key: result.data.key,
+                key: result.data.key.startsWith('sk-')
+                  ? result.data.key
+                  : `sk-${result.data.key}`,
               })
             }
           } else {

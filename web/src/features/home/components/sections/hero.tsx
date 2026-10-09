@@ -18,11 +18,13 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { CherryStudio } from '@lobehub/icons'
 import { Link } from '@tanstack/react-router'
-import { ArrowRight, BookOpen } from 'lucide-react'
+import { ArrowRight, BookOpen, Download } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
 import { useStatus } from '@/hooks/use-status'
+import { KUNCODE_SETUP_RELEASE_URL } from '@/lib/kuncode-setup'
+import { parseHeaderNavModulesFromStatus } from '@/lib/nav-modules'
 
 import { HeroTerminalDemo } from '../hero-terminal-demo'
 
@@ -48,6 +50,8 @@ const MoreIcon = () => (
 export function Hero(props: HeroProps) {
   const { t } = useTranslation()
   const { status } = useStatus()
+  const showSetupDownload =
+    parseHeaderNavModulesFromStatus(status).setupDownload
   const docsUrl =
     (status?.docs_link as string | undefined) || 'https://docs.newapi.pro'
 
@@ -138,16 +142,13 @@ export function Hero(props: HeroProps) {
             style={{ animationDelay: '180ms' }}
           >
             {props.isAuthenticated ? (
-              <>
-                <Button
-                  className='group h-11 rounded-lg px-5 text-sm font-medium'
-                  render={<Link to='/dashboard' />}
-                >
-                  {t('Go to Dashboard')}
-                  <ArrowRight className='ml-1.5 size-4 transition-transform duration-200 group-hover:translate-x-0.5' />
-                </Button>
-                {renderDocsButton()}
-              </>
+              <Button
+                className='group h-11 rounded-lg px-5 text-sm font-medium'
+                render={<Link to='/dashboard' />}
+              >
+                {t('Go to Dashboard')}
+                <ArrowRight className='ml-1.5 size-4 transition-transform duration-200 group-hover:translate-x-0.5' />
+              </Button>
             ) : (
               <>
                 <Button
@@ -164,10 +165,34 @@ export function Hero(props: HeroProps) {
                 >
                   {t('View Pricing')}
                 </Button>
-                {renderDocsButton()}
               </>
             )}
+            {showSetupDownload && (
+              <Button
+                variant='outline'
+                role='link'
+                className='border-border/50 hover:border-border hover:bg-muted/50 h-11 rounded-lg px-5 text-sm font-medium'
+                render={
+                  <a
+                    href={KUNCODE_SETUP_RELEASE_URL}
+                    target='_blank'
+                    rel='noopener noreferrer'
+                  />
+                }
+              >
+                <Download className='size-4' aria-hidden='true' />
+                {t('Download Setup')}
+              </Button>
+            )}
+            {renderDocsButton()}
           </div>
+          {showSetupDownload && (
+            <p className='text-muted-foreground mt-3 max-w-xl text-xs leading-relaxed'>
+              {t(
+                'Configure Codex, Claude Code, and OpenCode with KunCode Setup. Windows x64.'
+              )}
+            </p>
+          )}
 
           {/* Supported Apps (参考图二样式，进行卡片化和信息扩充设计，增加视觉高度) */}
           <div

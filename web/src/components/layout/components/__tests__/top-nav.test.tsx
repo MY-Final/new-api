@@ -65,13 +65,7 @@ await i18n.use(initReactI18next).init({
 
 function NavLinksHarness() {
   const links = useTopNavLinks()
-  return (
-    <ul>
-      {links.map((link) => (
-        <li key={link.href}>{link.title}</li>
-      ))}
-    </ul>
-  )
+  return <TopNav links={links} />
 }
 
 function renderNavLinks(status: Record<string, unknown>) {
@@ -89,6 +83,28 @@ function renderNavLinks(status: Record<string, unknown>) {
 }
 
 describe('top navigation contact action', () => {
+  test.each([false, 'false', 0])(
+    'hides the Setup download when the administrator sets setupDownload=%s',
+    (setupDownload) => {
+      renderNavLinks({ HeaderNavModules: JSON.stringify({ setupDownload }) })
+      expect(
+        screen.queryByRole('link', { name: 'Download Setup' })
+      ).not.toBeInTheDocument()
+    }
+  )
+
+  test('offers the latest Setup release as an external download without requiring login', () => {
+    renderNavLinks({})
+
+    const download = screen.getByRole('link', { name: 'Download Setup' })
+    expect(download).toHaveAttribute(
+      'href',
+      'https://github.com/MY-Final/kuncode-setup/releases/latest'
+    )
+    expect(download).toHaveAttribute('target', '_blank')
+    expect(download).toHaveAttribute('rel', 'noopener noreferrer')
+  })
+
   test('opens the contact dialog instead of navigating to the contact route', () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },

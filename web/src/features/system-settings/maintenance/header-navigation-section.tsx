@@ -58,6 +58,7 @@ const headerNavSchema = z.object({
   docs: z.boolean(),
   about: z.boolean(),
   contact: z.boolean(),
+  setupDownload: z.boolean(),
 })
 
 type HeaderNavFormValues = z.infer<typeof headerNavSchema>
@@ -100,6 +101,10 @@ const toFormValues = (config: HeaderNavModulesConfig): HeaderNavFormValues => ({
     config.contact === undefined
       ? HEADER_NAV_DEFAULT.contact
       : Boolean(config.contact),
+  setupDownload:
+    config.setupDownload === undefined
+      ? HEADER_NAV_DEFAULT.setupDownload
+      : Boolean(config.setupDownload),
 })
 
 export function HeaderNavigationSection({
@@ -127,6 +132,7 @@ export function HeaderNavigationSection({
       docs: values.docs,
       about: values.about,
       contact: values.contact,
+      setupDownload: values.setupDownload,
       pricing: {
         ...(config.pricing ?? HEADER_NAV_DEFAULT.pricing),
         enabled: values.pricingEnabled,
@@ -183,6 +189,13 @@ export function HeaderNavigationSection({
       key: 'contact',
       title: t('Contact Us'),
       description: t('Contact information and community group.'),
+    },
+    {
+      key: 'setupDownload',
+      title: t('Download Setup'),
+      description: t(
+        'Show KunCode Setup downloads in navigation, the home page, API keys, and the key creation dialog.'
+      ),
     },
   ]
 

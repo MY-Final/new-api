@@ -32,6 +32,7 @@ import {
 import {
   act,
   cleanup,
+  fireEvent,
   render,
   screen,
   within,
@@ -385,7 +386,7 @@ async function renderKeysPage(
   } else {
     await screen.findByText(currentKey.name)
   }
-  return { post, put }
+  return { post, put, client }
 }
 
 it('combines creation and last use while keeping expiry, models and IP restrictions separate', async () => {
@@ -615,6 +616,37 @@ it('keeps mobile quota readable and opens complete model and IP restrictions by 
   expect(within(details).getByText('2001:db8::1')).toBeVisible()
 })
 
+it('offers the Setup download alongside key management without passing credentials in the link', async () => {
+  const { client } = await renderKeysPage()
+
+  const download = screen.getByRole('link', { name: 'Download Setup' })
+  expect(download).toHaveAttribute(
+    'href',
+    'https://github.com/MY-Final/kuncode-setup/releases/latest'
+  )
+  expect(download).toHaveAttribute('target', '_blank')
+  expect(download).toHaveAttribute('rel', 'noopener noreferrer')
+  act(() =>
+    client.setQueryData(['status'], {
+      HeaderNavModules: JSON.stringify({ setupDownload: false }),
+    })
+  )
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('link', { name: 'Download Setup' })
+    ).not.toBeInTheDocument()
+  )
+  expect(screen.getByRole('button', { name: 'Create API Key' })).toBeVisible()
+  act(() =>
+    client.setQueryData(['status'], {
+      HeaderNavModules: JSON.stringify({ setupDownload: true }),
+    })
+  )
+  expect(
+    await screen.findByRole('link', { name: 'Download Setup' })
+  ).toBeVisible()
+})
+
 it('offers the create drawer from the empty state when there are no keys or active filters', async () => {
   await renderKeysPage(1, {}, {}, [])
   await screen.findByText('No API Keys Found')
@@ -652,47 +684,101 @@ it('does not offer the empty-state create action while a search filter is active
   )
 })
 
-it('shows the created key with a copy action and configured addresses', async () => {
-  await renderKeysPage(
-    1,
-    {},
-    {
-      api_base_urls: ['https://kuncode.120403.xyz', 'https://wcnmb.fun'],
+it.each([
+  { count: 1, prefix: '', setupDownload: true },
+  { count: 2, prefix: '', setupDownload: true },
+  { count: 1, prefix: 'sk-', setupDownload: true },
+  { count: 1, prefix: '', setupDownload: false },
+])(
+  'shows and copies complete keys after creating $count key(s) with response prefix "$prefix" and setupDownload=$setupDownload',
+  async ({ count, prefix, setupDownload }) => {
+    const { post } = await renderKeysPage(
+      1,
+      {},
+      {
+        api_base_urls: ['https://kuncode.120403.xyz', 'https://wcnmb.fun'],
+        HeaderNavModules: JSON.stringify({ setupDownload }),
+      }
+    )
+    const user = userEvent.setup()
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText')
+    const expectedKeys = Array.from(
+      { length: count },
+      (_, index) => `sk-fake-key-for-test-only-${index}`
+    )
+    for (let index = 0; index < count; index++) {
+      post.mockResolvedValueOnce({
+        data: {
+          success: true,
+          data: { key: `${prefix}fake-key-for-test-only-${index}` },
+        },
+      })
     }
-  )
-  const user = userEvent.setup()
-  const writeText = vi.spyOn(navigator.clipboard, 'writeText')
 
-  await user.click(screen.getByRole('button', { name: 'Create API Key' }))
-  const drawer = await screen.findByRole('dialog', { name: 'Create API Key' })
-  const nameInput = within(drawer).getByLabelText('Name')
-  await user.type(nameInput, 'first-key')
-  await waitFor(() =>
-    expect(
+    await user.click(screen.getByRole('button', { name: 'Create API Key' }))
+    const drawer = await screen.findByRole('dialog', { name: 'Create API Key' })
+    const nameInput = within(drawer).getByLabelText('Name')
+    await user.type(nameInput, 'first-key')
+    if (count > 1) {
+      const quantity = within(drawer).getByLabelText('Quantity')
+      fireEvent.input(quantity, { target: { value: String(count) } })
+    }
+    await waitFor(() =>
+      expect(
+        within(drawer).getByRole('button', { name: 'Save changes' })
+      ).toBeEnabled()
+    )
+    await user.click(
       within(drawer).getByRole('button', { name: 'Save changes' })
-    ).toBeEnabled()
-  )
-  await user.click(within(drawer).getByRole('button', { name: 'Save changes' }))
+    )
 
-  const nextStep = await screen.findByRole('dialog', {
-    name: 'API Key created',
-  })
-  expect(within(nextStep).getByText('fake-key-for-test-only')).toBeVisible()
-  await user.click(
-    within(nextStep).getByRole('button', {
+    const nextStep = await screen.findByRole('dialog', {
+      name: 'API Key created',
+    })
+    if (setupDownload) {
+      const download = within(nextStep).getByRole('link', {
+        name: 'Download Setup',
+      })
+      expect(download).toHaveAttribute(
+        'href',
+        'https://github.com/MY-Final/kuncode-setup/releases/latest'
+      )
+      expect(download).toHaveAttribute('target', '_blank')
+      expect(download).toHaveAttribute('rel', 'noopener noreferrer')
+      expect(
+        within(nextStep).getByText(
+          'Configure Codex, Claude Code, and OpenCode with KunCode Setup. Windows x64.'
+        )
+      ).toBeVisible()
+    } else {
+      expect(
+        within(nextStep).queryByRole('link', { name: 'Download Setup' })
+      ).not.toBeInTheDocument()
+      expect(
+        within(nextStep).queryByText(
+          'Configure Codex, Claude Code, and OpenCode with KunCode Setup. Windows x64.'
+        )
+      ).not.toBeInTheDocument()
+    }
+    const copyButtons = within(nextStep).getAllByRole('button', {
       name: 'Copy API key: first-key',
     })
-  )
-  expect(writeText).toHaveBeenCalledWith('fake-key-for-test-only')
-  expect(within(nextStep).getByRole('button', { name: 'Done' })).toBeVisible()
-  expect(
-    within(nextStep).queryByRole('button', { name: 'Open Playground' })
-  ).not.toBeInTheDocument()
-  for (const url of ['https://kuncode.120403.xyz', 'https://wcnmb.fun']) {
+    expect(copyButtons).toHaveLength(count)
+    for (const [index, completeKey] of expectedKeys.entries()) {
+      expect(within(nextStep).getByText(completeKey)).toBeVisible()
+      await user.click(copyButtons[index])
+      expect(writeText).toHaveBeenNthCalledWith(index + 1, completeKey)
+    }
+    expect(within(nextStep).getByRole('button', { name: 'Done' })).toBeVisible()
     expect(
-      within(nextStep).getByRole('button', {
-        name: `Copy API URL: ${url}`,
-      })
-    ).toBeVisible()
+      within(nextStep).queryByRole('button', { name: 'Open Playground' })
+    ).not.toBeInTheDocument()
+    for (const url of ['https://kuncode.120403.xyz', 'https://wcnmb.fun']) {
+      expect(
+        within(nextStep).getByRole('button', {
+          name: `Copy API URL: ${url}`,
+        })
+      ).toBeVisible()
+    }
   }
-})
+)
