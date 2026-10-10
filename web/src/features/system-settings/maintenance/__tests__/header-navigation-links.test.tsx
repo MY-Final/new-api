@@ -64,6 +64,24 @@ it('lists the configured top navigation links', () => {
   expect(screen.getByText('Custom links')).toBeInTheDocument()
 })
 
+it('shows the setup download override and disables it when the entry is hidden', () => {
+  renderSection(
+    JSON.stringify({
+      setupDownload: true,
+      setupDownloadUrl: 'https://downloads.example.com/kuncode',
+    })
+  )
+
+  expect(
+    screen.getByLabelText('Setup download URL')
+  ).toHaveValue('https://downloads.example.com/kuncode')
+  expect(screen.getByLabelText('Setup download URL')).toBeEnabled()
+
+  cleanup()
+  renderSection(JSON.stringify({ setupDownload: false }))
+  expect(screen.getByLabelText('Setup download URL')).toBeDisabled()
+})
+
 it('appends an empty link row and removes it again', async () => {
   const user = userEvent.setup()
   renderSection(JSON.stringify({ links: [] }))

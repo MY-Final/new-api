@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import {
   parseHeaderNavLinks,
+  parseSetupDownloadUrl,
   type HeaderNavLink,
 } from '@/lib/nav-modules'
 
@@ -35,8 +36,10 @@ export type HeaderNavModulesConfig = {
   about: boolean
   contact: boolean
   setupDownload: boolean
+  /** Administrator override for the setup download target; empty uses the built-in page. */
+  setupDownloadUrl: string
   links: HeaderNavLink[]
-  [key: string]: boolean | HeaderNavAccessConfig | HeaderNavLink[]
+  [key: string]: boolean | string | HeaderNavAccessConfig | HeaderNavLink[]
 }
 
 export type SidebarSectionConfig = {
@@ -61,6 +64,7 @@ export const HEADER_NAV_DEFAULT: HeaderNavModulesConfig = {
   about: true,
   contact: true,
   setupDownload: true,
+  setupDownloadUrl: '',
   links: [],
 }
 
@@ -179,6 +183,10 @@ export function parseHeaderNavModules(
       }
       if (key === 'links') {
         result.links = parseHeaderNavLinks(raw)
+        return
+      }
+      if (key === 'setupDownloadUrl') {
+        result.setupDownloadUrl = parseSetupDownloadUrl(raw)
         return
       }
 

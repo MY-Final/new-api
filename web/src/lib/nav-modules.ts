@@ -47,8 +47,10 @@ export type HeaderNavModules = {
   about: boolean
   contact: boolean
   setupDownload: boolean
+  /** Administrator override for the setup download target; empty uses the built-in page. */
+  setupDownloadUrl: string
   links: HeaderNavLink[]
-  [key: string]: boolean | ModuleAccess | HeaderNavLink[]
+  [key: string]: boolean | string | ModuleAccess | HeaderNavLink[]
 }
 
 const DEFAULT_HEADER_NAV_MODULES: HeaderNavModules = {
@@ -60,6 +62,7 @@ const DEFAULT_HEADER_NAV_MODULES: HeaderNavModules = {
   about: true,
   contact: true,
   setupDownload: true,
+  setupDownloadUrl: '',
   links: [],
 }
 
@@ -75,6 +78,17 @@ function cloneHeaderNavDefaults(): HeaderNavModules {
     rankings: { ...DEFAULT_HEADER_NAV_MODULES.rankings },
     links: [],
   }
+}
+
+/**
+ * Normalizes the administrator-defined setup download URL. Anything that is not
+ * an absolute http(s) URL is dropped so the entry falls back to the built-in
+ * release page instead of pointing somewhere unexpected.
+ */
+export function parseSetupDownloadUrl(raw: unknown): string {
+  if (typeof raw !== 'string') return ''
+  const trimmed = raw.trim()
+  return trimmed && isHttpUrl(trimmed) ? trimmed : ''
 }
 
 /**
@@ -164,6 +178,10 @@ export function parseHeaderNavModules(raw: unknown): HeaderNavModules {
     }
     if (key === 'links') {
       result.links = parseHeaderNavLinks(value)
+      return
+    }
+    if (key === 'setupDownloadUrl') {
+      result.setupDownloadUrl = parseSetupDownloadUrl(value)
       return
     }
 

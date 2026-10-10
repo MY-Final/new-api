@@ -130,6 +130,18 @@ describe('top navigation contact action', () => {
     ).not.toBeInTheDocument()
   })
 
+  test('uses the administrator-defined setup download URL', () => {
+    renderNavLinks({
+      HeaderNavModules: JSON.stringify({
+        setupDownloadUrl: 'https://downloads.example.com/kuncode',
+      }),
+    })
+
+    expect(
+      screen.getByRole('link', { name: 'Download Setup' })
+    ).toHaveAttribute('href', 'https://downloads.example.com/kuncode')
+  })
+
   test('opens the contact dialog instead of navigating to the contact route', () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },

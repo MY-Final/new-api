@@ -17,9 +17,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useStatus } from '@/hooks/use-status'
+import { resolveSetupDownloadUrl } from '@/lib/kuncode-setup'
 import { parseHeaderNavModulesFromStatus } from '@/lib/nav-modules'
 
 export function useSetupDownload(): boolean {
   const { status } = useStatus()
   return parseHeaderNavModulesFromStatus(status).setupDownload
+}
+
+/** Download target for the setup entry, honouring the administrator override. */
+export function useSetupDownloadUrl(): string {
+  const { status } = useStatus()
+  return resolveSetupDownloadUrl(
+    parseHeaderNavModulesFromStatus(status).setupDownloadUrl
+  )
 }

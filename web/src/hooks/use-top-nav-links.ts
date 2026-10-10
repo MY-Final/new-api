@@ -21,7 +21,7 @@ import { useTranslation } from 'react-i18next'
 
 import { useContactSettings } from '@/features/contact/use-contact-settings'
 import { useStatus } from '@/hooks/use-status'
-import { KUNCODE_SETUP_RELEASE_URL } from '@/lib/kuncode-setup'
+import { resolveSetupDownloadUrl } from '@/lib/kuncode-setup'
 import { parseHeaderNavModulesFromStatus } from '@/lib/nav-modules'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -101,7 +101,7 @@ export function useTopNavLinks(): TopNavLink[] {
   if (modules.setupDownload) {
     links.push({
       title: t('Download Setup'),
-      href: KUNCODE_SETUP_RELEASE_URL,
+      href: resolveSetupDownloadUrl(modules?.setupDownloadUrl),
       external: true,
     })
   }

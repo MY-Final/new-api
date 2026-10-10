@@ -61,6 +61,8 @@ func TestValidateHeaderNavModulesOptionChecksOnlyLinks(t *testing.T) {
 		`{"pricing":{"enabled":true,"requireAuth":false},"rankings":"false"}`,
 		`{"home":true,"links":[]}`,
 		`{"links":[{"name":"官网","url":"https://example.com"}]}`,
+		`{"setupDownloadUrl":""}`,
+		`{"setupDownloadUrl":"https://example.com/setup"}`,
 	}
 	for _, value := range valid {
 		require.NoError(t, validateOptionValue("HeaderNavModules", value), value)
@@ -70,6 +72,9 @@ func TestValidateHeaderNavModulesOptionChecksOnlyLinks(t *testing.T) {
 		`{"links":[{"name":"Help","url":"javascript:alert(1)"}]}`,
 		`{"links":[{"name":"","url":"https://example.com"}]}`,
 		`{"links":{"name":"Help","url":"https://example.com"}}`,
+		`{"setupDownloadUrl":"javascript:alert(1)"}`,
+		`{"setupDownloadUrl":"/setup"}`,
+		`{"setupDownloadUrl":123}`,
 		"not json",
 	}
 	for _, value := range invalid {

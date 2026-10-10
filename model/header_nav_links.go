@@ -12,9 +12,12 @@ const (
 	// navigation.
 	MaxHeaderNavLinks       = 10
 	maxHeaderNavLinkNameLen = 20
-	maxHeaderNavLinkURLLen  = 500
+	maxHeaderNavURLLen      = 500
 
 	headerNavLinksField = "links"
+	// headerNavSetupDownloadURLField overrides where the setup download entry
+	// points. Empty means "use the client's built-in release page".
+	headerNavSetupDownloadURLField = "setupDownloadUrl"
 )
 
 // HeaderNavLink is one administrator-defined external link in the top
@@ -51,7 +54,7 @@ func ParseHeaderNavLinks(raw string) ([]HeaderNavLink, error) {
 		if err != nil {
 			return nil, err
 		}
-		target, err := normalizeExternalNavURL("top navigation link", entry.URL, maxHeaderNavLinkURLLen)
+		target, err := normalizeExternalNavURL("top navigation link", entry.URL, maxHeaderNavURLLen)
 		if err != nil {
 			return nil, fmt.Errorf("top navigation link %q: %w", name, err)
 		}
@@ -65,8 +68,9 @@ func ParseHeaderNavLinks(raw string) ([]HeaderNavLink, error) {
 	return links, nil
 }
 
-// ValidateHeaderNavModulesOption validates the part of HeaderNavModules that the
-// console renders for visitors: the optional `links` array.
+// ValidateHeaderNavModulesOption validates the parts of HeaderNavModules that
+// the console renders for visitors: the optional `links` array and the optional
+// `setupDownloadUrl` override.
 //
 // The other keys keep their historical shapes (a boolean or
 // {enabled, requireAuth}) and are read by the navigation middleware, so unknown
@@ -82,15 +86,27 @@ func ValidateHeaderNavModulesOption(value string) error {
 	if err := common.UnmarshalJsonStr(trimmed, &parsed); err != nil {
 		return fmt.Errorf("HeaderNavModules must be a JSON object: %w", err)
 	}
-	raw, exists := parsed[headerNavLinksField]
-	if !exists || raw == nil {
-		return nil
+	if raw, exists := parsed[headerNavLinksField]; exists && raw != nil {
+		encoded, err := common.Marshal(raw)
+		if err != nil {
+			return fmt.Errorf("HeaderNavModules links cannot be encoded: %w", err)
+		}
+		if _, err := ParseHeaderNavLinks(string(encoded)); err != nil {
+			return err
+		}
 	}
 
-	encoded, err := common.Marshal(raw)
-	if err != nil {
-		return fmt.Errorf("HeaderNavModules links cannot be encoded: %w", err)
+	if raw, exists := parsed[headerNavSetupDownloadURLField]; exists && raw != nil {
+		target, ok := raw.(string)
+		if !ok {
+			return fmt.Errorf("HeaderNavModules %s must be a string", headerNavSetupDownloadURLField)
+		}
+		if strings.TrimSpace(target) != "" {
+			if _, err := normalizeExternalNavURL("setup download", target, maxHeaderNavURLLen); err != nil {
+				return err
+			}
+		}
 	}
-	_, err = ParseHeaderNavLinks(string(encoded))
-	return err
+
+	return nil
 }
