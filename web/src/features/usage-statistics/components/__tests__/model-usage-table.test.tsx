@@ -91,7 +91,29 @@ describe('ModelUsageTable', () => {
     expect(modelOrder()[0]).toContain('gamma')
     expect(modelOrder()[2]).toContain('alpha')
   })
-  it('keeps long token counts narrow while exposing the exact value on hover', () => {
+  it('marks the ranked column and moves the share bar with the ranking metric', async () => {
+    const user = userEvent.setup()
+    render(<ModelUsageTable data={models} />)
+
+    // Default ranking is cost: alpha holds 60% of the total cost.
+    expect(
+      screen.getByRole('columnheader', { name: /User Cost/ })
+    ).toHaveAttribute('aria-sort', 'descending')
+    expect(screen.getByText(/60\s*%/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: 'Tokens' }))
+
+    expect(
+      screen.getByRole('columnheader', { name: /Total Tokens/ })
+    ).toHaveAttribute('aria-sort', 'descending')
+    expect(
+      screen.getByRole('columnheader', { name: /User Cost/ })
+    ).not.toHaveAttribute('aria-sort')
+    // beta holds 900 of 1050 tokens, so the bar follows the selected metric.
+    expect(screen.getByText(/85\.71\s*%/)).toBeInTheDocument()
+  })
+
+  it('shows exact token counts instead of compacted values', () => {
     render(
       <ModelUsageTable
         data={[
@@ -107,16 +129,9 @@ describe('ModelUsageTable', () => {
       />
     )
 
-    // Dense token columns stay compact so the last columns fit without scrolling.
-    expect(screen.getByText('711.1M')).toBeInTheDocument()
-    expect(screen.getByText('714.8M')).toBeInTheDocument()
-    expect(screen.queryByText('711,084,385')).not.toBeInTheDocument()
-    // The exact number stays reachable for auditing.
-    expect(screen.getByText('711.1M')).toHaveAttribute(
-      'title',
-      '711,084,385'
-    )
-    // Request counts stay exact: they are short and used for reconciliation.
+    // Token columns report the real amount, so the numbers can be reconciled.
+    expect(screen.getByText('711,084,385')).toBeInTheDocument()
+    expect(screen.getByText('714,792,396')).toBeInTheDocument()
     expect(screen.getByText('3,730')).toBeInTheDocument()
   })
 })
