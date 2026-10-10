@@ -63,9 +63,9 @@ const (
 )
 
 var (
-	ErrPaymentMethodMismatch = errors.New("payment method mismatch")
-	ErrTopUpNotFound         = errors.New("topup not found")
-	ErrTopUpStatusInvalid    = errors.New("topup status invalid")
+	ErrPaymentMethodMismatch error = common.NewMessage("Payment method mismatch")
+	ErrTopUpNotFound         error = common.NewMessage("Top-up not found")
+	ErrTopUpStatusInvalid    error = common.NewMessage("Top-up status invalid")
 	// The quota errors reach the web console, so they carry message keys.
 	ErrInvalidTopUpQuota        error = common.NewMessage("Invalid top-up quota")
 	ErrTopUpQuotaLimitExceeded  error = common.NewMessage("Top-up quota limit exceeded")

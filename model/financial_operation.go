@@ -18,13 +18,15 @@ const (
 	FinancialOperationPenaltyReversal  = "penalty_reversal"
 )
 
+// The finance errors reach the web console, so they carry message keys: the
+// console translates the English source text (and its own locale entry).
 var (
-	ErrFinancialReasonInvalid      = errors.New("reason must contain 1 to 255 characters")
-	ErrRedemptionNotRefundable     = errors.New("redemption is not refundable")
-	ErrPenaltyNotFound             = errors.New("penalty not found")
-	ErrPenaltyAlreadyReversed      = errors.New("penalty already reversed")
-	ErrFinancialRoleForbidden      = errors.New("cannot operate on a user with the same or higher role")
-	ErrFinancialOperationKeyNeeded = errors.New("request id is required")
+	ErrFinancialReasonInvalid      error = common.NewMessage("Reason must contain 1 to 255 characters")
+	ErrRedemptionNotRefundable     error = common.NewMessage("Redemption is not refundable")
+	ErrPenaltyNotFound             error = common.NewMessage("Penalty not found")
+	ErrPenaltyAlreadyReversed      error = common.NewMessage("Penalty already reversed")
+	ErrFinancialRoleForbidden      error = common.NewMessage("Cannot operate on a user with the same or higher role")
+	ErrFinancialOperationKeyNeeded error = common.NewMessage("Request id is required")
 )
 
 type FinancialOperation struct {

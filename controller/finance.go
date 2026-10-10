@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"errors"
 	"strconv"
 	"strings"
 
@@ -97,7 +96,7 @@ func GetFinancialOperations(c *gin.Context) {
 func RefundFinanceTopUp(c *gin.Context) {
 	var req financeRefundRequest
 	if err := common.DecodeJson(c.Request.Body, &req); err != nil || !req.ExternalRefundCompleted {
-		common.ApiError(c, errors.New("external refund confirmation is required"))
+		common.ApiError(c, common.NewMessage("External refund confirmation is required"))
 		return
 	}
 	already, err := model.RefundTopUpByAdmin(req.TradeNo, req.Reason, c.GetInt("id"))
@@ -111,7 +110,7 @@ func RefundFinanceTopUp(c *gin.Context) {
 func RefundFinanceRedemption(c *gin.Context) {
 	var req financeRefundRequest
 	if err := common.DecodeJson(c.Request.Body, &req); err != nil || !req.ExternalRefundCompleted {
-		common.ApiError(c, errors.New("external refund confirmation is required"))
+		common.ApiError(c, common.NewMessage("External refund confirmation is required"))
 		return
 	}
 	already, err := model.RefundRedemptionByAdmin(req.RedemptionId, req.Reason, c.GetInt("id"))

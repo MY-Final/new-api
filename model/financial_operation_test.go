@@ -179,3 +179,30 @@ func TestListFinancialOperationsMarksReversedPenalties(t *testing.T) {
 	assert.Equal(t, reversed.Id, byId[reversal.Id].ReversalOfId)
 	assert.Zero(t, byId[reversal.Id].ReversedById)
 }
+
+func TestFinanceErrorsCarryConsoleMessageKeys(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		key  string
+	}{
+		{"reason", ErrFinancialReasonInvalid, "Reason must contain 1 to 255 characters"},
+		{"redemption", ErrRedemptionNotRefundable, "Redemption is not refundable"},
+		{"penalty missing", ErrPenaltyNotFound, "Penalty not found"},
+		{"penalty reversed", ErrPenaltyAlreadyReversed, "Penalty already reversed"},
+		{"role", ErrFinancialRoleForbidden, "Cannot operate on a user with the same or higher role"},
+		{"request id", ErrFinancialOperationKeyNeeded, "Request id is required"},
+		{"topup missing", ErrTopUpNotFound, "Top-up not found"},
+		{"topup not refundable", ErrTopUpNotRefundable, "Top-up is not refundable"},
+		{"rebate missing", ErrAffiliateRebateNotFound, "Affiliate rebate not found"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var message *common.Message
+			require.ErrorAs(t, tc.err, &message)
+			assert.Equal(t, tc.key, message.Key)
+			// The rendered English text stays available for non-console callers.
+			assert.Equal(t, tc.key, tc.err.Error())
+		})
+	}
+}
