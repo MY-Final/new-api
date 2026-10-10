@@ -87,6 +87,16 @@ export function UsageChart(props: UsageChartProps) {
       line: { style: { lineWidth: 2 } },
       legends: { visible: false },
       tooltip: {
+        trigger: 'hover',
+        /*
+         * A single-series line chart has no series field, so VChart falls back
+         * to the dimension tooltip and prints the raw measure. For the cost
+         * trend that is the raw quota value, which reads like a token count
+         * (e.g. 4424958 instead of the money amount). Pin the mark tooltip so
+         * the formatted lines below are the ones users see.
+         */
+        activeType: 'mark',
+        dimension: { visible: false },
         mark: {
           title: { value: (datum: { day: string }) => datum.day },
           content: [
