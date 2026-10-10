@@ -23,6 +23,7 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
+  DATA_TABLE_VIEW_MODES,
   DISABLED_ROW_DESKTOP,
   DISABLED_ROW_MOBILE,
   DataTablePage,
@@ -48,6 +49,8 @@ import { useUsersColumns } from './users-columns'
 import { useUsers } from './users-provider'
 
 const route = getRouteApi('/_authenticated/users/')
+
+const USERS_VIEW_MODE_STORAGE_KEY = 'users:view-mode'
 
 const USER_SORTABLE_COLUMNS = new Set<UserSortBy>([
   'id',
@@ -226,6 +229,12 @@ export function UsersTable() {
       )}
       skeletonKeyPrefix='users-skeleton'
       applyHeaderSize
+      enableCardView
+      // Desktop keeps the table; phones open on cards. A stored preference wins.
+      defaultViewMode={
+        isMobile ? DATA_TABLE_VIEW_MODES.CARD : DATA_TABLE_VIEW_MODES.TABLE
+      }
+      viewModeStorageKey={USERS_VIEW_MODE_STORAGE_KEY}
       toolbarProps={{
         searchPlaceholder: t('Filter by username, name or email...'),
         searchDebounceMs: 500,

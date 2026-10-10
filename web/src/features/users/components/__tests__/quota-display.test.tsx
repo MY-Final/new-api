@@ -130,19 +130,27 @@ function QuotaTable(props: {
   )
 }
 
+// State the currency explicitly: the app's own default is a site setting, while
+// this suite asserts the unit symbol rendered in the column header.
+function usdCurrency() {
+  return {
+    ...DEFAULT_CURRENCY_CONFIG,
+    quotaDisplayType: 'USD' as const,
+    usdExchangeRate: 1,
+    customCurrencySymbol: '¤',
+    customCurrencyExchangeRate: 1,
+  }
+}
+
 beforeEach(() => {
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
-  useSystemConfigStore
-    .getState()
-    .setConfig({ currency: { ...DEFAULT_CURRENCY_CONFIG } })
+  useSystemConfigStore.getState().setConfig({ currency: usdCurrency() })
 })
 afterEach(() => {
   cleanup()
   clients.splice(0).forEach((client) => client.clear())
   useAuthStore.getState().auth.reset()
-  useSystemConfigStore
-    .getState()
-    .setConfig({ currency: { ...DEFAULT_CURRENCY_CONFIG } })
+  useSystemConfigStore.getState().setConfig({ currency: usdCurrency() })
 })
 
 it('shows balance above secondary usage text and opens quota details on click', async () => {
@@ -156,18 +164,20 @@ it('shows balance above secondary usage text and opens quota details on click', 
   ).toHaveAttribute('data-sortable', 'true')
   expect(screen.getAllByRole('columnheader')).toHaveLength(1)
   const cells = screen.getAllByRole('cell')
-  expect(within(cells[0]).getByText('0.0038')).toBeInTheDocument()
   expect(cells).toHaveLength(1)
-  expect(
-    within(cells[0]).queryByText('Available Balance')
-  ).not.toBeInTheDocument()
+  expect(within(cells[0]).getByText('0.0038')).toBeInTheDocument()
+  expect(within(cells[0]).queryByText('Available Balance')).not.toBeInTheDocument()
   expect(within(cells[0]).getByText('0.0022')).toBeInTheDocument()
-  expect(screen.getByText('0.0038').parentElement).toHaveClass('grid-cols-1')
+  // Balance reads first, usage second, so narrow columns stack instead of
+  // squeezing both numbers into one line.
+  const cellText = cells[0].textContent ?? ''
+  expect(cellText.indexOf('0.0038')).toBeLessThan(cellText.indexOf('0.0022'))
   expect(screen.getByText('Used amount').parentElement).toHaveAttribute(
     'data-table-text',
     'secondary'
   )
-  expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+  // The usage bar stays: it is the fastest read of balance versus usage.
+  expect(screen.getByRole('progressbar')).toBeInTheDocument()
   expect(screen.queryByText('0.006')).not.toBeInTheDocument()
   const trigger = screen.getByRole('button', {
     name: 'Available Balance 0.0038; Used amount 0.0022',
@@ -178,7 +188,6 @@ it('shows balance above secondary usage text and opens quota details on click', 
   expect(within(detail).getByText('Total Used')).toBeInTheDocument()
   expect(within(detail).getByText('0.0038')).toBeInTheDocument()
   expect(within(detail).getByText('0.0022')).toBeInTheDocument()
-  expect(within(detail).queryByRole('progressbar')).not.toBeInTheDocument()
   await userEvent.keyboard('{Escape}')
   await waitFor(() =>
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
@@ -199,16 +208,22 @@ it.each([0, 500000])(
       expect(screen.queryByText('Used amount')).not.toBeInTheDocument()
       await userEvent.click(screen.getByRole('button', { name: 'No Quota' }))
       const detail = await screen.findByRole('dialog', { name: 'Quota ($)' })
-      expect(within(detail).getAllByText('0')).toHaveLength(2)
+      expect(
+        within(detail).getByText('Available Balance').nextElementSibling
+      ).toHaveTextContent('0')
+      expect(
+        within(detail).getByText('Total Used').nextElementSibling
+      ).toHaveTextContent('0')
       return
     }
     expect(screen.queryByText('No Quota')).not.toBeInTheDocument()
+    const zeroBalanceCell = screen.getAllByRole('cell')[0]
     expect(
-      within(screen.getAllByRole('cell')[0]).getByText('0')
-    ).toBeInTheDocument()
+      zeroBalanceCell.querySelector('[data-slot="user-quota-balance"]')
+    ).toHaveTextContent('0')
     expect(
-      within(screen.getAllByRole('cell')[0]).getByText('1')
-    ).toBeInTheDocument()
+      within(zeroBalanceCell).getByText('Used amount').parentElement
+    ).toHaveTextContent('1')
   }
 )
 
@@ -230,7 +245,7 @@ it('preserves negative balances in details opened with the keyboard', async () =
 it('shows the custom symbol only in the column header', () => {
   useSystemConfigStore.getState().setConfig({
     currency: {
-      ...DEFAULT_CURRENCY_CONFIG,
+      ...usdCurrency(),
       quotaDisplayType: 'CUSTOM',
       customCurrencySymbol: '🐱',
       customCurrencyExchangeRate: 1,
@@ -414,7 +429,7 @@ it('updates the header unit and converted amounts together when currency setting
   act(() =>
     useSystemConfigStore.getState().setConfig({
       currency: {
-        ...DEFAULT_CURRENCY_CONFIG,
+        ...usdCurrency(),
         quotaDisplayType: 'CNY',
         usdExchangeRate: 7,
       },
@@ -436,7 +451,7 @@ it('updates the header unit and converted amounts together when currency setting
 
 it('labels raw quota mode as tokens without introducing a currency symbol', () => {
   useSystemConfigStore.getState().setConfig({
-    currency: { ...DEFAULT_CURRENCY_CONFIG, quotaDisplayType: 'TOKENS' },
+    currency: { ...usdCurrency(), quotaDisplayType: 'TOKENS' },
   })
   render(
     <I18nextProvider i18n={i18n}>
@@ -476,15 +491,29 @@ function valueOf(label: string): string {
   return labelNode.parentElement?.textContent ?? ''
 }
 
+async function triggerQuotaDetails(): Promise<void> {
+  await userEvent.click(
+    screen.getByRole('button', { name: /Available Balance 0.0038/ })
+  )
+  await screen.findByRole('dialog')
+}
+
+// Details render as a definition list: the value is the term's sibling.
+function detailValueOf(label: string): HTMLElement {
+  const term = screen.getByText(label)
+  expect(term.nextElementSibling).not.toBeNull()
+  return term.nextElementSibling as HTMLElement
+}
+
 it('shows paid and bonus balances without hovering', () => {
   renderQuotaCell({ remaining: 1900, used: 1100, bonus: 600, paid: 1300 })
   // 1300 and 600 quota units at 500000 per unit.
-  expect(valueOf('Paid Balance')).toContain('0.0026')
-  expect(valueOf('Bonus Balance')).toContain('0.0012')
+  expect(valueOf('Paid')).toContain('0.0026')
+  expect(valueOf('Bonus')).toContain('0.0012')
   expect(screen.getByRole('progressbar')).toBeInTheDocument()
 })
 
-it('shows how much paid and bonus quota was consumed without hovering', () => {
+it('shows how much paid and bonus quota was consumed in the details', async () => {
   renderQuotaCell({
     remaining: 1900,
     used: 1100,
@@ -493,17 +522,23 @@ it('shows how much paid and bonus quota was consumed without hovering', () => {
     bonusUsed: 400,
     paidUsed: 700,
   })
-  expect(valueOf('Paid used')).toContain('0.0014')
-  expect(valueOf('Bonus used')).toContain('0.0008')
+  await triggerQuotaDetails()
+  expect(detailValueOf('Paid used')).toHaveTextContent('0.0014')
+  expect(detailValueOf('Bonus used')).toHaveTextContent('0.0008')
 })
 
-it('omits the per-source usage row when the ledger reports nothing', () => {
+it('omits the per-source usage row when the ledger reports nothing', async () => {
   renderQuotaCell({ remaining: 1900, used: 1100, bonus: 600, paid: 1300 })
   // Balances are known from the user row, but a missing ledger must not be
   // rendered as "used zero" for both sources.
-  expect(screen.getByText('Paid Balance')).toBeInTheDocument()
-  expect(screen.queryByText('Paid used')).not.toBeInTheDocument()
-  expect(screen.queryByText('Bonus used')).not.toBeInTheDocument()
+  expect(
+    within(screen.getAllByRole('cell')[0]).getByText('Paid')
+  ).toBeInTheDocument()
+  await triggerQuotaDetails()
+  const detail = screen.getByRole('dialog')
+  expect(within(detail).getByText('Paid Balance')).toBeInTheDocument()
+  expect(within(detail).queryByText('Paid used')).not.toBeInTheDocument()
+  expect(within(detail).queryByText('Bonus used')).not.toBeInTheDocument()
 })
 
 it('keeps a negative balance readable and clamps the progress value', () => {
@@ -524,5 +559,11 @@ it('reaches the full breakdown from the keyboard', async () => {
     paidUsed: 700,
   })
   await userEvent.tab()
-  expect(screen.getByRole('progressbar').closest('[tabindex]')).toHaveFocus()
+  const trigger = screen.getByRole('button', {
+    name: /Available Balance 0.0038/,
+  })
+  expect(trigger).toHaveFocus()
+  await userEvent.keyboard('{Enter}')
+  expect(await screen.findByRole('dialog')).toBeInTheDocument()
+  expect(screen.getByText('Paid used')).toBeInTheDocument()
 })
