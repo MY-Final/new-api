@@ -337,6 +337,13 @@ func InitResources() error {
 		}
 	}
 	model.InitOptionMap()
+	if common.IsMasterNode {
+		// The shop option carries a code-level default, so this migration reads
+		// the loaded option map rather than only the persisted database row.
+		if err := model.SeedShopCustomPage(); err != nil {
+			common.SysError(common.LogText("failed to migrate the embedded shop URL: %s", err.Error()))
+		}
+	}
 
 	// 清理旧的磁盘缓存文件
 	common.CleanupOldCacheFiles()

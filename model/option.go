@@ -89,6 +89,9 @@ func InitOptionMap() {
 	common.OptionMap["WorkerAllowHttpImageRequestEnabled"] = strconv.FormatBool(system_setting.WorkerAllowHttpImageRequestEnabled)
 	common.OptionMap["PayAddress"] = ""
 	common.OptionMap["CustomCallbackAddress"] = ""
+	// Default shop URL: SeedShopCustomPage folds this value (or the persisted
+	// one) into CustomPages on the first startup after the upgrade, after which
+	// the retired option is no longer read.
 	common.OptionMap["LiandongShopUrl"] = "https://pay.ldxp.cn/shop/Q2JDSIRE"
 	common.OptionMap["KunCodeRelayPulseUrl"] = ""
 	common.OptionMap["EpayId"] = ""
@@ -258,16 +261,13 @@ func validateOptionValue(key string, value string) error {
 	if key == CustomPagesOptionKey {
 		return ValidateCustomPagesOption(value)
 	}
-	if key == "LiandongShopUrl" || key == "TopUpLink" {
+	if key == "TopUpLink" {
 		trimmed := strings.TrimSpace(value)
 		if trimmed == "" {
 			return nil
 		}
 		if !strings.HasPrefix(trimmed, "http://") && !strings.HasPrefix(trimmed, "https://") {
-			if key == "TopUpLink" {
-				return fmt.Errorf("TopUpLink must start with http:// or https://")
-			}
-			return fmt.Errorf("LiandongShopUrl must start with http:// or https://")
+			return fmt.Errorf("TopUpLink must start with http:// or https://")
 		}
 	}
 	if key == "AffiliateTopupRebateRate" || key == "AffiliateRedemptionRebateRate" {

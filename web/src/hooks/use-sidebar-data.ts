@@ -39,7 +39,6 @@ import {
   Radio,
   ServerCog,
   Settings,
-  Store,
   ShieldCheck,
   Ticket,
   User,
@@ -50,7 +49,6 @@ import { useTranslation } from 'react-i18next'
 
 import type { SidebarData } from '@/components/layout/types'
 import { useCustomPages } from '@/features/custom-pages/hooks/use-custom-pages'
-import { useStatus } from '@/hooks/use-status'
 import { ROLE } from '@/lib/roles'
 
 /**
@@ -61,11 +59,6 @@ import { ROLE } from '@/lib/roles'
  */
 export function useSidebarData(): SidebarData {
   const { t } = useTranslation()
-  const { status } = useStatus()
-  const shopUrl =
-    typeof status?.liandong_shop_url === 'string'
-      ? status.liandong_shop_url.trim()
-      : ''
   const { links: customPageLinks } = useCustomPages()
 
   return {
@@ -164,16 +157,6 @@ export function useSidebarData(): SidebarData {
             url: '/profile',
             icon: User,
           },
-          ...(shopUrl
-            ? [
-                {
-                  title: t('Shop'),
-                  url: '/shop',
-                  icon: Store,
-                  highlight: true,
-                },
-              ]
-            : []),
           {
             title: t('Security & Access'),
             url: '/security',
@@ -190,6 +173,7 @@ export function useSidebarData(): SidebarData {
                 title: t(page.name),
                 url: page.href,
                 icon: PanelsTopLeft,
+                highlight: page.highlight,
                 // The API already hides admin-only pages from other roles;
                 // requiredRole keeps a stale cache from leaking the entry.
                 ...(page.adminOnly ? { requiredRole: ROLE.ADMIN } : {}),

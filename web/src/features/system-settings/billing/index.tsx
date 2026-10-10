@@ -67,7 +67,6 @@ const defaultBillingSettings: BillingSettings = {
   EpayKey: '',
   Price: 7.3,
   MinTopUp: 1,
-  LiandongShopUrl: '',
   CustomCallbackAddress: '',
   PayMethods: '',
   'payment_setting.amount_options': '',

@@ -81,6 +81,9 @@ it('lists the configured pages and appends an empty row', async () => {
   expect(nameInputs).toHaveLength(2)
   expect(nameInputs[1]).toHaveValue('')
   expect(screen.getAllByRole('switch', { name: 'Admins only' })).toHaveLength(2)
+  expect(
+    screen.getAllByRole('switch', { name: 'Highlight in sidebar' })
+  ).toHaveLength(2)
 })
 
 it('removes a page row and shows the empty hint when none are left', async () => {

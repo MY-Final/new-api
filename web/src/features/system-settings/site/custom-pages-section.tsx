@@ -71,6 +71,7 @@ const customPagesSchema = z.object({
             'URL must start with http:// or https://'
           ),
         adminOnly: z.boolean(),
+        highlight: z.boolean(),
       })
     )
     .max(MAX_CUSTOM_PAGES, TOO_MANY_PAGES_MESSAGE),
@@ -116,6 +117,7 @@ export function CustomPagesSection({
         name: page.name.trim(),
         url: page.url.trim(),
         adminOnly: page.adminOnly,
+        highlight: page.highlight,
       }))
     )
     if (serialized === initialSerialized) return
@@ -211,6 +213,23 @@ export function CustomPagesSection({
                       </FormItem>
                     )}
                   />
+                  <FormField
+                    control={form.control}
+                    name={`pages.${index}.highlight`}
+                    render={({ field: highlightField }) => (
+                      <FormItem>
+                        <FormLabel>{t('Highlight in sidebar')}</FormLabel>
+                        <div className='flex h-8 items-center'>
+                          <FormControl>
+                            <Switch
+                              checked={highlightField.value}
+                              onCheckedChange={highlightField.onChange}
+                            />
+                          </FormControl>
+                        </div>
+                      </FormItem>
+                    )}
+                  />
                   <Button
                     type='button'
                     variant='ghost'
@@ -229,7 +248,14 @@ export function CustomPagesSection({
               variant='outline'
               size='sm'
               disabled={isFull}
-              onClick={() => pages.append({ name: '', url: '', adminOnly: false })}
+              onClick={() =>
+                pages.append({
+                  name: '',
+                  url: '',
+                  adminOnly: false,
+                  highlight: false,
+                })
+              }
             >
               <Plus className='size-4' aria-hidden='true' />
               {t('Add page')}

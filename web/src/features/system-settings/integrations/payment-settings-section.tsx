@@ -106,11 +106,6 @@ const paymentSchema = z.object({
   EpayKey: z.string(),
   Price: z.coerce.number().min(0),
   MinTopUp: z.coerce.number().min(0),
-  LiandongShopUrl: z.string().refine((value) => {
-    const trimmed = value.trim()
-    if (!trimmed) return true
-    return /^https?:\/\//.test(trimmed)
-  }, 'Provide a valid URL starting with http:// or https://'),
   CustomCallbackAddress: z
     .string()
     .refine(
@@ -430,7 +425,6 @@ export function PaymentSettingsSection({
       EpayKey: values.EpayKey.trim(),
       Price: values.Price,
       MinTopUp: values.MinTopUp,
-      LiandongShopUrl: values.LiandongShopUrl.trim(),
       CustomCallbackAddress: removeTrailingSlash(values.CustomCallbackAddress),
       PayMethods: values.PayMethods.trim(),
       AmountOptions: values.AmountOptions.trim(),
@@ -473,7 +467,6 @@ export function PaymentSettingsSection({
       EpayKey: initialRef.current.EpayKey.trim(),
       Price: initialRef.current.Price,
       MinTopUp: initialRef.current.MinTopUp,
-      LiandongShopUrl: initialRef.current.LiandongShopUrl.trim(),
       CustomCallbackAddress: removeTrailingSlash(
         initialRef.current.CustomCallbackAddress
       ),
@@ -535,10 +528,6 @@ export function PaymentSettingsSection({
 
     if (sanitized.MinTopUp !== initial.MinTopUp) {
       updates.push({ key: 'MinTopUp', value: sanitized.MinTopUp })
-    }
-
-    if (sanitized.LiandongShopUrl !== initial.LiandongShopUrl) {
-      updates.push({ key: 'LiandongShopUrl', value: sanitized.LiandongShopUrl })
     }
 
     if (sanitized.CustomCallbackAddress !== initial.CustomCallbackAddress) {
@@ -963,29 +952,6 @@ export function PaymentSettingsSection({
                     )}
                   />
                 </div>
-
-                <FormField
-                  control={form.control}
-                  name='LiandongShopUrl'
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t('Liandong Shop URL')}</FormLabel>
-                      <FormControl>
-                        <Input
-                          type='url'
-                          placeholder='https://pay.ldxp.cn/shop/XXXX'
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        {t(
-                          'Link to your Liandong shop. It is embedded in the Shop menu. Leave empty to hide the Shop menu.'
-                        )}
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
 
                 <FormField
                   control={form.control}

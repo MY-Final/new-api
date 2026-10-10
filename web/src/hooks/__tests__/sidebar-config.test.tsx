@@ -202,11 +202,13 @@ describe('Custom pages sidebar group', () => {
         name: 'Status page',
         url: 'https://status.example.com',
         adminOnly: false,
+        highlight: false,
       },
       {
         name: 'Monitoring',
         url: 'https://monitoring.example.com',
         adminOnly: true,
+        highlight: true,
       },
     ])
 
@@ -223,6 +225,8 @@ describe('Custom pages sidebar group', () => {
       '/embed/monitoring',
     ])
     expect(group?.items[1].requiredRole).toBe(ROLE.ADMIN)
+    // Highlighted pages (the shop) keep the emphasized sidebar style.
+    expect(group?.items.map((item) => item.highlight)).toEqual([false, true])
 
     const hidden = sidebarFor()
     expect(

@@ -27,6 +27,8 @@ export type CustomPage = {
   name: string
   url: string
   adminOnly: boolean
+  /** Renders the sidebar entry with the highlighted style (the shop uses it). */
+  highlight: boolean
 }
 
 export type CustomPageLink = CustomPage & {
@@ -60,7 +62,12 @@ export function normalizeCustomPages(value: unknown): CustomPage[] {
     const name = typeof candidate.name === 'string' ? candidate.name.trim() : ''
     const url = typeof candidate.url === 'string' ? candidate.url.trim() : ''
     if (!name || !url) continue
-    pages.push({ name, url, adminOnly: candidate.adminOnly === true })
+    pages.push({
+      name,
+      url,
+      adminOnly: candidate.adminOnly === true,
+      highlight: candidate.highlight === true,
+    })
   }
   return pages
 }

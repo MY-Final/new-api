@@ -12,11 +12,18 @@ import (
 
 const (
 	// CustomPagesOptionKey stores the administrator-defined embedded pages as a
-	// JSON array of {name, url, adminOnly} entries. Array order is menu order.
+	// JSON array of {name, url, adminOnly, highlight} entries. Array order is
+	// menu order.
 	CustomPagesOptionKey = "CustomPages"
 	// LegacyChannelDetectionOptionKey held the single channel detection URL
 	// before custom pages existed. It is migrated into CustomPages on startup.
 	LegacyChannelDetectionOptionKey = "KunCodeRelayPulseUrl"
+	// LegacyShopOptionKey held the single embedded shop URL. SeedShopCustomPage
+	// folds its effective value into CustomPages and retires it.
+	LegacyShopOptionKey = "LiandongShopUrl"
+	// shopPageMigrationMarkerKey records that the shop was folded into
+	// CustomPages, so the admin's later edits are never overwritten.
+	shopPageMigrationMarkerKey = "migration.shop_page_seeded"
 
 	maxCustomPages       = 20
 	maxCustomPageNameLen = 30
@@ -24,11 +31,13 @@ const (
 )
 
 // CustomPage is one administrator-configured embedded page: a sidebar entry
-// whose target URL the console shows inside an iframe.
+// whose target URL the console shows inside an iframe. Highlight marks the
+// entry as emphasized in the sidebar (the shop uses it).
 type CustomPage struct {
 	Name      string `json:"name"`
 	URL       string `json:"url"`
 	AdminOnly bool   `json:"adminOnly"`
+	Highlight bool   `json:"highlight"`
 }
 
 // ParseCustomPages normalizes the stored option value. The database may hold a
@@ -64,7 +73,12 @@ func ParseCustomPages(raw string) ([]CustomPage, error) {
 			return nil, fmt.Errorf("custom page name %q is used more than once", name)
 		}
 		names[key] = struct{}{}
-		pages = append(pages, CustomPage{Name: name, URL: target, AdminOnly: entry.AdminOnly})
+		pages = append(pages, CustomPage{
+			Name:      name,
+			URL:       target,
+			AdminOnly: entry.AdminOnly,
+			Highlight: entry.Highlight,
+		})
 	}
 	return pages, nil
 }

@@ -55,7 +55,12 @@ afterEach(() => {
 
 it('embeds the configured page in a sandboxed frame with a new-tab escape hatch', async () => {
   renderEmbed('monitoring', [
-    { name: 'Monitoring', url: 'https://mon.example.com', adminOnly: true },
+    {
+      name: 'Monitoring',
+      url: 'https://mon.example.com',
+      adminOnly: true,
+      highlight: true,
+    },
   ])
 
   const frame = await screen.findByTitle('Monitoring')
@@ -73,7 +78,12 @@ it('embeds the configured page in a sandboxed frame with a new-tab escape hatch'
 
 it('explains when the page is not available to this user', async () => {
   renderEmbed('monitoring', [
-    { name: 'Status', url: 'https://status.example.com', adminOnly: false },
+    {
+      name: 'Status',
+      url: 'https://status.example.com',
+      adminOnly: false,
+      highlight: false,
+    },
   ])
 
   expect(await screen.findByText('Page not found')).toBeInTheDocument()

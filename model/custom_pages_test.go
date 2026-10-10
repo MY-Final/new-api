@@ -12,13 +12,14 @@ import (
 
 func TestParseCustomPagesNormalizesEntries(t *testing.T) {
 	pages, err := ParseCustomPages(
-		`[{"name":" 服务状态 ","url":" https://status.example.com ","adminOnly":true}]`,
+		`[{"name":" 服务状态 ","url":" https://status.example.com ","adminOnly":true,"highlight":true}]`,
 	)
 	require.NoError(t, err)
 	require.Len(t, pages, 1)
 	assert.Equal(t, "服务状态", pages[0].Name)
 	assert.Equal(t, "https://status.example.com", pages[0].URL)
 	assert.True(t, pages[0].AdminOnly)
+	assert.True(t, pages[0].Highlight)
 
 	empty, err := ParseCustomPages("   ")
 	require.NoError(t, err)
@@ -164,4 +165,82 @@ func TestMigrateLegacyCustomPagesKeepsInvalidLegacyValue(t *testing.T) {
 
 	requireOptionMissing(t, db, CustomPagesOptionKey)
 	assert.Equal(t, "not-a-url", requireOptionValue(t, db, LegacyChannelDetectionOptionKey))
+}
+
+// withOptionMap swaps the process-wide option map for the test and restores it.
+func withOptionMap(t *testing.T, values map[string]string) {
+	t.Helper()
+	common.OptionMapRWMutex.Lock()
+	previous := common.OptionMap
+	common.OptionMap = values
+	common.OptionMapRWMutex.Unlock()
+	t.Cleanup(func() {
+		common.OptionMapRWMutex.Lock()
+		common.OptionMap = previous
+		common.OptionMapRWMutex.Unlock()
+	})
+}
+
+func TestSeedShopCustomPageSeedsEffectiveValueOnce(t *testing.T) {
+	db := useFrontendOptionMigrationDB(t)
+	shopURL := "https://pay.example.com/shop/abc"
+	require.NoError(t, db.Create(&Option{Key: LegacyShopOptionKey, Value: shopURL}).Error)
+	// The effective value comes from the option map, which also carries the
+	// code-level default during a real startup.
+	withOptionMap(t, map[string]string{LegacyShopOptionKey: shopURL})
+
+	require.NoError(t, SeedShopCustomPage())
+
+	pages, err := ParseCustomPages(requireOptionValue(t, db, CustomPagesOptionKey))
+	require.NoError(t, err)
+	require.Len(t, pages, 1)
+	assert.Equal(t, "Shop", pages[0].Name)
+	assert.Equal(t, shopURL, pages[0].URL)
+	assert.False(t, pages[0].AdminOnly)
+	assert.True(t, pages[0].Highlight, "the shop entry keeps its sidebar highlight")
+	requireOptionMissing(t, db, LegacyShopOptionKey)
+	assert.Equal(t, "true", requireOptionValue(t, db, shopPageMigrationMarkerKey))
+
+	common.OptionMapRWMutex.RLock()
+	_, stillLoaded := common.OptionMap[LegacyShopOptionKey]
+	common.OptionMapRWMutex.RUnlock()
+	assert.False(t, stillLoaded, "the retired option is dropped from memory")
+
+	// The marker makes it one-time: an administrator removing the entry must not
+	// see it resurrected on the next startup.
+	require.NoError(t, UpdateOption(CustomPagesOptionKey, "[]"))
+	require.NoError(t, SeedShopCustomPage())
+
+	pages, err = ParseCustomPages(requireOptionValue(t, db, CustomPagesOptionKey))
+	require.NoError(t, err)
+	assert.Empty(t, pages)
+}
+
+func TestSeedShopCustomPageKeepsAnExistingEntry(t *testing.T) {
+	db := useFrontendOptionMigrationDB(t)
+	shopURL := "https://pay.example.com/shop/abc"
+	configured := `[{"name":"Shop","url":"` + shopURL + `","adminOnly":false,"highlight":true}]`
+	require.NoError(t, db.Create([]Option{
+		{Key: CustomPagesOptionKey, Value: configured},
+		{Key: LegacyShopOptionKey, Value: shopURL},
+	}).Error)
+	withOptionMap(t, map[string]string{
+		LegacyShopOptionKey:  shopURL,
+		CustomPagesOptionKey: configured,
+	})
+
+	require.NoError(t, SeedShopCustomPage())
+
+	assert.Equal(t, configured, requireOptionValue(t, db, CustomPagesOptionKey))
+	requireOptionMissing(t, db, LegacyShopOptionKey)
+}
+
+func TestSeedShopCustomPageSkipsWhenNothingConfigured(t *testing.T) {
+	db := useFrontendOptionMigrationDB(t)
+	withOptionMap(t, map[string]string{})
+
+	require.NoError(t, SeedShopCustomPage())
+
+	requireOptionMissing(t, db, CustomPagesOptionKey)
+	assert.Equal(t, "true", requireOptionValue(t, db, shopPageMigrationMarkerKey))
 }

@@ -34,8 +34,18 @@ describe('custom page links', () => {
 
   it('keeps duplicate slugs unique so every entry opens its own page', () => {
     const links = buildCustomPageLinks([
-      { name: 'Status', url: 'https://a.example.com', adminOnly: false },
-      { name: 'status', url: 'https://b.example.com', adminOnly: true },
+      {
+        name: 'Status',
+        url: 'https://a.example.com',
+        adminOnly: false,
+        highlight: false,
+      },
+      {
+        name: 'status',
+        url: 'https://b.example.com',
+        adminOnly: true,
+        highlight: true,
+      },
     ])
 
     expect(links.map((link) => link.slug)).toEqual(['status', 'status-2'])
@@ -44,6 +54,7 @@ describe('custom page links', () => {
       '/embed/status-2',
     ])
     expect(links[1].adminOnly).toBe(true)
+    expect(links[1].highlight).toBe(true)
   })
 })
 
@@ -51,14 +62,24 @@ describe('custom page payload handling', () => {
   it('drops malformed entries from an API payload', () => {
     expect(
       normalizeCustomPages([
-        { name: ' ok ', url: ' https://a.example.com ', adminOnly: true },
+        {
+          name: ' ok ',
+          url: ' https://a.example.com ',
+          adminOnly: true,
+          highlight: true,
+        },
         { name: '', url: 'https://missing-name.example.com' },
         { name: 'missing url' },
         null,
         'not an entry',
       ])
     ).toEqual([
-      { name: 'ok', url: 'https://a.example.com', adminOnly: true },
+      {
+        name: 'ok',
+        url: 'https://a.example.com',
+        adminOnly: true,
+        highlight: true,
+      },
     ])
 
     expect(normalizeCustomPages('nope')).toEqual([])
@@ -66,7 +87,12 @@ describe('custom page payload handling', () => {
 
   it('round-trips the stored option value', () => {
     const pages = [
-      { name: '监控', url: 'https://mon.example.com', adminOnly: true },
+      {
+        name: '监控',
+        url: 'https://mon.example.com',
+        adminOnly: true,
+        highlight: true,
+      },
     ]
     expect(parseCustomPagesOption(serializeCustomPages(pages))).toEqual(pages)
     expect(parseCustomPagesOption('')).toEqual([])
