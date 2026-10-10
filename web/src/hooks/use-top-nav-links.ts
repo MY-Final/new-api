@@ -116,5 +116,11 @@ export function useTopNavLinks(): TopNavLink[] {
     links.push({ title: t('Contact Us'), href: '/contact' })
   }
 
+  // Administrator-defined links: names display exactly as typed, every visitor
+  // sees them, and they open in a new tab instead of being embedded.
+  for (const link of modules?.links ?? []) {
+    links.push({ title: link.name, href: link.url, external: true })
+  }
+
   return links
 }

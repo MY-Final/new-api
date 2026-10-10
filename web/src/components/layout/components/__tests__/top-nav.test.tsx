@@ -105,6 +105,31 @@ describe('top navigation contact action', () => {
     expect(download).toHaveAttribute('rel', 'noopener noreferrer')
   })
 
+  test('shows administrator-defined links as public external links', () => {
+    renderNavLinks({
+      HeaderNavModules: JSON.stringify({
+        links: [
+          { name: '官网', url: 'https://example.com' },
+          { name: 'Help', url: 'https://help.example.com' },
+          // Dropped before rendering: it must never become a navigation target.
+          { name: 'Bad', url: 'javascript:alert(1)' },
+        ],
+      }),
+    })
+
+    const official = screen.getByRole('link', { name: '官网' })
+    expect(official).toHaveAttribute('href', 'https://example.com')
+    expect(official).toHaveAttribute('target', '_blank')
+    expect(official).toHaveAttribute('rel', 'noopener noreferrer')
+    expect(screen.getByRole('link', { name: 'Help' })).toHaveAttribute(
+      'href',
+      'https://help.example.com'
+    )
+    expect(
+      screen.queryByRole('link', { name: 'Bad' })
+    ).not.toBeInTheDocument()
+  })
+
   test('opens the contact dialog instead of navigating to the contact route', () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },

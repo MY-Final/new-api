@@ -261,6 +261,9 @@ func validateOptionValue(key string, value string) error {
 	if key == CustomPagesOptionKey {
 		return ValidateCustomPagesOption(value)
 	}
+	if key == "HeaderNavModules" {
+		return ValidateHeaderNavModulesOption(value)
+	}
 	if key == "TopUpLink" {
 		trimmed := strings.TrimSpace(value)
 		if trimmed == "" {

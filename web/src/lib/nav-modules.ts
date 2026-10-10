@@ -18,11 +18,25 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import type { QueryClient } from '@tanstack/react-query'
 
+import { isHttpUrl } from '@/lib/content-format'
 import { readCachedStatus, statusQueryOptions } from '@/lib/status-query'
 
 export type ModuleAccess = { enabled: boolean; requireAuth: boolean }
 
 export type HeaderNavModule = 'rankings' | 'pricing'
+
+/**
+ * One administrator-defined external link in the top navigation. It is stored
+ * inside HeaderNavModules and published through the unauthenticated status
+ * payload, so label and URL are public by design.
+ */
+export type HeaderNavLink = {
+  name: string
+  url: string
+}
+
+export const MAX_HEADER_NAV_LINKS = 10
+export const MAX_HEADER_NAV_LINK_NAME_LENGTH = 20
 
 export type HeaderNavModules = {
   home: boolean
@@ -33,7 +47,8 @@ export type HeaderNavModules = {
   about: boolean
   contact: boolean
   setupDownload: boolean
-  [key: string]: boolean | ModuleAccess
+  links: HeaderNavLink[]
+  [key: string]: boolean | ModuleAccess | HeaderNavLink[]
 }
 
 const DEFAULT_HEADER_NAV_MODULES: HeaderNavModules = {
@@ -45,6 +60,7 @@ const DEFAULT_HEADER_NAV_MODULES: HeaderNavModules = {
   about: true,
   contact: true,
   setupDownload: true,
+  links: [],
 }
 
 const DEFAULTS: Record<HeaderNavModule, ModuleAccess> = {
@@ -57,7 +73,29 @@ function cloneHeaderNavDefaults(): HeaderNavModules {
     ...DEFAULT_HEADER_NAV_MODULES,
     pricing: { ...DEFAULT_HEADER_NAV_MODULES.pricing },
     rankings: { ...DEFAULT_HEADER_NAV_MODULES.rankings },
+    links: [],
   }
+}
+
+/**
+ * Normalizes the administrator-defined top navigation links. The value arrives
+ * from the unauthenticated status payload, so anything that is not a labelled
+ * absolute http(s) URL is dropped before it can reach an anchor.
+ */
+export function parseHeaderNavLinks(raw: unknown): HeaderNavLink[] {
+  if (!Array.isArray(raw)) return []
+
+  const links: HeaderNavLink[] = []
+  for (const entry of raw) {
+    if (links.length >= MAX_HEADER_NAV_LINKS) break
+    if (!entry || typeof entry !== 'object') continue
+    const candidate = entry as { name?: unknown; url?: unknown }
+    const name = typeof candidate.name === 'string' ? candidate.name.trim() : ''
+    const url = typeof candidate.url === 'string' ? candidate.url.trim() : ''
+    if (!name || !isHttpUrl(url)) continue
+    links.push({ name, url })
+  }
+  return links
 }
 
 export function parseHeaderNavBoolean(
@@ -122,6 +160,10 @@ export function parseHeaderNavModules(raw: unknown): HeaderNavModules {
     }
     if (key === 'rankings') {
       result.rankings = parseAccess(value, result.rankings)
+      return
+    }
+    if (key === 'links') {
+      result.links = parseHeaderNavLinks(value)
       return
     }
 

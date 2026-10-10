@@ -1,11 +1,8 @@
 package model
 
 import (
-	"errors"
 	"fmt"
-	"net/url"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
 )
@@ -114,36 +111,9 @@ func GetCustomPagesForRole(role int) ([]CustomPage, error) {
 }
 
 func normalizeCustomPageName(name string) (string, error) {
-	trimmed := strings.TrimSpace(name)
-	if trimmed == "" {
-		return "", errors.New("custom page name cannot be empty")
-	}
-	if utf8.RuneCountInString(trimmed) > maxCustomPageNameLen {
-		return "", fmt.Errorf("custom page name cannot exceed %d characters", maxCustomPageNameLen)
-	}
-	if strings.ContainsAny(trimmed, "\r\n\t") {
-		return "", errors.New("custom page name cannot contain line breaks")
-	}
-	return trimmed, nil
+	return normalizeNavLabel("custom page", name, maxCustomPageNameLen)
 }
 
 func normalizeCustomPageURL(target string) (string, error) {
-	trimmed := strings.TrimSpace(target)
-	if trimmed == "" {
-		return "", errors.New("custom page URL cannot be empty")
-	}
-	if len(trimmed) > maxCustomPageURLLen {
-		return "", fmt.Errorf("custom page URL cannot exceed %d characters", maxCustomPageURLLen)
-	}
-	parsed, err := url.Parse(trimmed)
-	if err != nil {
-		return "", errors.New("custom page URL is not a valid URL")
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return "", errors.New("custom page URL must start with http:// or https://")
-	}
-	if parsed.Host == "" {
-		return "", errors.New("custom page URL must include a host")
-	}
-	return trimmed, nil
+	return normalizeExternalNavURL("custom page", target, maxCustomPageURLLen)
 }

@@ -17,20 +17,28 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
+import { Plus, Trash2 } from 'lucide-react'
 import { useEffect, useMemo } from 'react'
-import { useForm } from 'react-hook-form'
+import { useFieldArray, useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import * as z from 'zod'
 
+import { Button } from '@/components/ui/button'
 import {
   Form,
   FormControl,
   FormDescription,
   FormField,
+  FormItem,
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
+import {
+  MAX_HEADER_NAV_LINKS,
+  MAX_HEADER_NAV_LINK_NAME_LENGTH,
+} from '@/lib/nav-modules'
 
 import {
   SettingsControlChildren,
@@ -49,6 +57,28 @@ import {
 } from './config'
 
 const headerNavSchema = z.object({
+  links: z
+    .array(
+      z.object({
+        name: z
+          .string()
+          .trim()
+          .min(1, 'Name is required')
+          .max(
+            MAX_HEADER_NAV_LINK_NAME_LENGTH,
+            'Link name cannot exceed 20 characters'
+          ),
+        url: z
+          .string()
+          .trim()
+          .min(1, 'URL is required')
+          .refine(
+            (value) => /^https?:\/\/\S+$/i.test(value.trim()),
+            'URL must start with http:// or https://'
+          ),
+      })
+    )
+    .max(MAX_HEADER_NAV_LINKS, 'At most 10 links are supported'),
   home: z.boolean(),
   console: z.boolean(),
   pricingEnabled: z.boolean(),
@@ -63,12 +93,16 @@ const headerNavSchema = z.object({
 
 type HeaderNavFormValues = z.infer<typeof headerNavSchema>
 
+/** Every form field except the custom link list renders as a switch. */
+type HeaderNavSwitchKey = Exclude<keyof HeaderNavFormValues, 'links'>
+
 type HeaderNavigationSectionProps = {
   config: HeaderNavModulesConfig
   initialSerialized: string
 }
 
 const toFormValues = (config: HeaderNavModulesConfig): HeaderNavFormValues => ({
+  links: (config.links ?? []).map((link) => ({ ...link })),
   home:
     config.home === undefined ? HEADER_NAV_DEFAULT.home : Boolean(config.home),
   console:
@@ -120,6 +154,8 @@ export function HeaderNavigationSection({
     defaultValues: formDefaults,
   })
 
+  const linkFields = useFieldArray({ control: form.control, name: 'links' })
+
   useEffect(() => {
     form.reset(formDefaults)
   }, [formDefaults, form])
@@ -127,6 +163,10 @@ export function HeaderNavigationSection({
   const onSubmit = async (values: HeaderNavFormValues) => {
     const payload: HeaderNavModulesConfig = {
       ...config,
+      links: values.links.map((link) => ({
+        name: link.name.trim(),
+        url: link.url.trim(),
+      })),
       home: values.home,
       console: values.console,
       docs: values.docs,
@@ -161,7 +201,7 @@ export function HeaderNavigationSection({
   }
 
   const simpleModules: Array<{
-    key: keyof HeaderNavFormValues
+    key: HeaderNavSwitchKey
     title: string
     description: string
   }> = [
@@ -200,8 +240,8 @@ export function HeaderNavigationSection({
   ]
 
   const accessModules: Array<{
-    enabledKey: keyof HeaderNavFormValues
-    requireAuthKey: keyof HeaderNavFormValues
+    enabledKey: HeaderNavSwitchKey
+    requireAuthKey: HeaderNavSwitchKey
     requireAuthDependsOn: 'pricingEnabled' | 'rankingsEnabled'
     title: string
     description: string
@@ -317,6 +357,85 @@ export function HeaderNavigationSection({
                 />
               </SettingsControlGroup>
             ))}
+          </div>
+
+          <div className='space-y-3'>
+            <div className='space-y-1'>
+              <p className='text-sm font-medium'>{t('Custom links')}</p>
+              <p className='text-muted-foreground text-sm'>
+                {t(
+                  'Up to {{count}} links. Names display exactly as typed; URLs open in a new tab and are visible to every visitor.',
+                  { count: MAX_HEADER_NAV_LINKS }
+                )}
+              </p>
+            </div>
+
+            {linkFields.fields.length === 0 && (
+              <p className='text-muted-foreground rounded-lg border border-dashed px-3 py-6 text-center text-sm'>
+                {t('No custom links yet.')}
+              </p>
+            )}
+
+            {linkFields.fields.map((field, index) => (
+              <div
+                key={field.id}
+                className='grid gap-3 rounded-lg border p-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto]'
+              >
+                <FormField
+                  control={form.control}
+                  name={`links.${index}.name`}
+                  render={({ field: nameField }) => (
+                    <FormItem>
+                      <FormLabel>{t('Link name')}</FormLabel>
+                      <FormControl>
+                        <Input {...nameField} autoComplete='off' />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name={`links.${index}.url`}
+                  render={({ field: urlField }) => (
+                    <FormItem>
+                      <FormLabel>{t('URL')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...urlField}
+                          placeholder='https://example.com'
+                          autoComplete='off'
+                          inputMode='url'
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <div className='flex items-end'>
+                  <Button
+                    type='button'
+                    variant='ghost'
+                    size='icon'
+                    aria-label={t('Remove link')}
+                    onClick={() => linkFields.remove(index)}
+                  >
+                    <Trash2 className='size-4' aria-hidden='true' />
+                  </Button>
+                </div>
+              </div>
+            ))}
+
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              disabled={linkFields.fields.length >= MAX_HEADER_NAV_LINKS}
+              onClick={() => linkFields.append({ name: '', url: '' })}
+            >
+              <Plus className='size-4' aria-hidden='true' />
+              {t('Add link')}
+            </Button>
           </div>
         </SettingsForm>
       </Form>
