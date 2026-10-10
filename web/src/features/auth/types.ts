@@ -143,7 +143,6 @@ export interface SystemStatus {
     password_login_encryption_enabled?: boolean
     password_register_enabled?: boolean
     custom_oauth_providers?: CustomOAuthProviderInfo[]
-    kuncode_relay_pulse_url?: string
     api_base_urls?: string[]
     contact?: ContactStatus
     [key: string]: unknown
@@ -193,7 +192,6 @@ export interface SystemStatus {
   password_login_encryption_enabled?: boolean
   password_register_enabled?: boolean
   custom_oauth_providers?: CustomOAuthProviderInfo[]
-  kuncode_relay_pulse_url?: string
   api_base_urls?: string[]
   contact?: ContactStatus
   [key: string]: unknown

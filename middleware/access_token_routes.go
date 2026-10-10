@@ -55,6 +55,7 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"POST /api/desktop/keys/:id/reveal": accessTokenScopeRule(model.DesktopKeysRevealScope),
 	// router/api-router.go: top level
 	"GET /api/models":                     accessTokenScopeRule("profile:read"),
+	"GET /api/custom-pages":               accessTokenScopeRule("profile:read"),
 	"GET /api/status/test":                accessTokenScopeRule("log:read"),
 	"GET /api/pricing":                    accessTokenAnyRule,
 	"GET /api/perf-metrics/summary":       accessTokenAnyRule,

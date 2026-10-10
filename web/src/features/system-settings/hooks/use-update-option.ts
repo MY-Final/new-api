@@ -40,7 +40,6 @@ const STATUS_RELATED_KEYS = new Set([
   'general_setting.custom_currency_symbol',
   'general_setting.custom_currency_exchange_rate',
   'oidc.display_name',
-  'KunCodeRelayPulseUrl',
   'ApiBaseURLs',
   'ServerAddress',
   'contact.title',
@@ -73,6 +72,12 @@ export function useUpdateOption() {
           } catch {
             /* empty */
           }
+        }
+
+        // The sidebar and the embed page read custom pages through their own
+        // query, so an edit must refresh it instead of the status payload.
+        if (variables.key === 'CustomPages') {
+          queryClient.invalidateQueries({ queryKey: ['custom-pages'] })
         }
 
         toast.success(i18next.t('Setting updated successfully'))

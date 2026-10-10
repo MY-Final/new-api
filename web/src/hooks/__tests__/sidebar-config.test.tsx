@@ -26,6 +26,8 @@ import {
   parseSidebarModulesAdmin,
   serializeSidebarModulesAdmin,
 } from '@/features/system-settings/maintenance/config'
+import type { CustomPage } from '@/lib/custom-pages'
+import { ROLE } from '@/lib/roles'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { useSidebarConfig } from '../use-sidebar-config'
@@ -49,15 +51,15 @@ function sidebarFor(
   admin?: object,
   user?: object,
   canConfigure = true,
-  relayPulseUrl = ''
+  customPages: CustomPage[] = []
 ) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
   client.setQueryData(['status'], {
     SidebarModulesAdmin: admin ? JSON.stringify(admin) : '',
-    kuncode_relay_pulse_url: relayPulseUrl,
   })
+  client.setQueryData(['custom-pages'], customPages)
   useAuthStore.getState().auth.setUser({
     id: 1,
     username: 'alice',
@@ -193,37 +195,38 @@ describe('audit log sidebar entry', () => {
   })
 })
 
-describe('Channel Detection sidebar entry', () => {
-  it('shows only when an embed URL is configured', () => {
-    const configured = sidebarFor(
-      undefined,
-      undefined,
-      true,
-      'https://pulse.example.com'
+describe('Custom pages sidebar group', () => {
+  it('lists configured pages with their embed links and hides the group without pages', () => {
+    const configured = sidebarFor(undefined, undefined, true, [
+      {
+        name: 'Status page',
+        url: 'https://status.example.com',
+        adminOnly: false,
+      },
+      {
+        name: 'Monitoring',
+        url: 'https://monitoring.example.com',
+        adminOnly: true,
+      },
+    ])
+
+    const group = configured.result.current.find(
+      (navGroup) => navGroup.id === 'custom-pages'
     )
-    expect(
-      configured.result.current
-        .flatMap((group) => group.items)
-        .some((item) => item.title === 'Channel Detection')
-    ).toBe(true)
+    expect(group?.title).toBe('Custom Pages')
+    expect(group?.items.map((item) => item.title)).toEqual([
+      'Status page',
+      'Monitoring',
+    ])
+    expect(group?.items.map((item) => item.url)).toEqual([
+      '/embed/status-page',
+      '/embed/monitoring',
+    ])
+    expect(group?.items[1].requiredRole).toBe(ROLE.ADMIN)
 
     const hidden = sidebarFor()
     expect(
-      hidden.result.current
-        .flatMap((group) => group.items)
-        .some((item) => item.title === 'Channel Detection')
-    ).toBe(false)
-
-    const disabled = sidebarFor(
-      { console: { enabled: true, relayPulse: false } },
-      undefined,
-      true,
-      'https://pulse.example.com'
-    )
-    expect(
-      disabled.result.current
-        .flatMap((group) => group.items)
-        .some((item) => item.title === 'Channel Detection')
+      hidden.result.current.some((navGroup) => navGroup.id === 'custom-pages')
     ).toBe(false)
   })
 })

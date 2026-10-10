@@ -255,7 +255,10 @@ func validateOptionValue(key string, value string) error {
 	if err := system_setting.ValidateContactOption(key, value); err != nil {
 		return err
 	}
-	if key == "LiandongShopUrl" || key == "KunCodeRelayPulseUrl" || key == "TopUpLink" {
+	if key == CustomPagesOptionKey {
+		return ValidateCustomPagesOption(value)
+	}
+	if key == "LiandongShopUrl" || key == "TopUpLink" {
 		trimmed := strings.TrimSpace(value)
 		if trimmed == "" {
 			return nil
@@ -264,10 +267,7 @@ func validateOptionValue(key string, value string) error {
 			if key == "TopUpLink" {
 				return fmt.Errorf("TopUpLink must start with http:// or https://")
 			}
-			if key == "LiandongShopUrl" {
-				return fmt.Errorf("LiandongShopUrl must start with http:// or https://")
-			}
-			return fmt.Errorf("KunCodeRelayPulseUrl must start with http:// or https://")
+			return fmt.Errorf("LiandongShopUrl must start with http:// or https://")
 		}
 	}
 	if key == "AffiliateTopupRebateRate" || key == "AffiliateRedemptionRebateRate" {

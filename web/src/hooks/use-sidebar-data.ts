@@ -34,6 +34,7 @@ import {
   LayoutDashboard,
   ListTodo,
   MessageSquare,
+  PanelsTopLeft,
   PlugZap,
   Radio,
   ServerCog,
@@ -48,6 +49,7 @@ import {
 import { useTranslation } from 'react-i18next'
 
 import type { SidebarData } from '@/components/layout/types'
+import { useCustomPages } from '@/features/custom-pages/hooks/use-custom-pages'
 import { useStatus } from '@/hooks/use-status'
 import { ROLE } from '@/lib/roles'
 
@@ -64,10 +66,7 @@ export function useSidebarData(): SidebarData {
     typeof status?.liandong_shop_url === 'string'
       ? status.liandong_shop_url.trim()
       : ''
-  const relayPulseUrl =
-    typeof status?.kuncode_relay_pulse_url === 'string'
-      ? status.kuncode_relay_pulse_url.trim()
-      : ''
+  const { links: customPageLinks } = useCustomPages()
 
   return {
     navGroups: [
@@ -126,15 +125,6 @@ export function useSidebarData(): SidebarData {
             url: '/usage-logs/common',
             icon: FileText,
           },
-          ...(relayPulseUrl
-            ? [
-                {
-                  title: t('Channel Detection'),
-                  url: '/kun-code-relay-pulse',
-                  icon: Activity,
-                },
-              ]
-            : []),
           {
             title: t('Audit Logs'),
             url: '/usage-logs/audit',
@@ -191,6 +181,22 @@ export function useSidebarData(): SidebarData {
           },
         ],
       },
+      ...(customPageLinks.length > 0
+        ? [
+            {
+              id: 'custom-pages',
+              title: t('Custom Pages'),
+              items: customPageLinks.map((page) => ({
+                title: t(page.name),
+                url: page.href,
+                icon: PanelsTopLeft,
+                // The API already hides admin-only pages from other roles;
+                // requiredRole keeps a stale cache from leaking the entry.
+                ...(page.adminOnly ? { requiredRole: ROLE.ADMIN } : {}),
+              })),
+            },
+          ]
+        : []),
       {
         id: 'admin',
         title: t('Admin'),

@@ -34,7 +34,7 @@ const defaultSiteSettings: SiteSettings = {
   ServerAddress: '',
   ApiBaseURLs: '',
   TaskPublicAddress: '',
-  KunCodeRelayPulseUrl: '',
+  CustomPages: '',
   'general_setting.docs_link': '',
   'legal.user_agreement': '',
   'legal.privacy_policy': '',
