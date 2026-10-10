@@ -129,7 +129,7 @@ export function UserUsageDialog(props: UserUsageDialogProps) {
       open={props.open}
       onOpenChange={props.onOpenChange}
       title={`${t('Usage Details')} - ${props.username}`}
-      contentClassName='sm:max-w-6xl'
+      contentClassName='sm:max-w-6xl lg:max-w-[min(94vw,1680px)]'
       bodyClassName='space-y-4'
     >
       <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>

@@ -30,7 +30,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { formatNumber, formatQuota, formatTimestamp } from '@/lib/format'
+import {
+  formatCompactNumber,
+  formatNumber,
+  formatQuota,
+  formatTimestamp,
+} from '@/lib/format'
 
 import { getUserUsageRequests, type UsageStatisticsParams } from '../api'
 
@@ -116,23 +121,41 @@ export function UsageRequestsTable(props: UsageRequestsTableProps) {
           {item.channel_name || (item.channel_id ? `#${item.channel_id}` : '-')}
         </TableCell>
         <TableCell>{item.success ? t('Success') : t('Failed')}</TableCell>
-        <TableCell className='hidden text-right tabular-nums lg:table-cell'>
-          {formatNumber(item.input_tokens)}
+        <TableCell
+          className='hidden text-right tabular-nums lg:table-cell'
+          title={formatNumber(item.input_tokens)}
+        >
+          {formatCompactNumber(item.input_tokens)}
         </TableCell>
-        <TableCell className='hidden text-right tabular-nums lg:table-cell'>
-          {formatNumber(item.output_tokens)}
+        <TableCell
+          className='hidden text-right tabular-nums lg:table-cell'
+          title={formatNumber(item.output_tokens)}
+        >
+          {formatCompactNumber(item.output_tokens)}
         </TableCell>
-        <TableCell className='hidden text-right tabular-nums xl:table-cell'>
-          {formatNumber(item.cache_read_tokens)}
+        <TableCell
+          className='hidden text-right tabular-nums xl:table-cell'
+          title={formatNumber(item.cache_read_tokens)}
+        >
+          {formatCompactNumber(item.cache_read_tokens)}
         </TableCell>
-        <TableCell className='hidden text-right tabular-nums xl:table-cell'>
-          {formatNumber(item.cache_write_tokens)}
+        <TableCell
+          className='hidden text-right tabular-nums xl:table-cell'
+          title={formatNumber(item.cache_write_tokens)}
+        >
+          {formatCompactNumber(item.cache_write_tokens)}
         </TableCell>
-        <TableCell className='hidden text-right tabular-nums xl:table-cell'>
-          {formatNumber(item.reasoning_tokens)}
+        <TableCell
+          className='hidden text-right tabular-nums xl:table-cell'
+          title={formatNumber(item.reasoning_tokens)}
+        >
+          {formatCompactNumber(item.reasoning_tokens)}
         </TableCell>
-        <TableCell className='text-right tabular-nums'>
-          {formatNumber(item.total_tokens)}
+        <TableCell
+          className='text-right tabular-nums'
+          title={formatNumber(item.total_tokens)}
+        >
+          {formatCompactNumber(item.total_tokens)}
         </TableCell>
         <TableCell className='text-right font-medium tabular-nums'>
           {formatQuota(item.user_cost)}

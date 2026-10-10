@@ -91,4 +91,32 @@ describe('ModelUsageTable', () => {
     expect(modelOrder()[0]).toContain('gamma')
     expect(modelOrder()[2]).toContain('alpha')
   })
+  it('keeps long token counts narrow while exposing the exact value on hover', () => {
+    render(
+      <ModelUsageTable
+        data={[
+          {
+            ...emptyMetrics,
+            model_name: 'deepseek-v4-flash',
+            request_count: 3730,
+            input_tokens: 711_084_385,
+            total_tokens: 714_792_396,
+            user_cost: 6.97,
+          },
+        ]}
+      />
+    )
+
+    // Dense token columns stay compact so the last columns fit without scrolling.
+    expect(screen.getByText('711.1M')).toBeInTheDocument()
+    expect(screen.getByText('714.8M')).toBeInTheDocument()
+    expect(screen.queryByText('711,084,385')).not.toBeInTheDocument()
+    // The exact number stays reachable for auditing.
+    expect(screen.getByText('711.1M')).toHaveAttribute(
+      'title',
+      '711,084,385'
+    )
+    // Request counts stay exact: they are short and used for reconciliation.
+    expect(screen.getByText('3,730')).toBeInTheDocument()
+  })
 })

@@ -154,6 +154,18 @@ describe('UserUsageDialog', () => {
     )
   })
 
+  test('grows past the default dialog cap so the token tables are not clipped', async () => {
+    getUserUsageMock.mockResolvedValue({ success: true, data: usageData })
+    renderDialog()
+    await screen.findByText('model-a')
+
+    // The token tables need roughly 1120-1180px; the default 1152px dialog cap
+    // left the last column behind a horizontal scrollbar on wide screens.
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toHaveClass('sm:max-w-6xl')
+    expect(dialog).toHaveClass('lg:max-w-[min(94vw,1680px)]')
+  })
+
   test('defaults the usage period to the current day', async () => {
     getUserUsageMock.mockClear()
     getUserUsageMock.mockResolvedValue({ success: true, data: usageData })
