@@ -55,6 +55,10 @@ type FinancialOperation struct {
 	RelatedAffiliateAfter  int    `json:"related_affiliate_after" gorm:"type:bigint"`
 	Reason                 string `json:"reason" gorm:"type:varchar(255)"`
 	CreatedAt              int64  `json:"created_at" gorm:"bigint;autoCreateTime;index"`
+	// ReversedById is filled by the list query with the reversal operation that
+	// undid this row (0 when it was never reversed). Not persisted: the reversal
+	// itself is a row of this table.
+	ReversedById int `json:"reversed_by_id" gorm:"-"`
 }
 
 type FinanceQuery struct {
@@ -811,5 +815,41 @@ func ListFinancialOperations(filters FinanceQuery, pageInfo *common.PageInfo) ([
 	}
 	var items []*FinancialOperation
 	err := query.Order("id DESC").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&items).Error
-	return items, total, err
+	if err != nil {
+		return nil, 0, err
+	}
+	if err := fillOperationReversals(items); err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
+}
+
+// fillOperationReversals marks penalties on the page that a later reversal
+// undid, so the console shows "reversed by #id" instead of offering the action
+// again. Reversal rows themselves carry reversal_of_id and are skipped.
+func fillOperationReversals(items []*FinancialOperation) error {
+	ids := make([]int, 0, len(items))
+	for _, item := range items {
+		if item.OperationType == FinancialOperationPenalty {
+			ids = append(ids, item.Id)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+
+	var reversals []FinancialOperation
+	if err := DB.Select("id", "reversal_of_id").
+		Where("reversal_of_id IN ?", ids).
+		Find(&reversals).Error; err != nil {
+		return err
+	}
+	byOriginal := make(map[int]int, len(reversals))
+	for _, reversal := range reversals {
+		byOriginal[reversal.ReversalOfId] = reversal.Id
+	}
+	for _, item := range items {
+		item.ReversedById = byOriginal[item.Id]
+	}
+	return nil
 }

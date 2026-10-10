@@ -149,3 +149,33 @@ func inviterQuota(t *testing.T, userId int) int {
 	require.NoError(t, DB.First(&user, userId).Error)
 	return user.AffQuota
 }
+
+func TestListFinancialOperationsMarksReversedPenalties(t *testing.T) {
+	truncateTables(t)
+	target := &User{Username: "penalty-listed", AffCode: "penalty-listed-code", Quota: 50}
+	require.NoError(t, DB.Create(target).Error)
+
+	reversed, _, err := ApplyFinancialPenalty(target.Id, 5, "reversed penalty", "list-request-1", 0, common.RoleRootUser)
+	require.NoError(t, err)
+	kept, _, err := ApplyFinancialPenalty(target.Id, 3, "kept penalty", "list-request-2", 0, common.RoleRootUser)
+	require.NoError(t, err)
+	reversal, _, err := ReverseFinancialPenalty(reversed.Id, "appeal accepted", 0, common.RoleRootUser)
+	require.NoError(t, err)
+
+	pageInfo := &common.PageInfo{Page: 1, PageSize: 20}
+	items, total, err := ListFinancialOperations(FinanceQuery{}, pageInfo)
+	require.NoError(t, err)
+	require.Equal(t, int64(3), total)
+
+	byId := make(map[int]FinancialOperation, len(items))
+	for _, item := range items {
+		byId[item.Id] = *item
+	}
+	// The original penalty points at its reversal, which is what the console
+	// needs to stop offering the reverse action.
+	assert.Equal(t, reversal.Id, byId[reversed.Id].ReversedById)
+	assert.Zero(t, byId[kept.Id].ReversedById)
+	// The reversal row itself carries the link back to the penalty.
+	assert.Equal(t, reversed.Id, byId[reversal.Id].ReversalOfId)
+	assert.Zero(t, byId[reversal.Id].ReversedById)
+}
