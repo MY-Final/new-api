@@ -27,6 +27,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { useModalScrollLock } from '@/hooks/use-modal-scroll-lock'
 import { cn } from '@/lib/utils'
 
 type DialogProps = React.ComponentProps<typeof DialogRoot> & {
@@ -66,6 +67,11 @@ export function Dialog({
   showCloseButton,
   ...dialogProps
 }: DialogProps) {
+  // The console scrolls inside the layout, so the dialog library's body-only
+  // lock is not enough: the page behind would keep scrolling (and keep showing
+  // its scrollbar next to the dialog's).
+  useModalScrollLock(dialogProps.open)
+
   return (
     <DialogRoot {...dialogProps}>
       {trigger ? <DialogTrigger render={trigger} /> : null}
@@ -95,6 +101,7 @@ export function Dialog({
         </DialogHeader>
 
         <div
+          data-slot='dialog-body'
           className={cn(
             '-mx-1 min-h-0 overflow-x-hidden overflow-y-auto overscroll-contain',
             'h-[var(--dialog-content-height)]'
