@@ -160,11 +160,13 @@ func TestRedeemCreditsQuotaExactlyOnce(t *testing.T) {
 	require.NoError(t, LOG_DB.Where("user_id = ? AND type = ?", userId, LogTypeTopup).Find(&logs).Error)
 	require.Len(t, logs, 1)
 	assert.Equal(t, "192.0.2.10", logs[0].Ip)
-	var other map[string]map[string]any
+	var other map[string]any
 	require.NoError(t, common.UnmarshalJsonStr(logs[0].Other, &other))
-	assert.Equal(t, PaymentMethodRedemption, other["admin_info"]["payment_method"])
-	assert.NotEmpty(t, other["admin_info"]["server_ip"])
-	assert.NotEmpty(t, other["admin_info"]["version"])
+	adminInfo, ok := other["admin_info"].(map[string]any)
+	require.True(t, ok, "expected admin_info in log other: %s", logs[0].Other)
+	assert.Equal(t, PaymentMethodRedemption, adminInfo["payment_method"])
+	assert.NotEmpty(t, adminInfo["server_ip"])
+	assert.NotEmpty(t, adminInfo["version"])
 
 	// Redeeming the same code again must fail and must not credit quota.
 	_, err = Redeem(key, userId, "192.0.2.10")

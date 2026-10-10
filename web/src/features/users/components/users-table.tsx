@@ -104,12 +104,8 @@ export function UsersTable() {
   const { data: groupsData } = useQuery({
     queryKey: ['groups'],
     queryFn: async () => requireServerSuccess(await getGroups()),
+    staleTime: 5 * 60 * 1000,
   })
-  const groupOptions = useMemo(
-    () =>
-      (groupsData?.data || []).map((group) => ({ label: group, value: group })),
-    [groupsData]
-  )
 
   const sortParams = useMemo(() => {
     const activeSort = sorting[0]
@@ -249,7 +245,10 @@ export function UsersTable() {
           {
             columnId: 'group',
             title: t('User Group'),
-            options: groupOptions,
+            options: (groupsData?.data ?? []).map((group) => ({
+              label: group,
+              value: group,
+            })),
             singleSelect: true,
           },
         ],
