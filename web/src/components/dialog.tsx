@@ -104,6 +104,14 @@ export function Dialog({
           data-slot='dialog-body'
           className={cn(
             '-mx-1 min-h-0 overflow-x-hidden overflow-y-auto overscroll-contain',
+            // The body scrolls inside the popup, which is a scroll container
+            // too. Without containment the popup's scroll range spans the
+            // body's *entire* content, so every long dialog grows a second,
+            // phantom scrollbar whose extra range only reveals blank space.
+            // Layout containment keeps the body's overflow inside the body, so
+            // the popup scrolls only for what it really has to show (an
+            // oversized header/footer).
+            'contain-layout',
             'h-[var(--dialog-content-height)]'
           )}
         >

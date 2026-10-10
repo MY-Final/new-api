@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { createInstance } from 'i18next'
 import { I18nextProvider } from 'react-i18next'
 import { afterEach, expect, it } from 'vitest'
@@ -54,4 +54,20 @@ it('locks the console scroll containers while the dialog is open', () => {
   renderDialog()
 
   expect(document.documentElement.dataset.modalOpen).toBe('true')
+})
+
+it('keeps the body scroller out of the popup scroll range', () => {
+  // A scroll container's scroll range also spans its descendants' scrollable
+  // overflow. The body scrolls inside the popup, so without containment every
+  // long dialog gains a second, phantom scrollbar whose extra range only
+  // reveals blank space below the content.
+  renderDialog()
+  const popup = screen.getByRole('dialog', { name: 'Usage Details' })
+  const body = popup.querySelector("[data-slot='dialog-body']")
+
+  expect(body).toHaveClass('overflow-y-auto', 'min-h-0')
+  expect(body).toHaveClass('contain-layout')
+  // The popup still scrolls for what the body cannot absorb, such as a header
+  // taller than the viewport.
+  expect(popup).toHaveClass('overflow-y-auto')
 })
