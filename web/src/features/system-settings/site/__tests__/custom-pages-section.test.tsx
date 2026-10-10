@@ -68,12 +68,19 @@ it('lists the configured pages and appends an empty row', async () => {
     screen.getByDisplayValue('https://status.example.com')
   ).toBeInTheDocument()
   expect(screen.getByText('Embedded pages')).toBeInTheDocument()
+  // The limit hint must interpolate the count, not print the placeholder.
+  expect(
+    screen.getByText(
+      'Maximum 20 pages. Menu names must be unique; the page URL stays on the server for admin-only entries.'
+    )
+  ).toBeInTheDocument()
 
   await user.click(screen.getByRole('button', { name: 'Add page' }))
 
   const nameInputs = screen.getAllByLabelText('Menu name')
   expect(nameInputs).toHaveLength(2)
   expect(nameInputs[1]).toHaveValue('')
+  expect(screen.getAllByRole('switch', { name: 'Admins only' })).toHaveLength(2)
 })
 
 it('removes a page row and shows the empty hint when none are left', async () => {

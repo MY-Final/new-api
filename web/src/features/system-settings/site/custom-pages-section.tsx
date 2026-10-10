@@ -43,14 +43,15 @@ import {
   type CustomPage,
 } from '@/lib/custom-pages'
 
-import {
-  SettingsForm,
-  SettingsSwitchContent,
-  SettingsSwitchItem,
-} from '../components/settings-form-layout'
+import { SettingsForm } from '../components/settings-form-layout'
 import { SettingsPageFormActions } from '../components/settings-page-context'
 import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
+
+// FormMessage translates the message key without interpolation, so validation
+// copy carries the literal limits that MAX_* currently enforce.
+const NAME_TOO_LONG_MESSAGE = `Name cannot exceed ${MAX_CUSTOM_PAGE_NAME_LENGTH} characters`
+const TOO_MANY_PAGES_MESSAGE = `At most ${MAX_CUSTOM_PAGES} pages are supported`
 
 const customPagesSchema = z.object({
   pages: z
@@ -60,10 +61,7 @@ const customPagesSchema = z.object({
           .string()
           .trim()
           .min(1, 'Name is required')
-          .max(
-            MAX_CUSTOM_PAGE_NAME_LENGTH,
-            'Name cannot exceed {{count}} characters'
-          ),
+          .max(MAX_CUSTOM_PAGE_NAME_LENGTH, NAME_TOO_LONG_MESSAGE),
         url: z
           .string()
           .trim()
@@ -75,7 +73,7 @@ const customPagesSchema = z.object({
         adminOnly: z.boolean(),
       })
     )
-    .max(MAX_CUSTOM_PAGES, 'At most {{count}} pages are supported'),
+    .max(MAX_CUSTOM_PAGES, TOO_MANY_PAGES_MESSAGE),
 })
 
 type CustomPagesFormValues = z.infer<typeof customPagesSchema>
@@ -198,23 +196,25 @@ export function CustomPagesSection({
                     control={form.control}
                     name={`pages.${index}.adminOnly`}
                     render={({ field: adminField }) => (
-                      <SettingsSwitchItem className='items-center gap-2 py-0'>
-                        <SettingsSwitchContent>
-                          <FormLabel>{t('Admins only')}</FormLabel>
-                        </SettingsSwitchContent>
-                        <FormControl>
-                          <Switch
-                            checked={adminField.value}
-                            onCheckedChange={adminField.onChange}
-                          />
-                        </FormControl>
-                      </SettingsSwitchItem>
+                      // Label above a control row as tall as the inputs, so all
+                      // three columns share one label line and one control line.
+                      <FormItem>
+                        <FormLabel>{t('Admins only')}</FormLabel>
+                        <div className='flex h-8 items-center'>
+                          <FormControl>
+                            <Switch
+                              checked={adminField.value}
+                              onCheckedChange={adminField.onChange}
+                            />
+                          </FormControl>
+                        </div>
+                      </FormItem>
                     )}
                   />
                   <Button
                     type='button'
                     variant='ghost'
-                    size='icon-sm'
+                    size='icon'
                     aria-label={t('Remove page')}
                     onClick={() => pages.remove(index)}
                   >
@@ -236,7 +236,8 @@ export function CustomPagesSection({
             </Button>
             <FormDescription>
               {t(
-                'Maximum {{count}} pages. Menu names must be unique; the page URL stays on the server for admin-only entries.'
+                'Maximum {{count}} pages. Menu names must be unique; the page URL stays on the server for admin-only entries.',
+                { count: MAX_CUSTOM_PAGES }
               )}
             </FormDescription>
           </div>
