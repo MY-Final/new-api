@@ -74,6 +74,35 @@ export interface SearchRedemptionsParams {
   page_size?: number
 }
 
+export interface RedemptionSummaryParams {
+  keyword?: string
+  status?: string
+  type?: 'paid' | 'reward'
+}
+
+// Counts and quota totals of the redemption codes matching the current list
+// filters. `available` means still enabled and not expired.
+export interface RedemptionSummary {
+  total: number
+  used: number
+  available: number
+  expired: number
+  disabled: number
+  refunded: number
+  paid: number
+  reward: number
+  issued_quota: number
+  redeemed_quota: number
+  redeemed_paid_quota: number
+  redeemed_bonus_quota: number
+  available_quota: number
+  available_paid_quota: number
+  available_bonus_quota: number
+  expired_quota: number
+  disabled_quota: number
+  refunded_quota: number
+}
+
 export interface RedemptionFormData {
   id?: number
   name: string

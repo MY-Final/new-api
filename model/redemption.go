@@ -134,19 +134,9 @@ func GetAllRedemptions(startIdx int, num int) (redemptions []*Redemption, total 
 	return redemptions, total, nil
 }
 
-func SearchRedemptions(keyword string, status string, redemptionType string, startIdx int, num int) (redemptions []*Redemption, total int64, err error) {
-	tx := DB.Begin()
-	if tx.Error != nil {
-		return nil, 0, tx.Error
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
-	}()
-
-	query := tx.Model(&Redemption{})
-
+// applyRedemptionFilters 应用兑换码列表的筛选条件，列表与汇总共用，
+// 保证「按状态/类型/关键字筛选后看到的数字」与列表口径一致。
+func applyRedemptionFilters(query *gorm.DB, keyword string, status string, redemptionType string) *gorm.DB {
 	if keyword != "" {
 		if id, err := strconv.Atoi(keyword); err == nil {
 			query = query.Where("id = ? OR name LIKE ?", id, keyword+"%")
@@ -183,6 +173,22 @@ func SearchRedemptions(keyword string, status string, redemptionType string, sta
 		query = query.Where("type = ?", redemptionType)
 	}
 
+	return query
+}
+
+func SearchRedemptions(keyword string, status string, redemptionType string, startIdx int, num int) (redemptions []*Redemption, total int64, err error) {
+	tx := DB.Begin()
+	if tx.Error != nil {
+		return nil, 0, tx.Error
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	query := applyRedemptionFilters(tx.Model(&Redemption{}), keyword, status, redemptionType)
+
 	// Get total count
 	err = query.Count(&total).Error
 	if err != nil {
@@ -202,6 +208,109 @@ func SearchRedemptions(keyword string, status string, redemptionType string, sta
 	}
 
 	return redemptions, total, nil
+}
+
+// RedemptionSummary 汇总管理员关心的兑换码发放与兑付情况。数量与额度都按
+// 当前筛选条件统计，「可用」指仍处于可用状态且未过期的码。
+type RedemptionSummary struct {
+	Total     int64 `json:"total"`
+	Used      int64 `json:"used"`
+	Available int64 `json:"available"`
+	Expired   int64 `json:"expired"`
+	Disabled  int64 `json:"disabled"`
+	Refunded  int64 `json:"refunded"`
+	Paid      int64 `json:"paid"`
+	Reward    int64 `json:"reward"`
+
+	IssuedQuota         int64 `json:"issued_quota"`
+	RedeemedQuota       int64 `json:"redeemed_quota"`
+	RedeemedPaidQuota   int64 `json:"redeemed_paid_quota"`
+	RedeemedBonusQuota  int64 `json:"redeemed_bonus_quota"`
+	AvailableQuota      int64 `json:"available_quota"`
+	AvailablePaidQuota  int64 `json:"available_paid_quota"`
+	AvailableBonusQuota int64 `json:"available_bonus_quota"`
+	ExpiredQuota        int64 `json:"expired_quota"`
+	DisabledQuota       int64 `json:"disabled_quota"`
+	RefundedQuota       int64 `json:"refunded_quota"`
+}
+
+type redemptionStatusTotals struct {
+	Status     int    `gorm:"column:status"`
+	Type       string `gorm:"column:type"`
+	Count      int64  `gorm:"column:count"`
+	Quota      int64  `gorm:"column:quota"`
+	PaidQuota  int64  `gorm:"column:paid_quota"`
+	BonusQuota int64  `gorm:"column:bonus_quota"`
+}
+
+type redemptionExpiryTotals struct {
+	Expired    int   `gorm:"column:expired"`
+	Count      int64 `gorm:"column:count"`
+	Quota      int64 `gorm:"column:quota"`
+	PaidQuota  int64 `gorm:"column:paid_quota"`
+	BonusQuota int64 `gorm:"column:bonus_quota"`
+}
+
+// GetRedemptionSummary 用两条聚合查询算出汇总：一条按状态分组得到各状态数量
+// 与额度，一条只统计可用状态、按是否过期分组，避免逐状态多次扫描全表。
+func GetRedemptionSummary(keyword string, status string, redemptionType string) (*RedemptionSummary, error) {
+	const quotaColumns = "COUNT(*) AS count, COALESCE(SUM(quota), 0) AS quota, " +
+		"COALESCE(SUM(paid_quota), 0) AS paid_quota, COALESCE(SUM(bonus_quota), 0) AS bonus_quota"
+
+	summary := &RedemptionSummary{}
+
+	var statusTotals []redemptionStatusTotals
+	if err := applyRedemptionFilters(DB.Model(&Redemption{}), keyword, status, redemptionType).
+		Select("status, type, " + quotaColumns).
+		Group("status, type").
+		Scan(&statusTotals).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range statusTotals {
+		summary.Total += row.Count
+		summary.IssuedQuota += row.Quota
+		if row.Type == RedemptionTypePaid {
+			summary.Paid += row.Count
+		} else {
+			summary.Reward += row.Count
+		}
+		switch row.Status {
+		case common.RedemptionCodeStatusUsed:
+			summary.Used += row.Count
+			summary.RedeemedQuota += row.Quota
+			summary.RedeemedPaidQuota += row.PaidQuota
+			summary.RedeemedBonusQuota += row.BonusQuota
+		case common.RedemptionCodeStatusDisabled:
+			summary.Disabled += row.Count
+			summary.DisabledQuota += row.Quota
+		case common.RedemptionCodeStatusRefunded:
+			summary.Refunded += row.Count
+			summary.RefundedQuota += row.Quota
+		}
+	}
+
+	now := common.GetTimestamp()
+	var expiryTotals []redemptionExpiryTotals
+	if err := applyRedemptionFilters(DB.Model(&Redemption{}), keyword, status, redemptionType).
+		Select("CASE WHEN expired_time != 0 AND expired_time < ? THEN 1 ELSE 0 END AS expired, "+quotaColumns, now).
+		Where("status = ?", common.RedemptionCodeStatusEnabled).
+		Group("expired").
+		Scan(&expiryTotals).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range expiryTotals {
+		if row.Expired == 1 {
+			summary.Expired = row.Count
+			summary.ExpiredQuota = row.Quota
+			continue
+		}
+		summary.Available = row.Count
+		summary.AvailableQuota = row.Quota
+		summary.AvailablePaidQuota = row.PaidQuota
+		summary.AvailableBonusQuota = row.BonusQuota
+	}
+
+	return summary, nil
 }
 
 func GetRedemptionById(id int) (*Redemption, error) {

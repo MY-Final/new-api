@@ -43,6 +43,15 @@ func SearchRedemptions(c *gin.Context) {
 	return
 }
 
+func GetRedemptionSummary(c *gin.Context) {
+	summary, err := model.GetRedemptionSummary(c.Query("keyword"), c.Query("status"), c.Query("type"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, summary)
+}
+
 func GetRedemption(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {

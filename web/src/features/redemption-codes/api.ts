@@ -16,7 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import i18next from 'i18next'
+
 import { api } from '@/lib/api'
+import {
+  createServerError,
+  requireServerSuccess,
+} from '@/lib/server-error-message'
 
 import type {
   Redemption,
@@ -25,6 +31,8 @@ import type {
   GetRedemptionsResponse,
   SearchRedemptionsParams,
   RedemptionFormData,
+  RedemptionSummary,
+  RedemptionSummaryParams,
   BatchRedemptionOperationRequest,
   BatchRedemptionOperationResult,
 } from './types'
@@ -55,6 +63,30 @@ export async function searchRedemptions(
   queryParams.set('page_size', String(page_size))
   const res = await api.get(`/api/redemption/search?${queryParams.toString()}`)
   return res.data
+}
+
+// Get counts and quota totals under the same filters as the list
+export async function getRedemptionSummary(
+  params: RedemptionSummaryParams = {}
+): Promise<RedemptionSummary> {
+  const response = await api.get<ApiResponse<RedemptionSummary>>(
+    '/api/redemption/summary',
+    {
+      params: {
+        keyword: params.keyword || undefined,
+        status: params.status || undefined,
+        type: params.type || undefined,
+      },
+    }
+  )
+  const payload = requireServerSuccess(response.data)
+  if (!payload.data) {
+    throw createServerError(
+      payload,
+      i18next.t('Failed to load redemption summary')
+    )
+  }
+  return payload.data
 }
 
 // Get single redemption code by ID

@@ -115,6 +115,64 @@ func TestSearchRedemptionsFiltersAndPaginates(t *testing.T) {
 	}
 }
 
+func TestGetRedemptionSummaryBucketsCountsAndQuota(t *testing.T) {
+	require.NoError(t, DB.AutoMigrate(&Redemption{}))
+	require.NoError(t, DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Redemption{}).Error)
+	t.Cleanup(func() {
+		require.NoError(t, DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Redemption{}).Error)
+	})
+
+	now := common.GetTimestamp()
+	redemptions := []Redemption{
+		{Id: 101, Name: "batch-a", Key: "20000000000000000000000000000101", Status: common.RedemptionCodeStatusEnabled, ExpiredTime: 0, Type: RedemptionTypePaid, Quota: 100, PaidQuota: 100},
+		{Id: 102, Name: "batch-a", Key: "20000000000000000000000000000102", Status: common.RedemptionCodeStatusEnabled, ExpiredTime: now + 3600, Type: RedemptionTypeReward, Quota: 60, BonusQuota: 60},
+		{Id: 103, Name: "batch-b", Key: "20000000000000000000000000000103", Status: common.RedemptionCodeStatusEnabled, ExpiredTime: now - 10, Type: RedemptionTypeReward, Quota: 50, BonusQuota: 50},
+		{Id: 104, Name: "batch-b", Key: "20000000000000000000000000000104", Status: common.RedemptionCodeStatusUsed, ExpiredTime: 0, Type: RedemptionTypeReward, Quota: 200, BonusQuota: 200},
+		{Id: 105, Name: "batch-b", Key: "20000000000000000000000000000105", Status: common.RedemptionCodeStatusDisabled, ExpiredTime: 0, Type: RedemptionTypeReward, Quota: 30, BonusQuota: 30},
+		{Id: 106, Name: "batch-c", Key: "20000000000000000000000000000106", Status: common.RedemptionCodeStatusRefunded, ExpiredTime: 0, Type: RedemptionTypeReward, Quota: 70, BonusQuota: 70},
+	}
+	require.NoError(t, DB.Create(&redemptions).Error)
+
+	summary, err := GetRedemptionSummary("", "", "")
+	require.NoError(t, err)
+	assert.Equal(t, int64(6), summary.Total)
+	assert.Equal(t, int64(1), summary.Used)
+	assert.Equal(t, int64(2), summary.Available)
+	assert.Equal(t, int64(1), summary.Expired)
+	assert.Equal(t, int64(1), summary.Disabled)
+	assert.Equal(t, int64(1), summary.Refunded)
+	assert.Equal(t, int64(510), summary.IssuedQuota)
+	assert.Equal(t, int64(200), summary.RedeemedQuota)
+	assert.Equal(t, int64(200), summary.RedeemedBonusQuota)
+	assert.Equal(t, int64(0), summary.RedeemedPaidQuota)
+	assert.Equal(t, int64(160), summary.AvailableQuota)
+	assert.Equal(t, int64(100), summary.AvailablePaidQuota)
+	assert.Equal(t, int64(60), summary.AvailableBonusQuota)
+	assert.Equal(t, int64(50), summary.ExpiredQuota)
+	assert.Equal(t, int64(30), summary.DisabledQuota)
+	assert.Equal(t, int64(70), summary.RefundedQuota)
+	assert.Equal(t, int64(1), summary.Paid)
+	assert.Equal(t, int64(5), summary.Reward)
+
+	// 汇总必须跟随列表筛选条件，否则卡片数字会和列表口径不一致。
+	byKeyword, err := GetRedemptionSummary("batch-a", "", "")
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), byKeyword.Total)
+	assert.Equal(t, int64(2), byKeyword.Available)
+	assert.Equal(t, int64(160), byKeyword.AvailableQuota)
+
+	byExpired, err := GetRedemptionSummary("", "expired", "")
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), byExpired.Total)
+	assert.Equal(t, int64(1), byExpired.Expired)
+	assert.Equal(t, int64(50), byExpired.ExpiredQuota)
+
+	byPaid, err := GetRedemptionSummary("", "", RedemptionTypePaid)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), byPaid.Total)
+	assert.Equal(t, int64(100), byPaid.AvailablePaidQuota)
+}
+
 func setupRedeemFixture(t *testing.T, quota int) (userId int, key string) {
 	t.Helper()
 	require.NoError(t, DB.AutoMigrate(&Redemption{}))
