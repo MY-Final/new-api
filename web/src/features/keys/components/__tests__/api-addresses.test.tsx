@@ -48,6 +48,16 @@ afterEach(() => {
   localStorage.clear()
 })
 
+// The keys toolbar renders other actions (for example the setup download
+// link) before the trigger, so walk the tab order until it is reached.
+async function tabToApiAddressesTrigger(user: ReturnType<typeof userEvent.setup>) {
+  const trigger = screen.getByRole('button', { name: 'API Addresses' })
+  for (let step = 0; step < 6 && document.activeElement !== trigger; step += 1) {
+    await user.tab()
+  }
+  return trigger
+}
+
 function renderAddresses(status: StatusData) {
   client.setQueryData(STATUS_QUERY_KEY, status)
   return render(
@@ -186,8 +196,7 @@ it.each([
     const writeText = vi.spyOn(navigator.clipboard, 'writeText')
     renderAddresses(status)
 
-    await user.tab()
-    const trigger = screen.getByRole('button', { name: 'API Addresses' })
+    const trigger = await tabToApiAddressesTrigger(user)
     expect(trigger).toHaveFocus()
     await user.keyboard('{Enter}')
     const dialog = await screen.findByRole('dialog', { name: 'API Addresses' })
