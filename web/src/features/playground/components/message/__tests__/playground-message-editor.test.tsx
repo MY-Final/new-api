@@ -16,10 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import i18next from 'i18next'
-import { beforeAll, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest'
 
 import type { Message } from '../../../types'
 import { PlaygroundMessageEditor } from '../playground-message-editor'
@@ -30,6 +30,20 @@ const userMessage: Message = {
   key: 'msg-1',
   from: 'user',
   versions: [{ id: 'v1', content: 'original' }],
+}
+
+const imageMessage: Message = {
+  key: 'msg-2',
+  from: 'user',
+  versions: [
+    {
+      id: 'v1',
+      content: [
+        { type: 'text', text: 'original' },
+        { type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' } },
+      ],
+    },
+  ],
 }
 
 function renderEditor(options: {
@@ -92,6 +106,35 @@ describe('PlaygroundMessageEditor leave warning', () => {
 
     expect(onCancelEdit).not.toHaveBeenCalled()
     expect(screen.queryByText(leavePrompt)).not.toBeInTheDocument()
+  })
+})
+
+afterEach(() => {
+  cleanup()
+})
+
+describe('PlaygroundMessageEditor attachments', () => {
+  test('shows attached images while the text is edited', () => {
+    render(
+      <PlaygroundMessageEditor
+        editText='original'
+        message={imageMessage}
+        onEditTextChange={() => undefined}
+        originalText='original'
+      />
+    )
+
+    expect(
+      screen.getByRole('button', { name: 'Preview image' })
+    ).toBeInTheDocument()
+  })
+
+  test('shows no image thumbnails for a text-only message', () => {
+    renderEditor({ editText: 'original' })
+
+    expect(
+      screen.queryByRole('button', { name: 'Preview image' })
+    ).not.toBeInTheDocument()
   })
 })
 

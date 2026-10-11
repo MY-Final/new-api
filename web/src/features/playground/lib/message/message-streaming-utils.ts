@@ -28,6 +28,7 @@ import {
 } from './message-timing-utils'
 import {
   getCurrentVersion,
+  getTextContent,
   hasMessageContent,
   updateCurrentVersionContent,
 } from './message-utils'
@@ -42,9 +43,9 @@ export function processStreamingContent(
   contentChunk?: string
 ): Message {
   const currentVersion = getCurrentVersion(message)
-  const fullContent = contentChunk
-    ? currentVersion.content + contentChunk
-    : currentVersion.content
+  // Assistant messages stream plain text; only user messages carry images.
+  const currentText = getTextContent(currentVersion.content)
+  const fullContent = contentChunk ? currentText + contentChunk : currentText
 
   if (!message.reasoning && !fullContent.includes('<think>')) {
     return {
@@ -103,7 +104,10 @@ export function applyStreamingChunk(
   }
 
   const currentVersion = getCurrentVersion(message)
-  const appendableChunk = getAppendableChunk(currentVersion.content, chunk)
+  const appendableChunk = getAppendableChunk(
+    getTextContent(currentVersion.content),
+    chunk
+  )
   const contentMessage = processStreamingContent(message, appendableChunk)
 
   return {
@@ -123,11 +127,11 @@ export function finalizeMessage(
   apiReasoningContent?: string
 ): Message {
   const currentVersion = getCurrentVersion(message)
-  const parsedThinkTags = currentVersion.content.includes('<think>')
-    ? parseThinkTags(currentVersion.content)
+  const currentText = getTextContent(currentVersion.content)
+  const parsedThinkTags = currentText.includes('<think>')
+    ? parseThinkTags(currentText)
     : undefined
-  const visibleContent =
-    parsedThinkTags?.visibleContent ?? currentVersion.content
+  const visibleContent = parsedThinkTags?.visibleContent ?? currentText
   const finalReasoning =
     apiReasoningContent ||
     message.reasoning?.content ||

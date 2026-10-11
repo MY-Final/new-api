@@ -25,7 +25,7 @@ export type PlaygroundMessageLayoutMode = 'alternating' | 'left'
 
 export interface MessageVersion {
   id: string
-  content: string
+  content: MessageContent
 }
 
 export interface Message {
@@ -54,8 +54,11 @@ export interface Message {
 // API payload types
 export interface ChatCompletionMessage {
   role: MessageRole
-  content: string | ContentPart[]
+  content: MessageContent
 }
+
+/** A user message carries plain text, or text plus attached image parts. */
+export type MessageContent = string | ContentPart[]
 
 export interface ContentPart {
   type: 'text' | 'image_url'

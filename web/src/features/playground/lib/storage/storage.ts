@@ -24,7 +24,11 @@ import {
   sanitizeMessagesOnLoad,
 } from '../message/message-streaming-utils'
 import { completeAssistantTiming } from '../message/message-timing-utils'
-import { hasMessageContent } from '../message/message-utils'
+import {
+  getContentImages,
+  getTextContent,
+  hasMessageContent,
+} from '../message/message-utils'
 import {
   MAX_LOADED_MESSAGE_CHARS,
   MAX_LOADED_MESSAGES_CHARS,
@@ -96,7 +100,15 @@ function trimMessages(messages: Message[]): Message[] {
 
 function getMessageSize(message: Message): number {
   const versionsSize = message.versions.reduce(
-    (total, version) => total + version.content.length,
+    (total, version) =>
+      total +
+      (typeof version.content === 'string'
+        ? version.content.length
+        : getTextContent(version.content).length +
+          getContentImages(version.content).reduce(
+            (imagesSize, url) => imagesSize + url.length,
+            0
+          )),
     0
   )
   const reasoningSize = message.reasoning?.content.length ?? 0
@@ -195,10 +207,12 @@ function collapseRepeatedSectionSnapshots(text: string): string {
 function normalizeStoredMessageForLoad(message: Message): Message {
   let changed = false
   const versions = message.versions.map((version) => {
-    const collapsedContent = collapseRepeatedSectionSnapshots(version.content)
+    const collapsedContent = collapseRepeatedSectionSnapshots(
+      getTextContent(version.content)
+    )
     const content = truncateText(collapsedContent, MAX_LOADED_MESSAGE_CHARS)
 
-    if (content === version.content && collapsedContent === version.content) {
+    if (content === version.content) {
       return version
     }
 
@@ -375,7 +389,18 @@ export function loadMessages(): Message[] | null {
 export function saveMessages(messages: Message[]): void {
   try {
     const trimmed = trimMessages(messages)
-    const parsed = messagesSchema.parse(trimmed) as Message[]
+    // Attached images live in the browser as data URLs. They are far larger
+    // than the conversation budget for localStorage, so the stored copy keeps
+    // the text only; the in-memory conversation (and the request payload) still
+    // carries the images.
+    const persistable = trimmed.map((message) => ({
+      ...message,
+      versions: message.versions.map((version) => ({
+        ...version,
+        content: getTextContent(version.content),
+      })),
+    }))
+    const parsed = messagesSchema.parse(persistable)
     writeStoredValue(STORAGE_KEYS.MESSAGES, parsed)
   } catch (error) {
     // eslint-disable-next-line no-console
