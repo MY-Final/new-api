@@ -41,11 +41,12 @@ import {
   TooltipTrigger,
   TooltipProvider,
 } from '@/components/ui/tooltip'
-import { formatQuotaWithCurrency } from '@/lib/currency'
+import { formatQuotaWithCurrency, getCurrencyDisplay } from '@/lib/currency'
 import dayjs from '@/lib/dayjs'
 import { handleServerError } from '@/lib/handle-server-error'
 import { createServerError } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
+import { useSystemConfigStore } from '@/stores/system-config-store'
 
 import { getCheckinStatus, performCheckin } from '../api'
 import type { CheckinRecord } from '../types'
@@ -120,8 +121,48 @@ export function CheckinCalendarCard({
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   }, [])
 
+  const todayMonthString = todayString.slice(0, 7)
   const checkedToday = checkinData?.stats?.checked_in_today === true
   const todayAward = checkinRecordsMap[todayString]
+
+  // Subscribe so both the amounts and the unit follow currency setting changes.
+  useSystemConfigStore((state) => state.config.currency)
+
+  // The reward amounts are quota units: show the number alone and put the
+  // currency unit next to the label. A wide custom symbol (e.g. an emoji) inside
+  // the value makes these narrow cells wrap, which then breaks the row.
+  const { meta: currencyMeta } = getCurrencyDisplay()
+  const quotaUnit =
+    currencyMeta.kind === 'tokens' ? t('Tokens') : currencyMeta.symbol
+  const statCells = [
+    {
+      key: 'total-checkins',
+      value: checkinData?.stats?.total_checkins || 0,
+      label: t('Total check-ins'),
+      unit: '',
+    },
+    {
+      key: 'monthly-quota',
+      // The queried month drives the calendar, so label the amount with that
+      // month instead of claiming "this month" while browsing another one.
+      value: formatQuotaWithCurrency(monthlyQuota, {
+        digitsLarge: 0,
+        showSymbol: false,
+      }),
+      label:
+        currentMonthStr === todayMonthString ? t('This month') : currentMonthStr,
+      unit: quotaUnit,
+    },
+    {
+      key: 'total-quota',
+      value: formatQuotaWithCurrency(checkinData?.stats?.total_quota || 0, {
+        digitsLarge: 0,
+        showSymbol: false,
+      }),
+      label: t('Total earned'),
+      unit: quotaUnit,
+    },
+  ]
 
   useEffect(() => {
     if (initialLoaded) return
@@ -339,35 +380,28 @@ export function CheckinCalendarCard({
           <>
             {/* Stats */}
             <div className='grid grid-cols-3 gap-px border-b'>
-              <div className='bg-card p-3 text-center sm:p-5'>
-                <div className='text-xl font-semibold tracking-tight tabular-nums sm:text-2xl'>
-                  {checkinData?.stats?.total_checkins || 0}
+              {statCells.map((stat) => (
+                <div
+                  key={stat.key}
+                  className='bg-card flex min-w-0 flex-col items-center justify-center gap-1 px-2 py-3 text-center sm:py-4'
+                >
+                  <div
+                    data-slot='checkin-stat-value'
+                    className='text-xl leading-none font-semibold tracking-tight tabular-nums sm:text-2xl'
+                  >
+                    {stat.value}
+                  </div>
+                  <div
+                    data-slot='checkin-stat-label'
+                    className='text-muted-foreground flex min-w-0 max-w-full items-center gap-1 text-[10px] font-medium sm:text-xs'
+                  >
+                    <span className='truncate'>{stat.label}</span>
+                    {stat.unit ? (
+                      <span className='shrink-0'>{stat.unit}</span>
+                    ) : null}
+                  </div>
                 </div>
-                <div className='text-muted-foreground mt-0.5 text-[10px] font-medium sm:mt-1 sm:text-xs'>
-                  {t('Total check-ins')}
-                </div>
-              </div>
-              <div className='bg-card p-3 text-center sm:p-5'>
-                <div className='text-xl font-semibold tracking-tight tabular-nums sm:text-2xl'>
-                  {formatQuotaWithCurrency(monthlyQuota, { digitsLarge: 0 })}
-                </div>
-                <div className='text-muted-foreground mt-0.5 text-[10px] font-medium sm:mt-1 sm:text-xs'>
-                  {t('This month')}
-                </div>
-              </div>
-              <div className='bg-card p-3 text-center sm:p-5'>
-                <div className='text-xl font-semibold tracking-tight tabular-nums sm:text-2xl'>
-                  {formatQuotaWithCurrency(
-                    checkinData?.stats?.total_quota || 0,
-                    {
-                      digitsLarge: 0,
-                    }
-                  )}
-                </div>
-                <div className='text-muted-foreground mt-0.5 text-[10px] font-medium sm:mt-1 sm:text-xs'>
-                  {t('Total earned')}
-                </div>
-              </div>
+              ))}
             </div>
 
             {/* Calendar */}
@@ -383,6 +417,7 @@ export function CheckinCalendarCard({
                       variant='ghost'
                       size='icon'
                       className='h-7 w-7 sm:h-8 sm:w-8'
+                      aria-label={t('Previous month')}
                       onClick={handlePrevMonth}
                     >
                       <ChevronLeft className='h-3.5 w-3.5 sm:h-4 sm:w-4' />
@@ -391,6 +426,7 @@ export function CheckinCalendarCard({
                       variant='ghost'
                       size='icon'
                       className='h-7 w-7 sm:h-8 sm:w-8'
+                      aria-label={t('Next month')}
                       onClick={handleNextMonth}
                     >
                       <ChevronRight className='h-3.5 w-3.5 sm:h-4 sm:w-4' />
@@ -463,11 +499,7 @@ export function CheckinCalendarCard({
                   })}
                 </div>
 
-                {/* Footer hint */}
-                <div className='text-muted-foreground border-t pt-3 text-center text-[11px] sm:pt-4 sm:text-xs'>
-                  {t('You can only check in once per day')}
-                </div>
-
+                {/* Rules */}
                 <div className='bg-muted/30 text-muted-foreground rounded-lg border p-3 text-xs'>
                   <ul className='list-disc space-y-1 pl-5'>
                     <li>
