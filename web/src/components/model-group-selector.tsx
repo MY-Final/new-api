@@ -38,6 +38,7 @@ For commercial licensing, please contact support@quantumnous.com
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { TruncatedText } from '@/components/truncated-text'
 import { Button } from '@/components/ui/button'
 import {
   Command,
@@ -59,6 +60,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { cn } from '@/lib/utils'
 
@@ -649,7 +656,9 @@ export const ModelGroupSelector: React.FC<ModelGroupSelectorProps> = ({
     <Button
       aria-expanded={open}
       className={cn(
-        'h-8 max-w-[15rem] justify-start gap-2 border px-2.5 font-medium shadow-none',
+        // Group names are routinely long, so the trigger claims more room on
+        // wider screens instead of squeezing the selected group into a pill.
+        'h-8 max-w-[15rem] justify-start gap-2 border px-2.5 font-medium shadow-none md:max-w-[26rem]',
         'bg-background/80 hover:bg-accent/70 text-foreground',
         'focus:!ring-0 focus:!outline-none',
         className
@@ -660,12 +669,21 @@ export const ModelGroupSelector: React.FC<ModelGroupSelectorProps> = ({
       variant='outline'
     >
       <CpuIcon className='text-muted-foreground size-4 shrink-0' />
-      <span className='min-w-0 truncate text-xs'>
-        {currentModel?.label || t('Model')}
-      </span>
-      <span className='bg-muted text-muted-foreground hidden max-w-20 shrink-0 rounded px-1.5 py-0.5 text-[10px] sm:inline-flex'>
-        {currentGroup?.label || t('Group')}
-      </span>
+      <TruncatedText
+        className='text-xs'
+        maxWidth='max-w-full'
+        text={currentModel?.label || t('Model')}
+      />
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <span className='bg-muted text-muted-foreground hidden max-w-24 min-w-0 shrink-0 truncate rounded px-1.5 py-0.5 text-[10px] sm:block md:max-w-[15rem]' />
+          }
+        >
+          {currentGroup?.label || t('Group')}
+        </TooltipTrigger>
+        <TooltipContent>{currentGroup?.label || t('Group')}</TooltipContent>
+      </Tooltip>
       <ChevronsUpDown className='text-muted-foreground ml-auto size-3.5 shrink-0 opacity-60' />
     </Button>
   )
@@ -704,9 +722,11 @@ export const ModelGroupSelector: React.FC<ModelGroupSelectorProps> = ({
               ref={isSelected ? selectedGroupOptionRef : undefined}
               type='button'
             >
-              <span className='min-w-0 truncate font-medium'>
-                {group.label}
-              </span>
+              <TruncatedText
+                className='font-medium'
+                maxWidth='max-w-full'
+                text={group.label}
+              />
               <Check
                 className={cn(
                   'size-3.5 shrink-0',
@@ -763,16 +783,15 @@ export const ModelGroupSelector: React.FC<ModelGroupSelectorProps> = ({
                 }
                 value={model.value}
               >
-                <span
+                <TruncatedText
                   className={cn(
-                    'min-w-0 truncate',
                     selectedModel === model.value
                       ? modelGroupSelectorLayoutClasses.selectedModelText
                       : modelGroupSelectorLayoutClasses.unselectedModelText
                   )}
-                >
-                  {model.label}
-                </span>
+                  maxWidth='max-w-full'
+                  text={model.label}
+                />
                 <Check
                   className={cn(
                     'size-3.5 shrink-0',
@@ -807,33 +826,39 @@ export const ModelGroupSelector: React.FC<ModelGroupSelectorProps> = ({
     </div>
   )
 
-  return isMobile ? (
-    <Drawer open={open} onOpenChange={setOpen}>
-      <DrawerTrigger asChild>{renderTrigger()}</DrawerTrigger>
-      <DrawerContent className='flex max-h-[80vh] min-h-[60vh] flex-col'>
-        <DrawerHeader className='pb-3 text-left'>
-          <DrawerTitle>{t('Select Model')}</DrawerTitle>
-        </DrawerHeader>
-        <div className='min-h-0 flex-1 overflow-y-auto px-4 pb-5'>
-          {renderContent()}
-        </div>
-      </DrawerContent>
-    </Drawer>
-  ) : (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger render={renderTrigger()} />
-      <PopoverContent
-        align='end'
-        className={cn(
-          'bg-popover z-50 w-[34rem] max-w-[calc(100vw-2rem)] rounded-xl border p-0 shadow-lg',
-          modelGroupSelectorLayoutClasses.desktopPanel
-        )}
-        collisionPadding={8}
-        side='top'
-        sideOffset={8}
-      >
-        {renderContent()}
-      </PopoverContent>
-    </Popover>
+  // Long model and group names are truncated in this popover, so every label
+  // carries a tooltip with the full name.
+  return (
+    <TooltipProvider delay={200}>
+      {isMobile ? (
+        <Drawer open={open} onOpenChange={setOpen}>
+          <DrawerTrigger asChild>{renderTrigger()}</DrawerTrigger>
+          <DrawerContent className='flex max-h-[80vh] min-h-[60vh] flex-col'>
+            <DrawerHeader className='pb-3 text-left'>
+              <DrawerTitle>{t('Select Model')}</DrawerTitle>
+            </DrawerHeader>
+            <div className='min-h-0 flex-1 overflow-y-auto px-4 pb-5'>
+              {renderContent()}
+            </div>
+          </DrawerContent>
+        </Drawer>
+      ) : (
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger render={renderTrigger()} />
+          <PopoverContent
+            align='end'
+            className={cn(
+              'bg-popover z-50 w-[34rem] max-w-[calc(100vw-2rem)] rounded-xl border p-0 shadow-lg',
+              modelGroupSelectorLayoutClasses.desktopPanel
+            )}
+            collisionPadding={8}
+            side='top'
+            sideOffset={8}
+          >
+            {renderContent()}
+          </PopoverContent>
+        </Popover>
+      )}
+    </TooltipProvider>
   )
 }
