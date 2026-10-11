@@ -149,7 +149,10 @@ export function RedemptionsMutateDrawer({
           result.data.id !== redemptionId
         ) {
           setRedemptionLoadState('error')
-          toast.error(t('Failed to load'))
+          // A failed business response still carries the server reason (for
+          // example a code that is no longer available); only fall back to the
+          // generic text when the payload has none.
+          handleServerError(result, t('Failed to load'))
           return
         }
 
