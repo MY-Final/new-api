@@ -18,12 +18,16 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { DEFAULT_DASHBOARD_CHART_PREFERENCES } from '@/features/dashboard/constants'
+import {
+  DEFAULT_DASHBOARD_CHART_PREFERENCES,
+  DASHBOARD_CHART_PREFERENCES_STORAGE_KEY,
+} from '@/features/dashboard/constants'
 
 import {
   buildDefaultDashboardFilters,
   getDefaultDays,
   getSavedChartPreferences,
+  detectQuickRangeDays,
 } from '../filters'
 
 describe('dashboard default time range', () => {
@@ -49,7 +53,33 @@ describe('dashboard default time range', () => {
     expect(getSavedChartPreferences().defaultTimeRangeDays).toBe(0)
   })
 
+  it('keeps saved range and chart preferences while migrating the ranking to cost', () => {
+    localStorage.setItem(
+      DASHBOARD_CHART_PREFERENCES_STORAGE_KEY,
+      JSON.stringify({
+        consumptionDistributionChart: 'bar',
+        modelAnalyticsChart: 'proportion',
+        defaultTimeRangeDays: 7,
+        defaultTimeGranularity: 'day',
+      })
+    )
+    expect(getSavedChartPreferences()).toEqual({
+      consumptionDistributionChart: 'bar',
+      modelRankingMetric: 'quota',
+      defaultTimeRangeDays: 7,
+      defaultTimeGranularity: 'day',
+    })
+  })
+
   it('keeps the hourly users analytics fallback on today', () => {
     expect(getDefaultDays('hour')).toBe(0)
+  })
+
+  it('highlights 30 days but leaves partial custom ranges unselected', () => {
+    const end = new Date('2026-10-12T10:30:00Z')
+    expect(detectQuickRangeDays(new Date('2026-09-12T10:30:00Z'), end)).toBe(30)
+    expect(
+      detectQuickRangeDays(new Date('2026-10-11T11:00:00Z'), end)
+    ).toBeNull()
   })
 })

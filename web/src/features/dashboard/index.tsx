@@ -37,14 +37,12 @@ import {
   useAutoRefreshInterval,
 } from '@/hooks'
 import { ROLE } from '@/lib/roles'
-import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { ModelsChartPreferences } from './components/models/models-chart-preferences'
 import { ModelsFilter } from './components/models/models-filter-dialog'
 import { OverviewDashboard } from './components/overview/overview-dashboard'
 import { UsersFilter } from './components/users/users-filter-dialog'
-import { DEFAULT_TIME_GRANULARITY } from './constants'
 import {
   buildDefaultDashboardFilters,
   buildDefaultUserChartsFilters,
@@ -59,50 +57,14 @@ import {
 import type {
   DashboardChartPreferences,
   DashboardFilters,
-  QuotaDataItem,
   UserChartsFilters,
 } from './types'
 
 const route = getRouteApi('/_authenticated/dashboard/$section')
 
-const LOG_STAT_CARD_FALLBACK_KEYS = [
-  'count',
-  'quota',
-  'tokens',
-  'average-rpm',
-  'average-tpm',
-] as const
-const PERFORMANCE_METRIC_FALLBACK_KEYS = [
-  'success-rate',
-  'average-latency',
-  'throughput',
-] as const
-const PERFORMANCE_MODEL_FALLBACK_KEYS = [
-  'primary-model',
-  'secondary-model',
-] as const
-
-const LazyLogStatCards = lazy(() =>
-  import('./components/models/log-stat-cards').then((m) => ({
-    default: m.LogStatCards,
-  }))
-)
-
-const LazyModelCharts = lazy(() =>
-  import('./components/models/model-charts').then((m) => ({
-    default: m.ModelCharts,
-  }))
-)
-
-const LazyConsumptionDistributionChart = lazy(() =>
-  import('./components/models/consumption-distribution-chart').then((m) => ({
-    default: m.ConsumptionDistributionChart,
-  }))
-)
-
-const LazyPerformanceOverview = lazy(() =>
-  import('./components/models/performance-overview').then((m) => ({
-    default: m.PerformanceOverview,
+const LazyModelDashboard = lazy(() =>
+  import('./components/models/model-dashboard').then((m) => ({
+    default: m.ModelDashboard,
   }))
 )
 
@@ -118,32 +80,6 @@ const LazyFlowCharts = lazy(() =>
   }))
 )
 
-function LogStatCardsFallback() {
-  return (
-    <div className='overflow-hidden rounded-lg border'>
-      <div className='divide-border/60 grid grid-cols-2 divide-x sm:grid-cols-3 lg:grid-cols-5'>
-        {LOG_STAT_CARD_FALLBACK_KEYS.map((key, index) => (
-          <div
-            key={key}
-            className={cn(
-              'px-2.5 py-1.5 sm:px-5 sm:py-4',
-              index === LOG_STAT_CARD_FALLBACK_KEYS.length - 1 &&
-                'col-span-2 sm:col-span-1'
-            )}
-          >
-            <div className='flex items-center gap-1.5 sm:gap-2'>
-              <Skeleton className='size-4 rounded-sm sm:size-7 sm:rounded-md' />
-              <Skeleton className='h-4 w-16' />
-            </div>
-            <Skeleton className='mt-1 h-5 w-16 sm:mt-2 sm:h-7 sm:w-20' />
-            <Skeleton className='mt-1 hidden h-3.5 w-28 md:block' />
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 function ModelChartsFallback() {
   return (
     <div className='overflow-hidden rounded-lg border'>
@@ -158,35 +94,12 @@ function ModelChartsFallback() {
   )
 }
 
-function PerformanceOverviewFallback() {
-  return (
-    <div className='overflow-hidden rounded-lg border'>
-      <div className='flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-5'>
-        <div className='flex items-center gap-2'>
-          <Skeleton className='h-4 w-24' />
-        </div>
-        {PERFORMANCE_METRIC_FALLBACK_KEYS.map((key) => (
-          <div key={key} className='flex items-center gap-1.5'>
-            <Skeleton className='h-3 w-14' />
-            <Skeleton className='h-4 w-16' />
-          </div>
-        ))}
-        <div className='ml-auto flex items-center gap-2'>
-          {PERFORMANCE_MODEL_FALLBACK_KEYS.map((key) => (
-            <Skeleton key={key} className='h-5 w-28 rounded-full' />
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
 const SECTION_META: Record<DashboardSectionId, { titleKey: string }> = {
   overview: {
     titleKey: 'Overview',
   },
   models: {
-    titleKey: 'Model Call Analytics',
+    titleKey: 'Operations Overview',
   },
   flow: {
     titleKey: 'Flow',
@@ -204,8 +117,6 @@ export function Dashboard() {
   const activeSection = (params.section ??
     DASHBOARD_DEFAULT_SECTION) as DashboardSectionId
 
-  const [modelData, setModelData] = useState<QuotaDataItem[]>([])
-  const [dataLoading, setDataLoading] = useState(false)
   const [chartPreferences, setChartPreferences] =
     useState<DashboardChartPreferences>(() => getSavedChartPreferences())
   const [modelFilters, setModelFilters] = useState<DashboardFilters>(() =>
@@ -235,14 +146,6 @@ export function Dashboard() {
   const handleResetUserFilters = useCallback(() => {
     setUserChartsFilters(buildDefaultUserChartsFilters())
   }, [])
-
-  const handleDataUpdate = useCallback(
-    (data: QuotaDataItem[], loading: boolean) => {
-      setModelData(data)
-      setDataLoading(loading)
-    },
-    []
-  )
 
   const handleChartPreferencesChange = useCallback(
     (preferences: DashboardChartPreferences) => {
@@ -285,6 +188,7 @@ export function Dashboard() {
           currentFilters={modelFilters}
           onFilterChange={handleFilterChange}
           onReset={handleResetFilters}
+          maxRangeDays={isAdmin ? undefined : 30}
         />
         <AutoRefreshControl
           autoRefreshInterval={autoRefreshInterval}
@@ -338,6 +242,7 @@ export function Dashboard() {
           currentFilters={modelFilters}
           onFilterChange={handleFilterChange}
           onReset={handleResetFilters}
+          maxRangeDays={isAdmin ? undefined : 30}
           titleKey='Flow Filters'
           descriptionKey='Filter the traffic flow view by time range and user.'
         />
@@ -355,7 +260,11 @@ export function Dashboard() {
 
   return (
     <SectionPageLayout>
-      <SectionPageLayout.Title>{t(meta.titleKey)}</SectionPageLayout.Title>
+      <SectionPageLayout.Title>
+        {activeSection === 'models' && !isAdmin
+          ? t('Usage Analytics')
+          : t(meta.titleKey)}
+      </SectionPageLayout.Title>
       <SectionPageLayout.Content>
         <div className='space-y-3 sm:space-y-4'>
           <div className='flex flex-wrap items-center justify-between gap-1.5 sm:gap-2'>
@@ -364,7 +273,9 @@ export function Dashboard() {
                 <TabsList className='max-w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto'>
                   {visibleSections.map((section) => (
                     <TabsTrigger key={section} value={section}>
-                      {t(SECTION_META[section].titleKey)}
+                      {section === 'models' && !isAdmin
+                        ? t('Usage Analytics')
+                        : t(SECTION_META[section].titleKey)}
                     </TabsTrigger>
                   ))}
                 </TabsList>
@@ -379,54 +290,17 @@ export function Dashboard() {
             )}
           </div>
           {activeSection === 'models' && (
-            <>
-              <FadeIn>
-                <Suspense fallback={<LogStatCardsFallback />}>
-                  <LazyLogStatCards
-                    filters={modelFilters}
-                    onDataUpdate={handleDataUpdate}
-                    refetchInterval={refetchInterval}
-                  />
-                </Suspense>
-              </FadeIn>
-              {isAdmin && (
-                <FadeIn delay={0.05}>
-                  <Suspense fallback={<PerformanceOverviewFallback />}>
-                    <LazyPerformanceOverview
-                      refetchInterval={refetchInterval}
-                    />
-                  </Suspense>
-                </FadeIn>
-              )}
-
-              <FadeIn delay={0.1}>
-                <Suspense fallback={<ModelChartsFallback />}>
-                  <LazyConsumptionDistributionChart
-                    data={modelData}
-                    loading={dataLoading}
-                    defaultChartType={
-                      chartPreferences.consumptionDistributionChart
-                    }
-                    timeGranularity={
-                      modelFilters.time_granularity || DEFAULT_TIME_GRANULARITY
-                    }
-                  />
-                </Suspense>
-              </FadeIn>
-              <FadeIn delay={0.15}>
-                <Suspense fallback={<ModelChartsFallback />}>
-                  <LazyModelCharts
-                    data={modelData}
-                    loading={dataLoading}
-                    defaultChartTab={chartPreferences.modelAnalyticsChart}
-                    timeGranularity={
-                      modelFilters.time_granularity || DEFAULT_TIME_GRANULARITY
-                    }
-                    filters={modelFilters}
-                  />
-                </Suspense>
-              </FadeIn>
-            </>
+            <FadeIn>
+              <Suspense fallback={<ModelChartsFallback />}>
+                <LazyModelDashboard
+                  isAdmin={isAdmin}
+                  filters={modelFilters}
+                  preferences={chartPreferences}
+                  onFilterChange={handleFilterChange}
+                  refetchInterval={refetchInterval}
+                />
+              </Suspense>
+            </FadeIn>
           )}
           {activeSection === 'users' && (
             <FadeIn>

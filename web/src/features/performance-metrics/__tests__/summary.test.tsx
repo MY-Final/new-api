@@ -17,6 +17,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRouter,
+  RouterProvider,
+} from '@tanstack/react-router'
 import { render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -123,7 +129,7 @@ function renderModelDetails() {
 describe('server performance summaries', () => {
   it.each([PerformanceHealthPanel, PerformanceOverview])(
     'uses the weighted server result across models',
-    (Component) => {
+    async (Component) => {
       client.setQueryData(['perf-metrics-summary', 24], {
         success: true,
         data: {
@@ -134,12 +140,16 @@ describe('server performance summaries', () => {
           })),
         },
       })
+      const router = createRouter({
+        routeTree: createRootRoute({ component: Component }),
+        history: createMemoryHistory({ initialEntries: ['/'] }),
+      })
       render(
         <QueryClientProvider client={client}>
-          <Component />
+          <RouterProvider router={router} />
         </QueryClientProvider>
       )
-      expect(screen.getByText('99.01%')).toBeVisible()
+      expect(await screen.findByText('99.01%')).toBeVisible()
       expect(screen.queryByText('50.00%')).not.toBeInTheDocument()
       expect(screen.getByText('1.01s')).toBeVisible()
     }

@@ -29,7 +29,7 @@ import type {
   ConsumptionDistributionChartType,
   DashboardChartPreferences,
   DashboardFilters,
-  ModelAnalyticsChartTab,
+  DashboardMetric,
   UserChartsFilters,
 } from '@/features/dashboard/types'
 import { getRollingDateRange, type TimeGranularity } from '@/lib/time'
@@ -50,10 +50,8 @@ function isConsumptionDistributionChartType(
   return value === 'bar' || value === 'area'
 }
 
-function isModelAnalyticsChartTab(
-  value: unknown
-): value is ModelAnalyticsChartTab {
-  return value === 'trend' || value === 'proportion' || value === 'top'
+function isDashboardMetric(value: unknown): value is DashboardMetric {
+  return value === 'quota' || value === 'count' || value === 'tokens'
 }
 
 function isTimeRangePresetDays(value: unknown): value is number {
@@ -72,11 +70,14 @@ export function detectQuickRangeDays(start?: Date, end?: Date): number | null {
   endOfStartDay.setDate(endOfStartDay.getDate() + 1)
   if (
     start.getTime() === startOfDay.getTime() &&
+    end.getTime() >= start.getTime() &&
     end.getTime() <= endOfStartDay.getTime()
   ) {
     return 0
   }
-  const days = Math.round((end.getTime() - start.getTime()) / 86_400_000)
+  const duration = end.getTime() - start.getTime()
+  const days = Math.round(duration / 86_400_000)
+  if (Math.abs(duration - days * 86_400_000) > 1000) return null
   return TIME_RANGE_PRESETS.some((preset) => preset.days === days) ? days : null
 }
 
@@ -131,9 +132,9 @@ export function getSavedChartPreferences(): DashboardChartPreferences {
       )
         ? parsed.consumptionDistributionChart
         : fallbackPreferences.consumptionDistributionChart,
-      modelAnalyticsChart: isModelAnalyticsChartTab(parsed.modelAnalyticsChart)
-        ? parsed.modelAnalyticsChart
-        : fallbackPreferences.modelAnalyticsChart,
+      modelRankingMetric: isDashboardMetric(parsed.modelRankingMetric)
+        ? parsed.modelRankingMetric
+        : fallbackPreferences.modelRankingMetric,
       defaultTimeRangeDays: isTimeRangePresetDays(parsed.defaultTimeRangeDays)
         ? parsed.defaultTimeRangeDays
         : fallbackPreferences.defaultTimeRangeDays,

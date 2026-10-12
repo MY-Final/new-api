@@ -42,6 +42,7 @@ interface StatCardProps {
   title: string
   value: string | number
   description: string
+  descriptionClassName?: string
   icon: LucideIcon
   sparkline?: number[]
   sparklineVariant?: StatCardSparklineVariant
@@ -50,6 +51,7 @@ interface StatCardProps {
   loading?: boolean
   error?: boolean
   action?: ReactNode
+  visualization?: ReactNode
   iconTone?: IconBadgeTone
   compactMobile?: boolean
 }
@@ -261,9 +263,11 @@ export function StatCard(props: StatCardProps) {
           --
         </div>
         <p
+          title={props.description}
           className={cn(
             'text-muted-foreground/60 line-clamp-1 text-[11px] sm:text-xs',
-            props.compactMobile && 'hidden sm:block'
+            props.compactMobile && 'hidden sm:block',
+            props.descriptionClassName
           )}
         >
           {props.description}
@@ -277,9 +281,11 @@ export function StatCard(props: StatCardProps) {
           {props.value}
         </div>
         <p
+          title={props.description}
           className={cn(
             'text-muted-foreground/60 line-clamp-1 text-[11px] leading-relaxed sm:text-xs',
-            props.compactMobile && 'hidden sm:block'
+            props.compactMobile && 'hidden sm:block',
+            props.descriptionClassName
           )}
         >
           {props.description}
@@ -289,7 +295,9 @@ export function StatCard(props: StatCardProps) {
   }
 
   let visualization: ReactNode
-  if (props.details?.length) {
+  if (props.visualization != null) {
+    visualization = props.visualization
+  } else if (props.details?.length) {
     visualization = <StatCardDetails details={props.details} />
   } else if (sparklineVariant === 'line') {
     visualization = <LineSparkline values={props.sparkline} tone={tone} />

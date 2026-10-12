@@ -22,6 +22,7 @@ import type { QuotaDataItem } from '@/features/dashboard/types'
 import type { TimeGranularity } from '@/lib/time'
 
 import { processChartData, processUserChartData } from '../charts'
+import { buildDashboardAnalytics } from '../operations'
 
 const cases: Array<{
   granularity: TimeGranularity
@@ -152,5 +153,65 @@ describe.each(cases)('dashboard $granularity chart chronology', (scenario) => {
         )
       ).toEqual([0, 0, 0, 0, 0, 0, 8])
     }
+  })
+})
+
+describe('operations analytics', () => {
+  test('aggregates all models while preserving the selected range and idle hours across New Year', () => {
+    const range = {
+      start: new Date('2025-12-31T23:30:00'),
+      end: new Date('2026-01-01T02:30:00'),
+    }
+    const first = new Date('2025-12-31T23:00:00').getTime() / 1000
+    const data: QuotaDataItem[] = [
+      {
+        created_at: first + 10800,
+        model_name: 'b',
+        quota: 20,
+        count: 1,
+        token_used: 40,
+      },
+      {
+        created_at: first,
+        model_name: 'a',
+        quota: 10,
+        count: 2,
+        token_used: 30,
+      },
+      {
+        created_at: first,
+        model_name: 'b',
+        quota: 30,
+        count: 3,
+        token_used: 50,
+      },
+    ]
+    const analytics = buildDashboardAnalytics(data, 'hour', range)
+    expect(analytics.summary).toEqual({ quota: 60, count: 6, tokens: 120 })
+    expect(analytics.models.find((model) => model.model === 'b')).toEqual({
+      model: 'b',
+      quota: 50,
+      count: 4,
+      tokens: 90,
+    })
+    expect(analytics.timeline.map((point) => point.timestamp)).toEqual([
+      first,
+      first + 3600,
+      first + 7200,
+      first + 10800,
+    ])
+    expect(analytics.timeline.map((point) => point.quota)).toEqual([
+      40, 0, 0, 20,
+    ])
+  })
+
+  test('keeps empty usage empty without inventing model statistics', () => {
+    const result = buildDashboardAnalytics([], 'day', {
+      start: new Date('2026-10-10T00:00:00'),
+      end: new Date('2026-10-11T00:00:00'),
+    })
+    expect(result.models).toEqual([])
+    expect(result.summary).toEqual({ quota: 0, count: 0, tokens: 0 })
+    expect(result.timeline.map((point) => point.quota)).toEqual([0, 0])
   })
 })

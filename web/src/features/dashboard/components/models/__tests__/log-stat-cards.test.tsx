@@ -16,110 +16,109 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { act, render, screen, within } from '@testing-library/react'
+import i18next from 'i18next'
+import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 
-import { getUserQuotaDates } from '@/features/dashboard/api'
-import { useAuthStore } from '@/stores/auth-store'
+import zh from '@/i18n/locales/zh.json'
+import {
+  DEFAULT_CURRENCY_CONFIG,
+  useSystemConfigStore,
+} from '@/stores/system-config-store'
 
+import { buildDashboardAnalytics } from '../../../lib/operations'
 import { LogStatCards } from '../log-stat-cards'
 
-vi.mock('@/features/dashboard/api', () => ({
-  getUserQuotaDates: vi.fn(),
-}))
+const data = buildDashboardAnalytics(
+  [
+    {
+      created_at: 1735689600,
+      model_name: 'model-a',
+      count: 10,
+      quota: 100,
+      token_used: 1000,
+    },
+  ],
+  'hour',
+  { start: new Date(1735689600000), end: new Date(1735693200000) }
+)
 
-const getUserQuotaDatesMock = vi.mocked(getUserQuotaDates)
-
-const currentRangeStart = new Date('2025-01-01T00:00:00')
-const currentRangeEnd = new Date('2025-01-02T00:00:00')
-const previousRangeStart = new Date(currentRangeStart.getTime() - 86_400_000)
-
-function renderCards() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+describe('operations summary cards', () => {
+  beforeEach(() => {
+    const store = useSystemConfigStore.getState()
+    store.setConfig({
+      currency: { ...DEFAULT_CURRENCY_CONFIG, quotaDisplayType: 'USD' },
+    })
   })
-  render(
-    <QueryClientProvider client={queryClient}>
+  afterEach(async () => {
+    await i18next.changeLanguage('en')
+    i18next.removeResourceBundle('zhCN', 'translation')
+    const store = useSystemConfigStore.getState()
+    store.setConfig({ currency: DEFAULT_CURRENCY_CONFIG })
+  })
+
+  test('updates monetary values when the configured currency changes after load', () => {
+    const usage = { ...data, summary: { ...data.summary, quota: 500000 } }
+    render(<LogStatCards data={usage} loading={false} error={false} />)
+    const card = screen.getByRole('region', { name: 'User quota consumption' })
+    expect(within(card).getByText('$1')).toBeVisible()
+    const store = useSystemConfigStore.getState()
+    act(() => {
+      store.setConfig({
+        currency: {
+          ...DEFAULT_CURRENCY_CONFIG,
+          quotaDisplayType: 'CNY',
+          usdExchangeRate: 7,
+        },
+      })
+    })
+    expect(within(card).getByText('¥7')).toBeVisible()
+  })
+
+  test('switches labels and number formatting to the chosen interface language', async () => {
+    i18next.addResourceBundle('zhCN', 'translation', zh.translation)
+    render(<LogStatCards data={data} loading={false} error={false} />)
+    await act(async () => {
+      await i18next.changeLanguage('zhCN')
+    })
+    expect(screen.getByRole('region', { name: '用户消耗' })).toBeVisible()
+    expect(
+      within(screen.getByRole('region', { name: '请求数' })).getByText('10')
+    ).toBeVisible()
+  })
+
+  test('shows consumption, requests and tokens without duplicating RPM and TPM', () => {
+    render(
       <LogStatCards
-        filters={{
-          start_timestamp: currentRangeStart,
-          end_timestamp: currentRangeEnd,
-          time_granularity: 'hour',
-        }}
-        onDataUpdate={vi.fn()}
+        data={data}
+        previous={{ count: 5, quota: 50, tokens: 500 }}
+        loading={false}
+        error={false}
       />
-    </QueryClientProvider>
-  )
-}
-
-beforeEach(() => {
-  useAuthStore.getState().auth.setUser({
-    id: 1,
-    username: 'admin',
-    role: 10,
-    quota: 0,
-    used_quota: 0,
-    request_count: 0,
-  })
-})
-
-describe('LogStatCards', () => {
-  test('shows period-over-period deltas from the previous window', async () => {
-    getUserQuotaDatesMock.mockImplementation(async (params) => {
-      const isPrevious =
-        params.start_timestamp ===
-        Math.floor(previousRangeStart.getTime() / 1000)
-      const scale = isPrevious ? 0.5 : 1
-      return {
-        success: true,
-        data: [
-          {
-            created_at: params.start_timestamp,
-            model_name: 'gpt-4o',
-            count: Math.round(10 * scale),
-            quota: Math.round(100 * scale),
-            token_used: Math.round(1000 * scale),
-          },
-        ],
-      }
-    })
-    renderCards()
-
-    expect(await screen.findByText('Total Count')).toBeInTheDocument()
-    expect(getUserQuotaDatesMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        start_timestamp: Math.floor(previousRangeStart.getTime() / 1000),
-      }),
-      true
     )
-    expect((await screen.findAllByText('↑100%')).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('↑100%')).toHaveLength(3)
+    expect(
+      within(screen.getByRole('region', { name: 'Requests' })).getByText('10')
+    ).toBeVisible()
+    expect(screen.queryByText('Average RPM')).not.toBeInTheDocument()
+    expect(screen.queryByText('Average TPM')).not.toBeInTheDocument()
   })
 
-  test('omits deltas when the previous window has no data', async () => {
-    getUserQuotaDatesMock.mockImplementation(async (params) => {
-      const isPrevious =
-        params.start_timestamp ===
-        Math.floor(previousRangeStart.getTime() / 1000)
-      return {
-        success: true,
-        data: isPrevious
-          ? []
-          : [
-              {
-                created_at: params.start_timestamp,
-                model_name: 'gpt-4o',
-                count: 10,
-                quota: 100,
-                token_used: 1000,
-              },
-            ],
-      }
-    })
-    renderCards()
+  test('omits growth when the previous period has no usage', () => {
+    render(
+      <LogStatCards
+        data={data}
+        previous={{ count: 0, quota: 0, tokens: 0 }}
+        loading={false}
+        error={false}
+      />
+    )
+    expect(screen.queryByText('↑100%')).not.toBeInTheDocument()
+  })
 
-    expect(await screen.findByText('Total Count')).toBeInTheDocument()
-    expect(screen.queryByText('↑100%')).toBeNull()
-    expect(screen.queryByText('↓50%')).toBeNull()
+  test('shows unknown values rather than zero totals when loading fails', () => {
+    render(<LogStatCards data={data} loading={false} error />)
+    expect(screen.getAllByText('--')).toHaveLength(3)
+    expect(screen.queryByText('10')).not.toBeInTheDocument()
   })
 })

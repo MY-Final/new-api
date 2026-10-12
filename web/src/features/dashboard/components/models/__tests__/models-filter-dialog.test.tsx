@@ -55,6 +55,27 @@ beforeEach(() => {
 })
 
 describe('ModelsFilter', () => {
+  test('keeps an oversized custom self range open instead of applying it', async () => {
+    const user = userEvent.setup()
+    const onFilterChange = vi.fn()
+    render(
+      <ModelsFilter
+        preferences={DEFAULT_DASHBOARD_CHART_PREFERENCES}
+        currentFilters={{
+          ...currentFilters,
+          end_timestamp: new Date('2025-02-15T00:00:00'),
+        }}
+        maxRangeDays={30}
+        onFilterChange={onFilterChange}
+        onReset={vi.fn()}
+      />
+    )
+    await user.click(screen.getByRole('button', { name: 'Filter' }))
+    await user.click(screen.getByRole('button', { name: 'Apply Filters' }))
+    expect(onFilterChange).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog')).toBeVisible()
+  })
+
   test('shows the chart granularity control by default', async () => {
     const user = userEvent.setup()
     renderFilter()

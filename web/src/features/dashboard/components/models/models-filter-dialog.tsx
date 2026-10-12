@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { Filter, RotateCcw, Calendar, Search } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 import { DateTimePicker } from '@/components/datetime-picker'
 import { Dialog } from '@/components/dialog'
@@ -64,6 +65,7 @@ interface ModelsFilterProps {
   // Chart-only control; operational views hide it because they render no
   // time-bucketed charts.
   showGranularity?: boolean
+  maxRangeDays?: number
 }
 
 // Quick-range presets imply a sensible granularity (matching the app's
@@ -108,6 +110,22 @@ export function ModelsFilter(props: ModelsFilterProps) {
   }
 
   const handleApply = () => {
+    if (filters.start_timestamp && filters.end_timestamp) {
+      const duration =
+        filters.end_timestamp.getTime() - filters.start_timestamp.getTime()
+      if (duration < 0) {
+        toast.error(t('End time must be after start time'))
+        return
+      }
+      if (props.maxRangeDays && duration > props.maxRangeDays * 86400000) {
+        toast.error(
+          t('Date range cannot exceed {{days}} days', {
+            days: props.maxRangeDays,
+          })
+        )
+        return
+      }
+    }
     props.onFilterChange(
       cleanFilters(
         filters as unknown as Record<string, unknown>
