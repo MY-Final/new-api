@@ -17,34 +17,37 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
-import { Activity, BarChart3, Coins, Hash, Users } from 'lucide-react'
-import { useMemo, useState, type ReactNode } from 'react'
+import { Coins, Hash, Info, Layers, Users } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
-import { DataTableServerPagination } from '@/components/data-table'
 import { ErrorState } from '@/components/error-state'
-import { LogsDrilldownLink } from '@/components/logs-drilldown-link'
-import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { DateRangePresets } from '@/features/dashboard/components/date-range-presets'
 import { StatDelta } from '@/features/dashboard/components/stat-delta'
+import { PanelWrapper } from '@/features/dashboard/components/ui/panel-wrapper'
+import { StatCard } from '@/features/dashboard/components/ui/stat-card'
 import type { UserChartsFilters } from '@/features/dashboard/types'
+import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
 import { UserUsageDialog } from '@/features/users/components/dialogs/user-usage-dialog'
-import { formatNumber, formatQuota } from '@/lib/format'
-import { dateToUnixTimestamp } from '@/lib/time'
+import { toIntlLocale } from '@/i18n/languages'
+import { formatCompactNumber, formatNumber, formatQuota } from '@/lib/format'
+import { requireServerSuccess } from '@/lib/server-error-message'
+import { dateToUnixTimestamp, getRollingDateRange } from '@/lib/time'
+import { useSystemConfigStore } from '@/stores/system-config-store'
 
-import { getAdminUserUsageRanking } from '../api'
-import type { UserUsageAggregate } from '../types'
-
-type SortBy = 'user_cost' | 'total_tokens' | 'request_count'
+import { getAdminUserUsageRanking, type UsageStatisticsParams } from '../api'
+import { UserUsageInsights } from './user-usage-insights'
+import { UserUsageRanking } from './user-usage-ranking'
 
 interface AdminUsageAnalyticsProps {
   filters: UserChartsFilters
@@ -52,38 +55,14 @@ interface AdminUsageAnalyticsProps {
   refetchInterval?: number | false
 }
 
-function StatCard(props: {
-  label: string
-  value: string
-  delta?: ReactNode
-  icon: typeof Users
-  tone: IconBadgeTone
-}) {
-  const Icon = props.icon
-  return (
-    <div className='min-w-0 rounded-lg border px-3 py-3'>
-      <div className='flex items-center gap-2'>
-        <IconBadge tone={props.tone} size='sm'>
-          <Icon />
-        </IconBadge>
-        <span className='text-muted-foreground truncate text-xs'>
-          {props.label}
-        </span>
-      </div>
-      <div className='mt-2 flex items-baseline gap-1.5'>
-        <div className='font-mono text-xl font-semibold tabular-nums'>
-          {props.value}
-        </div>
-        {props.delta}
-      </div>
-    </div>
-  )
-}
-
 export function AdminUsageAnalytics(props: AdminUsageAnalyticsProps) {
-  const { t } = useTranslation()
-  const [page, setPage] = useState(1)
-  const [sortBy, setSortBy] = useState<SortBy>('user_cost')
+  const { t, i18n } = useTranslation()
+  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
+  useSystemConfigStore((state) => state.config.currency)
+  const [view, setView] = useState('ranking')
+  const isPeriodView = view === 'ranking' || view === 'tokens'
+  const [sortBy, setSortBy] =
+    useState<NonNullable<UsageStatisticsParams['sort_by']>>('user_cost')
   const [username, setUsername] = useState('')
   const [modelName, setModelName] = useState('')
   const [channel, setChannel] = useState('')
@@ -91,364 +70,405 @@ export function AdminUsageAnalytics(props: AdminUsageAnalyticsProps) {
     id: number
     username: string
   }>()
-
   const range = props.filters.range
-  const queryParams = useMemo(() => {
-    const params = {
-      start_timestamp: dateToUnixTimestamp(range.start),
-      end_timestamp: dateToUnixTimestamp(range.end),
+  const start = dateToUnixTimestamp(range.start)
+  const end = dateToUnixTimestamp(range.end)
+  // A changed range, filter, sort or page size starts at page one immediately,
+  // including when the parent applies a date range from its filter dialog.
+  const scope = JSON.stringify([
+    start,
+    end,
+    username,
+    modelName,
+    channel,
+    sortBy,
+    props.filters.topUserLimit,
+  ])
+  const [pagination, setPagination] = useState({ scope, page: 1 })
+  const page = pagination.scope === scope ? pagination.page : 1
+  if (pagination.scope !== scope) setPagination({ scope, page: 1 })
+  const queryParams = useMemo(
+    () => ({
+      start_timestamp: start,
+      end_timestamp: end,
       p: page,
       page_size: props.filters.topUserLimit,
       sort_by: sortBy,
       username: username || undefined,
       model_name: modelName || undefined,
       channel: channel ? Number(channel) : undefined,
-    }
-    return params
-  }, [
-    channel,
-    modelName,
-    page,
-    props.filters.topUserLimit,
-    range,
-    sortBy,
-    username,
-  ])
+    }),
+    [
+      start,
+      end,
+      page,
+      props.filters.topUserLimit,
+      sortBy,
+      username,
+      modelName,
+      channel,
+    ]
+  )
   const rankingQuery = useQuery({
     queryKey: ['usage-statistics', 'admin', queryParams],
     queryFn: async () => {
-      const result = await getAdminUserUsageRanking(queryParams)
-      if (!result.success || !result.data) throw new Error(result.message)
+      const result = requireServerSuccess(
+        await getAdminUserUsageRanking(queryParams)
+      )
+      if (!result.data) throw new Error(t('Failed to load usage details'))
       return result.data
     },
+    enabled: isPeriodView,
     refetchInterval: props.refetchInterval,
-    placeholderData: (previous) => previous,
+    retry: false,
   })
-  const data = rankingQuery.data
-
-  // Same-length window immediately before the selected one, used for the
-  // period-over-period deltas on the summary cards.
-  const previousParams = useMemo(() => {
-    const rangeSeconds =
-      dateToUnixTimestamp(range.end) - dateToUnixTimestamp(range.start)
-    const previousEnd = new Date(range.start.getTime() - 1000)
-    const previousStart = new Date(range.start.getTime() - rangeSeconds * 1000)
-    return {
-      start_timestamp: dateToUnixTimestamp(previousStart),
-      end_timestamp: dateToUnixTimestamp(previousEnd),
+  const previousParams = useMemo(
+    () => ({
+      ...queryParams,
+      start_timestamp: start - (end - start) - 1,
+      end_timestamp: start - 1,
       p: 1,
       page_size: 1,
-      sort_by: sortBy,
-      username: username || undefined,
-      model_name: modelName || undefined,
-      channel: channel ? Number(channel) : undefined,
-    }
-  }, [channel, modelName, range, sortBy, username])
+      sort_by: 'user_cost' as const,
+    }),
+    [queryParams, start, end]
+  )
   const previousQuery = useQuery({
     queryKey: ['usage-statistics', 'admin', 'previous', previousParams],
     queryFn: async () => {
-      const result = await getAdminUserUsageRanking(previousParams)
-      if (!result.success || !result.data) throw new Error(result.message)
+      const result = requireServerSuccess(
+        await getAdminUserUsageRanking(previousParams)
+      )
+      if (!result.data) throw new Error(t('Failed to load usage details'))
       return result.data
     },
     staleTime: 60_000,
+    enabled: isPeriodView,
+    refetchInterval: props.refetchInterval,
+    retry: false,
+    meta: { errorToast: false },
   })
-  const previousSummary = previousQuery.data?.summary
-  let tableBody: ReactNode
-  if (rankingQuery.isLoading && !data) {
-    tableBody = (
-      <TableRow>
-        <TableCell
-          colSpan={10}
-          className='text-muted-foreground h-20 text-center'
-        >
-          {t('Loading...')}
-        </TableCell>
-      </TableRow>
-    )
-  } else if (data?.items.length) {
-    tableBody = data.items.map((item) => (
-      <TableRow key={item.user_id}>
-        <TableCell>
-          <button
-            type='button'
-            className='text-primary max-w-40 truncate font-medium hover:underline'
-            onClick={() =>
-              setSelectedUser({
-                id: item.user_id,
-                username: item.username,
-              })
-            }
-          >
-            {item.username || `#${item.user_id}`}
-          </button>
-        </TableCell>
-        <TableCell className='text-right tabular-nums'>
-          {formatNumber(item.request_count)}
-        </TableCell>
-        <TableCell className='text-right tabular-nums'>
-          {formatNumber(item.input_tokens)}
-        </TableCell>
-        <TableCell className='text-right tabular-nums'>
-          {formatNumber(item.output_tokens)}
-        </TableCell>
-        <TableCell className='text-right tabular-nums'>
-          {formatNumber(item.cache_read_tokens)}
-        </TableCell>
-        <TableCell className='text-right tabular-nums'>
-          {formatNumber(item.cache_write_tokens)}
-        </TableCell>
-        <TableCell className='text-right tabular-nums'>
-          {formatNumber(item.reasoning_tokens)}
-        </TableCell>
-        <TableCell className='text-right tabular-nums'>
-          {formatNumber(item.total_tokens)}
-        </TableCell>
-        <TableCell className='text-right font-medium tabular-nums'>
-          {formatQuota(item.user_cost)}
-        </TableCell>
-        <TableCell className='w-10'>
-          <LogsDrilldownLink
-            start={range.start}
-            end={range.end}
-            username={item.username || undefined}
-          />
-        </TableCell>
-      </TableRow>
-    ))
-  } else {
-    tableBody = (
-      <TableRow>
-        <TableCell
-          colSpan={10}
-          className='text-muted-foreground h-20 text-center'
-        >
-          {t('No usage data')}
-        </TableCell>
-      </TableRow>
-    )
+  const activityQuery = useQuery({
+    queryKey: ['usage-statistics', 'admin', 'activity'],
+    queryFn: async () => {
+      const today = getRollingDateRange(0)
+      // The existing endpoint returns site-wide activity independently of its
+      // usage filters. Query a small, unfiltered period for this separate view.
+      const result = requireServerSuccess(
+        await getAdminUserUsageRanking({
+          start_timestamp: dateToUnixTimestamp(today.start),
+          end_timestamp: dateToUnixTimestamp(today.end),
+          p: 1,
+          page_size: 1,
+          username: undefined,
+          model_name: undefined,
+          channel: undefined,
+        })
+      )
+      if (!result.data) throw new Error(t('Failed to load usage details'))
+      return result.data
+    },
+    enabled: view === 'activity',
+    refetchInterval: props.refetchInterval,
+    retry: false,
+  })
+  const data = rankingQuery.data
+  const previous = previousQuery.isError ? undefined : previousQuery.data
+  const metrics = [
+    {
+      title: t('Users in period'),
+      description: t('Users matching the selected filters'),
+      definition: t(
+        'Distinct users with consumption or refund records in the selected period and filters. Users with only refunds are included.'
+      ),
+      value: data?.total ?? 0,
+      previous: previous?.total,
+      icon: Users,
+    },
+    {
+      title: t('User Cost'),
+      description: t('User charges after refunds'),
+      definition: t(
+        'Consumption minus refunds recorded in this period, including billed cache charges. Refunds use their own record time, even when the original charge was earlier. This is not top-up income.'
+      ),
+      value: data?.summary.user_cost ?? 0,
+      previous: previous?.summary.user_cost,
+      icon: Coins,
+      money: true,
+    },
+    {
+      title: t('Consumption records'),
+      description: t('Consumption logs, excluding error logs'),
+      definition: t(
+        'Counts consumption log entries, not unique successful API calls. Error logs are excluded. Retries count only when a consumption record is written. Task submissions and extra settlement charges can also add records.'
+      ),
+      value: data?.summary.request_count ?? 0,
+      previous: previous?.summary.request_count,
+      icon: Hash,
+    },
+    {
+      title: t('Total Tokens'),
+      description: t('Input and output tokens'),
+      definition: t(
+        'Input plus output tokens from consumption logs. Cache reads and writes are included in input; reasoning is included in output. Refunds change spend, not token totals.'
+      ),
+      value: data?.summary.total_tokens ?? 0,
+      previous: previous?.summary.total_tokens,
+      icon: Layers,
+    },
+  ]
+  const handleRangeChange = (next: { start?: Date; end?: Date }) => {
+    if (!next.start || !next.end) return
+    const seconds = (next.end.getTime() - next.start.getTime()) / 1000
+    if (seconds < 0) {
+      toast.error(t('End time must be after start time'))
+      return
+    }
+    if (seconds > 31 * 86400) {
+      toast.error(t('Date range cannot exceed {{days}} days', { days: 31 }))
+      return
+    }
+    props.onFiltersChange({
+      ...props.filters,
+      range: { start: next.start, end: next.end },
+    })
   }
-
-  const summaryDelta = (key: keyof UserUsageAggregate) => (
-    <StatDelta
-      current={data?.summary[key] ?? 0}
-      previous={previousSummary?.[key] ?? 0}
+  const periodError = rankingQuery.isError ? (
+    <ErrorState
+      title={t('Failed to load usage details')}
+      description={rankingQuery.error.message}
+      onRetry={() => void rankingQuery.refetch()}
     />
-  )
-  const cacheTokensDelta = (
-    <StatDelta
-      current={
-        (data?.summary.cache_read_tokens ?? 0) +
-        (data?.summary.cache_write_tokens ?? 0)
-      }
-      previous={
-        (previousSummary?.cache_read_tokens ?? 0) +
-        (previousSummary?.cache_write_tokens ?? 0)
-      }
-    />
-  )
+  ) : undefined
 
   return (
-    <div className='space-y-3 sm:space-y-4'>
-      <div className='grid gap-2 sm:grid-cols-2 lg:grid-cols-5'>
-        <StatCard
-          label={t('DAU')}
-          value={formatNumber(data?.activity.dau ?? 0)}
-          icon={Users}
-          tone='info'
-        />
-        <StatCard
-          label={t('WAU')}
-          value={formatNumber(data?.activity.wau ?? 0)}
-          icon={Activity}
-          tone='success'
-        />
-        <StatCard
-          label={t('MAU')}
-          value={formatNumber(data?.activity.mau ?? 0)}
-          icon={BarChart3}
-          tone='warning'
-        />
-        <StatCard
-          label={t('Requests')}
-          value={formatNumber(data?.summary.request_count ?? 0)}
-          delta={summaryDelta('request_count')}
-          icon={Hash}
-          tone='chart-4'
-        />
-        <StatCard
-          label={t('Input Tokens')}
-          value={formatNumber(data?.summary.input_tokens ?? 0)}
-          delta={summaryDelta('input_tokens')}
-          icon={Hash}
-          tone='chart-2'
-        />
-        <StatCard
-          label={t('Output Tokens')}
-          value={formatNumber(data?.summary.output_tokens ?? 0)}
-          delta={summaryDelta('output_tokens')}
-          icon={Hash}
-          tone='chart-3'
-        />
-        <StatCard
-          label={t('Cache Tokens')}
-          value={formatNumber(
-            (data?.summary.cache_read_tokens ?? 0) +
-              (data?.summary.cache_write_tokens ?? 0)
-          )}
-          delta={cacheTokensDelta}
-          icon={Hash}
-          tone='chart-4'
-        />
-        <StatCard
-          label={t('Total Tokens')}
-          value={formatNumber(data?.summary.total_tokens ?? 0)}
-          delta={summaryDelta('total_tokens')}
-          icon={Hash}
-          tone='chart-5'
-        />
-        <StatCard
-          label={t('User Cost')}
-          value={formatQuota(data?.summary.user_cost ?? 0)}
-          delta={summaryDelta('user_cost')}
-          icon={Coins}
-          tone='chart-5'
-        />
-      </div>
-
-      <div className='rounded-lg border'>
-        <div className='flex flex-col gap-3 border-b px-3 py-3 sm:px-5'>
+    <Tabs
+      value={view}
+      onValueChange={(value) => setView(String(value))}
+      className='min-w-0 gap-4'
+    >
+      <TabsList
+        className='grid w-full max-w-full grid-cols-2 gap-1 group-data-horizontal/tabs:h-auto sm:flex sm:w-fit sm:flex-wrap'
+        aria-label={t('User analytics views')}
+      >
+        <TabsTrigger
+          value='ranking'
+          className='whitespace-normal sm:flex-none sm:px-3 sm:whitespace-nowrap'
+        >
+          {t('User ranking')}
+        </TabsTrigger>
+        <TabsTrigger
+          value='tokens'
+          className='whitespace-normal sm:flex-none sm:px-3 sm:whitespace-nowrap'
+        >
+          {t('Token breakdown')}
+        </TabsTrigger>
+        <TabsTrigger
+          value='activity'
+          className='whitespace-normal sm:flex-none sm:px-3 sm:whitespace-nowrap'
+        >
+          {t('All-site activity')}
+        </TabsTrigger>
+        <TabsTrigger
+          value='definitions'
+          className='whitespace-normal sm:flex-none sm:px-3 sm:whitespace-nowrap'
+        >
+          {t('Metric definitions')}
+        </TabsTrigger>
+      </TabsList>
+      {isPeriodView && (
+        <>
           <div className='flex flex-wrap items-center justify-between gap-2'>
-            <div>
-              <h2 className='text-sm font-semibold'>
-                {t('User Usage Ranking')}
-              </h2>
-              <p className='text-muted-foreground mt-0.5 text-xs'>
-                {t('Successful API calls only')}
-              </p>
+            <div className='flex min-w-0 flex-wrap items-center gap-2'>
+              <Badge variant='outline' className='max-w-full break-all'>
+                {username || t('All users')}
+              </Badge>
+              <DateRangePresets range={range} onChange={handleRangeChange} />
             </div>
-            <Tabs
-              value={sortBy}
-              onValueChange={(value) => {
-                setSortBy(value as SortBy)
-                setPage(1)
-              }}
-            >
-              <TabsList>
-                <TabsTrigger value='user_cost'>{t('Cost')}</TabsTrigger>
-                <TabsTrigger value='total_tokens'>{t('Tokens')}</TabsTrigger>
-                <TabsTrigger value='request_count'>{t('Requests')}</TabsTrigger>
-              </TabsList>
-            </Tabs>
+            <CompactDateTimeRangePicker
+              start={range.start}
+              end={range.end}
+              onChange={handleRangeChange}
+              maxRangeDays={31}
+              className='sm:w-auto'
+            />
           </div>
-          <div className='grid gap-2 sm:grid-cols-3'>
+          <div
+            className='grid grid-cols-2 gap-3 xl:grid-cols-4'
+            aria-label={t('Period Summary')}
+          >
+            {metrics.map((metric) => (
+              <section
+                key={metric.title}
+                aria-label={metric.title}
+                className='bg-card min-w-0 rounded-xl border p-3 sm:p-4'
+              >
+                <StatCard
+                  title={metric.title}
+                  value={
+                    metric.money
+                      ? formatQuota(metric.value)
+                      : formatCompactNumber(metric.value, locale)
+                  }
+                  description={metric.description}
+                  descriptionClassName='line-clamp-none'
+                  icon={metric.icon}
+                  iconTone='info'
+                  titleAction={
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            variant='ghost'
+                            size='icon-xs'
+                            aria-label={t('Metric definition: {{metric}}', {
+                              metric: metric.title,
+                            })}
+                          />
+                        }
+                      >
+                        <Info aria-hidden='true' />
+                      </TooltipTrigger>
+                      <TooltipContent className='max-w-[min(24rem,calc(100vw-2rem))] leading-relaxed'>
+                        {metric.definition}
+                      </TooltipContent>
+                    </Tooltip>
+                  }
+                  loading={rankingQuery.isLoading}
+                  error={rankingQuery.isError}
+                  action={
+                    !rankingQuery.isLoading &&
+                    !rankingQuery.isError &&
+                    metric.previous !== undefined ? (
+                      <StatDelta
+                        current={metric.value}
+                        previous={metric.previous}
+                      />
+                    ) : undefined
+                  }
+                  visualization={
+                    !metric.money &&
+                    metric.value >= 1000 &&
+                    !rankingQuery.isLoading &&
+                    !rankingQuery.isError && (
+                      <div className='text-muted-foreground text-xs tabular-nums'>
+                        {formatNumber(metric.value, locale)}
+                      </div>
+                    )
+                  }
+                />
+              </section>
+            ))}
+          </div>
+          <div className='grid min-w-0 gap-2 sm:grid-cols-3'>
             <Input
               value={username}
-              onChange={(event) => {
-                setUsername(event.target.value)
-                setPage(1)
-              }}
+              onChange={(event) => setUsername(event.target.value)}
               placeholder={t('Filter users')}
               aria-label={t('Filter users')}
             />
             <Input
               value={modelName}
-              onChange={(event) => {
-                setModelName(event.target.value)
-                setPage(1)
-              }}
+              onChange={(event) => setModelName(event.target.value)}
               placeholder={t('Filter models')}
               aria-label={t('Filter models')}
             />
             <Input
               value={channel}
-              onChange={(event) => {
+              onChange={(event) =>
                 setChannel(event.target.value.replaceAll(/\D/g, ''))
-                setPage(1)
-              }}
+              }
               placeholder={t('Channel ID')}
               aria-label={t('Channel ID')}
               inputMode='numeric'
             />
           </div>
-        </div>
-        {rankingQuery.isError ? (
-          <ErrorState
-            className='min-h-40'
-            title={t('Failed to load usage details')}
-            description={
-              rankingQuery.error instanceof Error
-                ? rankingQuery.error.message
-                : undefined
+        </>
+      )}
+      <TabsContent value='ranking'>
+        {periodError ?? (
+          <UserUsageRanking
+            data={data}
+            loading={rankingQuery.isLoading}
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+            page={page}
+            pageSize={props.filters.topUserLimit}
+            onPageChange={(nextPage) =>
+              setPagination({ scope, page: nextPage })
             }
-            onRetry={() => rankingQuery.refetch()}
+            onPageSizeChange={(pageSize) =>
+              props.onFiltersChange({
+                ...props.filters,
+                topUserLimit: pageSize,
+              })
+            }
+            range={range}
+            modelName={modelName || undefined}
+            channel={queryParams.channel}
+            onUserSelect={(item) =>
+              setSelectedUser({ id: item.user_id, username: item.username })
+            }
+          />
+        )}
+      </TabsContent>
+      <TabsContent value='tokens'>
+        {periodError ?? (
+          <UserUsageInsights
+            view='tokens'
+            data={data}
+            loading={rankingQuery.isLoading}
+          />
+        )}
+      </TabsContent>
+      <TabsContent value='activity'>
+        {activityQuery.isError ? (
+          <ErrorState
+            title={t('Failed to load usage details')}
+            description={activityQuery.error.message}
+            onRetry={() => void activityQuery.refetch()}
           />
         ) : (
-          <>
-            <div className='overflow-x-auto'>
-              <Table className='min-w-[1040px]'>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t('User')}</TableHead>
-                    <TableHead className='text-right'>
-                      {t('Requests')}
-                    </TableHead>
-                    <TableHead className='text-right'>
-                      {t('Input Tokens')}
-                    </TableHead>
-                    <TableHead className='text-right'>
-                      {t('Output Tokens')}
-                    </TableHead>
-                    <TableHead className='text-right'>
-                      {t('Cache Read')}
-                    </TableHead>
-                    <TableHead className='text-right'>
-                      {t('Cache Write')}
-                    </TableHead>
-                    <TableHead className='text-right'>
-                      {t('Reasoning')}
-                    </TableHead>
-                    <TableHead className='text-right'>
-                      {t('Total Tokens')}
-                    </TableHead>
-                    <TableHead className='text-right'>
-                      {t('User Cost')}
-                    </TableHead>
-                    <TableHead className='w-10' />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>{tableBody}</TableBody>
-              </Table>
-            </div>
-            <div className='border-t px-3 py-2 sm:px-5'>
-              <DataTableServerPagination
-                page={page}
-                pageSize={props.filters.topUserLimit}
-                total={data?.total ?? 0}
-                onPageChange={setPage}
-                onPageSizeChange={(pageSize) => {
-                  setPage(1)
-                  props.onFiltersChange({
-                    ...props.filters,
-                    topUserLimit: pageSize,
-                  })
-                }}
-              />
-            </div>
-          </>
+          <UserUsageInsights
+            view='activity'
+            data={activityQuery.data}
+            loading={activityQuery.isLoading}
+          />
         )}
-      </div>
-
+      </TabsContent>
+      <TabsContent value='definitions'>
+        <PanelWrapper
+          title={t('Metric definitions')}
+          className='rounded-xl shadow-none'
+        >
+          <dl className='grid gap-5 sm:grid-cols-2'>
+            {metrics.map((metric) => (
+              <div key={metric.title} className='min-w-0'>
+                <dt className='mb-2 font-semibold'>{metric.title}</dt>
+                <dd className='text-muted-foreground text-sm leading-relaxed'>
+                  {metric.definition}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </PanelWrapper>
+      </TabsContent>
       {selectedUser && (
         <UserUsageDialog
+          key={selectedUser.id}
           open
           onOpenChange={(open) => {
             if (!open) setSelectedUser(undefined)
           }}
           userId={selectedUser.id}
           username={selectedUser.username}
+          initialRange={range}
+          usageFilters={{
+            model_name: modelName || undefined,
+            channel: queryParams.channel,
+          }}
         />
       )}
-    </div>
+    </Tabs>
   )
 }

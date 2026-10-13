@@ -169,16 +169,29 @@ describe('API key group table cell', () => {
     ).toHaveAttribute('title', 'Follow user group')
   })
 
-  test('keeps a long group name reachable through the switch trigger', async () => {
+  test('shows a long group name as wrapping text beside the multiplier', async () => {
     const groupName = 'production-with-a-very-long-custom-group-name'
     renderCell({ group: groupName, ratio: 12.345678 })
     const trigger = screen.getByRole('button', { name: 'Change group' })
-    expect(trigger).toHaveClass('max-w-50')
+    expect(trigger).not.toHaveClass('max-w-50')
     expect(trigger).toHaveAttribute('title', groupName)
+    expect(screen.getByText(groupName)).not.toHaveClass('truncate')
+    expect(screen.getByText(groupName)).toHaveClass(
+      'whitespace-normal',
+      '[overflow-wrap:anywhere]'
+    )
+    expect(
+      screen.getByText('12.345678x').closest('[data-slot="badge"]')
+        ?.parentElement
+    ).toHaveClass('flex-wrap')
     expect(screen.getByText('12.345678x')).toBeInTheDocument()
 
     await userEvent.click(trigger)
     expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    expect(document.querySelector('[data-slot="popover-content"]')).toHaveClass(
+      'w-80',
+      'max-w-[calc(100vw-2rem)]'
+    )
     expect(getCommandItem('Priority group')).toBeInTheDocument()
   })
 

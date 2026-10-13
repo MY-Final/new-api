@@ -51,6 +51,7 @@ interface StatCardProps {
   loading?: boolean
   error?: boolean
   action?: ReactNode
+  titleAction?: ReactNode
   visualization?: ReactNode
   iconTone?: IconBadgeTone
   compactMobile?: boolean
@@ -312,8 +313,18 @@ export function StatCard(props: StatCardProps) {
         props.compactMobile ? 'gap-1' : 'gap-1.5'
       )}
     >
-      <div className='flex items-start justify-between gap-1'>
-        <div className='text-muted-foreground flex items-center gap-1 text-[11px] font-medium sm:gap-2 sm:text-xs'>
+      <div
+        className={cn(
+          'flex items-start justify-between gap-1',
+          props.titleAction && 'flex-wrap sm:flex-nowrap'
+        )}
+      >
+        <div
+          className={cn(
+            'text-muted-foreground flex min-w-0 items-center gap-1 text-[11px] font-medium sm:gap-2 sm:text-xs',
+            props.titleAction && 'w-full sm:w-auto'
+          )}
+        >
           <IconBadge
             tone={iconTone}
             size='stat'
@@ -324,9 +335,15 @@ export function StatCard(props: StatCardProps) {
           >
             <Icon />
           </IconBadge>
-          <span className='line-clamp-1 leading-snug sm:line-clamp-2'>
+          <span
+            title={props.title}
+            className='min-w-0 leading-snug [overflow-wrap:anywhere]'
+          >
             {props.title}
           </span>
+          {props.titleAction && (
+            <span className='shrink-0'>{props.titleAction}</span>
+          )}
         </div>
         {props.action && <div className='shrink-0'>{props.action}</div>}
       </div>

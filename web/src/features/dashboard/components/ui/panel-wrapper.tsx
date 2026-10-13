@@ -78,7 +78,11 @@ export function PanelWrapper(props: PanelWrapperProps) {
         aria-label={typeof props.title === 'string' ? props.title : undefined}
         className={frameClassName}
       >
-        <PanelHeader title={props.title} description={props.description} />
+        <PanelHeader
+          title={props.title}
+          description={props.description}
+          actions={props.headerActions}
+        />
         <div className={cn('p-4 sm:p-5', props.contentClassName)}>
           <Skeleton className={`w-full ${height}`} />
         </div>
@@ -92,7 +96,11 @@ export function PanelWrapper(props: PanelWrapperProps) {
         aria-label={typeof props.title === 'string' ? props.title : undefined}
         className={frameClassName}
       >
-        <PanelHeader title={props.title} description={props.description} />
+        <PanelHeader
+          title={props.title}
+          description={props.description}
+          actions={props.headerActions}
+        />
         <div
           className={cn(
             'text-muted-foreground flex items-center justify-center px-4 text-sm',

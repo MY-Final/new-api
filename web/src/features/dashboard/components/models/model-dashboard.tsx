@@ -25,7 +25,7 @@ import { toast } from 'sonner'
 
 import { ErrorState } from '@/components/error-state'
 import { Badge } from '@/components/ui/badge'
-import { Button, buttonVariants } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button'
 import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
 import { toIntlLocale } from '@/i18n/languages'
 import { formatNumber } from '@/lib/format'
@@ -35,9 +35,10 @@ import { getRollingDateRange } from '@/lib/time'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { getUserQuotaDates } from '../../api'
-import { buildQueryParams, detectQuickRangeDays } from '../../lib/filters'
+import { buildQueryParams } from '../../lib/filters'
 import { buildDashboardAnalytics } from '../../lib/operations'
 import type { DashboardChartPreferences, DashboardFilters } from '../../types'
+import { DateRangePresets } from '../date-range-presets'
 import { ConsumptionDistributionChart } from './consumption-distribution-chart'
 import { LogStatCards } from './log-stat-cards'
 import { ModelCharts } from './model-charts'
@@ -152,7 +153,6 @@ export function ModelDashboard(props: ModelDashboardProps) {
       previousRange.end_timestamp,
     ]
   )
-  const selectedDays = detectQuickRangeDays(range.start, range.end)
   const handleRangeChange = (next: { start?: Date; end?: Date }) => {
     if (!next.start || !next.end) return
     const seconds = (next.end.getTime() - next.start.getTime()) / 1000
@@ -189,26 +189,7 @@ export function ModelDashboard(props: ModelDashboardProps) {
               ? props.filters.username || t('All users')
               : t('My usage')}
           </Badge>
-          <div className='flex flex-wrap gap-1' aria-label={t('Quick Range')}>
-            {[
-              { days: 0, label: t('Today') },
-              { days: 1, label: t('Last 24 hours') },
-              { days: 7, label: t('7 Days') },
-              { days: 30, label: t('30 Days') },
-            ].map((preset) => (
-              <Button
-                key={preset.days}
-                variant={selectedDays === preset.days ? 'secondary' : 'ghost'}
-                size='sm'
-                aria-pressed={selectedDays === preset.days}
-                onClick={() =>
-                  handleRangeChange(getRollingDateRange(preset.days))
-                }
-              >
-                {preset.label}
-              </Button>
-            ))}
-          </div>
+          <DateRangePresets range={range} onChange={handleRangeChange} />
         </div>
         <CompactDateTimeRangePicker
           start={range.start}

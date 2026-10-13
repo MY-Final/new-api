@@ -34,6 +34,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { toIntlLocale } from '@/i18n/languages'
+import { formatNumber } from '@/lib/format'
 import { cn, getPageNumbers } from '@/lib/utils'
 
 type DataTablePaginationProps<TData> = {
@@ -46,6 +48,79 @@ const PAGE_SIZE_SELECT_ITEMS = PAGE_SIZE_OPTIONS.map((pageSize) => ({
   value: `${pageSize}`,
   label: pageSize,
 }))
+
+function CompactPagination(props: {
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+  onPageChange: (page: number) => void
+  onPageSizeChange?: (pageSize: number) => void
+}) {
+  const { t, i18n } = useTranslation()
+  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
+  return (
+    <nav
+      aria-label={t('Page')}
+      className='flex w-full min-w-0 flex-wrap items-center justify-between gap-3 text-sm'
+    >
+      <div className='flex min-w-0 flex-wrap items-center gap-2'>
+        <span className='text-muted-foreground min-w-0 [overflow-wrap:anywhere]'>
+          {t('Total:')} {formatNumber(props.total, locale)}
+        </span>
+        {props.onPageSizeChange && (
+          <Select
+            items={PAGE_SIZE_SELECT_ITEMS}
+            value={`${props.pageSize}`}
+            onValueChange={(value) => props.onPageSizeChange?.(Number(value))}
+          >
+            <SelectTrigger
+              aria-label={t('Rows per page')}
+              className='h-8 w-16 tabular-nums'
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent side='top' alignItemWithTrigger={false}>
+              <SelectGroup>
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <SelectItem key={size} value={`${size}`}>
+                    {size}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+      <div className='flex shrink-0 items-center gap-2'>
+        <Button
+          variant='outline'
+          size='icon'
+          className='size-11'
+          aria-label={t('Go to previous page')}
+          onClick={() => props.onPageChange(props.page - 1)}
+          disabled={props.page <= 1}
+        >
+          <ChevronLeftIcon />
+        </Button>
+        <span className='tabular-nums' aria-live='polite'>
+          {formatNumber(props.page, locale)} /{' '}
+          {formatNumber(Math.max(1, props.totalPages), locale)}
+        </span>
+        <Button
+          variant='outline'
+          size='icon'
+          className='size-11'
+          aria-label={t('Go to next page')}
+          onClick={() => props.onPageChange(props.page + 1)}
+          disabled={props.totalPages !== -1 && props.page >= props.totalPages}
+        >
+          <ChevronRightIcon />
+        </Button>
+      </div>
+    </nav>
+  )
+}
 
 type PaginationControlsProps = {
   currentPage: number
@@ -189,47 +264,16 @@ export function DataTablePagination<TData>({
   table,
   compact = false,
 }: DataTablePaginationProps<TData>) {
-  const { t } = useTranslation()
   const pagination = table.getState().pagination
-  const currentPage = pagination.pageIndex + 1
-  const totalPages = table.getPageCount()
-  const totalRows = table.getRowCount()
-
   if (compact) {
     return (
-      <nav
-        aria-label={t('Page')}
-        className='flex w-full min-w-0 flex-wrap items-center justify-between gap-2 text-sm'
-      >
-        <span className='text-muted-foreground min-w-0 [overflow-wrap:anywhere]'>
-          {t('Total:')} {totalRows.toLocaleString()}
-        </span>
-        <div className='flex items-center gap-2'>
-          <Button
-            variant='outline'
-            size='icon'
-            className='size-11'
-            aria-label={t('Go to previous page')}
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-          >
-            <ChevronLeftIcon />
-          </Button>
-          <span className='tabular-nums' aria-live='polite'>
-            {currentPage} / {Math.max(1, totalPages)}
-          </span>
-          <Button
-            variant='outline'
-            size='icon'
-            className='size-11'
-            aria-label={t('Go to next page')}
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-          >
-            <ChevronRightIcon />
-          </Button>
-        </div>
-      </nav>
+      <CompactPagination
+        page={pagination.pageIndex + 1}
+        pageSize={pagination.pageSize}
+        total={table.getRowCount()}
+        totalPages={table.getPageCount()}
+        onPageChange={(page) => table.setPageIndex(page - 1)}
+      />
     )
   }
 
@@ -246,6 +290,7 @@ export function DataTablePagination<TData>({
 }
 
 type DataTableServerPaginationProps = {
+  compact?: boolean
   page: number
   pageSize: number
   total: number
@@ -259,6 +304,16 @@ export function DataTableServerPagination(
   const totalPages = Math.ceil(Math.max(0, props.total) / props.pageSize)
   const currentPage =
     totalPages === 0 ? 1 : Math.min(Math.max(props.page, 1), totalPages)
+
+  if (props.compact) {
+    return (
+      <CompactPagination
+        {...props}
+        page={currentPage}
+        totalPages={totalPages}
+      />
+    )
+  }
 
   return (
     <PaginationControls

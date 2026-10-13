@@ -122,3 +122,34 @@ describe('operations summary cards', () => {
     expect(screen.queryByText('10')).not.toBeInTheDocument()
   })
 })
+
+test('long translated metric titles can shrink beside their comparison and keep the full title accessible', async () => {
+  const title = 'Расходы пользователя'
+  i18next.addResourceBundle('ru', 'translation', {
+    'User quota consumption': title,
+  })
+  try {
+    await act(async () => {
+      await i18next.changeLanguage('ru')
+    })
+    render(
+      <LogStatCards
+        data={data}
+        previous={{ count: 5, quota: 50, tokens: 500 }}
+        loading={false}
+        error={false}
+      />
+    )
+    const label = screen.getByTitle(title)
+    expect(label).toHaveClass('min-w-0', '[overflow-wrap:anywhere]')
+    expect(label.parentElement).toHaveClass('min-w-0')
+    expect(
+      within(screen.getByRole('region', { name: title })).getByTitle(
+        'Compared with the previous period'
+      )
+    ).toBeVisible()
+  } finally {
+    await i18next.changeLanguage('en')
+    i18next.removeResourceBundle('ru', 'translation')
+  }
+})
