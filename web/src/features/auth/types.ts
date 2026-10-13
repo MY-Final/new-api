@@ -96,6 +96,8 @@ export interface ContactStatus {
 }
 
 export interface SystemStatus {
+  ticket_images_enabled?: boolean
+  ticket_image_retention_days?: number
   success?: boolean
   message?: string
   data?: {

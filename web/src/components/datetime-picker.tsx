@@ -42,6 +42,8 @@ const calendarLocales = {
 } as const
 
 interface DateTimePickerProps {
+  id?: string
+  disabled?: boolean
   value?: Date
   onChange?: (date: Date | undefined) => void
   placeholder?: string
@@ -49,6 +51,8 @@ interface DateTimePickerProps {
 }
 
 export function DateTimePicker({
+  id,
+  disabled = false,
   value,
   onChange,
   placeholder,
@@ -116,6 +120,9 @@ export function DateTimePicker({
         <PopoverTrigger
           render={
             <Button
+              id={id}
+              type='button'
+              disabled={disabled}
               variant='outline'
               className={cn(
                 'flex-1 justify-between font-normal',
@@ -146,16 +153,17 @@ export function DateTimePicker({
         value={time}
         onChange={handleTimeChange}
         className='w-32 appearance-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none'
-        disabled={!date}
+        disabled={disabled || !date}
       />
       {date && (
         <Button
           type='button'
+          disabled={disabled}
           variant='outline'
           size='icon'
           onClick={handleClear}
           className='shrink-0'
-          aria-label='Clear'
+          aria-label={t('Clear')}
         >
           <span aria-hidden='true'>✕</span>
         </Button>

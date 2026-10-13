@@ -387,6 +387,9 @@ func migrateDB() error {
 	if err != nil {
 		return err
 	}
+	if err := MigrateTickets(DB); err != nil {
+		return err
+	}
 	if err := migrateUserQuotaSources(); err != nil {
 		return err
 	}

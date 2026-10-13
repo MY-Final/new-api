@@ -36,6 +36,7 @@ func InitOptionMap() {
 	common.OptionMap = make(map[string]string)
 
 	// 添加原有的系统配置
+	common.OptionMap["SupportTicketsEnabled"] = "true"
 	common.OptionMap["FileUploadPermission"] = strconv.Itoa(common.FileUploadPermission)
 	common.OptionMap["FileDownloadPermission"] = strconv.Itoa(common.FileDownloadPermission)
 	common.OptionMap["ImageUploadPermission"] = strconv.Itoa(common.ImageUploadPermission)
@@ -234,6 +235,12 @@ func SyncOptions(frequency int) {
 }
 
 func validateOptionValue(key string, value string) error {
+	if key == system_setting.TicketStorageOption {
+		return ValidateTicketStorageOption(value)
+	}
+	if key == "SupportTicketsEnabled" && value != "true" && value != "false" {
+		return fmt.Errorf("SupportTicketsEnabled must be true or false")
+	}
 	if key == legacyAccessTokenRetireAtKey {
 		return errLegacyRetireAtReadOnly
 	}
@@ -280,6 +287,9 @@ func validateOptionValue(key string, value string) error {
 }
 
 func UpdateOption(key string, value string) error {
+	if key == system_setting.TicketStorageOption {
+		return UpdateOptionsBulk(map[string]string{key: value})
+	}
 	if IsRequestPolicyOption(key) {
 		return UpdateRequestPolicyOptions(map[string]string{key: value})
 	}

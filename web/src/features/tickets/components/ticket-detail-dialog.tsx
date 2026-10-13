@@ -1,0 +1,352 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+
+import { ConfirmDialog } from '@/components/confirm-dialog'
+import { Dialog } from '@/components/dialog'
+import { ErrorState } from '@/components/error-state'
+import { ImagePreviewDialog } from '@/components/image-preview-dialog'
+import { LoadingState } from '@/components/loading-state'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { hasPermission } from '@/lib/admin-permissions'
+import { formatTimestampToDate } from '@/lib/format'
+import { handleServerError } from '@/lib/handle-server-error'
+import { useAuthStore } from '@/stores/auth-store'
+
+import { changeTicket, getScreenshot, getTicket, readTicket } from '../api'
+import { ticketCategories, ticketStatuses } from '../constants'
+import type { TicketStatus } from '../types'
+import { TicketComposer } from './ticket-composer'
+import { TicketSelect } from './ticket-select'
+
+export function TicketDetailDialog(props: {
+  id: number
+  staff: boolean
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  const client = useQueryClient()
+  const user = useAuthStore((state) => state.auth.user)
+  const canReply = !props.staff || hasPermission(user, 'ticket', 'write')
+  const canManage = props.staff && hasPermission(user, 'ticket', 'operate')
+  const [before, setBefore] = useState(0)
+  const [closeConfirm, setCloseConfirm] = useState(false)
+  const [assignee, setAssignee] = useState('')
+  const [preview, setPreview] = useState<string | null>(null)
+  const previewURL = useRef<string | null>(null)
+  const query = useQuery({
+    queryKey: ['tickets', 'detail', props.staff, user?.id, props.id, before],
+    queryFn: () => getTicket(props.staff, props.id, before),
+    refetchInterval: before === 0 ? 30000 : false,
+  })
+  const read = useMutation({
+    mutationFn: (version: number) => readTicket(props.staff, props.id, version),
+    onSuccess: (_result, version) => {
+      readVersion.current = Math.max(readVersion.current, version)
+      void client.invalidateQueries({ queryKey: ['tickets', 'unread'] })
+      void client.invalidateQueries({ queryKey: ['tickets', 'list'] })
+    },
+    retry: 1,
+  })
+  const version = query.data?.ticket.version
+  const readVersion = useRef(0)
+  const markRead = read.mutate
+  useEffect(() => {
+    if (version && before === 0 && version > readVersion.current) {
+      markRead(version)
+    }
+  }, [version, before, markRead])
+  useEffect(
+    () => () => {
+      if (previewURL.current) URL.revokeObjectURL(previewURL.current)
+    },
+    []
+  )
+  const update = useMutation({
+    mutationFn: (input: { status?: TicketStatus; assignee?: number }) =>
+      changeTicket(
+        props.staff,
+        props.id,
+        query.data?.ticket.version ?? 0,
+        input.status,
+        input.assignee
+      ),
+    onSuccess: () => {
+      setCloseConfirm(false)
+      void client.invalidateQueries({ queryKey: ['tickets'] })
+    },
+    onError: (error) => handleServerError(error, t('Ticket operation failed')),
+  })
+  const screenshot = useMutation({
+    mutationFn: (id: number) => getScreenshot(props.staff, props.id, id),
+    onSuccess: (blob) => {
+      if (previewURL.current) URL.revokeObjectURL(previewURL.current)
+      previewURL.current = URL.createObjectURL(blob)
+      setPreview(previewURL.current)
+    },
+    onError: (error) => handleServerError(error, t('Ticket operation failed')),
+  })
+  const ticket = query.data?.ticket
+  return (
+    <>
+      <Dialog
+        open
+        title={ticket ? `#${ticket.id} · ${ticket.title}` : t('Ticket details')}
+        onOpenChange={(open) => {
+          if (!open) props.onClose()
+        }}
+        contentClassName='sm:max-w-5xl'
+        titleClassName='break-words [overflow-wrap:anywhere]'
+        contentHeight='min(75vh, 800px)'
+      >
+        {query.isPending && <LoadingState />}
+        {query.isError && (
+          <ErrorState
+            onRetry={() => {
+              void query.refetch()
+            }}
+          />
+        )}
+        {ticket && query.data && (
+          <div className='grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_240px]'>
+            <section
+              className='min-w-0 space-y-4'
+              aria-label={t('Conversation')}
+            >
+              <div className='flex flex-wrap gap-2'>
+                {query.data.has_more && (
+                  <Button
+                    size='sm'
+                    variant='outline'
+                    onClick={() => setBefore(query.data?.messages[0]?.id ?? 0)}
+                  >
+                    {t('Older messages')}
+                  </Button>
+                )}
+                {before > 0 && (
+                  <Button
+                    size='sm'
+                    variant='outline'
+                    onClick={() => setBefore(0)}
+                  >
+                    {t('Latest messages')}
+                  </Button>
+                )}
+              </div>
+              {query.data.messages.map((message) => (
+                <article
+                  key={message.id}
+                  className={`space-y-2 rounded-lg border p-4 ${message.sender_type === 'note' ? 'border-amber-300 bg-amber-50 dark:bg-amber-950/30' : 'bg-muted/20'}`}
+                >
+                  <div className='flex flex-wrap items-center justify-between gap-2 text-xs'>
+                    <span className='font-medium'>
+                      {message.sender_type === 'note'
+                        ? t('Internal note')
+                        : t(
+                            message.sender_type === 'admin' ? 'Support' : 'User'
+                          )}
+                      {props.staff ? ` #${message.sender_id}` : ''}
+                    </span>
+                    <time className='text-muted-foreground'>
+                      {formatTimestampToDate(message.created_at)}
+                    </time>
+                  </div>
+                  <p className='text-sm [overflow-wrap:anywhere] break-words whitespace-pre-wrap'>
+                    {message.content}
+                  </p>
+                  <div className='flex flex-wrap gap-2'>
+                    {message.attachments.map((attachment) => (
+                      <Button
+                        key={attachment.id}
+                        variant='outline'
+                        size='sm'
+                        className='max-w-full truncate'
+                        disabled={
+                          screenshot.isPending ||
+                          (attachment.expires_at !== undefined &&
+                            attachment.expires_at <= Date.now() / 1000)
+                        }
+                        onClick={() => screenshot.mutate(attachment.id)}
+                      >
+                        {attachment.name}
+                        {attachment.expires_at !== undefined &&
+                        attachment.expires_at <= Date.now() / 1000
+                          ? ` · ${t('Image expired')}`
+                          : null}
+                      </Button>
+                    ))}
+                  </div>
+                </article>
+              ))}
+              <TicketComposer
+                id={props.id}
+                staff={props.staff}
+                canReply={canReply}
+                canManage={canManage}
+              />
+            </section>
+            <aside
+              className='min-w-0 space-y-4 text-sm'
+              aria-label={t('Ticket details')}
+            >
+              <Badge variant='outline'>
+                {t(ticketStatuses[ticket.status])}
+              </Badge>
+              <dl className='space-y-3 [overflow-wrap:anywhere] break-words'>
+                <div>
+                  <dt className='text-muted-foreground'>{t('Category')}</dt>
+                  <dd>{t(ticketCategories[ticket.category])}</dd>
+                </div>
+                <div>
+                  <dt className='text-muted-foreground'>{t('Created at')}</dt>
+                  <dd>{formatTimestampToDate(ticket.created_at)}</dd>
+                </div>
+                {props.staff && (
+                  <div>
+                    <dt className='text-muted-foreground'>{t('User ID')}</dt>
+                    <dd>{ticket.user_id}</dd>
+                  </div>
+                )}
+                {ticket.request_id && (
+                  <div>
+                    <dt className='text-muted-foreground'>{t('Request ID')}</dt>
+                    <dd>{ticket.request_id}</dd>
+                  </div>
+                )}
+                {ticket.order_number && (
+                  <div>
+                    <dt className='text-muted-foreground'>
+                      {t('Order number')}
+                    </dt>
+                    <dd>{ticket.order_number}</dd>
+                  </div>
+                )}
+                {ticket.occurred_at > 0 && (
+                  <div>
+                    <dt className='text-muted-foreground'>
+                      {t('Time of occurrence')}
+                    </dt>
+                    <dd>{formatTimestampToDate(ticket.occurred_at)}</dd>
+                  </div>
+                )}
+                {ticket.model_name && (
+                  <div>
+                    <dt className='text-muted-foreground'>{t('Model')}</dt>
+                    <dd>{ticket.model_name}</dd>
+                  </div>
+                )}
+              </dl>
+              {canManage && (
+                <div className='space-y-3'>
+                  <TicketSelect
+                    label={t('Status')}
+                    value={ticket.status}
+                    options={ticketStatuses}
+                    disabled={update.isPending}
+                    onChange={(status) =>
+                      update.mutate({ status: status as TicketStatus })
+                    }
+                  />
+                  <Label htmlFor='ticket-assignee'>{t('Assignee ID')}</Label>
+                  <Input
+                    id='ticket-assignee'
+                    type='number'
+                    min={0}
+                    value={assignee}
+                    placeholder={String(ticket.assignee_id)}
+                    disabled={update.isPending}
+                    onChange={(event) => setAssignee(event.target.value)}
+                  />
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    disabled={
+                      update.isPending ||
+                      assignee === '' ||
+                      !Number.isInteger(Number(assignee)) ||
+                      Number(assignee) < 0
+                    }
+                    onClick={() =>
+                      update.mutate({ assignee: Number(assignee) })
+                    }
+                  >
+                    {t('Assign')}
+                  </Button>
+                </div>
+              )}
+              {!props.staff && ticket.status !== 'closed' && (
+                <Button
+                  variant='outline'
+                  disabled={update.isPending}
+                  onClick={() => setCloseConfirm(true)}
+                >
+                  {t('Close ticket')}
+                </Button>
+              )}
+              {!props.staff && ticket.status === 'closed' && (
+                <Button
+                  variant='outline'
+                  disabled={update.isPending}
+                  onClick={() => update.mutate({ status: 'pending' })}
+                >
+                  {t('Reopen ticket')}
+                </Button>
+              )}
+              <div className='space-y-2 border-t pt-3'>
+                <p className='font-medium'>{t('Activity')}</p>
+                {query.data.events.map((event) => (
+                  <p key={event.id} className='text-muted-foreground text-xs'>
+                    {event.action === 'assigned'
+                      ? `${t('Assigned')} #${event.assignee_id}`
+                      : `${t(ticketStatuses[event.from_status])} → ${t(ticketStatuses[event.to_status])}`}
+                    <br />
+                    {formatTimestampToDate(event.created_at)}
+                  </p>
+                ))}
+              </div>
+            </aside>
+          </div>
+        )}
+      </Dialog>
+      <ConfirmDialog
+        open={closeConfirm}
+        onOpenChange={setCloseConfirm}
+        title={t('Close ticket')}
+        desc={t('Close this ticket? You can reopen it later.')}
+        confirmText={t('Close ticket')}
+        isLoading={update.isPending}
+        handleConfirm={() => update.mutate({ status: 'closed' })}
+      />
+      <ImagePreviewDialog
+        src={preview}
+        alt={t('Screenshot')}
+        onClose={() => {
+          if (previewURL.current) URL.revokeObjectURL(previewURL.current)
+          previewURL.current = null
+          setPreview(null)
+        }}
+      />
+    </>
+  )
+}

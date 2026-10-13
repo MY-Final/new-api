@@ -45,6 +45,7 @@ func GetStatus(c *gin.Context) {
 
 	cs := console_setting.GetConsoleSetting()
 	passkeySetting := system_setting.PasskeySettingsSnapshot()
+	ticketStorage := model.TicketStorageConfig()
 	common.OptionMapRWMutex.RLock()
 	defer common.OptionMapRWMutex.RUnlock()
 
@@ -128,6 +129,9 @@ func GetStatus(c *gin.Context) {
 		"passkey_user_verification":   passkeySetting.UserVerification,
 		"passkey_attachment":          passkeySetting.AttachmentPreference,
 		"setup":                       constant.Setup,
+		"support_tickets_enabled":     common.OptionMap["SupportTicketsEnabled"] != "false",
+		"ticket_images_enabled":       ticketStorage.Enabled && ticketStorage.Ready(),
+		"ticket_image_retention_days": ticketStorage.RetentionDays,
 		"user_agreement_enabled":      legalSetting.UserAgreement != "",
 		"privacy_policy_enabled":      legalSetting.PrivacyPolicy != "",
 		"checkin_enabled":             operation_setting.GetCheckinSetting().Enabled,

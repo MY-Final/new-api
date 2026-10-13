@@ -48,7 +48,10 @@ import {
 import { useTranslation } from 'react-i18next'
 
 import type { SidebarData } from '@/components/layout/types'
+import { useTicketUnread } from '@/features/tickets/hooks/use-ticket-unread'
 import { useStatus } from '@/hooks/use-status'
+import { toIntlLocale } from '@/i18n/languages'
+import { formatNumber } from '@/lib/format'
 import { ROLE } from '@/lib/roles'
 
 /**
@@ -58,8 +61,10 @@ import { ROLE } from '@/lib/roles'
  * registered in `layout/lib/sidebar-view-registry.ts`.
  */
 export function useSidebarData(): SidebarData {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { status } = useStatus()
+  const tickets = useTicketUnread()
+  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const shopUrl =
     typeof status?.liandong_shop_url === 'string'
       ? status.liandong_shop_url.trim()
@@ -154,6 +159,15 @@ export function useSidebarData(): SidebarData {
         title: t('Personal'),
         items: [
           {
+            title: t('My tickets'),
+            url: '/tickets',
+            icon: MessageSquare,
+            badge:
+              tickets.personal > 0
+                ? formatNumber(Math.min(tickets.personal, 99), locale)
+                : undefined,
+          },
+          {
             title: t('Wallet'),
             url: '/wallet',
             icon: Wallet,
@@ -195,6 +209,19 @@ export function useSidebarData(): SidebarData {
         id: 'admin',
         title: t('Admin'),
         items: [
+          ...(tickets.canRead
+            ? [
+                {
+                  title: t('Ticket Management'),
+                  url: '/ticket-management',
+                  icon: ClipboardList,
+                  badge:
+                    tickets.staff > 0
+                      ? formatNumber(Math.min(tickets.staff, 99), locale)
+                      : undefined,
+                },
+              ]
+            : []),
           {
             title: t('Channels'),
             url: '/channels',
