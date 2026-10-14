@@ -23,10 +23,18 @@ import {
   createRouter,
   RouterProvider,
 } from '@tanstack/react-router'
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { QuotaDataItem } from '@/features/dashboard/types'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 import { useSystemConfigStore } from '@/stores/system-config-store'
@@ -36,6 +44,10 @@ import { OverviewDashboard } from '../overview-dashboard'
 const storageKey = 'dashboard_overview_setup_guide_expanded'
 let client: QueryClient
 let keyLookupError: Error | null
+let usageData: QuotaDataItem[]
+let usageFails: boolean
+let contentEnabled: boolean
+let uptimeEnabled: boolean
 
 beforeEach(() => {
   window.localStorage.clear()
@@ -52,6 +64,10 @@ beforeEach(() => {
     defaultOptions: { queries: { retry: false } },
   })
   keyLookupError = null
+  usageData = []
+  usageFails = false
+  contentEnabled = false
+  uptimeEnabled = false
   vi.spyOn(api, 'get').mockImplementation(async (url) => {
     switch (url) {
       case '/api/token/?p=1&size=10':
@@ -68,20 +84,285 @@ beforeEach(() => {
         return {
           data: {
             data: {
-              api_info_enabled: false,
-              announcements_enabled: false,
-              faq_enabled: false,
-              uptime_kuma_enabled: false,
+              api_info_enabled: contentEnabled,
+              announcements_enabled: contentEnabled,
+              faq_enabled: contentEnabled,
+              uptime_kuma_enabled: uptimeEnabled,
+              announcements: [{ id: 1, content: 'Latest platform update' }],
+              faq: [
+                {
+                  id: 'help',
+                  question: 'How do I get started?',
+                  answer: 'Create a key.',
+                },
+              ],
+              api_info: [
+                {
+                  url: 'https://api.example.com',
+                  route: '/v1',
+                  description: 'API gateway',
+                  color: 'blue',
+                },
+              ],
             },
           },
         }
       case '/api/user/models':
         return { data: { success: true, data: ['gpt-4o-mini'] } }
       case '/api/data/self':
-        return { data: { success: true, data: [] } }
+      case '/api/data':
+        return { data: { success: !usageFails, data: usageData } }
+      case '/api/perf-metrics/summary':
+        return {
+          data: {
+            success: true,
+            data: {
+              summary: { success_rate: 96, avg_latency_ms: 1500, avg_tps: 20 },
+              models: [
+                {
+                  model_name: 'needs-attention',
+                  success_rate: 75,
+                  avg_latency_ms: 1800,
+                  avg_tps: 15,
+                },
+              ],
+            },
+          },
+        }
+      case '/api/uptime/status':
+        return {
+          data: {
+            success: true,
+            data: [
+              {
+                categoryName: 'Production',
+                monitors: [
+                  {
+                    name: 'production-provider-with-a-long-model-version-and-region',
+                    status: 0,
+                    uptime: 0.98,
+                    group: 'Extended models',
+                  },
+                  { name: 'Main API', status: 1, uptime: 1 },
+                ],
+              },
+            ],
+          },
+        }
       default:
         throw new Error(`Unexpected dashboard request: ${url}`)
     }
+  })
+})
+
+describe('overview usage and content', () => {
+  it('shows the selected period usage before support content and keeps personal balance separate', async () => {
+    usageData = [
+      {
+        created_at: Math.floor(Date.now() / 1000),
+        model_name: 'active-model',
+        quota: 500000,
+        count: 42,
+        token_used: 1000,
+      },
+    ]
+    contentEnabled = true
+    await renderOverview()
+    const requests = await screen.findByRole('region', { name: 'Requests' })
+    expect(await within(requests).findByText('42')).toBeVisible()
+    expect(
+      screen.getByRole('region', { name: 'Current Balance' })
+    ).toBeVisible()
+    expect(
+      screen.getByText('Current balance, independent of the selected period')
+    ).toBeVisible()
+    const trend = screen.getByRole('region', { name: 'Consumption Trend' })
+    const announcement = await screen.findByText('Latest platform update')
+    expect(
+      trend.compareDocumentPosition(announcement) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+    expect(
+      vi.mocked(api.get).mock.calls.some(([url]) => url === '/api/data')
+    ).toBe(false)
+    expect(
+      vi
+        .mocked(api.get)
+        .mock.calls.some(([url]) => url === '/api/perf-metrics/summary')
+    ).toBe(false)
+  })
+
+  it('loads site-wide usage and model health for an administrator instead of their personal totals', async () => {
+    usageData = [
+      {
+        created_at: Math.floor(Date.now() / 1000),
+        model_name: 'site-model',
+        count: 123,
+        quota: 500000,
+      },
+    ]
+    useAuthStore.getState().auth.setUser({
+      id: 1,
+      username: 'admin',
+      role: 10,
+      quota: 1000000,
+      request_count: 1,
+    })
+    await renderOverview()
+    const requests = await screen.findByRole('region', { name: 'Requests' })
+    expect(await within(requests).findByText('123')).toBeVisible()
+    expect(screen.getByText('All users')).toBeVisible()
+    expect(
+      await screen.findByRole('link', {
+        name: 'View failed requests for needs-attention',
+      })
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('region', { name: 'Current Balance' })
+    ).not.toBeInTheDocument()
+    expect(
+      vi.mocked(api.get).mock.calls.some(([url]) => url === '/api/data')
+    ).toBe(true)
+    expect(
+      vi.mocked(api.get).mock.calls.some(([url]) => url === '/api/data/self')
+    ).toBe(false)
+  })
+
+  it('changes all usage modules to a quick range without changing the balance', async () => {
+    const user = userEvent.setup()
+    await renderOverview()
+    const quick = await screen.findByRole('group', { name: 'Quick Range' })
+    await user.click(
+      within(quick).getByRole('button', { name: 'Last 24 hours' })
+    )
+    expect(
+      within(quick).getByRole('button', { name: 'Last 24 hours' })
+    ).toHaveAttribute('aria-pressed', 'true')
+    await waitFor(() =>
+      expect(
+        vi.mocked(api.get).mock.calls.some(([url, config]) => {
+          const params = config?.params
+          return (
+            url === '/api/data/self' &&
+            params.end_timestamp - params.start_timestamp === 86400
+          )
+        })
+      ).toBe(true)
+    )
+    expect(
+      screen.getByRole('region', { name: 'Current Balance' })
+    ).toBeVisible()
+  })
+
+  it('shows the new account usage after the signed-in user changes', async () => {
+    usageData = [
+      {
+        created_at: Math.floor(Date.now() / 1000),
+        model_name: 'first-account',
+        count: 42,
+      },
+    ]
+    await renderOverview()
+    const requests = await screen.findByRole('region', { name: 'Requests' })
+    expect(await within(requests).findByText('42')).toBeVisible()
+    usageData = [
+      {
+        created_at: Math.floor(Date.now() / 1000),
+        model_name: 'second-account',
+        count: 7,
+      },
+    ]
+    act(() =>
+      useAuthStore
+        .getState()
+        .auth.setUser({ id: 2, username: 'second', role: 1, quota: 500000 })
+    )
+    expect(await within(requests).findByText('7')).toBeVisible()
+    expect(within(requests).queryByText('42')).not.toBeInTheDocument()
+    expect(
+      await screen.findByRole('link', { name: 'second-account' })
+    ).toBeVisible()
+  })
+
+  it('shows monitor names and current online counts independently of historical uptime', async () => {
+    uptimeEnabled = true
+    await renderOverview()
+    expect(await screen.findByText('1 of 2 monitors online')).toBeVisible()
+    expect(
+      screen.getByText(
+        'production-provider-with-a-long-model-version-and-region'
+      )
+    ).toBeVisible()
+    expect(screen.getByText('Offline · Extended models')).toBeVisible()
+    expect(screen.getByText('98.00%')).toBeVisible()
+  })
+
+  it.each([1, 10])(
+    'shows announcements, FAQ and access information together for role %s',
+    async (role) => {
+      contentEnabled = true
+      const user = userEvent.setup()
+      useAuthStore.getState().auth.setUser({
+        id: 1,
+        username: 'dashboard-user',
+        role,
+        quota: 1000000,
+        request_count: 1,
+      })
+      await renderOverview()
+      expect(await screen.findByText('Latest platform update')).toBeVisible()
+      expect(screen.getByText('https://api.example.com')).toBeVisible()
+      const question = screen.getByRole('button', {
+        name: 'How do I get started?',
+      })
+      expect(question).toBeVisible()
+      question.focus()
+      await user.keyboard('{Enter}')
+      expect(await screen.findByText('Create a key.')).toBeVisible()
+      expect(question).toHaveAttribute('aria-expanded', 'true')
+      expect(screen.getByText('Latest platform update')).toBeVisible()
+      expect(screen.getByText('https://api.example.com')).toBeVisible()
+      expect(
+        screen.queryByRole('tablist', { name: 'Overview information' })
+      ).not.toBeInTheDocument()
+    }
+  )
+
+  it('keeps disabled information panels hidden', async () => {
+    await renderOverview()
+    await screen.findByRole('button', { name: 'Setup guide' })
+    expect(screen.queryByText('Latest platform update')).not.toBeInTheDocument()
+    expect(screen.queryByText('How do I get started?')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('https://api.example.com')
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Service availability by monitor')
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows unknown metrics and retry on usage failure instead of fabricated zero usage', async () => {
+    usageFails = true
+    const user = userEvent.setup()
+    await renderOverview()
+    await screen.findByText('Failed to load statistics')
+    expect(
+      within(screen.getByRole('region', { name: 'Requests' })).getByText('--')
+    ).toBeVisible()
+    usageFails = false
+    usageData = [
+      {
+        created_at: Math.floor(Date.now() / 1000),
+        model_name: 'recovered',
+        count: 7,
+      },
+    ]
+    await user.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(
+      await within(screen.getByRole('region', { name: 'Requests' })).findByText(
+        '7'
+      )
+    ).toBeVisible()
   })
 })
 
@@ -107,7 +388,7 @@ async function renderOverview() {
 }
 
 describe('overview setup guide', () => {
-  it('shows usage first and only a header entry when setup is complete', async () => {
+  it('shows usage and persistent quick actions while keeping the completed guide collapsed', async () => {
     await renderOverview()
 
     const toggle = await screen.findByRole('button', { name: 'Setup guide' })
@@ -117,9 +398,13 @@ describe('overview setup guide', () => {
     ).toEqual(['Overview', 'Usage at a glance'])
     expect(screen.queryByText('Setup guide complete')).not.toBeInTheDocument()
     expect(screen.queryByText('Setup progress: 3/3')).not.toBeInTheDocument()
-    for (const name of ['API Keys', 'Channels', 'Usage Logs', 'Pricing']) {
-      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
+    const actions = screen.getByRole('navigation', { name: 'Quick actions' })
+    for (const name of ['API Keys', 'Usage Logs', 'Pricing']) {
+      expect(within(actions).getByRole('button', { name })).toBeVisible()
     }
+    expect(
+      within(actions).queryByRole('button', { name: 'Channels' })
+    ).not.toBeInTheDocument()
     const panel = document.getElementById(
       toggle.getAttribute('aria-controls') ?? ''
     )
@@ -145,7 +430,9 @@ describe('overview setup guide', () => {
       })
     ).toBeVisible()
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /^API Keys/ })).toBeVisible()
+      expect(screen.getAllByRole('button', { name: /^API Keys/ })).toHaveLength(
+        2
+      )
     )
 
     await user.keyboard(' ')

@@ -16,5 +16,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+/**
+ * Built-in download page for KunCode Setup. Administrators can override it with
+ * `HeaderNavModules.setupDownloadUrl`; the override is validated on the server
+ * and normalized while parsing the status payload.
+ */
 export const KUNCODE_SETUP_RELEASE_URL =
   'https://github.com/MY-Final/kuncode-setup/releases/latest'
+
+/** Resolves the effective download URL, falling back to the built-in page. */
+export function resolveSetupDownloadUrl(override?: string): string {
+  const trimmed = override?.trim() ?? ''
+  return trimmed || KUNCODE_SETUP_RELEASE_URL
+}

@@ -18,16 +18,21 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 import {
   PromptInput,
+  PromptInputAttachment,
+  PromptInputAttachments,
   PromptInputFooter,
+  PromptInputHeader,
   PromptInputTextarea,
   type PromptInputMessage,
 } from '@/components/ai-elements/prompt-input'
 
-import { getSubmittableInputText } from '../../lib'
+import { getSubmittableInputContent } from '../../lib'
 import type {
+  MessageContent,
   ModelOption,
   GroupOption,
   ParameterEnabled,
@@ -36,9 +41,14 @@ import type {
 import { PlaygroundInputControls } from './playground-input-controls'
 import { PlaygroundInputTools } from './playground-input-tools'
 
+// Vision requests carry the images inline as data URLs, so keep the payload
+// small enough for the relay and for the browser to encode.
+const MAX_IMAGES = 4
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
 interface PlaygroundInputProps {
   config: PlaygroundConfig
-  onSubmit: (text: string) => void
+  onSubmit: (content: MessageContent) => void
   onStop?: () => void
   disabled?: boolean
   isGenerating?: boolean
@@ -85,20 +95,38 @@ export function PlaygroundInput({
   const [text, setText] = useState('')
 
   const handleSubmit = (message: PromptInputMessage) => {
-    const submittableText = getSubmittableInputText(message, disabled)
+    const content = getSubmittableInputContent(message, disabled)
 
-    if (!submittableText) return
-    onSubmit(submittableText)
+    if (content === null) return
+    onSubmit(content)
     setText('')
+  }
+
+  // The prompt input translates its own rejection reasons before reporting.
+  const handleAttachmentError = (error: { message: string }) => {
+    toast.error(error.message)
   }
 
   return (
     <div className='grid shrink-0 gap-4 px-1 md:pb-4'>
       <PromptInput
+        accept='image/*'
         className='relative'
         groupClassName='bg-background/95 dark:bg-background/80 border-border/70 shadow-[0_18px_60px_-32px_rgba(0,0,0,0.65)] ring-1 ring-foreground/5 rounded-xl overflow-hidden transition-all duration-200 focus-within:border-primary/45 focus-within:ring-primary/15 focus-within:shadow-[0_22px_70px_-34px_rgba(0,0,0,0.75)]'
+        maxFileSize={MAX_IMAGE_BYTES}
+        maxFiles={MAX_IMAGES}
+        multiple
+        onError={handleAttachmentError}
         onSubmit={handleSubmit}
       >
+        <PromptInputHeader className='gap-1.5 px-4 pt-3 empty:hidden'>
+          <PromptInputAttachments>
+            {(attachment) => (
+              <PromptInputAttachment data={attachment} />
+            )}
+          </PromptInputAttachments>
+        </PromptInputHeader>
+
         <PromptInputTextarea
           autoComplete='off'
           autoCorrect='off'

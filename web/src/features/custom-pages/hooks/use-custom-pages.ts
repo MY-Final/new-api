@@ -16,14 +16,37 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { createFileRoute } from '@tanstack/react-router'
+import { useQuery } from '@tanstack/react-query'
+import { useMemo } from 'react'
 
-import { Shop } from '@/features/shop'
+import {
+  buildCustomPageLinks,
+  type CustomPageLink,
+} from '@/lib/custom-pages'
 
-export const Route = createFileRoute('/_authenticated/shop/')({
-  component: RouteComponent,
-})
+import { getCustomPages } from '../api'
 
-function RouteComponent() {
-  return <Shop />
+export const CUSTOM_PAGES_QUERY_KEY = ['custom-pages'] as const
+
+export function useCustomPages(): {
+  links: CustomPageLink[]
+  isLoading: boolean
+  isError: boolean
+} {
+  const query = useQuery({
+    queryKey: CUSTOM_PAGES_QUERY_KEY,
+    queryFn: getCustomPages,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const links = useMemo(
+    () => buildCustomPageLinks(query.data ?? []),
+    [query.data]
+  )
+
+  return {
+    links,
+    isLoading: query.isLoading,
+    isError: query.isError,
+  }
 }

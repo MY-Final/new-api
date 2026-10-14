@@ -233,6 +233,17 @@ func EmailTemplateFor(key string) (EmailTemplate, EmailTemplateSpec, bool) {
 	return EmailTemplate{}, EmailTemplateSpec{}, false
 }
 
+// HasEmailTemplateOverride reports whether an administrator saved a custom
+// template for key. Templates without an override keep the built-in localized
+// content, so untouched installs are unaffected by the template feature.
+func HasEmailTemplateOverride(key string) bool {
+	template, ok := EmailTemplates()[key]
+	if !ok {
+		return false
+	}
+	return strings.TrimSpace(template.Subject) != "" || strings.TrimSpace(template.Body) != ""
+}
+
 func EmailTemplateDefaults() []EmailTemplateDefault {
 	specs := EmailTemplateSpecs()
 	defaults := make([]EmailTemplateDefault, 0, len(specs))

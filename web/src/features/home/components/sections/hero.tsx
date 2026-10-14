@@ -23,7 +23,7 @@ import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
 import { useStatus } from '@/hooks/use-status'
-import { KUNCODE_SETUP_RELEASE_URL } from '@/lib/kuncode-setup'
+import { resolveSetupDownloadUrl } from '@/lib/kuncode-setup'
 import { parseHeaderNavModulesFromStatus } from '@/lib/nav-modules'
 
 import { HeroTerminalDemo } from '../hero-terminal-demo'
@@ -50,8 +50,11 @@ const MoreIcon = () => (
 export function Hero(props: HeroProps) {
   const { t } = useTranslation()
   const { status } = useStatus()
-  const showSetupDownload =
-    parseHeaderNavModulesFromStatus(status).setupDownload
+  const headerNavModules = parseHeaderNavModulesFromStatus(status)
+  const showSetupDownload = headerNavModules.setupDownload
+  const setupDownloadUrl = resolveSetupDownloadUrl(
+    headerNavModules.setupDownloadUrl
+  )
   const docsUrl =
     (status?.docs_link as string | undefined) || 'https://docs.newapi.pro'
 
@@ -174,7 +177,7 @@ export function Hero(props: HeroProps) {
                 className='border-border/50 hover:border-border hover:bg-muted/50 h-11 rounded-lg px-5 text-sm font-medium'
                 render={
                   <a
-                    href={KUNCODE_SETUP_RELEASE_URL}
+                    href={setupDownloadUrl}
                     target='_blank'
                     rel='noopener noreferrer'
                   />

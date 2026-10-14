@@ -44,12 +44,14 @@ import { MESSAGE_STATUS } from '../../constants'
 import {
   getMessageAlignmentClass,
   getMessageContentState,
+  getMessageImages,
   isErrorMessage,
   type MessageAlignment,
 } from '../../lib'
 import { getMessageContentStyles } from '../../lib/message/message-styles'
 import type { Message } from '../../types'
 import { MessageError } from './message-error'
+import { PlaygroundMessageImages } from './playground-message-images'
 import { MessageMetadata } from './message-metadata'
 
 type PlaygroundMessageContentProps = {
@@ -79,6 +81,8 @@ export function PlaygroundMessageContent({
     showMessageContent,
     sources,
   } = getMessageContentState(message, versionContent)
+  const images = getMessageImages(message)
+  const hasImages = images.length > 0
   const isError = isErrorMessage(message)
   const isMessageFinal =
     message.status !== MESSAGE_STATUS.LOADING &&
@@ -134,7 +138,7 @@ export function PlaygroundMessageContent({
         </>
       )}
 
-      {!isError && showMessageContent && (
+      {!isError && (showMessageContent || hasImages) && (
         <>
           {isSourceVisible ? (
             <CodeBlock
@@ -151,12 +155,21 @@ export function PlaygroundMessageContent({
               <CodeBlockCopyButton />
             </CodeBlock>
           ) : (
-            <MessageContent
-              variant='flat'
-              className={cn(getMessageContentStyles())}
-            >
-              <Response final={isMessageFinal}>{displayContent}</Response>
-            </MessageContent>
+            <>
+              {/* An image-only message has no text block to render. */}
+              <PlaygroundMessageImages
+                className={showMessageContent ? 'mb-2' : undefined}
+                images={images}
+              />
+              {showMessageContent && (
+                <MessageContent
+                  variant='flat'
+                  className={cn(getMessageContentStyles())}
+                >
+                  <Response final={isMessageFinal}>{displayContent}</Response>
+                </MessageContent>
+              )}
+            </>
           )}
           <MessageMetadata alignment={alignment} message={message} />
           {actions}

@@ -77,11 +77,6 @@ const _systemInfoSchema = z.object({
   ServerAddress: z.string().optional(),
   ApiBaseURLs: z.string().refine(hasValidAPIBaseURLs),
   TaskPublicAddress: z.string().refine(isValidTaskPublicAddress),
-  KunCodeRelayPulseUrl: z.string().refine((value) => {
-    const trimmed = value.trim()
-    if (!trimmed) return true
-    return /^https?:\/\//.test(trimmed)
-  }),
   Logo: z.string().url().optional().or(z.literal('')),
   Footer: z.string().optional(),
   About: z.string().optional(),
@@ -115,7 +110,6 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
     ServerAddress: normalizeValue(defaultValues.ServerAddress),
     ApiBaseURLs: normalizeValue(defaultValues.ApiBaseURLs),
     TaskPublicAddress: normalizeValue(defaultValues.TaskPublicAddress),
-    KunCodeRelayPulseUrl: normalizeValue(defaultValues.KunCodeRelayPulseUrl),
     Logo: normalizeValue(defaultValues.Logo),
     Footer: normalizeValue(defaultValues.Footer),
     About: normalizeValue(defaultValues.About),
@@ -146,11 +140,6 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
           'Enter an absolute HTTP(S) URL without credentials, query parameters, or fragments'
         ),
     }),
-    KunCodeRelayPulseUrl: z
-      .string()
-      .refine((value) => !value.trim() || /^https?:\/\//.test(value.trim()), {
-        error: () => t('Provide a valid URL starting with http:// or https://'),
-      }),
     Logo: z.string().url().optional().or(z.literal('')),
     Footer: z.string().optional(),
     About: z.string().optional(),
@@ -175,11 +164,7 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
       onSubmit: async (_data, changedFields) => {
         for (const [key, value] of Object.entries(changedFields)) {
           let v = normalizeValue(value)
-          if (
-            key === 'ServerAddress' ||
-            key === 'TaskPublicAddress' ||
-            key === 'KunCodeRelayPulseUrl'
-          ) {
+          if (key === 'ServerAddress' || key === 'TaskPublicAddress') {
             v = v.replace(/\/+$/, '')
           }
           if (key === 'ApiBaseURLs') {
@@ -290,29 +275,6 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                     <FormDescription>
                       {t(
                         'Public base URL for async task media. Supports a dedicated media domain, port, or Nginx path prefix; falls back to Server Address when empty.'
-                      )}
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name='KunCodeRelayPulseUrl'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('Channel Detection URL')}</FormLabel>
-                    <FormControl>
-                      <Input
-                        type='url'
-                        placeholder='https://relaypulse.example.com'
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      {t(
-                        'URL for the Channel Detection page. It is embedded in the sidebar. Leave empty to hide it.'
                       )}
                     </FormDescription>
                     <FormMessage />

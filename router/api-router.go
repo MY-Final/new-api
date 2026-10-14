@@ -49,6 +49,7 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/privacy-policy", controller.GetPrivacyPolicy)
 		apiRouter.GET("/contact/qrcode", controller.GetContactQRCode)
 		apiRouter.GET("/about", controller.GetAbout)
+		apiRouter.GET("/custom-pages", middleware.UserAuth(), controller.GetCustomPages)
 		//apiRouter.GET("/midjourney", controller.GetMidjourney)
 		apiRouter.GET("/home_page_content", controller.GetHomePageContent)
 		apiRouter.GET("/pricing", middleware.HeaderNavModuleAuth("pricing"), controller.GetPricing)
@@ -360,6 +361,7 @@ func SetApiRouter(router *gin.Engine) {
 		{
 			redemptionRoute.GET("/", controller.GetAllRedemptions)
 			redemptionRoute.GET("/search", controller.SearchRedemptions)
+			redemptionRoute.GET("/summary", controller.GetRedemptionSummary)
 			redemptionRoute.GET("/:id", controller.GetRedemption)
 			redemptionRoute.POST("/", controller.AddRedemption)
 			redemptionRoute.POST("/batch", controller.BatchRedemptionOperation)

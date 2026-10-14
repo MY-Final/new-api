@@ -31,6 +31,19 @@ For commercial licensing, please contact support@quantumnous.com
 @import './theme-presets.css';
 
 @layer base {
+  /*
+   * A modal dialog locks the whole console, not just <body>: the console
+   * scrolls inside layout containers, so locking only the body would leave the
+   * page behind the dialog scrollable — and its scrollbar visible next to the
+   * dialog's own. Containers inside the dialog popup keep scrolling.
+   */
+  html[data-modal-open] [data-app-scroll-container]:not(
+      [data-slot='dialog-content'],
+      [data-slot='dialog-content'] *
+    ) {
+    overflow: hidden;
+  }
+
   :root {
     /* Mobile browser toolbars change dvh; 50% positioning and vh still use
        the layout viewport and can place dialog actions behind those bars. */

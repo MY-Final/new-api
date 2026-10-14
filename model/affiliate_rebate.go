@@ -59,12 +59,13 @@ type AffiliateInvitee struct {
 	ReversedQuota int    `json:"reversed_quota"`
 }
 
+// These reach the web console, so they carry message keys for translation.
 var (
-	ErrAffiliateRateInvalid     = errors.New("affiliate rebate rate must be between 0 and 10000")
-	ErrAffiliateSourceInvalid   = errors.New("invalid affiliate rebate source")
-	ErrAffiliateRebateNotFound  = errors.New("affiliate rebate not found")
-	ErrAffiliateAlreadyReversed = errors.New("affiliate rebate already reversed")
-	ErrTopUpNotRefundable       = errors.New("top-up is not refundable")
+	ErrAffiliateRateInvalid     error = common.NewMessage("Affiliate rebate rate must be between 0 and 10000")
+	ErrAffiliateSourceInvalid   error = common.NewMessage("Invalid affiliate rebate source")
+	ErrAffiliateRebateNotFound  error = common.NewMessage("Affiliate rebate not found")
+	ErrAffiliateAlreadyReversed error = common.NewMessage("Affiliate rebate already reversed")
+	ErrTopUpNotRefundable       error = common.NewMessage("Top-up is not refundable")
 )
 
 func affiliateSourceAllowed(sourceType string) bool {

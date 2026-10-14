@@ -27,8 +27,10 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { useSetupDownload } from '@/hooks/use-setup-download'
-import { KUNCODE_SETUP_RELEASE_URL } from '@/lib/kuncode-setup'
+import {
+  useSetupDownload,
+  useSetupDownloadUrl,
+} from '@/hooks/use-setup-download'
 
 import { useApiAddresses } from '../hooks/use-api-addresses'
 import { ApiAddressList } from './api-address-list'
@@ -39,6 +41,7 @@ export function ApiKeysPrimaryButtons() {
   const { setOpen } = useApiKeys()
   const { loading } = useApiAddresses()
   const showSetupDownload = useSetupDownload()
+  const setupDownloadUrl = useSetupDownloadUrl()
 
   return (
     <div className='flex flex-wrap gap-2'>
@@ -49,7 +52,7 @@ export function ApiKeysPrimaryButtons() {
           size='sm'
           render={
             <a
-              href={KUNCODE_SETUP_RELEASE_URL}
+              href={setupDownloadUrl}
               target='_blank'
               rel='noopener noreferrer'
             />

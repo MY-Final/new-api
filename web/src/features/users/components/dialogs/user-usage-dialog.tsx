@@ -26,6 +26,10 @@ import { toast } from 'sonner'
 import { Dialog } from '@/components/dialog'
 import { ErrorState } from '@/components/error-state'
 import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
+import {
+  getAdminUserUsage,
+  type UsageStatisticsParams,
+} from '@/features/usage-statistics/api'
 import { UsageOverview } from '@/features/usage-statistics/components/usage-overview'
 import { UsageRequestsTable } from '@/features/usage-statistics/components/usage-requests-table'
 import { dateToUnixTimestamp, getRollingDateRange } from '@/lib/time'
@@ -39,23 +43,36 @@ interface UserUsageDialogProps {
   onOpenChange: (open: boolean) => void
   userId: number
   username: string
+  initialRange?: { start: Date; end: Date }
+  usageFilters?: Pick<UsageStatisticsParams, 'model_name' | 'channel'>
 }
 
 export function UserUsageDialog(props: UserUsageDialogProps) {
   const { t } = useTranslation()
-  const [range, setRange] = useState(() => getRollingDateRange(0))
+  const [range, setRange] = useState(
+    () => props.initialRange ?? getRollingDateRange(0)
+  )
   const startTimestamp = dateToUnixTimestamp(range.start)
   const endTimestamp = dateToUnixTimestamp(range.end)
 
   const usageQuery = useQuery({
-    queryKey: ['users', 'usage', props.userId, startTimestamp, endTimestamp],
+    queryKey: [
+      'users',
+      'usage',
+      props.userId,
+      startTimestamp,
+      endTimestamp,
+      props.usageFilters,
+    ],
     enabled: props.open && props.userId > 0,
     queryFn: async () => {
-      const result = await getUserUsage(
-        props.userId,
-        startTimestamp,
-        endTimestamp
-      )
+      const result = props.usageFilters
+        ? await getAdminUserUsage(props.userId, {
+            start_timestamp: startTimestamp,
+            end_timestamp: endTimestamp,
+            ...props.usageFilters,
+          })
+        : await getUserUsage(props.userId, startTimestamp, endTimestamp)
       if (!result.success || !result.data) {
         throw new Error(result.message || t('Failed to load usage details'))
       }
@@ -116,6 +133,7 @@ export function UserUsageDialog(props: UserUsageDialogProps) {
             params={{
               start_timestamp: startTimestamp,
               end_timestamp: endTimestamp,
+              ...props.usageFilters,
             }}
             queryKey='admin-user-requests'
           />
@@ -129,7 +147,7 @@ export function UserUsageDialog(props: UserUsageDialogProps) {
       open={props.open}
       onOpenChange={props.onOpenChange}
       title={`${t('Usage Details')} - ${props.username}`}
-      contentClassName='sm:max-w-6xl'
+      contentClassName='sm:max-w-6xl lg:max-w-[min(94vw,1680px)]'
       bodyClassName='space-y-4'
     >
       <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>

@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import {
+  ArrowDown,
   ArrowDownToLine,
   ArrowUpFromLine,
   Brain,
@@ -43,7 +44,11 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { formatNumber, formatPercent, formatQuota } from '@/lib/format'
+import {
+  formatNumber,
+  formatPercent,
+  formatQuota,
+} from '@/lib/format'
 
 import { isRangeCoveringToday, type UsageDateRange } from '../lib/usage-range'
 import type { UserUsage, UserUsageAggregate } from '../types'
@@ -192,6 +197,32 @@ export function SummaryMetrics(props: { summary: UserUsageAggregate }) {
 
 type ModelSortBy = 'user_cost' | 'total_tokens' | 'request_count'
 
+/**
+ * A metric column header that shows which metric the ranking is sorted by, so
+ * switching the ranking tabs is visible even when the row order does not move.
+ */
+function RankedMetricHead(props: {
+  metric: ModelSortBy
+  activeMetric: ModelSortBy
+  label: string
+}) {
+  const isActive = props.metric === props.activeMetric
+  return (
+    <TableHead
+      className='text-right'
+      aria-sort={isActive ? 'descending' : undefined}
+    >
+      {props.label}
+      {isActive ? (
+        <ArrowDown
+          className='ms-1 inline size-3.5 align-middle'
+          aria-hidden='true'
+        />
+      ) : null}
+    </TableHead>
+  )
+}
+
 export function ModelUsageTable(props: { data: UserUsage['models'] }) {
   const { t } = useTranslation()
   const [sortBy, setSortBy] = useState<ModelSortBy>('user_cost')
@@ -203,9 +234,11 @@ export function ModelUsageTable(props: { data: UserUsage['models'] }) {
     )
     return sorted
   }, [props.data, sortBy])
-  const totalCost = useMemo(
-    () => props.data.reduce((sum, item) => sum + item.user_cost, 0),
-    [props.data]
+  // The share bar follows the ranking metric: ranking by tokens while the bar
+  // still showed cost shares made the switch look like it did nothing.
+  const metricTotal = useMemo(
+    () => props.data.reduce((sum, item) => sum + item[sortBy], 0),
+    [props.data, sortBy]
   )
 
   if (props.data.length === 0) {
@@ -235,7 +268,11 @@ export function ModelUsageTable(props: { data: UserUsage['models'] }) {
           <TableHeader>
             <TableRow>
               <TableHead>{t('Model')}</TableHead>
-              <TableHead className='text-right'>{t('Requests')}</TableHead>
+              <RankedMetricHead
+                metric='request_count'
+                activeMetric={sortBy}
+                label={t('Requests')}
+              />
               <TableHead className='hidden text-right md:table-cell'>
                 {t('Input Tokens')}
               </TableHead>
@@ -251,14 +288,22 @@ export function ModelUsageTable(props: { data: UserUsage['models'] }) {
               <TableHead className='hidden text-right lg:table-cell'>
                 {t('Reasoning')}
               </TableHead>
-              <TableHead className='text-right'>{t('Total Tokens')}</TableHead>
-              <TableHead className='text-right'>{t('User Cost')}</TableHead>
+              <RankedMetricHead
+                metric='total_tokens'
+                activeMetric={sortBy}
+                label={t('Total Tokens')}
+              />
+              <RankedMetricHead
+                metric='user_cost'
+                activeMetric={sortBy}
+                label={t('User Cost')}
+              />
             </TableRow>
           </TableHeader>
           <TableBody>
             {models.map((item) => {
               const share =
-                totalCost > 0 ? (item.user_cost / totalCost) * 100 : 0
+                metricTotal > 0 ? (item[sortBy] / metricTotal) * 100 : 0
               return (
                 <TableRow key={item.model_name || '__empty_model__'}>
                   <TableCell className='max-w-56'>

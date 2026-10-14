@@ -193,11 +193,31 @@ export interface DashboardFilters {
 
 export type ConsumptionDistributionChartType = 'bar' | 'area'
 
-export type ModelAnalyticsChartTab = 'trend' | 'proportion' | 'top'
+export type DashboardMetric = 'quota' | 'count' | 'tokens'
+
+export interface DashboardMetricStats {
+  quota: number
+  count: number
+  tokens: number
+}
+
+export interface DashboardModelStats extends DashboardMetricStats {
+  model: string
+}
+
+export interface DashboardTimeStats extends DashboardMetricStats {
+  timestamp: number
+}
+
+export interface DashboardAnalytics {
+  summary: DashboardMetricStats
+  models: DashboardModelStats[]
+  timeline: DashboardTimeStats[]
+}
 
 export interface DashboardChartPreferences {
   consumptionDistributionChart: ConsumptionDistributionChartType
-  modelAnalyticsChart: ModelAnalyticsChartTab
+  modelRankingMetric: DashboardMetric
   defaultTimeRangeDays: number
   defaultTimeGranularity: TimeGranularity
 }

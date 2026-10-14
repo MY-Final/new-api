@@ -20,6 +20,7 @@ import { Label } from '@/components/ui/label'
 import { searchUsers } from '@/features/users/api'
 import type { User } from '@/features/users/types'
 import { useDebounce } from '@/hooks/use-debounce'
+import { handleServerError } from '@/lib/handle-server-error'
 import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
 import { formatQuota, parseQuotaFromDollars } from '@/lib/format'
 
@@ -200,9 +201,7 @@ export function FinanceActionDialog(props: {
       props.onSuccess()
       props.onClose()
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t('Financial operation failed')
-      )
+      handleServerError(error, t('Financial operation failed'))
     } finally {
       setLoading(false)
     }

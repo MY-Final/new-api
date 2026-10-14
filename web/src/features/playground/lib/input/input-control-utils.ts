@@ -16,11 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { GroupOption, ModelOption } from '../../types'
+import type { GroupOption, MessageContent, ModelOption } from '../../types'
+import { buildMessageContent } from '../message/message-utils'
 
 type InputControlStateOptions = {
   disabled?: boolean
   groups: GroupOption[]
+  hasAttachments?: boolean
   hasStopHandler: boolean
   isGenerating?: boolean
   isModelLoading?: boolean
@@ -34,24 +36,51 @@ type InputControlState = {
   shouldShowStop: boolean
 }
 
-type SubmittableInputMessage = {
-  text?: string | null
+type SubmittableInputAttachment = {
+  mediaType?: string
+  url?: string
 }
 
-export function getSubmittableInputText(
+type SubmittableInputMessage = {
+  text?: string | null
+  files?: SubmittableInputAttachment[]
+}
+
+/** Attached images only: the playground sends text and images. */
+export function getImageAttachmentUrls(
+  files: SubmittableInputAttachment[] | undefined
+): string[] {
+  return (files ?? []).flatMap((file) =>
+    file.mediaType?.startsWith('image/') && file.url ? [file.url] : []
+  )
+}
+
+/**
+ * Build the content to send from the composer state. An image-only message is
+ * submittable too, so `null` means "nothing to send".
+ */
+export function getSubmittableInputContent(
   message: SubmittableInputMessage,
   disabled?: boolean
-): string | null {
-  if (disabled || !message.text?.trim()) {
+): MessageContent | null {
+  if (disabled) {
     return null
   }
 
-  return message.text
+  const text = message.text ?? ''
+  const imageUrls = getImageAttachmentUrls(message.files)
+
+  if (!text.trim() && imageUrls.length === 0) {
+    return null
+  }
+
+  return buildMessageContent(text, imageUrls)
 }
 
 export function getInputControlState({
   disabled,
   groups,
+  hasAttachments,
   hasStopHandler,
   isGenerating,
   isModelLoading,
@@ -61,7 +90,10 @@ export function getInputControlState({
   const hasModels = models.length > 0
 
   return {
-    canSubmit: !disabled && hasModels && text.trim().length > 0,
+    canSubmit:
+      !disabled &&
+      hasModels &&
+      (text.trim().length > 0 || Boolean(hasAttachments)),
     isSelectorDisabled: disabled || isModelLoading || groups.length === 0,
     shouldShowStop: Boolean(isGenerating && hasStopHandler),
   }

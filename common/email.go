@@ -84,7 +84,7 @@ func SendEmail(subject string, receiver string, content string) error {
 		return err2
 	}
 	if SMTPServer == "" && SMTPAccount == "" {
-		return fmt.Errorf("SMTP 服务器未配置")
+		return NewMessage("SMTP server is not configured")
 	}
 	recipients := make([]string, 0, 2)
 	for _, candidate := range strings.Split(receiver, ";") {
@@ -138,7 +138,7 @@ func SendEmail(subject string, receiver string, content string) error {
 	}
 	err = client.Quit()
 	if err != nil {
-		SysError(fmt.Sprintf("failed to send email to %s: %v", receiver, err))
+		SysError(LogText("failed to send email to %s: %v", receiver, err))
 	}
 	return err
 }

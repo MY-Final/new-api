@@ -42,6 +42,7 @@ interface StatCardProps {
   title: string
   value: string | number
   description: string
+  descriptionClassName?: string
   icon: LucideIcon
   sparkline?: number[]
   sparklineVariant?: StatCardSparklineVariant
@@ -50,6 +51,8 @@ interface StatCardProps {
   loading?: boolean
   error?: boolean
   action?: ReactNode
+  titleAction?: ReactNode
+  visualization?: ReactNode
   iconTone?: IconBadgeTone
   compactMobile?: boolean
 }
@@ -261,9 +264,11 @@ export function StatCard(props: StatCardProps) {
           --
         </div>
         <p
+          title={props.description}
           className={cn(
             'text-muted-foreground/60 line-clamp-1 text-[11px] sm:text-xs',
-            props.compactMobile && 'hidden sm:block'
+            props.compactMobile && 'hidden sm:block',
+            props.descriptionClassName
           )}
         >
           {props.description}
@@ -277,9 +282,11 @@ export function StatCard(props: StatCardProps) {
           {props.value}
         </div>
         <p
+          title={props.description}
           className={cn(
             'text-muted-foreground/60 line-clamp-1 text-[11px] leading-relaxed sm:text-xs',
-            props.compactMobile && 'hidden sm:block'
+            props.compactMobile && 'hidden sm:block',
+            props.descriptionClassName
           )}
         >
           {props.description}
@@ -289,7 +296,9 @@ export function StatCard(props: StatCardProps) {
   }
 
   let visualization: ReactNode
-  if (props.details?.length) {
+  if (props.visualization != null) {
+    visualization = props.visualization
+  } else if (props.details?.length) {
     visualization = <StatCardDetails details={props.details} />
   } else if (sparklineVariant === 'line') {
     visualization = <LineSparkline values={props.sparkline} tone={tone} />
@@ -304,8 +313,18 @@ export function StatCard(props: StatCardProps) {
         props.compactMobile ? 'gap-1' : 'gap-1.5'
       )}
     >
-      <div className='flex items-start justify-between gap-1'>
-        <div className='text-muted-foreground flex items-center gap-1 text-[11px] font-medium sm:gap-2 sm:text-xs'>
+      <div
+        className={cn(
+          'flex items-start justify-between gap-1',
+          props.titleAction && 'flex-wrap sm:flex-nowrap'
+        )}
+      >
+        <div
+          className={cn(
+            'text-muted-foreground flex min-w-0 items-center gap-1 text-[11px] font-medium sm:gap-2 sm:text-xs',
+            props.titleAction && 'w-full sm:w-auto'
+          )}
+        >
           <IconBadge
             tone={iconTone}
             size='stat'
@@ -316,9 +335,15 @@ export function StatCard(props: StatCardProps) {
           >
             <Icon />
           </IconBadge>
-          <span className='line-clamp-1 leading-snug sm:line-clamp-2'>
+          <span
+            title={props.title}
+            className='min-w-0 leading-snug [overflow-wrap:anywhere]'
+          >
             {props.title}
           </span>
+          {props.titleAction && (
+            <span className='shrink-0'>{props.titleAction}</span>
+          )}
         </div>
         {props.action && <div className='shrink-0'>{props.action}</div>}
       </div>

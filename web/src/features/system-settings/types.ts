@@ -165,7 +165,7 @@ export type SiteSettings = {
   ServerAddress: string
   ApiBaseURLs: string
   TaskPublicAddress: string
-  KunCodeRelayPulseUrl: string
+  CustomPages: string
   'general_setting.docs_link': string
   'legal.user_agreement': string
   'legal.privacy_policy': string
@@ -335,7 +335,6 @@ export type BillingSettings = {
   EpayKey: string
   Price: number
   MinTopUp: number
-  LiandongShopUrl: string
   CustomCallbackAddress: string
   PayMethods: string
   'payment_setting.amount_options': string

@@ -16,6 +16,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import {
+  parseHeaderNavLinks,
+  parseSetupDownloadUrl,
+  type HeaderNavLink,
+} from '@/lib/nav-modules'
+
 export type HeaderNavAccessConfig = {
   enabled: boolean
   requireAuth: boolean
@@ -30,7 +36,10 @@ export type HeaderNavModulesConfig = {
   about: boolean
   contact: boolean
   setupDownload: boolean
-  [key: string]: boolean | HeaderNavAccessConfig
+  /** Administrator override for the setup download target; empty uses the built-in page. */
+  setupDownloadUrl: string
+  links: HeaderNavLink[]
+  [key: string]: boolean | string | HeaderNavAccessConfig | HeaderNavLink[]
 }
 
 export type SidebarSectionConfig = {
@@ -55,6 +64,8 @@ export const HEADER_NAV_DEFAULT: HeaderNavModulesConfig = {
   about: true,
   contact: true,
   setupDownload: true,
+  setupDownloadUrl: '',
+  links: [],
 }
 
 export const SIDEBAR_MODULES_DEFAULT: SidebarModulesAdminConfig = {
@@ -74,7 +85,6 @@ export const SIDEBAR_MODULES_DEFAULT: SidebarModulesAdminConfig = {
     audit: true,
     midjourney: true,
     task: true,
-    relayPulse: true,
   },
   personal: {
     enabled: true,
@@ -111,6 +121,7 @@ const cloneHeaderNavDefault = (): HeaderNavModulesConfig => ({
   ...HEADER_NAV_DEFAULT,
   pricing: { ...HEADER_NAV_DEFAULT.pricing },
   rankings: { ...HEADER_NAV_DEFAULT.rankings },
+  links: [],
 })
 
 const parseAccessModule = (
@@ -168,6 +179,14 @@ export function parseHeaderNavModules(
       }
       if (key === 'rankings') {
         result.rankings = parseAccessModule(raw, base.rankings)
+        return
+      }
+      if (key === 'links') {
+        result.links = parseHeaderNavLinks(raw)
+        return
+      }
+      if (key === 'setupDownloadUrl') {
+        result.setupDownloadUrl = parseSetupDownloadUrl(raw)
         return
       }
 

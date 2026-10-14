@@ -43,11 +43,11 @@ import { Route as AuthenticatedChannelsIndexRouteImport } from './routes/_authen
 import { Route as AuthenticatedChatChatIdRouteImport } from './routes/_authenticated/chat/$chatId'
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard/index'
 import { Route as AuthenticatedDashboardSectionRouteImport } from './routes/_authenticated/dashboard/$section'
+import { Route as AuthenticatedEmbedSlugRouteImport } from './routes/_authenticated/embed/$slug'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedFinanceSectionRouteImport } from './routes/_authenticated/finance/$section'
 import { Route as AuthenticatedIntelligenceTestIndexRouteImport } from './routes/_authenticated/intelligence-test/index'
 import { Route as AuthenticatedKeysIndexRouteImport } from './routes/_authenticated/keys/index'
-import { Route as AuthenticatedKunCodeRelayPulseIndexRouteImport } from './routes/_authenticated/kun-code-relay-pulse/index'
 import { Route as AuthenticatedLedgerIndexRouteImport } from './routes/_authenticated/ledger/index'
 import { Route as AuthenticatedModelsIndexRouteImport } from './routes/_authenticated/models/index'
 import { Route as AuthenticatedModelsSectionRouteImport } from './routes/_authenticated/models/$section'
@@ -56,7 +56,6 @@ import { Route as AuthenticatedPlaygroundIndexRouteImport } from './routes/_auth
 import { Route as AuthenticatedProfileIndexRouteImport } from './routes/_authenticated/profile/index'
 import { Route as AuthenticatedRedemptionCodesIndexRouteImport } from './routes/_authenticated/redemption-codes/index'
 import { Route as AuthenticatedSecurityIndexRouteImport } from './routes/_authenticated/security/index'
-import { Route as AuthenticatedShopIndexRouteImport } from './routes/_authenticated/shop/index'
 import { Route as AuthenticatedSubscriptionsIndexRouteImport } from './routes/_authenticated/subscriptions/index'
 import { Route as AuthenticatedSystemInfoIndexRouteImport } from './routes/_authenticated/system-info/index'
 import { Route as AuthenticatedSystemSettingsIndexRouteImport } from './routes/_authenticated/system-settings/index'
@@ -262,6 +261,11 @@ const AuthenticatedDashboardSectionRoute =
     path: '/dashboard/$section',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedEmbedSlugRoute = AuthenticatedEmbedSlugRouteImport.update({
+  id: '/embed/$slug',
+  path: '/embed/$slug',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedErrorsErrorRoute =
   AuthenticatedErrorsErrorRouteImport.update({
     id: '/errors/$error',
@@ -285,12 +289,6 @@ const AuthenticatedKeysIndexRoute = AuthenticatedKeysIndexRouteImport.update({
   path: '/keys/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedKunCodeRelayPulseIndexRoute =
-  AuthenticatedKunCodeRelayPulseIndexRouteImport.update({
-    id: '/kun-code-relay-pulse/',
-    path: '/kun-code-relay-pulse/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
 const AuthenticatedLedgerIndexRoute =
   AuthenticatedLedgerIndexRouteImport.update({
     id: '/ledger/',
@@ -339,11 +337,6 @@ const AuthenticatedSecurityIndexRoute =
     path: '/security/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedShopIndexRoute = AuthenticatedShopIndexRouteImport.update({
-  id: '/shop/',
-  path: '/shop/',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 const AuthenticatedSubscriptionsIndexRoute =
   AuthenticatedSubscriptionsIndexRouteImport.update({
     id: '/subscriptions/',
@@ -544,6 +537,7 @@ export interface FileRoutesByFullPath {
   '/user/reset': typeof authUserResetRoute
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
+  '/embed/$slug': typeof AuthenticatedEmbedSlugRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/finance/$section': typeof AuthenticatedFinanceSectionRoute
   '/models/$section': typeof AuthenticatedModelsSectionRoute
@@ -556,7 +550,6 @@ export interface FileRoutesByFullPath {
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/intelligence-test/': typeof AuthenticatedIntelligenceTestIndexRoute
   '/keys/': typeof AuthenticatedKeysIndexRoute
-  '/kun-code-relay-pulse/': typeof AuthenticatedKunCodeRelayPulseIndexRoute
   '/ledger/': typeof AuthenticatedLedgerIndexRoute
   '/models/': typeof AuthenticatedModelsIndexRoute
   '/monitoring/': typeof AuthenticatedMonitoringIndexRoute
@@ -564,7 +557,6 @@ export interface FileRoutesByFullPath {
   '/profile/': typeof AuthenticatedProfileIndexRoute
   '/redemption-codes/': typeof AuthenticatedRedemptionCodesIndexRoute
   '/security/': typeof AuthenticatedSecurityIndexRoute
-  '/shop/': typeof AuthenticatedShopIndexRoute
   '/subscriptions/': typeof AuthenticatedSubscriptionsIndexRoute
   '/system-info/': typeof AuthenticatedSystemInfoIndexRoute
   '/system-settings/': typeof AuthenticatedSystemSettingsIndexRoute
@@ -620,6 +612,7 @@ export interface FileRoutesByTo {
   '/user/reset': typeof authUserResetRoute
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
+  '/embed/$slug': typeof AuthenticatedEmbedSlugRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/finance/$section': typeof AuthenticatedFinanceSectionRoute
   '/models/$section': typeof AuthenticatedModelsSectionRoute
@@ -632,7 +625,6 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
   '/intelligence-test': typeof AuthenticatedIntelligenceTestIndexRoute
   '/keys': typeof AuthenticatedKeysIndexRoute
-  '/kun-code-relay-pulse': typeof AuthenticatedKunCodeRelayPulseIndexRoute
   '/ledger': typeof AuthenticatedLedgerIndexRoute
   '/models': typeof AuthenticatedModelsIndexRoute
   '/monitoring': typeof AuthenticatedMonitoringIndexRoute
@@ -640,7 +632,6 @@ export interface FileRoutesByTo {
   '/profile': typeof AuthenticatedProfileIndexRoute
   '/redemption-codes': typeof AuthenticatedRedemptionCodesIndexRoute
   '/security': typeof AuthenticatedSecurityIndexRoute
-  '/shop': typeof AuthenticatedShopIndexRoute
   '/subscriptions': typeof AuthenticatedSubscriptionsIndexRoute
   '/system-info': typeof AuthenticatedSystemInfoIndexRoute
   '/system-settings': typeof AuthenticatedSystemSettingsIndexRoute
@@ -700,6 +691,7 @@ export interface FileRoutesById {
   '/(auth)/user/reset': typeof authUserResetRoute
   '/_authenticated/chat/$chatId': typeof AuthenticatedChatChatIdRoute
   '/_authenticated/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
+  '/_authenticated/embed/$slug': typeof AuthenticatedEmbedSlugRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/finance/$section': typeof AuthenticatedFinanceSectionRoute
   '/_authenticated/models/$section': typeof AuthenticatedModelsSectionRoute
@@ -712,7 +704,6 @@ export interface FileRoutesById {
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/_authenticated/intelligence-test/': typeof AuthenticatedIntelligenceTestIndexRoute
   '/_authenticated/keys/': typeof AuthenticatedKeysIndexRoute
-  '/_authenticated/kun-code-relay-pulse/': typeof AuthenticatedKunCodeRelayPulseIndexRoute
   '/_authenticated/ledger/': typeof AuthenticatedLedgerIndexRoute
   '/_authenticated/models/': typeof AuthenticatedModelsIndexRoute
   '/_authenticated/monitoring/': typeof AuthenticatedMonitoringIndexRoute
@@ -720,7 +711,6 @@ export interface FileRoutesById {
   '/_authenticated/profile/': typeof AuthenticatedProfileIndexRoute
   '/_authenticated/redemption-codes/': typeof AuthenticatedRedemptionCodesIndexRoute
   '/_authenticated/security/': typeof AuthenticatedSecurityIndexRoute
-  '/_authenticated/shop/': typeof AuthenticatedShopIndexRoute
   '/_authenticated/subscriptions/': typeof AuthenticatedSubscriptionsIndexRoute
   '/_authenticated/system-info/': typeof AuthenticatedSystemInfoIndexRoute
   '/_authenticated/system-settings/': typeof AuthenticatedSystemSettingsIndexRoute
@@ -779,6 +769,7 @@ export interface FileRouteTypes {
     | '/user/reset'
     | '/chat/$chatId'
     | '/dashboard/$section'
+    | '/embed/$slug'
     | '/errors/$error'
     | '/finance/$section'
     | '/models/$section'
@@ -791,7 +782,6 @@ export interface FileRouteTypes {
     | '/dashboard/'
     | '/intelligence-test/'
     | '/keys/'
-    | '/kun-code-relay-pulse/'
     | '/ledger/'
     | '/models/'
     | '/monitoring/'
@@ -799,7 +789,6 @@ export interface FileRouteTypes {
     | '/profile/'
     | '/redemption-codes/'
     | '/security/'
-    | '/shop/'
     | '/subscriptions/'
     | '/system-info/'
     | '/system-settings/'
@@ -855,6 +844,7 @@ export interface FileRouteTypes {
     | '/user/reset'
     | '/chat/$chatId'
     | '/dashboard/$section'
+    | '/embed/$slug'
     | '/errors/$error'
     | '/finance/$section'
     | '/models/$section'
@@ -867,7 +857,6 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/intelligence-test'
     | '/keys'
-    | '/kun-code-relay-pulse'
     | '/ledger'
     | '/models'
     | '/monitoring'
@@ -875,7 +864,6 @@ export interface FileRouteTypes {
     | '/profile'
     | '/redemption-codes'
     | '/security'
-    | '/shop'
     | '/subscriptions'
     | '/system-info'
     | '/system-settings'
@@ -934,6 +922,7 @@ export interface FileRouteTypes {
     | '/(auth)/user/reset'
     | '/_authenticated/chat/$chatId'
     | '/_authenticated/dashboard/$section'
+    | '/_authenticated/embed/$slug'
     | '/_authenticated/errors/$error'
     | '/_authenticated/finance/$section'
     | '/_authenticated/models/$section'
@@ -946,7 +935,6 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard/'
     | '/_authenticated/intelligence-test/'
     | '/_authenticated/keys/'
-    | '/_authenticated/kun-code-relay-pulse/'
     | '/_authenticated/ledger/'
     | '/_authenticated/models/'
     | '/_authenticated/monitoring/'
@@ -954,7 +942,6 @@ export interface FileRouteTypes {
     | '/_authenticated/profile/'
     | '/_authenticated/redemption-codes/'
     | '/_authenticated/security/'
-    | '/_authenticated/shop/'
     | '/_authenticated/subscriptions/'
     | '/_authenticated/system-info/'
     | '/_authenticated/system-settings/'
@@ -1244,6 +1231,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardSectionRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/embed/$slug': {
+      id: '/_authenticated/embed/$slug'
+      path: '/embed/$slug'
+      fullPath: '/embed/$slug'
+      preLoaderRoute: typeof AuthenticatedEmbedSlugRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/errors/$error': {
       id: '/_authenticated/errors/$error'
       path: '/errors/$error'
@@ -1270,13 +1264,6 @@ declare module '@tanstack/react-router' {
       path: '/keys'
       fullPath: '/keys/'
       preLoaderRoute: typeof AuthenticatedKeysIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/kun-code-relay-pulse/': {
-      id: '/_authenticated/kun-code-relay-pulse/'
-      path: '/kun-code-relay-pulse'
-      fullPath: '/kun-code-relay-pulse/'
-      preLoaderRoute: typeof AuthenticatedKunCodeRelayPulseIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/ledger/': {
@@ -1333,13 +1320,6 @@ declare module '@tanstack/react-router' {
       path: '/security'
       fullPath: '/security/'
       preLoaderRoute: typeof AuthenticatedSecurityIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/shop/': {
-      id: '/_authenticated/shop/'
-      path: '/shop'
-      fullPath: '/shop/'
-      preLoaderRoute: typeof AuthenticatedShopIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/subscriptions/': {
@@ -1644,6 +1624,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedChat2linkRoute: typeof AuthenticatedChat2linkRoute
   AuthenticatedChatChatIdRoute: typeof AuthenticatedChatChatIdRoute
   AuthenticatedDashboardSectionRoute: typeof AuthenticatedDashboardSectionRoute
+  AuthenticatedEmbedSlugRoute: typeof AuthenticatedEmbedSlugRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
   AuthenticatedFinanceSectionRoute: typeof AuthenticatedFinanceSectionRoute
   AuthenticatedModelsSectionRoute: typeof AuthenticatedModelsSectionRoute
@@ -1656,7 +1637,6 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
   AuthenticatedIntelligenceTestIndexRoute: typeof AuthenticatedIntelligenceTestIndexRoute
   AuthenticatedKeysIndexRoute: typeof AuthenticatedKeysIndexRoute
-  AuthenticatedKunCodeRelayPulseIndexRoute: typeof AuthenticatedKunCodeRelayPulseIndexRoute
   AuthenticatedLedgerIndexRoute: typeof AuthenticatedLedgerIndexRoute
   AuthenticatedModelsIndexRoute: typeof AuthenticatedModelsIndexRoute
   AuthenticatedMonitoringIndexRoute: typeof AuthenticatedMonitoringIndexRoute
@@ -1664,7 +1644,6 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedProfileIndexRoute: typeof AuthenticatedProfileIndexRoute
   AuthenticatedRedemptionCodesIndexRoute: typeof AuthenticatedRedemptionCodesIndexRoute
   AuthenticatedSecurityIndexRoute: typeof AuthenticatedSecurityIndexRoute
-  AuthenticatedShopIndexRoute: typeof AuthenticatedShopIndexRoute
   AuthenticatedSubscriptionsIndexRoute: typeof AuthenticatedSubscriptionsIndexRoute
   AuthenticatedSystemInfoIndexRoute: typeof AuthenticatedSystemInfoIndexRoute
   AuthenticatedTaskPluginsIndexRoute: typeof AuthenticatedTaskPluginsIndexRoute
@@ -1682,6 +1661,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedChat2linkRoute: AuthenticatedChat2linkRoute,
   AuthenticatedChatChatIdRoute: AuthenticatedChatChatIdRoute,
   AuthenticatedDashboardSectionRoute: AuthenticatedDashboardSectionRoute,
+  AuthenticatedEmbedSlugRoute: AuthenticatedEmbedSlugRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
   AuthenticatedFinanceSectionRoute: AuthenticatedFinanceSectionRoute,
   AuthenticatedModelsSectionRoute: AuthenticatedModelsSectionRoute,
@@ -1696,8 +1676,6 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedIntelligenceTestIndexRoute:
     AuthenticatedIntelligenceTestIndexRoute,
   AuthenticatedKeysIndexRoute: AuthenticatedKeysIndexRoute,
-  AuthenticatedKunCodeRelayPulseIndexRoute:
-    AuthenticatedKunCodeRelayPulseIndexRoute,
   AuthenticatedLedgerIndexRoute: AuthenticatedLedgerIndexRoute,
   AuthenticatedModelsIndexRoute: AuthenticatedModelsIndexRoute,
   AuthenticatedMonitoringIndexRoute: AuthenticatedMonitoringIndexRoute,
@@ -1706,7 +1684,6 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedRedemptionCodesIndexRoute:
     AuthenticatedRedemptionCodesIndexRoute,
   AuthenticatedSecurityIndexRoute: AuthenticatedSecurityIndexRoute,
-  AuthenticatedShopIndexRoute: AuthenticatedShopIndexRoute,
   AuthenticatedSubscriptionsIndexRoute: AuthenticatedSubscriptionsIndexRoute,
   AuthenticatedSystemInfoIndexRoute: AuthenticatedSystemInfoIndexRoute,
   AuthenticatedTaskPluginsIndexRoute: AuthenticatedTaskPluginsIndexRoute,

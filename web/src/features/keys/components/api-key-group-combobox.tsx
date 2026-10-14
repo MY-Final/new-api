@@ -129,11 +129,11 @@ export function ApiKeyGroupOptions(props: ApiKeyGroupOptionsProps) {
                   )}
                 />
                 <span className='min-w-0 flex-1'>
-                  <span className='block truncate font-medium'>
+                  <span className='block font-medium [overflow-wrap:anywhere] whitespace-normal'>
                     {option.label}
                   </span>
                   {option.desc && (
-                    <span className='text-muted-foreground block truncate text-xs'>
+                    <span className='text-muted-foreground block text-xs [overflow-wrap:anywhere] whitespace-normal'>
                       {option.desc}
                     </span>
                   )}
@@ -184,7 +184,7 @@ export function ApiKeyGroupCombobox({
             data-auto-group-effect={isAutoSelected ? 'trigger' : undefined}
             disabled={disabled}
             className={cn(
-              'border-input bg-muted/40 hover:bg-muted/55 hover:text-foreground active:bg-background data-popup-open:border-ring data-popup-open:bg-background data-popup-open:ring-ring/20 relative h-auto min-h-14 w-full justify-between gap-2 rounded-lg px-3 py-2 text-start shadow-none transition-[background-color,border-color,box-shadow] duration-150 data-popup-open:ring-[3px] sm:min-h-20 sm:gap-3 sm:px-4 sm:py-3',
+              'border-input bg-muted/40 hover:bg-muted/55 hover:text-foreground active:bg-background data-popup-open:border-ring data-popup-open:bg-background data-popup-open:ring-ring/20 relative h-auto min-h-14 w-full justify-between gap-2 rounded-lg px-3 py-2 text-start whitespace-normal shadow-none transition-[background-color,border-color,box-shadow] duration-150 data-popup-open:ring-[3px] sm:min-h-20 sm:gap-3 sm:px-4 sm:py-3',
               isAutoSelected &&
                 cn(
                   AUTO_GROUP_FRAME_CLASS_NAME,
@@ -198,17 +198,17 @@ export function ApiKeyGroupCombobox({
           <AutoGroupFlowBorder shouldReduceMotion={shouldReduceMotion} />
         )}
         <span className='flex min-w-0 flex-1 items-center justify-between gap-2 sm:gap-3'>
-          <span className='min-w-0'>
-            <span className='block truncate font-medium'>
+          <span className='min-w-0 flex-1'>
+            <span className='block font-medium [overflow-wrap:anywhere] whitespace-normal'>
               {selectedOption?.label || placeholder || t('Select a group')}
             </span>
             {selectedOption?.desc && (
-              <span className='text-muted-foreground block truncate text-[11px] sm:text-xs'>
+              <span className='text-muted-foreground block text-[11px] [overflow-wrap:anywhere] whitespace-normal sm:text-xs'>
                 {selectedOption.desc}
               </span>
             )}
           </span>
-          <span className='hidden sm:block'>
+          <span className='hidden shrink-0 sm:block'>
             <GroupRatioBadge
               ratio={selectedOption?.ratio}
               isAuto={isAutoSelected}
@@ -222,7 +222,8 @@ export function ApiKeyGroupCombobox({
         />
       </PopoverTrigger>
       <PopoverContent
-        className='data-closed:zoom-out-100 data-open:zoom-in-100 data-[side=bottom]:slide-in-from-top-0 data-[side=left]:slide-in-from-right-0 data-[side=right]:slide-in-from-left-0 data-[side=top]:slide-in-from-bottom-0 w-[var(--anchor-width)] overflow-hidden rounded-xl p-0 shadow-lg data-closed:duration-75 data-open:duration-100'
+        collisionPadding={16}
+        className='data-closed:zoom-out-100 data-open:zoom-in-100 data-[side=bottom]:slide-in-from-top-0 data-[side=left]:slide-in-from-right-0 data-[side=right]:slide-in-from-left-0 data-[side=top]:slide-in-from-bottom-0 w-[var(--anchor-width)] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl p-0 shadow-lg data-closed:duration-75 data-open:duration-100'
         onWheel={(event) => event.stopPropagation()}
         onTouchMove={(event) => event.stopPropagation()}
         onPointerDown={(event) => event.stopPropagation()}

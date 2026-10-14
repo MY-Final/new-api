@@ -16,6 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import {
+  parseCustomPagesOption,
+  serializeCustomPages,
+} from '@/lib/custom-pages'
+
 import { SystemInfoSection } from '../general/system-info-section'
 import {
   parseHeaderNavModules,
@@ -29,6 +34,7 @@ import { SidebarModulesSection } from '../maintenance/sidebar-modules-section'
 import type { SiteSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
 import { ContactSection } from './contact-section'
+import { CustomPagesSection } from './custom-pages-section'
 
 const SITE_SECTIONS = [
   {
@@ -45,7 +51,6 @@ const SITE_SECTIONS = [
           ServerAddress: settings.ServerAddress,
           ApiBaseURLs: settings.ApiBaseURLs,
           TaskPublicAddress: settings.TaskPublicAddress,
-          KunCodeRelayPulseUrl: settings.KunCodeRelayPulseUrl,
           general_setting: {
             docs_link: settings['general_setting.docs_link'],
           },
@@ -107,6 +112,19 @@ const SITE_SECTIONS = [
         <SidebarModulesSection
           config={sidebarConfig}
           initialSerialized={sidebarSerialized}
+        />
+      )
+    },
+  },
+  {
+    id: 'custom-pages',
+    titleKey: 'Custom Pages',
+    build: (settings: SiteSettings) => {
+      const pages = parseCustomPagesOption(settings.CustomPages ?? '')
+      return (
+        <CustomPagesSection
+          value={settings.CustomPages ?? ''}
+          initialSerialized={serializeCustomPages(pages)}
         />
       )
     },

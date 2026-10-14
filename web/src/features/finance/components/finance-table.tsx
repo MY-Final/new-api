@@ -27,13 +27,15 @@ export function FinanceTable(props: {
   isFetching: boolean
   onAction: (action: FinanceAction) => void
   onRefresh: () => void
+  onDetails: (item: FinanceRecord) => void
   className?: string
 }) {
   const { t } = useTranslation()
   const columns = useFinanceColumns(
     props.section,
     props.onAction,
-    props.onRefresh
+    props.onRefresh,
+    props.onDetails
   )
 
   const pagination = useMemo<PaginationState>(

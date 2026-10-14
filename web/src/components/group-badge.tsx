@@ -63,6 +63,7 @@ type GroupBadgeProps = Omit<
   ratio?: number | null
   ratioLabel?: string
   containerClassName?: string
+  wrap?: boolean
 }
 
 function getGroupLabel(params: {
@@ -86,6 +87,8 @@ export function GroupBadge(props: GroupBadgeProps) {
     ratio,
     ratioLabel,
     containerClassName,
+    wrap = false,
+    children,
     copyable = false,
     showDot,
     className,
@@ -111,8 +114,19 @@ export function GroupBadge(props: GroupBadgeProps) {
       showDot={showDot ?? (isSpecialGroup ? false : undefined)}
       variant={isSpecialGroup ? 'neutral' : undefined}
       autoColor={isSpecialGroup ? undefined : groupName}
-      className={cn('min-w-0 shrink overflow-hidden', className)}
-    />
+      className={cn(
+        'min-w-0 shrink overflow-hidden',
+        wrap && 'h-auto whitespace-normal',
+        className
+      )}
+    >
+      {children ??
+        (wrap ? (
+          <span className='min-w-0 leading-normal [overflow-wrap:anywhere] whitespace-normal'>
+            {label}
+          </span>
+        ) : undefined)}
+    </StatusBadge>
   )
 
   if (ratio == null && !ratioLabel) {

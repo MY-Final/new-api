@@ -31,9 +31,10 @@ import { useMediaQuery } from '@/hooks'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
 import { createServerError } from '@/lib/server-error-message'
 
-import { getRedemptions, searchRedemptions } from '../api'
+import { getRedemptions, getRedemptionSummary, searchRedemptions } from '../api'
 import {
   ERROR_MESSAGES,
+  REDEMPTION_FILTER_EXPIRED,
   REDEMPTION_STATUS,
   getRedemptionStatusOptions,
   getRedemptionTypeOptions,
@@ -43,6 +44,7 @@ import type { Redemption } from '../types'
 import { DataTableBulkActions } from './data-table-bulk-actions'
 import { useRedemptionsColumns } from './redemptions-columns'
 import { RedemptionsMobileList } from './redemptions-mobile-list'
+import { RedemptionsSummaryCards } from './redemptions-summary-cards'
 import { useRedemptions } from './redemptions-provider'
 
 const route = getRouteApi('/_authenticated/redemption-codes/')
@@ -141,6 +143,25 @@ export function RedemptionsTable() {
 
   const redemptions = data?.items || []
 
+  // Summary shares the list filters so the cards never disagree with the rows.
+  const summaryQuery = useQuery({
+    queryKey: [
+      'redemptions',
+      'summary',
+      globalFilter,
+      statusFilterValue,
+      typeFilterValue,
+      refreshTrigger,
+    ],
+    queryFn: () =>
+      getRedemptionSummary({
+        keyword: globalFilter,
+        status: statusFilterValue,
+        type: typeFilterValue as 'paid' | 'reward',
+      }),
+    placeholderData: (previousData) => previousData,
+  })
+
   const { table } = useDataTable({
     data: redemptions,
     columns,
@@ -165,48 +186,74 @@ export function RedemptionsTable() {
     ensurePageInRange,
   })
 
-  const redemptionStatusOptions = useMemo(
-    () => getRedemptionStatusOptions(t),
-    [t]
-  )
-  const redemptionTypeOptions = useMemo(() => getRedemptionTypeOptions(t), [t])
+  const redemptionStatusOptions = useMemo(() => {
+    const counts: Record<string, number> = {
+      [String(REDEMPTION_STATUS.ENABLED)]: summaryQuery.data?.available ?? 0,
+      [String(REDEMPTION_STATUS.DISABLED)]: summaryQuery.data?.disabled ?? 0,
+      [String(REDEMPTION_STATUS.USED)]: summaryQuery.data?.used ?? 0,
+      [String(REDEMPTION_STATUS.REFUNDED)]: summaryQuery.data?.refunded ?? 0,
+      [REDEMPTION_FILTER_EXPIRED]: summaryQuery.data?.expired ?? 0,
+    }
+    return getRedemptionStatusOptions(t).map((option) => ({
+      ...option,
+      count: counts[option.value] ?? 0,
+    }))
+  }, [t, summaryQuery.data])
+  const redemptionTypeOptions = useMemo(() => {
+    const counts: Record<string, number> = {
+      paid: summaryQuery.data?.paid ?? 0,
+      reward: summaryQuery.data?.reward ?? 0,
+    }
+    return getRedemptionTypeOptions(t).map((option) => ({
+      ...option,
+      count: counts[option.value] ?? 0,
+    }))
+  }, [t, summaryQuery.data])
 
   return (
-    <DataTablePage
-      table={table}
-      columns={columns}
-      isLoading={isLoading}
-      isFetching={isFetching}
-      emptyTitle={t('No Redemption Codes Found')}
-      emptyDescription={t(
-        'No redemption codes available. Create your first redemption code to get started.'
-      )}
-      skeletonKeyPrefix='redemptions-skeleton'
-      applyHeaderSize
-      toolbarProps={{
-        searchPlaceholder: t('Filter by name or ID...'),
-        searchDebounceMs: 500,
-        filters: [
-          {
-            columnId: 'status',
-            title: t('Status'),
-            options: redemptionStatusOptions,
-            singleSelect: true,
-          },
-          {
-            columnId: 'type',
-            title: t('Type'),
-            options: redemptionTypeOptions,
-            singleSelect: true,
-          },
-        ],
-      }}
-      mobile={<RedemptionsMobileList table={table} isLoading={isLoading} />}
-      getRowClassName={(row, { isMobile }) => {
-        if (!isDisabledRedemptionRow(row.original)) return undefined
-        return isMobile ? DISABLED_ROW_MOBILE : DISABLED_ROW_DESKTOP
-      }}
-      bulkActions={<DataTableBulkActions table={table} />}
-    />
+    <div className='flex h-full min-h-0 flex-col gap-3'>
+      <RedemptionsSummaryCards
+        summary={summaryQuery.data}
+        loading={summaryQuery.isLoading}
+        error={summaryQuery.isError}
+      />
+      <DataTablePage
+        table={table}
+        columns={columns}
+        isLoading={isLoading}
+        isFetching={isFetching}
+        emptyTitle={t('No Redemption Codes Found')}
+        emptyDescription={t(
+          'No redemption codes available. Create your first redemption code to get started.'
+        )}
+        skeletonKeyPrefix='redemptions-skeleton'
+        applyHeaderSize
+        className='min-h-0 flex-1'
+        toolbarProps={{
+          searchPlaceholder: t('Filter by name or ID...'),
+          searchDebounceMs: 500,
+          filters: [
+            {
+              columnId: 'status',
+              title: t('Status'),
+              options: redemptionStatusOptions,
+              singleSelect: true,
+            },
+            {
+              columnId: 'type',
+              title: t('Type'),
+              options: redemptionTypeOptions,
+              singleSelect: true,
+            },
+          ],
+        }}
+        mobile={<RedemptionsMobileList table={table} isLoading={isLoading} />}
+        getRowClassName={(row, { isMobile }) => {
+          if (!isDisabledRedemptionRow(row.original)) return undefined
+          return isMobile ? DISABLED_ROW_MOBILE : DISABLED_ROW_DESKTOP
+        }}
+        bulkActions={<DataTableBulkActions table={table} />}
+      />
+    </div>
   )
 }

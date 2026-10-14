@@ -20,6 +20,7 @@ import { Activity, RotateCw } from 'lucide-react'
 import { memo, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { IconBadge } from '@/components/ui/icon-badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -33,16 +34,21 @@ import { cn } from '@/lib/utils'
 import { PanelWrapper } from '../ui/panel-wrapper'
 
 const STATUS_COLOR_MAP: Record<number, string> = {
-  1: 'bg-emerald-500',
-  0: 'bg-red-500',
-  2: 'bg-amber-500',
-  3: 'bg-blue-500',
+  1: 'bg-success',
+  0: 'bg-destructive',
+  2: 'bg-warning',
+  3: 'bg-info',
 }
 const DEFAULT_STATUS_COLOR = 'bg-muted-foreground/40'
 
 const StatusDot = memo(function StatusDot(props: { status: number }) {
   const color = STATUS_COLOR_MAP[props.status] ?? DEFAULT_STATUS_COLOR
-  return <span className={cn('inline-block size-2 rounded-full', color)} />
+  return (
+    <span
+      aria-hidden='true'
+      className={cn('inline-block size-2 shrink-0 rounded-full', color)}
+    />
+  )
 })
 
 export function UptimePanel() {
@@ -50,6 +56,14 @@ export function UptimePanel() {
   const [groups, setGroups] = useState<UptimeGroupResult[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const monitors = groups.flatMap((group) => group.monitors ?? [])
+  const onlineCount = monitors.filter((monitor) => monitor.status === 1).length
+  const statusLabels: Record<number, string> = {
+    1: t('Online'),
+    0: t('Offline'),
+    2: t('Pending'),
+    3: t('Maintenance'),
+  }
 
   useEffect(() => {
     const abortController = new AbortController()
@@ -104,25 +118,41 @@ export function UptimePanel() {
           {t('Uptime')}
         </span>
       }
-      description={t('Grouped monitor status from Uptime Kuma')}
+      description={t('Service availability by monitor')}
       loading={loading}
       empty={!groups.length}
       emptyMessage={t('No uptime monitoring configured')}
       height='h-80'
       contentClassName='p-0'
       headerActions={
-        <Button
-          variant='ghost'
-          size='sm'
-          onClick={handleRefresh}
-          disabled={refreshing}
-          className='size-7 p-0'
-        >
-          <RotateCw
-            className={cn('size-3.5', refreshing && 'animate-spin')}
+        <div className='flex max-w-full flex-wrap items-center gap-2'>
+          {!loading && monitors.length > 0 && (
+            <Badge
+              variant={
+                onlineCount === monitors.length ? 'outline' : 'secondary'
+              }
+              className='h-auto whitespace-normal'
+            >
+              {t('{{up}} of {{total}} monitors online', {
+                up: onlineCount,
+                total: monitors.length,
+              })}
+            </Badge>
+          )}
+          <Button
+            variant='ghost'
+            size='sm'
+            onClick={handleRefresh}
+            disabled={refreshing}
             aria-label={t('Refresh')}
-          />
-        </Button>
+            className='size-7 p-0'
+          >
+            <RotateCw
+              className={cn('size-3.5', refreshing && 'animate-spin')}
+              aria-label={t('Refresh')}
+            />
+          </Button>
+        </div>
       }
     >
       <ScrollArea className='h-80'>
@@ -153,14 +183,19 @@ export function UptimePanel() {
                         'border-border/60 border-b'
                     )}
                   >
-                    <div className='flex min-w-0 items-center gap-2.5'>
-                      <StatusDot status={monitor.status} />
-                      <span className='truncate text-sm'>{monitor.name}</span>
-                      {monitor.group && (
-                        <span className='text-muted-foreground/40 shrink-0 text-xs'>
-                          ({monitor.group})
+                    <div className='flex min-w-0 flex-1 items-start gap-2.5'>
+                      <span className='mt-1.5 flex shrink-0'>
+                        <StatusDot status={monitor.status} />
+                      </span>
+                      <div className='flex min-w-0 flex-1 flex-col gap-1'>
+                        <span className='text-sm leading-relaxed [overflow-wrap:anywhere]'>
+                          {monitor.name}
                         </span>
-                      )}
+                        <span className='text-muted-foreground text-xs [overflow-wrap:anywhere]'>
+                          {statusLabels[monitor.status] ?? t('Unknown')}
+                          {monitor.group && ` · ${monitor.group}`}
+                        </span>
+                      </div>
                     </div>
                     <span className='text-foreground shrink-0 font-mono text-sm font-semibold tabular-nums'>
                       {((monitor.uptime ?? 0) * 100).toFixed(2)}%

@@ -35,11 +35,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { Message } from '../../types'
+import type { Message, MessageContent } from '../../types'
 import {
   createLoadingAssistantMessage,
   createUserMessage,
+  getCurrentVersion,
   getMessageContent,
+  replaceMessageText,
   updateCurrentVersionContent,
 } from './message-utils'
 
@@ -56,7 +58,7 @@ type ChatMessageRenderState = {
 
 export function appendUserMessagePair(
   messages: Message[],
-  content: string
+  content: MessageContent
 ): Message[] {
   const submittedAt = Date.now()
 
@@ -127,7 +129,11 @@ export function applyMessageEdit(
   const updatedMessages = messages.map((message) =>
     message.key === messageKey
       ? {
-          ...updateCurrentVersionContent(message, content),
+          // Editing rewrites the text only; attached images stay on the message.
+          ...updateCurrentVersionContent(
+            message,
+            replaceMessageText(getCurrentVersion(message).content, content)
+          ),
           createdAt: shouldSubmit ? submittedAt : message.createdAt,
         }
       : message

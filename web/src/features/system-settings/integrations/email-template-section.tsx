@@ -192,9 +192,23 @@ function EmailTemplateForm(props: {
         footer: layout.footer ?? '',
       }),
     })
+    // Only store templates the administrator actually changed. Untouched
+    // templates keep the built-in, per-language content.
+    const overrides: Record<string, EmailTemplateDraft> = {}
+    for (const template of props.defaults) {
+      const draft = drafts[template.key]
+      if (!draft) continue
+      if (
+        draft.subject === template.subject &&
+        draft.body === template.body
+      ) {
+        continue
+      }
+      overrides[template.key] = draft
+    }
     await updateOption.mutateAsync({
       key: 'EmailTemplates',
-      value: JSON.stringify(drafts),
+      value: JSON.stringify(overrides),
     })
   }
   return (

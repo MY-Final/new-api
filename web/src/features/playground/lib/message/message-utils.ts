@@ -24,12 +24,13 @@ import type {
   MessageVersion,
   ChatCompletionMessage,
   ContentPart,
+  MessageContent,
 } from '../../types'
 
 /**
  * Create a new message version
  */
-export function createMessageVersion(content: string): MessageVersion {
+export function createMessageVersion(content: MessageContent): MessageVersion {
   return {
     id: nanoid(),
     content,
@@ -44,17 +45,29 @@ export function getCurrentVersion(message: Message): MessageVersion {
 }
 
 /**
- * Get displayable content from the current message version.
+ * Get displayable text from the current message version.
  */
 export function getMessageContent(message: Message): string {
-  return getCurrentVersion(message).content
+  return getTextContent(getCurrentVersion(message).content)
 }
 
 /**
- * Check whether a message has non-empty content in its current version.
+ * Get the images attached to the current message version.
+ */
+export function getMessageImages(message: Message): string[] {
+  return getContentImages(getCurrentVersion(message).content)
+}
+
+/**
+ * Check whether a message has content to show or send. A user message with
+ * only images attached counts as content.
  */
 export function hasMessageContent(message: Message): boolean {
-  return getMessageContent(message).trim() !== ''
+  const content = getCurrentVersion(message).content
+
+  return (
+    getTextContent(content).trim() !== '' || getContentImages(content).length > 0
+  )
 }
 
 /**
@@ -62,7 +75,7 @@ export function hasMessageContent(message: Message): boolean {
  */
 export function updateCurrentVersionContent(
   message: Message,
-  content: string
+  content: MessageContent
 ): Message {
   const currentVersion = getCurrentVersion(message)
   return {
@@ -75,7 +88,7 @@ export function updateCurrentVersionContent(
  * Create a user message
  */
 export function createUserMessage(
-  content: string,
+  content: MessageContent,
   createdAt: number = Date.now()
 ): Message {
   return {
@@ -112,7 +125,7 @@ export function createLoadingAssistantMessage(
 export function buildMessageContent(
   text: string,
   imageUrls: string[] = []
-): string | ContentPart[] {
+): MessageContent {
   const validImages = imageUrls.filter((url) => url.trim() !== '')
 
   if (validImages.length === 0) {
@@ -136,7 +149,7 @@ export function buildMessageContent(
 /**
  * Extract text content from message content
  */
-export function getTextContent(content: string | ContentPart[]): string {
+export function getTextContent(content: MessageContent): string {
   if (typeof content === 'string') {
     return content
   }
@@ -147,6 +160,41 @@ export function getTextContent(content: string | ContentPart[]): string {
   }
 
   return ''
+}
+
+/**
+ * Extract attached image URLs from message content
+ */
+export function getContentImages(content: MessageContent): string[] {
+  if (!Array.isArray(content)) {
+    return []
+  }
+
+  return content.flatMap((part) =>
+    part.type === 'image_url' && part.image_url?.url
+      ? [part.image_url.url]
+      : []
+  )
+}
+
+/**
+ * Replace the text of a message while keeping its attached images, so editing
+ * an image message only rewrites the text part.
+ */
+export function replaceMessageText(
+  content: MessageContent,
+  text: string
+): MessageContent {
+  if (!Array.isArray(content)) {
+    return text
+  }
+
+  const images = content.filter((part) => part.type === 'image_url')
+  if (images.length === 0) {
+    return text
+  }
+
+  return [{ type: 'text', text }, ...images]
 }
 
 /**

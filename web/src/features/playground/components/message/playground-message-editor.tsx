@@ -24,8 +24,9 @@ import { CodeBlockEditor } from '@/components/ai-elements/code-block'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Button } from '@/components/ui/button'
 
-import { getMessageEditorState } from '../../lib'
+import { getMessageEditorState, getMessageImages } from '../../lib'
 import type { Message } from '../../types'
+import { PlaygroundMessageImages } from './playground-message-images'
 
 type PlaygroundMessageEditorProps = {
   editText: string
@@ -53,6 +54,8 @@ export function PlaygroundMessageEditor({
     editText,
     originalText
   )
+  // Attached images survive a text edit, so show them while editing.
+  const images = getMessageImages(message)
 
   useEffect(() => {
     if (!hasChanged) return
@@ -152,6 +155,7 @@ export function PlaygroundMessageEditor({
 
   return (
     <>
+      <PlaygroundMessageImages className='mb-2' images={images} />
       <CodeBlockEditor
         actions={editorActions}
         ariaLabel={t('Edit')}

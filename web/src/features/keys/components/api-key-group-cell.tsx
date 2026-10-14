@@ -29,9 +29,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { useMediaQuery } from '@/hooks'
 import { handleServerError } from '@/lib/handle-server-error'
-import { cn } from '@/lib/utils'
 
 import { updateApiKeyGroup } from '../api'
 import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
@@ -53,7 +51,6 @@ type ApiKeyGroupCellProps = {
 export function ApiKeyGroupCell(props: ApiKeyGroupCellProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
-  const isMobile = useMediaQuery('(max-width: 640px)')
   const [open, setOpen] = useState(false)
   const [searchValue, setSearchValue] = useState('')
   const [isSaving, setIsSaving] = useState(false)
@@ -110,10 +107,7 @@ export function ApiKeyGroupCell(props: ApiKeyGroupCellProps) {
             aria-expanded={open}
             disabled={isSaving}
             title={group || t('Follow user group')}
-            className={cn(
-              'focus-visible:ring-ring/40 hover:bg-muted/60 flex max-w-full min-w-0 items-center gap-3 rounded-md px-1 py-0.5 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:opacity-60',
-              isMobile ? 'w-full justify-between' : 'max-w-50'
-            )}
+            className='focus-visible:ring-ring/40 hover:bg-muted/60 flex w-full max-w-full min-w-0 items-center justify-between gap-3 rounded-md px-1 py-0.5 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:opacity-60 sm:w-auto'
           />
         }
       >
@@ -135,22 +129,25 @@ export function ApiKeyGroupCell(props: ApiKeyGroupCellProps) {
             />
           </span>
         ) : (
-          <span
-            data-api-key-group-cell='group'
-            className='min-w-0 overflow-hidden'
-          >
+          <span data-api-key-group-cell='group' className='min-w-0'>
             <GroupBadge
               group={group}
               ratio={ratio}
               ratioLabel={group ? undefined : t('Inherited')}
+              type='text'
+              wrap
               className='px-0'
-              containerClassName='gap-3'
+              containerClassName='flex-wrap gap-x-3 gap-y-1'
             />
           </span>
         )}
         {indicator}
       </PopoverTrigger>
-      <PopoverContent align='start' className='w-64 overflow-hidden p-0'>
+      <PopoverContent
+        align='start'
+        collisionPadding={16}
+        className='w-80 max-w-[calc(100vw-2rem)] overflow-hidden p-0'
+      >
         <ApiKeyGroupOptions
           options={props.options}
           value={group}

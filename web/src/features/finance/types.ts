@@ -74,10 +74,14 @@ export interface FinancialOperation {
   related_affiliate_delta: number
   target_main_before: number
   target_main_after: number
+  target_bonus_delta: number
+  target_paid_delta: number
   related_main_before: number
   related_main_after: number
   related_affiliate_before: number
   related_affiliate_after: number
+  /** Reversal operation that undid this row; 0 when it was never reversed. */
+  reversed_by_id?: number
   reason: string
   created_at: number
 }

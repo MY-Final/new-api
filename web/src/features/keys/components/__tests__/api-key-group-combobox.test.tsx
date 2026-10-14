@@ -67,13 +67,13 @@ const options = [
   { value: 'vip', label: 'vip', desc: 'Priority group', ratio: 3 },
 ]
 
-function Harness(props: { initialValue: string }) {
+function Harness(props: { initialValue: string; options?: typeof options }) {
   const [value, setValue] = useState(props.initialValue)
 
   return (
     <I18nextProvider i18n={i18n}>
       <ApiKeyGroupCombobox
-        options={options}
+        options={props.options ?? options}
         value={value}
         onValueChange={setValue}
       />
@@ -97,6 +97,38 @@ function getCommandItem(label: string): HTMLElement {
 }
 
 describe('API key group combobox Auto effect', () => {
+  test('wraps long group names and descriptions in both the selection and options', () => {
+    const groupName = 'kuncode-专属分组-完整名称-abcdefghijklmnopqrstuvwxyz'
+    const description = '专属分组的完整说明，长名称和说明都应直接可读'
+    render(
+      <Harness
+        initialValue={groupName}
+        options={[
+          { value: groupName, label: groupName, desc: description, ratio: 1 },
+        ]}
+      />
+    )
+
+    const trigger = getTrigger()
+    expect(trigger).toHaveClass('h-auto', 'whitespace-normal')
+    for (const text of [groupName, description]) {
+      const label = within(trigger).getByText(text)
+      expect(label).not.toHaveClass('truncate')
+      expect(label).toHaveClass('whitespace-normal', '[overflow-wrap:anywhere]')
+    }
+
+    fireEvent.click(trigger)
+    const option = getCommandItem(groupName)
+    for (const text of [groupName, description]) {
+      const label = within(option).getByText(text)
+      expect(label).not.toHaveClass('truncate')
+      expect(label).toHaveClass('whitespace-normal', '[overflow-wrap:anywhere]')
+    }
+    expect(within(option).getByText('1x')).toBeInTheDocument()
+    fireEvent.click(option)
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  })
+
   test('uses the compact table capsules in the selected group and dropdown options', () => {
     setReducedMotion(false)
     render(<Harness initialValue='auto' />)

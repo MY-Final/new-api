@@ -30,7 +30,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { formatNumber, formatQuota, formatTimestamp } from '@/lib/format'
+import {
+  formatNumber,
+  formatQuota,
+  formatTimestamp,
+} from '@/lib/format'
 
 import { getUserUsageRequests, type UsageStatisticsParams } from '../api'
 

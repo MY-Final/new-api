@@ -20,8 +20,18 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest'
 
+import { getAdminUserUsage } from '@/features/usage-statistics/api'
+
 import { getUserUsage } from '../../../api'
 import { UserUsageDialog } from '../user-usage-dialog'
+
+vi.mock('@/features/usage-statistics/api', () => ({
+  getAdminUserUsage: vi.fn(),
+  getUserUsageRequests: vi.fn().mockResolvedValue({
+    success: true,
+    data: { items: [], total: 0, page: 1, page_size: 20 },
+  }),
+}))
 
 vi.mock('../../../api', () => ({
   getUserUsage: vi.fn(),
@@ -154,6 +164,18 @@ describe('UserUsageDialog', () => {
     )
   })
 
+  test('grows past the default dialog cap so the token tables are not clipped', async () => {
+    getUserUsageMock.mockResolvedValue({ success: true, data: usageData })
+    renderDialog()
+    await screen.findByText('model-a')
+
+    // The token tables need roughly 1120-1180px; the default 1152px dialog cap
+    // left the last column behind a horizontal scrollbar on wide screens.
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toHaveClass('sm:max-w-6xl')
+    expect(dialog).toHaveClass('lg:max-w-[min(94vw,1680px)]')
+  })
+
   test('defaults the usage period to the current day', async () => {
     getUserUsageMock.mockClear()
     getUserUsageMock.mockResolvedValue({ success: true, data: usageData })
@@ -205,4 +227,36 @@ describe('UserUsageDialog', () => {
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
   })
+})
+
+test('opening from user statistics inherits the period and model/channel filters', async () => {
+  const adminMock = vi.mocked(getAdminUserUsage)
+  adminMock.mockResolvedValue({ success: true, data: usageData })
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  const range = {
+    start: new Date('2025-01-01T00:00:00'),
+    end: new Date('2025-01-08T00:00:00'),
+  }
+  render(
+    <QueryClientProvider client={client}>
+      <UserUsageDialog
+        open
+        userId={7}
+        username='usage-user'
+        onOpenChange={() => undefined}
+        initialRange={range}
+        usageFilters={{ model_name: 'model-a', channel: 7 }}
+      />
+    </QueryClientProvider>
+  )
+  await screen.findByText('model-a')
+  expect(adminMock).toHaveBeenCalledWith(7, {
+    start_timestamp: range.start.getTime() / 1000,
+    end_timestamp: range.end.getTime() / 1000,
+    model_name: 'model-a',
+    channel: 7,
+  })
+  client.clear()
 })

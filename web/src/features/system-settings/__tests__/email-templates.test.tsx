@@ -111,7 +111,7 @@ it('inserts a clicked variable into the focused field at the cursor', async () =
   await waitFor(() => expect(subject).toHaveValue('Ticket {{.TicketID}}'))
 })
 
-it('saves every template as a single email template option', async () => {
+it('stores only the edited templates as overrides', async () => {
   const user = userEvent.setup()
   const put = vi
     .spyOn(api, 'put')
@@ -133,10 +133,10 @@ it('saves every template as a single email template option', async () => {
   )?.[1] as { value: string }
   const saved = JSON.parse(request.value)
   expect(saved.ticket.subject).toBe('Edited ticket subject')
-  expect(saved.verify.subject).toBe('Default {{.SystemName}} subject')
+  expect(saved.verify).toBeUndefined()
 })
 
-it('restores the built-in template before saving', async () => {
+it('restores the built-in template by removing the override', async () => {
   const user = userEvent.setup()
   const put = vi
     .spyOn(api, 'put')
@@ -157,7 +157,7 @@ it('restores the built-in template before saving', async () => {
   const request = put.mock.calls.find(
     ([, payload]) => (payload as { key: string }).key === 'EmailTemplates'
   )?.[1] as { value: string }
-  expect(JSON.parse(request.value).ticket.subject).toBe('Ticket {{.TicketID}}')
+  expect(JSON.parse(request.value).ticket).toBeUndefined()
 })
 
 it('saves the brand and footer as the email layout option', async () => {

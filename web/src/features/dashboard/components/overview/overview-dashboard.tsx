@@ -66,7 +66,6 @@ import {
 import { AnnouncementsPanel } from './announcements-panel'
 import { ApiInfoPanel } from './api-info-panel'
 import { FAQPanel } from './faq-panel'
-import { PerformanceHealthPanel } from './performance-health-panel'
 import { SummaryCards } from './summary-cards'
 import { UptimePanel } from './uptime-panel'
 
@@ -614,9 +613,12 @@ export function OverviewDashboard() {
   const setupStatusReady = apiKeysQuery.isFetched && Boolean(user)
   const setupGuideExpanded =
     manualSetupGuideExpanded ?? (setupStatusReady && !setupComplete)
-  const showLeftContentPanels =
-    isAdmin || showApiInfoPanel || showAnnouncementsPanel || showFAQPanel
-  const showContentPanels = showLeftContentPanels || showUptimePanel
+  const informationPanelCount = [
+    showAnnouncementsPanel,
+    showFAQPanel,
+    showApiInfoPanel,
+    showUptimePanel,
+  ].filter(Boolean).length
 
   const handleSetupGuideToggle = () => {
     const nextExpanded = !setupGuideExpanded
@@ -646,7 +648,12 @@ export function OverviewDashboard() {
         )}
       </SectionPageLayout.Actions>
       <SectionPageLayout.Content>
-        <div className='flex flex-col gap-4'>
+        <div className='flex min-w-0 flex-col gap-6'>
+          <nav aria-label={t('Quick actions')} className='flex flex-wrap gap-2'>
+            {visibleQuickActions.map((action) => (
+              <CompactQuickAction key={action.title} action={action} />
+            ))}
+          </nav>
           <div id={setupGuideId} hidden={!setupGuideExpanded}>
             {setupGuideExpanded && (
               <CardStaggerContainer className='grid items-stretch gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]'>
@@ -763,12 +770,6 @@ export function OverviewDashboard() {
                     </div>
 
                     <div className='flex flex-wrap items-center gap-2'>
-                      {visibleQuickActions.map((action) => (
-                        <CompactQuickAction
-                          key={action.title}
-                          action={action}
-                        />
-                      ))}
                       <Button
                         variant='outline'
                         size='sm'
@@ -789,53 +790,34 @@ export function OverviewDashboard() {
 
           <SummaryCards />
 
-          {showContentPanels && (
-            <CardStaggerContainer
+          {informationPanelCount > 0 && (
+            <div
               className={cn(
-                'grid grid-cols-1 gap-4',
-                showLeftContentPanels &&
-                  showUptimePanel &&
-                  'xl:grid-cols-[minmax(0,1fr)_22rem]'
+                'grid min-w-0 grid-cols-1 gap-4',
+                informationPanelCount > 1 && 'lg:grid-cols-2'
               )}
             >
-              {showLeftContentPanels && (
-                <div
-                  className={cn(
-                    'grid min-w-0 grid-cols-1 gap-4',
-                    (showApiInfoPanel ||
-                      showAnnouncementsPanel ||
-                      showFAQPanel) &&
-                      'lg:grid-cols-2'
-                  )}
-                >
-                  {isAdmin && (
-                    <CardStaggerItem className='lg:col-span-2'>
-                      <PerformanceHealthPanel />
-                    </CardStaggerItem>
-                  )}
-                  {showApiInfoPanel && (
-                    <CardStaggerItem>
-                      <ApiInfoPanel />
-                    </CardStaggerItem>
-                  )}
-                  {showAnnouncementsPanel && (
-                    <CardStaggerItem>
-                      <AnnouncementsPanel />
-                    </CardStaggerItem>
-                  )}
-                  {showFAQPanel && (
-                    <CardStaggerItem>
-                      <FAQPanel />
-                    </CardStaggerItem>
-                  )}
+              {showAnnouncementsPanel && (
+                <div className='min-w-0'>
+                  <AnnouncementsPanel />
+                </div>
+              )}
+              {showFAQPanel && (
+                <div className='min-w-0'>
+                  <FAQPanel />
+                </div>
+              )}
+              {showApiInfoPanel && (
+                <div className='min-w-0'>
+                  <ApiInfoPanel />
                 </div>
               )}
               {showUptimePanel && (
-                <CardStaggerItem>
+                <div className='min-w-0'>
                   <UptimePanel />
-                </CardStaggerItem>
+                </div>
               )}
-            </CardStaggerContainer>
+            </div>
           )}
         </div>
       </SectionPageLayout.Content>

@@ -23,6 +23,7 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
+  DATA_TABLE_VIEW_MODES,
   DISABLED_ROW_DESKTOP,
   DISABLED_ROW_MOBILE,
   DataTablePage,
@@ -48,6 +49,8 @@ import { useUsersColumns } from './users-columns'
 import { useUsers } from './users-provider'
 
 const route = getRouteApi('/_authenticated/users/')
+
+const USERS_VIEW_MODE_STORAGE_KEY = 'users:view-mode'
 
 const USER_SORTABLE_COLUMNS = new Set<UserSortBy>([
   'id',
@@ -104,12 +107,8 @@ export function UsersTable() {
   const { data: groupsData } = useQuery({
     queryKey: ['groups'],
     queryFn: async () => requireServerSuccess(await getGroups()),
+    staleTime: 5 * 60 * 1000,
   })
-  const groupOptions = useMemo(
-    () =>
-      (groupsData?.data || []).map((group) => ({ label: group, value: group })),
-    [groupsData]
-  )
 
   const sortParams = useMemo(() => {
     const activeSort = sorting[0]
@@ -230,6 +229,12 @@ export function UsersTable() {
       )}
       skeletonKeyPrefix='users-skeleton'
       applyHeaderSize
+      enableCardView
+      // Desktop keeps the table; phones open on cards. A stored preference wins.
+      defaultViewMode={
+        isMobile ? DATA_TABLE_VIEW_MODES.CARD : DATA_TABLE_VIEW_MODES.TABLE
+      }
+      viewModeStorageKey={USERS_VIEW_MODE_STORAGE_KEY}
       toolbarProps={{
         searchPlaceholder: t('Filter by username, name or email...'),
         searchDebounceMs: 500,
@@ -249,7 +254,10 @@ export function UsersTable() {
           {
             columnId: 'group',
             title: t('User Group'),
-            options: groupOptions,
+            options: (groupsData?.data ?? []).map((group) => ({
+              label: group,
+              value: group,
+            })),
             singleSelect: true,
           },
         ],

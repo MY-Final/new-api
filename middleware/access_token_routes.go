@@ -75,6 +75,7 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"POST /api/desktop/keys/:id/reveal":                  accessTokenScopeRule(model.DesktopKeysRevealScope),
 	// router/api-router.go: top level
 	"GET /api/models":                     accessTokenScopeRule("profile:read"),
+	"GET /api/custom-pages":               accessTokenScopeRule("profile:read"),
 	"GET /api/status/test":                accessTokenScopeRule("log:read"),
 	"GET /api/pricing":                    accessTokenAnyRule,
 	"GET /api/perf-metrics/summary":       accessTokenAnyRule,
@@ -276,6 +277,7 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	// router/api-router.go: /api/redemption
 	"GET /api/redemption/":           accessTokenScopeRule("redemption:read"),
 	"GET /api/redemption/search":     accessTokenScopeRule("redemption:read"),
+	"GET /api/redemption/summary":    accessTokenScopeRule("redemption:read"),
 	"GET /api/redemption/:id":        accessTokenScopeRule("redemption:read"),
 	"POST /api/redemption/":          accessTokenScopeRule("redemption:write"),
 	"POST /api/redemption/batch":     accessTokenScopeRule("redemption:write"),

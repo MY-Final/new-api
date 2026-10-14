@@ -30,9 +30,14 @@ import { DataTablePagination } from '../pagination'
 const rows = [{ id: 1 }, { id: 2 }, { id: 3 }]
 const emptyRows: { id: number }[] = []
 
-function Fixture(props: { empty?: boolean; compact?: boolean }) {
+function Fixture(props: {
+  empty?: boolean
+  compact?: boolean
+  pageCount?: number
+}) {
   const table = useReactTable({
     data: props.empty ? emptyRows : rows,
+    pageCount: props.pageCount,
     columns: [{ accessorKey: 'id' }],
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
@@ -64,4 +69,10 @@ it('shows a valid empty page with navigation disabled', () => {
 it('keeps page size selection available in the default layout', () => {
   render(<Fixture />)
   expect(screen.getByRole('combobox')).toBeVisible()
+})
+
+it('keeps the explicit server page count in compact mode', () => {
+  render(<Fixture compact pageCount={8} />)
+  expect(screen.getByText('1 / 8')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Go to next page' })).toBeEnabled()
 })

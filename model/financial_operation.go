@@ -18,13 +18,15 @@ const (
 	FinancialOperationPenaltyReversal  = "penalty_reversal"
 )
 
+// The finance errors reach the web console, so they carry message keys: the
+// console translates the English source text (and its own locale entry).
 var (
-	ErrFinancialReasonInvalid      = errors.New("reason must contain 1 to 255 characters")
-	ErrRedemptionNotRefundable     = errors.New("redemption is not refundable")
-	ErrPenaltyNotFound             = errors.New("penalty not found")
-	ErrPenaltyAlreadyReversed      = errors.New("penalty already reversed")
-	ErrFinancialRoleForbidden      = errors.New("cannot operate on a user with the same or higher role")
-	ErrFinancialOperationKeyNeeded = errors.New("request id is required")
+	ErrFinancialReasonInvalid      error = common.NewMessage("Reason must contain 1 to 255 characters")
+	ErrRedemptionNotRefundable     error = common.NewMessage("Redemption is not refundable")
+	ErrPenaltyNotFound             error = common.NewMessage("Penalty not found")
+	ErrPenaltyAlreadyReversed      error = common.NewMessage("Penalty already reversed")
+	ErrFinancialRoleForbidden      error = common.NewMessage("Cannot operate on a user with the same or higher role")
+	ErrFinancialOperationKeyNeeded error = common.NewMessage("Request id is required")
 )
 
 type FinancialOperation struct {
@@ -55,6 +57,10 @@ type FinancialOperation struct {
 	RelatedAffiliateAfter  int    `json:"related_affiliate_after" gorm:"type:bigint"`
 	Reason                 string `json:"reason" gorm:"type:varchar(255)"`
 	CreatedAt              int64  `json:"created_at" gorm:"bigint;autoCreateTime;index"`
+	// ReversedById is filled by the list query with the reversal operation that
+	// undid this row (0 when it was never reversed). Not persisted: the reversal
+	// itself is a row of this table.
+	ReversedById int `json:"reversed_by_id" gorm:"-"`
 }
 
 type FinanceQuery struct {
@@ -811,5 +817,41 @@ func ListFinancialOperations(filters FinanceQuery, pageInfo *common.PageInfo) ([
 	}
 	var items []*FinancialOperation
 	err := query.Order("id DESC").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&items).Error
-	return items, total, err
+	if err != nil {
+		return nil, 0, err
+	}
+	if err := fillOperationReversals(items); err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
+}
+
+// fillOperationReversals marks penalties on the page that a later reversal
+// undid, so the console shows "reversed by #id" instead of offering the action
+// again. Reversal rows themselves carry reversal_of_id and are skipped.
+func fillOperationReversals(items []*FinancialOperation) error {
+	ids := make([]int, 0, len(items))
+	for _, item := range items {
+		if item.OperationType == FinancialOperationPenalty {
+			ids = append(ids, item.Id)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+
+	var reversals []FinancialOperation
+	if err := DB.Select("id", "reversal_of_id").
+		Where("reversal_of_id IN ?", ids).
+		Find(&reversals).Error; err != nil {
+		return err
+	}
+	byOriginal := make(map[int]int, len(reversals))
+	for _, reversal := range reversals {
+		byOriginal[reversal.ReversalOfId] = reversal.Id
+	}
+	for _, item := range items {
+		item.ReversedById = byOriginal[item.Id]
+	}
+	return nil
 }

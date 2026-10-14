@@ -29,8 +29,10 @@ import {
   ItemGroup,
   ItemTitle,
 } from '@/components/ui/item'
-import { useSetupDownload } from '@/hooks/use-setup-download'
-import { KUNCODE_SETUP_RELEASE_URL } from '@/lib/kuncode-setup'
+import {
+  useSetupDownload,
+  useSetupDownloadUrl,
+} from '@/hooks/use-setup-download'
 
 import { ApiAddressList } from './api-address-list'
 import { useApiKeys } from './api-keys-provider'
@@ -49,6 +51,7 @@ export function ApiKeyCreatedDialog(props: ApiKeyCreatedDialogProps) {
   const { t } = useTranslation()
   const { createdKeys } = useApiKeys()
   const showSetupDownload = useSetupDownload()
+  const setupDownloadUrl = useSetupDownloadUrl()
 
   return (
     <Dialog
@@ -129,7 +132,7 @@ export function ApiKeyCreatedDialog(props: ApiKeyCreatedDialogProps) {
               size='sm'
               render={
                 <a
-                  href={KUNCODE_SETUP_RELEASE_URL}
+                  href={setupDownloadUrl}
                   target='_blank'
                   rel='noopener noreferrer'
                 />

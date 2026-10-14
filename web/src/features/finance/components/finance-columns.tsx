@@ -37,6 +37,7 @@ type ColumnContext = {
   t: TFunction
   onAction: (action: FinanceAction) => void
   onRefresh: () => void
+  onDetails: (item: FinanceRecord) => void
 }
 
 function getActionsColumn(
@@ -56,6 +57,7 @@ function getActionsColumn(
         row={row}
         onAction={ctx.onAction}
         onRefresh={ctx.onRefresh}
+        onDetails={ctx.onDetails}
       />
     ),
   }
@@ -488,6 +490,37 @@ function getOperationColumns(ctx: ColumnContext): ColumnDef<FinanceRecord>[] {
       },
     },
     {
+      id: 'reversal',
+      header: t('Reversed by'),
+      size: 140,
+      cell: ({ row }) => {
+        const operation = row.original as FinancialOperation
+        if (operation.reversed_by_id) {
+          return (
+            <BadgeCell>
+              <StatusBadge
+                label={`#${operation.reversed_by_id}`}
+                variant='danger'
+                copyable={false}
+              />
+            </BadgeCell>
+          )
+        }
+        if (operation.reversal_of_id) {
+          return (
+            <BadgeCell>
+              <StatusBadge
+                label={`#${operation.reversal_of_id}`}
+                variant='neutral'
+                copyable={false}
+              />
+            </BadgeCell>
+          )
+        }
+        return <span className='text-muted-foreground text-xs'>—</span>
+      },
+    },
+    {
       accessorKey: 'reason',
       header: t('Reason'),
       size: 220,
@@ -524,14 +557,15 @@ function getOperationColumns(ctx: ColumnContext): ColumnDef<FinanceRecord>[] {
 export function useFinanceColumns(
   section: FinanceSection,
   onAction: (action: FinanceAction) => void,
-  onRefresh: () => void
+  onRefresh: () => void,
+  onDetails: (item: FinanceRecord) => void
 ): ColumnDef<FinanceRecord>[] {
   const { t } = useTranslation()
   return useMemo(() => {
-    const ctx: ColumnContext = { t, onAction, onRefresh }
+    const ctx: ColumnContext = { t, onAction, onRefresh, onDetails }
     if (section === 'redemptions') return getRedemptionColumns(ctx)
     if (section === 'rebates') return getRebateColumns(ctx)
     if (section === 'operations') return getOperationColumns(ctx)
     return getTopupColumns(ctx)
-  }, [section, t, onAction, onRefresh])
+  }, [section, t, onAction, onRefresh, onDetails])
 }

@@ -87,16 +87,26 @@ func TestEmailTemplateDefaultsExposeEveryEditorField(t *testing.T) {
 	}
 }
 
-func TestQuotaNotificationsRenderTheQuotaTemplateWithNamedVariables(t *testing.T) {
-	stubEmailTemplates(t, "")
+func TestQuotaNotificationsRenderTheQuotaTemplateWhenOverridden(t *testing.T) {
+	stubEmailTemplates(t, `{"quota":{"subject":"额度提醒：{{.Title}}","body":"<p>剩余 {{.Remaining}}</p><p>{{.TopUpLink}}</p>"}}`)
 	subject, body := renderEmailNotify(
 		dto.NewNotify(dto.NotifyTypeQuotaExceed, "您的额度即将用尽", "legacy {{value}} content", []any{"ignored"}).
 			WithVariables(map[string]string{"Remaining": "5,000", "TopUpLink": "https://example.com/wallet"}),
 	)
-	assert.Equal(t, "您的额度即将用尽", subject)
+	assert.Equal(t, "额度提醒：您的额度即将用尽", subject)
 	assert.Contains(t, body, "5,000")
 	assert.Contains(t, body, "https://example.com/wallet")
 	assert.NotContains(t, body, "legacy ignored content", "quota emails must not mix the legacy body")
+}
+
+func TestQuotaNotificationsKeepTheirLocalizedContentWithoutAnOverride(t *testing.T) {
+	stubEmailTemplates(t, "")
+	subject, body := renderEmailNotify(
+		dto.NewNotify(dto.NotifyTypeQuotaExceed, "额度提醒", "{{value}} 剩余", []any{"5,000"}).
+			WithVariables(map[string]string{"Remaining": "5,000", "TopUpLink": "https://example.com/wallet"}),
+	)
+	assert.Equal(t, "额度提醒", subject)
+	assert.Contains(t, body, "5,000 剩余")
 }
 
 func TestNotificationsWithoutNamedVariablesKeepTheLegacyContent(t *testing.T) {

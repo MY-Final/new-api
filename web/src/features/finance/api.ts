@@ -1,4 +1,5 @@
 import { api } from '@/lib/api'
+import { requireServerSuccess } from '@/lib/server-error-message'
 
 import type {
   FinanceFilters,
@@ -37,10 +38,8 @@ async function getPage<T>(path: string, filters: FinanceFilters) {
   const response = await api.get<ApiResponse<PageData<T>>>(path, {
     params: queryParams(filters),
   })
-  if (!response.data.success) {
-    throw new Error(response.data.message || 'Request failed')
-  }
-  return response.data.data || { items: [], total: 0 }
+  const payload = requireServerSuccess(response.data)
+  return payload.data || { items: [], total: 0 }
 }
 
 export const getFinanceTopups = (filters: FinanceFilters) =>
@@ -56,39 +55,39 @@ export const getFinancialOperations = (filters: FinanceFilters) =>
   getPage<FinancialOperation>('/api/finance/operations', filters)
 
 export async function completeFinanceTopup(tradeNo: string) {
-  return (await api.post('/api/user/topup/complete', { trade_no: tradeNo })).data
+  const response = await api.post('/api/user/topup/complete', {
+    trade_no: tradeNo,
+  })
+  return requireServerSuccess(response.data)
 }
 
 export async function refundFinanceTopup(tradeNo: string, reason: string) {
-  return (
-    await api.post('/api/finance/topups/refund', {
-      trade_no: tradeNo,
-      reason,
-      external_refund_completed: true,
-    })
-  ).data
+  const response = await api.post('/api/finance/topups/refund', {
+    trade_no: tradeNo,
+    reason,
+    external_refund_completed: true,
+  })
+  return requireServerSuccess(response.data)
 }
 
 export async function refundFinanceRedemption(
   redemptionId: number,
   reason: string
 ) {
-  return (
-    await api.post('/api/finance/redemptions/refund', {
-      redemption_id: redemptionId,
-      reason,
-      external_refund_completed: true,
-    })
-  ).data
+  const response = await api.post('/api/finance/redemptions/refund', {
+    redemption_id: redemptionId,
+    reason,
+    external_refund_completed: true,
+  })
+  return requireServerSuccess(response.data)
 }
 
 export async function reverseFinanceRebate(rebateId: number, reason: string) {
-  return (
-    await api.post('/api/finance/rebates/reverse', {
-      rebate_id: rebateId,
-      reason,
-    })
-  ).data
+  const response = await api.post('/api/finance/rebates/reverse', {
+    rebate_id: rebateId,
+    reason,
+  })
+  return requireServerSuccess(response.data)
 }
 
 export async function applyFinancePenalty(
@@ -97,21 +96,19 @@ export async function applyFinancePenalty(
   reason: string,
   requestId: string
 ) {
-  return (
-    await api.post('/api/finance/penalties', {
-      user_id: userId,
-      quota,
-      reason,
-      request_id: requestId,
-    })
-  ).data
+  const response = await api.post('/api/finance/penalties', {
+    user_id: userId,
+    quota,
+    reason,
+    request_id: requestId,
+  })
+  return requireServerSuccess(response.data)
 }
 
 export async function reverseFinancePenalty(penaltyId: number, reason: string) {
-  return (
-    await api.post('/api/finance/penalties/reverse', {
-      penalty_id: penaltyId,
-      reason,
-    })
-  ).data
+  const response = await api.post('/api/finance/penalties/reverse', {
+    penalty_id: penaltyId,
+    reason,
+  })
+  return requireServerSuccess(response.data)
 }

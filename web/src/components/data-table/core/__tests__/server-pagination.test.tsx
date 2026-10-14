@@ -98,3 +98,30 @@ describe('DataTableServerPagination', () => {
     expect(onPageSizeChange).toHaveBeenCalledWith(50)
   })
 })
+
+test('compact server pagination wraps and preserves page-size and navigation controls', async () => {
+  const user = userEvent.setup()
+  const onPageChange = vi.fn()
+  const onPageSizeChange = vi.fn()
+  render(
+    <I18nextProvider i18n={i18n}>
+      <DataTableServerPagination
+        compact
+        page={1}
+        pageSize={10}
+        total={25}
+        onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
+      />
+    </I18nextProvider>
+  )
+  expect(screen.getByRole('navigation')).toHaveClass('flex-wrap')
+  expect(
+    screen.getByRole('button', { name: 'Go to previous page' })
+  ).toBeDisabled()
+  await user.click(screen.getByRole('button', { name: 'Go to next page' }))
+  expect(onPageChange).toHaveBeenCalledWith(2)
+  await user.click(screen.getByRole('combobox', { name: 'Rows per page' }))
+  await user.click(screen.getByRole('option', { name: '20' }))
+  expect(onPageSizeChange).toHaveBeenCalledWith(20)
+})

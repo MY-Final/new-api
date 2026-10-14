@@ -136,10 +136,6 @@ export function SidebarModulesSection({
         title: t('Task logs'),
         description: t('Background job tracker for queued work.'),
       },
-      relayPulse: {
-        title: t('Channel Detection'),
-        description: t('Embedded service monitoring and availability matrix.'),
-      },
     },
     personal: {
       topup: {

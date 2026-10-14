@@ -91,4 +91,47 @@ describe('ModelUsageTable', () => {
     expect(modelOrder()[0]).toContain('gamma')
     expect(modelOrder()[2]).toContain('alpha')
   })
+  it('marks the ranked column and moves the share bar with the ranking metric', async () => {
+    const user = userEvent.setup()
+    render(<ModelUsageTable data={models} />)
+
+    // Default ranking is cost: alpha holds 60% of the total cost.
+    expect(
+      screen.getByRole('columnheader', { name: /User Cost/ })
+    ).toHaveAttribute('aria-sort', 'descending')
+    expect(screen.getByText(/60\s*%/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: 'Tokens' }))
+
+    expect(
+      screen.getByRole('columnheader', { name: /Total Tokens/ })
+    ).toHaveAttribute('aria-sort', 'descending')
+    expect(
+      screen.getByRole('columnheader', { name: /User Cost/ })
+    ).not.toHaveAttribute('aria-sort')
+    // beta holds 900 of 1050 tokens, so the bar follows the selected metric.
+    expect(screen.getByText(/85\.71\s*%/)).toBeInTheDocument()
+  })
+
+  it('shows exact token counts instead of compacted values', () => {
+    render(
+      <ModelUsageTable
+        data={[
+          {
+            ...emptyMetrics,
+            model_name: 'deepseek-v4-flash',
+            request_count: 3730,
+            input_tokens: 711_084_385,
+            total_tokens: 714_792_396,
+            user_cost: 6.97,
+          },
+        ]}
+      />
+    )
+
+    // Token columns report the real amount, so the numbers can be reconciled.
+    expect(screen.getByText('711,084,385')).toBeInTheDocument()
+    expect(screen.getByText('714,792,396')).toBeInTheDocument()
+    expect(screen.getByText('3,730')).toBeInTheDocument()
+  })
 })
