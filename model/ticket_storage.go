@@ -54,6 +54,22 @@ func ValidateTicketStorageOption(raw string) error {
 	return nil
 }
 
+// TicketNotifyEmail reads the notification recipient on its own, so ticket
+// notifications keep working when image storage is not configured at all.
+func TicketNotifyEmail() string {
+	common.OptionMapRWMutex.RLock()
+	raw := common.OptionMap[system_setting.TicketStorageOption]
+	common.OptionMapRWMutex.RUnlock()
+	if raw == "" {
+		return ""
+	}
+	var config system_setting.TicketStorageConfig
+	if err := common.UnmarshalJsonStr(raw, &config); err != nil {
+		return ""
+	}
+	return config.NotifyEmail
+}
+
 func TicketObjectsDue(now int64, afterID int) ([]TicketStoredObject, error) {
 	objects := make([]TicketStoredObject, 0)
 	err := DB.Where("id > ?", afterID).Where("(expires_at <= ? OR (created_at <= ? AND NOT EXISTS (SELECT 1 FROM ticket_attachments WHERE ticket_attachments.object_key = ticket_stored_objects.object_key)))", now, now-3600).Order("id ASC").Limit(100).Find(&objects).Error

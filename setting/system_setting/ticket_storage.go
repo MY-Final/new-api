@@ -2,6 +2,7 @@ package system_setting
 
 import (
 	"errors"
+	"net/mail"
 	"net/url"
 	"regexp"
 	"strings"
@@ -17,6 +18,7 @@ type TicketStorageConfig struct {
 	Bucket        string `json:"bucket"`
 	AccessKey     string `json:"access_key"`
 	SecretKey     string `json:"secret_key"`
+	NotifyEmail   string `json:"notify_email"`
 }
 
 func (config TicketStorageConfig) Ready() bool {
@@ -44,6 +46,30 @@ func (config TicketStorageConfig) Validate() error {
 	}
 	if config.Enabled && (config.Endpoint == "" || config.Bucket == "") {
 		return errors.New("Configure R2 before enabling image uploads")
+	}
+	if err := validateTicketNotifyEmail(config.NotifyEmail); err != nil {
+		return err
+	}
+	return nil
+}
+
+const ticketNotifyEmailMaxLength = 1024
+
+// validateTicketNotifyEmail accepts an empty value or a semicolon separated
+// recipient list so several maintainers can share the notification inbox.
+func validateTicketNotifyEmail(value string) error {
+	if value == "" {
+		return nil
+	}
+	if len(value) > ticketNotifyEmailMaxLength || value != strings.TrimSpace(value) {
+		return errors.New("Enter a valid notification email address")
+	}
+	for _, address := range strings.Split(value, ";") {
+		address = strings.TrimSpace(address)
+		parsed, err := mail.ParseAddress(address)
+		if err != nil || parsed.Address != address || strings.ContainsAny(address, "\r\n") {
+			return errors.New("Enter a valid notification email address")
+		}
 	}
 	return nil
 }

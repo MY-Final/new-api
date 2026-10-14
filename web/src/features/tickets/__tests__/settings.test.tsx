@@ -30,6 +30,7 @@ const storage = {
   retention_days: 30,
   endpoint: '',
   bucket: '',
+  notify_email: '',
   credentials_configured: false,
 }
 
@@ -144,8 +145,8 @@ it('saves R2 credentials with the image switch and clears secret fields after su
   await user.type(screen.getByLabelText('R2 bucket'), ' ticket-images ')
   await user.type(screen.getByLabelText('R2 access key ID'), 'access')
   await user.type(screen.getByLabelText('R2 secret access key'), 'secret')
-  await user.click(screen.getByRole('button', { name: 'Save image settings' }))
-  expect(await screen.findByText('Image settings saved')).toBeVisible()
+  await user.click(screen.getByRole('button', { name: 'Save Settings' }))
+  expect(await screen.findByText('Saved successfully')).toBeVisible()
   expect(put).toHaveBeenCalledWith('/api/admin/tickets/storage', {
     enabled: true,
     retention_days: 30,
@@ -154,6 +155,7 @@ it('saves R2 credentials with the image switch and clears secret fields after su
     bucket: 'ticket-images',
     access_key: 'access',
     secret_key: 'secret',
+    notify_email: '',
   })
   expect(screen.getByLabelText('R2 access key ID')).toHaveValue('')
   expect(screen.getByLabelText('R2 secret access key')).toHaveValue('')
@@ -167,20 +169,60 @@ it('keeps the R2 draft after save failure and rejects invalid retention', async 
   const put = vi.spyOn(api, 'put').mockRejectedValue(new Error('Offline'))
   showSettings()
   await user.type(await screen.findByLabelText('R2 bucket'), 'ticket-images')
-  await user.click(screen.getByRole('button', { name: 'Save image settings' }))
+  await user.click(screen.getByRole('button', { name: 'Save Settings' }))
   await waitFor(() => expect(put).toHaveBeenCalledTimes(1))
   await waitFor(() =>
-    expect(
-      screen.getByRole('button', { name: 'Save image settings' })
-    ).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Save Settings' })).toBeEnabled()
   )
   expect(screen.getByLabelText('R2 bucket')).toHaveValue('ticket-images')
-  expect(screen.queryByText('Image settings saved')).not.toBeInTheDocument()
+  expect(screen.queryByText('Saved successfully')).not.toBeInTheDocument()
   const retention = screen.getByRole('spinbutton', {
     name: 'Image retention (days)',
   })
   await user.clear(retention)
   await user.type(retention, '366')
-  await user.click(screen.getByRole('button', { name: 'Save image settings' }))
+  await user.click(screen.getByRole('button', { name: 'Save Settings' }))
   expect(put).toHaveBeenCalledTimes(1)
+})
+
+it('saves the notification email that receives new ticket alerts', async () => {
+  const user = userEvent.setup()
+  vi.spyOn(api, 'get').mockResolvedValue({
+    data: { success: true, data: storage },
+  })
+  const put = vi.spyOn(api, 'put').mockResolvedValue({
+    data: {
+      success: true,
+      data: { ...storage, notify_email: 'ops@example.com' },
+    },
+  })
+  showSettings()
+  await user.type(
+    await screen.findByLabelText('Notification Email'),
+    'ops@example.com'
+  )
+  await user.click(screen.getByRole('button', { name: 'Save Settings' }))
+  expect(await screen.findByText('Saved successfully')).toBeVisible()
+  expect(put).toHaveBeenCalledWith(
+    '/api/admin/tickets/storage',
+    expect.objectContaining({ notify_email: 'ops@example.com' })
+  )
+})
+
+it('rejects an invalid notification email before saving', async () => {
+  const user = userEvent.setup()
+  vi.spyOn(api, 'get').mockResolvedValue({
+    data: { success: true, data: storage },
+  })
+  const put = vi.spyOn(api, 'put')
+  showSettings()
+  await user.type(
+    await screen.findByLabelText('Notification Email'),
+    'not-an-email'
+  )
+  await user.click(screen.getByRole('button', { name: 'Save Settings' }))
+  expect(
+    await screen.findByText('Enter a valid notification email address')
+  ).toBeVisible()
+  expect(put).not.toHaveBeenCalled()
 })

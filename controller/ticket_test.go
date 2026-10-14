@@ -464,13 +464,18 @@ func TestTicketR2ExpiryFailuresAndSettings(t *testing.T) {
 				{RetentionDays: 366},
 				{RetentionDays: 30, Endpoint: "https://attacker.invalid"},
 				{RetentionDays: 30, Endpoint: "http://127.0.0.1"},
+				{RetentionDays: 30, NotifyEmail: "not-an-email"},
+				{RetentionDays: 30, NotifyEmail: " owner@example.com"},
 			} {
 				assert.Equal(t, 400, ticketRequest(t, engine, "PUT", settingsPath, rootToken, bad).Code)
 			}
 			config.Enabled = false
 			config.AccessKey, config.SecretKey = "", ""
+			config.NotifyEmail = "owner@example.com;second@example.com"
 			assert.Equal(t, 200, ticketRequest(t, engine, "PUT", settingsPath, rootToken, config).Code)
 			assert.Equal(t, "test-secret", model.TicketStorageConfig().SecretKey, "blank credentials retain the configured pair")
+			assert.Equal(t, "owner@example.com;second@example.com", model.TicketStorageConfig().NotifyEmail)
+			assert.Contains(t, ticketRequest(t, engine, "GET", settingsPath, rootToken, nil).Body.String(), "owner@example.com")
 			var imageData bytes.Buffer
 			require.NoError(t, png.Encode(&imageData, image.NewRGBA(image.Rect(0, 0, 2, 2))))
 			body := map[string]any{"title": "R2", "category": "api", "content": "keep text", "request_key": "r2-create", "screenshots": []any{map[string]any{"name": "r2.png", "data": base64.StdEncoding.EncodeToString(imageData.Bytes())}}}

@@ -45,6 +45,15 @@ import { getTicketStorage, saveTicketStorage } from '../api'
 import type { TicketStorageSettings } from '../types'
 
 const schema = z.object({
+  notify_email: z
+    .string()
+    .trim()
+    .refine(
+      (value) =>
+        value === '' ||
+        value.split(';').every((part) => /^[^\s@]+@[^\s@]+$/.test(part.trim())),
+      'Enter a valid notification email address'
+    ),
   enabled: z.boolean(),
   retention_days: z
     .number({ error: 'Image retention must be between 1 and 365 days' })
@@ -84,6 +93,7 @@ function TicketStorageForm(props: { settings: TicketStorageSettings }) {
   const form = useForm<StorageValues>({
     resolver: zodResolver(schema),
     defaultValues: {
+      notify_email: props.settings.notify_email,
       enabled: props.settings.enabled,
       retention_days: props.settings.retention_days,
       endpoint: props.settings.endpoint,
@@ -96,6 +106,7 @@ function TicketStorageForm(props: { settings: TicketStorageSettings }) {
     mutationFn: () => saveTicketStorage(form.getValues()),
     onSuccess: (settings) => {
       form.reset({
+        notify_email: settings.notify_email,
         enabled: settings.enabled,
         retention_days: settings.retention_days,
         endpoint: settings.endpoint,
@@ -120,6 +131,30 @@ function TicketStorageForm(props: { settings: TicketStorageSettings }) {
           mutation.mutate()
         })}
       >
+        <Separator />
+        <p className='font-medium'>{t('Email notifications')}</p>
+        <FormField
+          control={form.control}
+          name='notify_email'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{t('Notification Email')}</FormLabel>
+              <FormControl>
+                <Input
+                  {...field}
+                  placeholder='support@example.com'
+                  disabled={mutation.isPending}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <p className='text-muted-foreground text-xs'>
+          {t(
+            'Send an email to this address when a user creates a ticket or replies. Leave empty to disable.'
+          )}
+        </p>
         <Separator />
         <FormField
           control={form.control}
@@ -242,11 +277,11 @@ function TicketStorageForm(props: { settings: TicketStorageSettings }) {
         </p>
         <div>
           <Button type='submit' disabled={mutation.isPending}>
-            {t('Save image settings')}
+            {t('Save Settings')}
           </Button>
         </div>
         {saved && !form.formState.isDirty && (
-          <p role='status'>{t('Image settings saved')}</p>
+          <p role='status'>{t('Saved successfully')}</p>
         )}
       </form>
     </Form>

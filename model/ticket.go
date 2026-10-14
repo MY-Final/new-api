@@ -61,6 +61,9 @@ type TicketMessage struct {
 	RequestHash string             `json:"-" gorm:"type:char(64);not null"`
 	CreatedAt   int64              `json:"created_at" gorm:"autoCreateTime"`
 	Attachments []TicketAttachment `json:"attachments" gorm:"-"`
+	// Created marks a freshly inserted row. Idempotent replays load the stored
+	// message instead, so callers can skip one-off side effects such as email.
+	Created bool `json:"-" gorm:"-"`
 	// SenderName is only filled for staff readers.
 	SenderName string `json:"sender_name,omitempty" gorm:"-"`
 }
@@ -214,6 +217,7 @@ func CreateTicket(ticket *Ticket, message *TicketMessage) error {
 		if err := tx.Create(message).Error; err != nil {
 			return err
 		}
+		message.Created = true
 		for i := range message.Attachments {
 			message.Attachments[i].TicketID = ticket.ID
 			message.Attachments[i].MessageID = message.ID
@@ -367,6 +371,7 @@ func ReplyTicket(actor TicketActor, message *TicketMessage, resolve bool) error 
 		if err := tx.Create(message).Error; err != nil {
 			return err
 		}
+		message.Created = true
 		for i := range message.Attachments {
 			message.Attachments[i].TicketID = ticket.ID
 			message.Attachments[i].MessageID = message.ID

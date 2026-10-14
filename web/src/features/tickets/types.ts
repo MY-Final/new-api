@@ -63,6 +63,7 @@ export interface TicketStorageSettings {
   retention_days: number
   endpoint: string
   bucket: string
+  notify_email: string
   credentials_configured: boolean
 }
 export interface TicketMessage {

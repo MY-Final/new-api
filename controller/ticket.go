@@ -164,8 +164,10 @@ func CreateTicket(c *gin.Context) {
 		ticketError(c, err)
 		return
 	}
-	if message.ID == 0 {
+	if !message.Created {
 		service.DiscardTicketImages(objects)
+	} else {
+		service.NotifyTicketCreated(ticket, c.GetString("username"), message.Content)
 	}
 	common.ApiSuccess(c, gin.H{"id": ticket.ID})
 }
@@ -218,17 +220,23 @@ func ReplyTicket(c *gin.Context) {
 		ticketError(c, err)
 		return
 	}
-	attachments := message.Attachments
 	if err := model.ReplyTicket(actor, message, request.Resolve); err != nil {
 		service.DiscardTicketImages(objects)
 		ticketError(c, err)
 		return
 	}
-	if len(attachments) > 0 && attachments[0].ID == 0 {
+	if !message.Created {
 		service.DiscardTicketImages(objects)
 	}
 	if actor.Staff {
 		recordManageAudit(c, "ticket.reply", map[string]any{"ticket_id": id, "internal": message.SenderType == "note"})
+	} else if message.Created {
+		// Re-read the reopened status so the notification email reflects it.
+		var current model.Ticket
+		if err := model.TicketScope(model.DB, actor).First(&current, id).Error; err == nil {
+			ticket = current
+		}
+		service.NotifyTicketReplied(&ticket, c.GetString("username"), message.Content)
 	}
 	common.ApiSuccess(c, gin.H{"id": message.ID})
 }
@@ -319,7 +327,7 @@ func GetTicketScreenshot(c *gin.Context) {
 
 func GetTicketStorageSettings(c *gin.Context) {
 	config := model.TicketStorageConfig()
-	common.ApiSuccess(c, gin.H{"enabled": config.Enabled, "retention_days": config.RetentionDays, "endpoint": config.Endpoint, "bucket": config.Bucket, "credentials_configured": config.AccessKey != "" && config.SecretKey != ""})
+	common.ApiSuccess(c, gin.H{"enabled": config.Enabled, "retention_days": config.RetentionDays, "endpoint": config.Endpoint, "bucket": config.Bucket, "notify_email": config.NotifyEmail, "credentials_configured": config.AccessKey != "" && config.SecretKey != ""})
 }
 
 func UpdateTicketStorageSettings(c *gin.Context) {
