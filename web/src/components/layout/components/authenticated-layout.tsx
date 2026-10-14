@@ -22,6 +22,7 @@ import { AnnouncementPopup } from '@/components/announcement-popup'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { LayoutProvider } from '@/context/layout-provider'
 import { SearchProvider } from '@/context/search-provider'
+import { CheckinFloatingWindow } from '@/features/profile/components/checkin-floating-window'
 import { getCookie } from '@/lib/cookies'
 import { cn } from '@/lib/utils'
 
@@ -58,6 +59,7 @@ export function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
           </div>
         </SidebarProvider>
         <AnnouncementPopup />
+        <CheckinFloatingWindow />
       </SearchProvider>
     </LayoutProvider>
   )

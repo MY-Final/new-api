@@ -49,12 +49,12 @@ export interface UserProfile {
   email?: string
   /** User group */
   group: string
-	/** Current quota balance */
-	quota: number
-	/** Balance from non-paid rewards */
-	bonus_quota?: number
-	/** Balance from paid top-ups and paid codes */
-	paid_quota?: number
+  /** Current quota balance */
+  quota: number
+  /** Balance from non-paid rewards */
+  bonus_quota?: number
+  /** Balance from paid top-ups and paid codes */
+  paid_quota?: number
   /** Total used quota */
   used_quota: number
   /** Total request count */
@@ -228,6 +228,10 @@ export interface CheckinStats {
 export interface CheckinStatusResponse {
   /** Whether check-in feature is enabled */
   enabled: boolean
+  /** Minimum quota a single check-in can award */
+  min_quota?: number
+  /** Maximum quota a single check-in can award */
+  max_quota?: number
   /** Check-in statistics */
   stats: CheckinStats
 }

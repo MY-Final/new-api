@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
 import {
   CalendarDays,
   ChevronDown,
@@ -25,12 +24,9 @@ import {
   ChevronUp,
   Sparkles,
 } from 'lucide-react'
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 
-import { Dialog } from '@/components/dialog'
-import { Turnstile } from '@/components/turnstile'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { IconBadge } from '@/components/ui/icon-badge'
@@ -43,12 +39,10 @@ import {
 } from '@/components/ui/tooltip'
 import { formatQuotaWithCurrency } from '@/lib/currency'
 import dayjs from '@/lib/dayjs'
-import { handleServerError } from '@/lib/handle-server-error'
-import { createServerError } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
 
-import { getCheckinStatus, performCheckin } from '../api'
-import type { CheckinRecord } from '../types'
+import { useCheckin } from '../hooks/use-checkin'
+import { CheckinTurnstileDialog } from './checkin-turnstile-dialog'
 
 interface CheckinCalendarCardProps {
   checkinEnabled: boolean
@@ -66,62 +60,30 @@ export function CheckinCalendarCard({
     const now = new Date()
     return new Date(now.getFullYear(), now.getMonth(), 1)
   })
-  const [checkinLoading, setCheckinLoading] = useState(false)
-  const [turnstileModalVisible, setTurnstileModalVisible] = useState(false)
-  const [turnstileWidgetKey, setTurnstileWidgetKey] = useState(0)
   const [initialLoaded, setInitialLoaded] = useState(false)
   const [collapsed, setCollapsed] = useState<boolean>(false)
 
   const currentMonthStr = useMemo(() => {
-    const y = currentMonth.getFullYear()
-    const m = String(currentMonth.getMonth() + 1).padStart(2, '0')
-    return `${y}-${m}`
+    return dayjs(currentMonth).format('YYYY-MM')
   }, [currentMonth])
 
-  // Fetch checkin status
-  /* eslint-disable @tanstack/query/exhaustive-deps */
   const {
     data: checkinData,
     isLoading,
-    refetch,
-  } = useQuery({
-    queryKey: ['checkin-status', currentMonthStr],
-    queryFn: async () => {
-      const res = await getCheckinStatus(currentMonthStr)
-      if (res.success && res.data) {
-        return res.data
-      }
-      throw createServerError(res, t('Failed to fetch checkin status'))
-    },
+    recordsMap: checkinRecordsMap,
+    monthlyQuota,
+    todayString,
+    checkedToday,
+    todayAward,
+    checkinLoading,
+    startCheckin,
+    turnstile,
+  } = useCheckin({
     enabled: checkinEnabled,
-    staleTime: 30000,
+    turnstileEnabled,
+    turnstileSiteKey,
+    month: currentMonthStr,
   })
-  /* eslint-enable @tanstack/query/exhaustive-deps */
-
-  const checkinRecordsMap = useMemo(() => {
-    const map: Record<string, number> = {}
-    const records = checkinData?.stats?.records || []
-    records.forEach((record: CheckinRecord) => {
-      map[record.checkin_date] = record.quota_awarded
-    })
-    return map
-  }, [checkinData?.stats?.records])
-
-  const monthlyQuota = useMemo(() => {
-    const records = checkinData?.stats?.records || []
-    return records.reduce(
-      (sum: number, record: CheckinRecord) => sum + (record.quota_awarded || 0),
-      0
-    )
-  }, [checkinData?.stats?.records])
-
-  const todayString = useMemo(() => {
-    const d = new Date()
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  }, [])
-
-  const checkedToday = checkinData?.stats?.checked_in_today === true
-  const todayAward = checkinRecordsMap[todayString]
 
   useEffect(() => {
     if (initialLoaded) return
@@ -130,49 +92,6 @@ export function CheckinCalendarCard({
     setCollapsed(checkedToday)
     setInitialLoaded(true)
   }, [checkinData, checkedToday, initialLoaded, isLoading])
-
-  const shouldTriggerTurnstile = useCallback(
-    (message?: string) => {
-      if (!turnstileEnabled) return false
-      if (typeof message !== 'string') return true
-      return message.includes('Turnstile')
-    },
-    [turnstileEnabled]
-  )
-
-  const doCheckin = useCallback(
-    async (token?: string) => {
-      setCheckinLoading(true)
-      try {
-        const res = await performCheckin(token)
-        if (res.success && res.data) {
-          toast.success(
-            `${t('Check-in successful! Received')} ${formatQuotaWithCurrency(res.data.quota_awarded)}`
-          )
-          refetch()
-          setTurnstileModalVisible(false)
-        } else {
-          if (!token && shouldTriggerTurnstile(res.message)) {
-            if (!turnstileSiteKey) {
-              toast.error(t('Turnstile is enabled but site key is empty.'))
-              return
-            }
-            setTurnstileModalVisible(true)
-            return
-          }
-          if (token && shouldTriggerTurnstile(res.message)) {
-            setTurnstileWidgetKey((v) => v + 1)
-          }
-          handleServerError(res, t('Check-in failed'))
-        }
-      } catch (error) {
-        handleServerError(error, t('Check-in failed'))
-      } finally {
-        setCheckinLoading(false)
-      }
-    },
-    [refetch, shouldTriggerTurnstile, t, turnstileSiteKey]
-  )
 
   const handlePrevMonth = () => {
     setCurrentMonth(
@@ -253,35 +172,7 @@ export function CheckinCalendarCard({
 
   return (
     <TooltipProvider delay={100}>
-      <Dialog
-        open={turnstileModalVisible}
-        onOpenChange={(open) => {
-          setTurnstileModalVisible(open)
-          if (!open) {
-            setTurnstileWidgetKey((v) => v + 1)
-          }
-        }}
-        title={t('Security Check')}
-        contentClassName='sm:max-w-md'
-        contentHeight='auto'
-        bodyClassName='space-y-4'
-      >
-        <div className='text-muted-foreground text-sm'>
-          {t('Please complete the security check to continue.')}
-        </div>
-        <div className='flex justify-center py-4'>
-          <Turnstile
-            key={turnstileWidgetKey}
-            siteKey={turnstileSiteKey}
-            onVerify={(token) => {
-              doCheckin(token)
-            }}
-            onExpire={() => {
-              setTurnstileWidgetKey((v) => v + 1)
-            }}
-          />
-        </div>
-      </Dialog>
+      <CheckinTurnstileDialog siteKey={turnstileSiteKey} state={turnstile} />
 
       <Card data-card-hover='false' className='gap-0 overflow-hidden py-0'>
         {/* Header */}
@@ -325,7 +216,7 @@ export function CheckinCalendarCard({
               </div>
             </button>
             <Button
-              onClick={() => doCheckin()}
+              onClick={startCheckin}
               disabled={checkinLoading || checkedToday}
               size='sm'
               className='w-full shrink-0 sm:w-auto'
