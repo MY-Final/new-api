@@ -39,6 +39,21 @@ export type UpdateOptionResponse = {
   message: string
 }
 
+export type PreviewEmailTemplateRequest = {
+  key: string
+  subject: string
+  body: string
+  brand: string
+  footer: string
+}
+
+export type PreviewEmailTemplateResponse = UpdateOptionResponse & {
+  data: {
+    subject: string
+    html: string
+  }
+}
+
 export interface PasskeyDomainChange {
   rp_id: string
   legacy_rp_ids: string
@@ -381,6 +396,9 @@ export type OperationsSettings = {
   SMTPStartTLSEnabled: boolean
   SMTPInsecureSkipVerify: boolean
   SMTPForceAuthLogin: boolean
+  EmailTemplates: string
+  EmailTemplateDefaults: string
+  EmailLayout: string
   WorkerUrl: string
   WorkerValidKey: string
   WorkerAllowHttpImageRequestEnabled: boolean

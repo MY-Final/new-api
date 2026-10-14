@@ -76,6 +76,8 @@ func InitOptionMap() {
 	common.OptionMap["SMTPStartTLSEnabled"] = strconv.FormatBool(common.SMTPStartTLSEnabled)
 	common.OptionMap["SMTPInsecureSkipVerify"] = strconv.FormatBool(common.SMTPInsecureSkipVerify)
 	common.OptionMap["SMTPForceAuthLogin"] = strconv.FormatBool(common.SMTPForceAuthLogin)
+	common.OptionMap[system_setting.EmailTemplatesOption] = "{}"
+	common.OptionMap[system_setting.EmailLayoutOption] = "{}"
 	common.OptionMap["Notice"] = ""
 	common.OptionMap["About"] = ""
 	common.OptionMap["HomePageContent"] = ""
@@ -237,6 +239,12 @@ func SyncOptions(frequency int) {
 func validateOptionValue(key string, value string) error {
 	if key == system_setting.TicketStorageOption {
 		return ValidateTicketStorageOption(value)
+	}
+	if key == system_setting.EmailTemplatesOption {
+		return system_setting.ValidateEmailTemplates(value)
+	}
+	if key == system_setting.EmailLayoutOption {
+		return system_setting.ValidateEmailLayout(value)
 	}
 	if key == "SupportTicketsEnabled" && value != "true" && value != "false" {
 		return fmt.Errorf("SupportTicketsEnabled must be true or false")

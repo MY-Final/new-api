@@ -452,6 +452,11 @@ func TestTicketR2ExpiryFailuresAndSettings(t *testing.T) {
 			assert.NotContains(t, response.Body.String(), "test-access")
 			assert.NotContains(t, response.Body.String(), "test-secret")
 			assert.NotContains(t, ticketRequest(t, engine, "GET", "/api/option/", rootToken, nil).Body.String(), system_setting.TicketStorageOption)
+			preview := ticketRequest(t, engine, "POST", "/api/option/email_templates/preview", rootToken, map[string]any{"key": "ticket", "subject": "Preview {{.TicketID}}", "body": "<p>{{.User}}</p>"})
+			assert.Equal(t, 200, preview.Code)
+			assert.Contains(t, preview.Body.String(), "Preview 12")
+			assert.Contains(t, preview.Body.String(), "alice")
+			assert.Equal(t, 403, ticketRequest(t, engine, "POST", "/api/option/email_templates/preview", ownerToken, map[string]any{"key": "ticket", "subject": "", "body": ""}).Code)
 			assert.NotContains(t, ticketRequest(t, engine, "GET", "/api/status", "", nil).Body.String(), "test-secret")
 			for _, bad := range []system_setting.TicketStorageConfig{
 				{Enabled: true, RetentionDays: 30},

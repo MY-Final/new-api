@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { SystemBehaviorSection } from '../general/system-behavior-section'
 import { EmailSettingsSection } from '../integrations/email-settings-section'
+import { EmailTemplateSection } from '../integrations/email-template-section'
 import { MonitoringSettingsSection } from '../integrations/monitoring-settings-section'
 import { WorkerSettingsSection } from '../integrations/worker-settings-section'
 import { LogSettingsSection } from '../maintenance/log-settings-section'
@@ -75,6 +76,17 @@ const OPERATIONS_SECTIONS = [
           SMTPInsecureSkipVerify: settings.SMTPInsecureSkipVerify,
           SMTPForceAuthLogin: settings.SMTPForceAuthLogin,
         }}
+      />
+    ),
+  },
+  {
+    id: 'email-templates',
+    titleKey: 'Email Templates',
+    build: (settings: OperationsSettings) => (
+      <EmailTemplateSection
+        templates={settings.EmailTemplates}
+        defaults={settings.EmailTemplateDefaults}
+        layout={settings.EmailLayout}
       />
     ),
   },

@@ -124,6 +124,10 @@ func GetOptions(c *gin.Context) {
 		Key:   "CompletionRatioMeta",
 		Value: buildCompletionRatioMetaValue(optionValues),
 	})
+	options = append(options, &model.Option{
+		Key:   system_setting.EmailTemplateDefaultsOption,
+		Value: system_setting.EmailTemplateDefaultsJSON(),
+	})
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -134,6 +138,28 @@ func GetOptions(c *gin.Context) {
 type OptionUpdateRequest struct {
 	Key   string `json:"key"`
 	Value any    `json:"value"`
+}
+
+// PreviewEmailTemplate renders unsaved template settings with sample data so
+// the admin editor can show exactly what the recipient would receive.
+func PreviewEmailTemplate(c *gin.Context) {
+	var request struct {
+		Key     string `json:"key"`
+		Subject string `json:"subject"`
+		Body    string `json:"body"`
+		Brand   string `json:"brand"`
+		Footer  string `json:"footer"`
+	}
+	if err := common.DecodeJson(http.MaxBytesReader(c.Writer, c.Request.Body, 64*1024), &request); err != nil {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	subject, body, err := service.PreviewEmailTemplate(request.Key, request.Subject, request.Body, request.Brand, request.Footer)
+	if err != nil {
+		common.ApiErrorMsg(c, err.Error())
+		return
+	}
+	common.ApiSuccess(c, gin.H{"subject": subject, "html": body})
 }
 
 func UpdatePasskeyDomains(c *gin.Context) {

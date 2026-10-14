@@ -22,6 +22,8 @@ import type {
   ConfirmPaymentComplianceResponse,
   FetchUpstreamRatiosRequest,
   LogCleanupTask,
+  PreviewEmailTemplateRequest,
+  PreviewEmailTemplateResponse,
   SystemOptionsResponse,
   SystemTaskListResponse,
   SystemTaskFilters,
@@ -41,6 +43,16 @@ export async function getSystemOptions() {
 
 export async function updateSystemOption(request: UpdateOptionRequest) {
   const res = await api.put<UpdateOptionResponse>('/api/option/', request)
+  return res.data
+}
+
+export async function previewEmailTemplate(
+  request: PreviewEmailTemplateRequest
+) {
+  const res = await api.post<PreviewEmailTemplateResponse>(
+    '/api/option/email_templates/preview',
+    request
+  )
   return res.data
 }
 
