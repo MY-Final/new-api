@@ -109,8 +109,24 @@ export function TicketsPage(props: { staff: boolean }) {
   ]
   if (props.staff) {
     columns.push(
-      { accessorKey: 'user_id', header: t('User ID') },
-      { accessorKey: 'assignee_id', header: t('Assignee ID') }
+      {
+        accessorKey: 'user_id',
+        header: t('User ID'),
+        cell: ({ row }) =>
+          row.original.user_name
+            ? `${row.original.user_name} (#${row.original.user_id})`
+            : row.original.user_id,
+      },
+      {
+        accessorKey: 'assignee_id',
+        header: t('Assignee ID'),
+        cell: ({ row }) => {
+          if (row.original.assignee_id === 0) return '-'
+          return row.original.assignee_name
+            ? `${row.original.assignee_name} (#${row.original.assignee_id})`
+            : row.original.assignee_id
+        },
+      }
     )
   }
   const { table } = useDataTable({

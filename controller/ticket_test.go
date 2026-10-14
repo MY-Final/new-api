@@ -209,7 +209,7 @@ func TestTicketsConfiguredDatabases(t *testing.T) {
 			require.NoError(t, model.MigrateTickets(db))
 			require.NoError(t, model.MigrateTickets(db))
 			require.NoError(t, authz.Init(db))
-			owner := &model.User{Username: "ticket-owner", Password: "placeholder", AffCode: "owner", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, AuthVersion: 1}
+			owner := &model.User{Username: "ticket-owner", Password: "placeholder", Email: "ticket-owner@example.com", AffCode: "owner", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, AuthVersion: 1}
 			other := &model.User{Username: "ticket-other", Password: "placeholder", AffCode: "other", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, AuthVersion: 1}
 			staff := &model.User{Username: "ticket-staff", Password: "placeholder", AffCode: "staff", Role: common.RoleAdminUser, Status: common.UserStatusEnabled, AuthVersion: 1}
 			for _, user := range []*model.User{owner, other, staff} {
@@ -256,6 +256,22 @@ func TestTicketsConfiguredDatabases(t *testing.T) {
 			require.NoError(t, common.Unmarshal(response.Body.Bytes(), &detail))
 			require.Len(t, detail.Data.Messages, 1)
 			require.Len(t, detail.Data.Messages[0].Attachments, 1)
+			assert.Nil(t, detail.Data.Requester, "owners must not receive account lookup data")
+			assert.Empty(t, detail.Data.Messages[0].SenderName)
+			response = ticketRequest(t, engine, "GET", adminPath, staffToken, nil)
+			require.Equal(t, 200, response.Code)
+			var staffDetail struct {
+				Data model.TicketDetail `json:"data"`
+			}
+			require.NoError(t, common.Unmarshal(response.Body.Bytes(), &staffDetail))
+			require.NotNil(t, staffDetail.Data.Requester)
+			assert.Equal(t, "ticket-owner", staffDetail.Data.Requester.Username)
+			assert.Equal(t, "ticket-owner@example.com", staffDetail.Data.Requester.Email)
+			require.Len(t, staffDetail.Data.Messages, 1)
+			assert.Equal(t, "ticket-owner", staffDetail.Data.Messages[0].SenderName)
+			response = ticketRequest(t, engine, "GET", "/api/admin/tickets", staffToken, nil)
+			assert.Equal(t, 200, response.Code)
+			assert.Contains(t, response.Body.String(), "ticket-owner")
 			attachment := detail.Data.Messages[0].Attachments[0].ID
 			screenshotPath := fmt.Sprintf("%s/attachments/%d", path, attachment)
 			response = ticketRequest(t, engine, "GET", screenshotPath, ownerToken, nil)

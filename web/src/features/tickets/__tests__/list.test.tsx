@@ -109,3 +109,42 @@ it('starts staff in pending tickets and searches only after the user submits', a
     })
   )
 })
+
+it('shows account names instead of bare ids for staff lists', async () => {
+  vi.spyOn(api, 'get').mockImplementation(async (url) => ({
+    data: {
+      success: true,
+      data:
+        url === '/api/status'
+          ? { support_tickets_enabled: true }
+          : {
+              items: [
+                {
+                  id: 9,
+                  user_id: 7,
+                  title: 'Cannot call the API',
+                  category: 'api',
+                  status: 'pending',
+                  assignee_id: 3,
+                  version: 1,
+                  request_id: '',
+                  order_number: '',
+                  model_name: '',
+                  occurred_at: 0,
+                  created_at: 1700000000,
+                  updated_at: 1700000000,
+                  unread: false,
+                  user_name: 'alice',
+                  assignee_name: 'support',
+                },
+              ],
+              total: 1,
+              page: 1,
+              page_size: 20,
+            },
+    },
+  }))
+  showList(true)
+  expect(await screen.findByText('alice (#7)')).toBeVisible()
+  expect(screen.getByText('support (#3)')).toBeVisible()
+})

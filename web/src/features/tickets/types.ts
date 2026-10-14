@@ -43,6 +43,8 @@ export interface Ticket {
   created_at: number
   updated_at: number
   unread: boolean
+  user_name?: string
+  assignee_name?: string
 }
 export interface Screenshot {
   name: string
@@ -67,6 +69,7 @@ export interface TicketMessage {
   id: number
   sender_id: number
   sender_type: 'user' | 'admin' | 'note'
+  sender_name?: string
   content: string
   created_at: number
   attachments: TicketAttachment[]
@@ -82,6 +85,11 @@ export interface TicketEvent {
 }
 export interface TicketDetail {
   ticket: Ticket
+  requester?: {
+    id: number
+    username: string
+    email: string
+  }
   messages: TicketMessage[]
   events: TicketEvent[]
   has_more: boolean

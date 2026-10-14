@@ -46,6 +46,9 @@ type Ticket struct {
 	UpdatedAt   int64  `json:"updated_at" gorm:"autoUpdateTime;index"`
 	ClosedAt    int64  `json:"closed_at" gorm:"index"`
 	Unread      bool   `json:"unread" gorm:"->;-:migration"`
+	// Account names are read-only display fields filled by scoped list queries.
+	UserName     string `json:"user_name" gorm:"->;-:migration"`
+	AssigneeName string `json:"assignee_name" gorm:"->;-:migration"`
 }
 
 type TicketMessage struct {
@@ -58,6 +61,8 @@ type TicketMessage struct {
 	RequestHash string             `json:"-" gorm:"type:char(64);not null"`
 	CreatedAt   int64              `json:"created_at" gorm:"autoCreateTime"`
 	Attachments []TicketAttachment `json:"attachments" gorm:"-"`
+	// SenderName is only filled for staff readers.
+	SenderName string `json:"sender_name,omitempty" gorm:"-"`
 }
 
 // Data is retained only for migrating screenshots from the earlier DB storage.
@@ -94,10 +99,19 @@ type TicketRead struct {
 }
 
 type TicketDetail struct {
-	Ticket   Ticket          `json:"ticket"`
-	Messages []TicketMessage `json:"messages"`
-	Events   []TicketEvent   `json:"events"`
-	HasMore  bool            `json:"has_more"`
+	Ticket    Ticket           `json:"ticket"`
+	Requester *TicketRequester `json:"requester,omitempty"`
+	Messages  []TicketMessage  `json:"messages"`
+	Events    []TicketEvent    `json:"events"`
+	HasMore   bool             `json:"has_more"`
+}
+
+// TicketRequester carries only the account fields staff need to identify and
+// contact the person who opened a ticket.
+type TicketRequester struct {
+	ID       int    `json:"id"`
+	Username string `json:"username"`
+	Email    string `json:"email"`
 }
 
 type TicketFilter struct {
@@ -236,7 +250,12 @@ func ListTickets(actor TicketActor, filter TicketFilter) ([]Ticket, int64, error
 		return nil, 0, err
 	}
 	items := make([]Ticket, 0)
-	err := query.Select("tickets.*, CASE WHEN tickets.version > COALESCE((SELECT version FROM ticket_reads WHERE ticket_reads.ticket_id = tickets.id AND ticket_reads.user_id = ?), 0) THEN 1 ELSE 0 END AS unread", actor.UserID).
+	selection := "tickets.*, CASE WHEN tickets.version > COALESCE((SELECT version FROM ticket_reads WHERE ticket_reads.ticket_id = tickets.id AND ticket_reads.user_id = ?), 0) THEN 1 ELSE 0 END AS unread"
+	if actor.Staff {
+		// Account names are staff-only so owners never receive them in their list.
+		selection = "tickets.*, COALESCE((SELECT username FROM users WHERE users.id = tickets.user_id), '') AS user_name, CASE WHEN tickets.assignee_id = 0 THEN '' ELSE COALESCE((SELECT username FROM users WHERE users.id = tickets.assignee_id), '') END AS assignee_name, " + selection
+	}
+	err := query.Select(selection, actor.UserID).
 		Order("updated_at DESC, id DESC").Offset(filter.Offset).Limit(filter.Limit).Find(&items).Error
 	return items, total, err
 }
@@ -249,6 +268,12 @@ func GetTicketDetail(id int, actor TicketActor, before int) (*TicketDetail, erro
 	}
 	if err != nil {
 		return nil, err
+	}
+	if actor.Staff {
+		var requester User
+		if err := DB.Select("id", "username", "email").First(&requester, detail.Ticket.UserID).Error; err == nil {
+			detail.Requester = &TicketRequester{ID: requester.Id, Username: requester.Username, Email: requester.Email}
+		}
 	}
 	query := DB.Where("ticket_id = ?", id)
 	if !actor.Staff {
@@ -279,6 +304,24 @@ func GetTicketDetail(id int, actor TicketActor, before int) (*TicketDetail, erro
 			for _, attachment := range attachments {
 				if attachment.MessageID == detail.Messages[i].ID {
 					detail.Messages[i].Attachments = append(detail.Messages[i].Attachments, attachment)
+				}
+			}
+		}
+	}
+	if actor.Staff {
+		senderIDs := make([]int, 0, len(detail.Messages))
+		for i := range detail.Messages {
+			senderIDs = append(senderIDs, detail.Messages[i].SenderID)
+		}
+		if len(senderIDs) > 0 {
+			var senders []User
+			if err := DB.Select("id", "username").Where("id IN ?", senderIDs).Find(&senders).Error; err == nil {
+				names := make(map[int]string, len(senders))
+				for _, sender := range senders {
+					names[sender.Id] = sender.Username
+				}
+				for i := range detail.Messages {
+					detail.Messages[i].SenderName = names[detail.Messages[i].SenderID]
 				}
 			}
 		}

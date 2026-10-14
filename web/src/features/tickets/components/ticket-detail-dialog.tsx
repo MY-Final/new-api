@@ -91,6 +91,25 @@ export function TicketDetailDialog(props: {
     onError: (error) => handleServerError(error, t('Ticket operation failed')),
   })
   const ticket = query.data?.ticket
+  const senderLabels = new Map<number, string>()
+  for (const message of query.data?.messages ?? []) {
+    if (message.sender_type === 'note') {
+      senderLabels.set(message.id, t('Internal note'))
+      continue
+    }
+    if (props.staff && message.sender_name) {
+      senderLabels.set(
+        message.id,
+        `${message.sender_name} (#${message.sender_id})`
+      )
+      continue
+    }
+    const role = t(message.sender_type === 'admin' ? 'Support' : 'User')
+    senderLabels.set(
+      message.id,
+      props.staff ? `${role} #${message.sender_id}` : role
+    )
+  }
   return (
     <>
       <Dialog
@@ -144,12 +163,7 @@ export function TicketDetailDialog(props: {
                 >
                   <div className='flex flex-wrap items-center justify-between gap-2 text-xs'>
                     <span className='font-medium'>
-                      {message.sender_type === 'note'
-                        ? t('Internal note')
-                        : t(
-                            message.sender_type === 'admin' ? 'Support' : 'User'
-                          )}
-                      {props.staff ? ` #${message.sender_id}` : ''}
+                      {senderLabels.get(message.id)}
                     </span>
                     <time className='text-muted-foreground'>
                       {formatTimestampToDate(message.created_at)}
@@ -194,7 +208,17 @@ export function TicketDetailDialog(props: {
                 {props.staff && (
                   <div>
                     <dt className='text-muted-foreground'>{t('User ID')}</dt>
-                    <dd>{ticket.user_id}</dd>
+                    <dd>
+                      {query.data.requester
+                        ? `${query.data.requester.username} (#${ticket.user_id})`
+                        : ticket.user_id}
+                    </dd>
+                  </div>
+                )}
+                {props.staff && query.data.requester?.email && (
+                  <div>
+                    <dt className='text-muted-foreground'>{t('Email')}</dt>
+                    <dd>{query.data.requester.email}</dd>
                   </div>
                 )}
                 {ticket.request_id && (

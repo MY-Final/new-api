@@ -230,6 +230,36 @@ it('shows private thumbnails automatically and opens the loaded image with the k
   expect(revokeURL).toHaveBeenCalledWith('blob:private-screenshot')
 })
 
+it('identifies the requester and message authors for staff', async () => {
+  vi.spyOn(api, 'get').mockResolvedValue({
+    data: {
+      success: true,
+      data: {
+        ...detail,
+        ticket: { ...detail.ticket, user_id: 7 },
+        requester: { id: 7, username: 'alice', email: 'alice@example.com' },
+        messages: [
+          { ...detail.messages[0], sender_id: 7, sender_name: 'alice' },
+          {
+            id: 52,
+            sender_id: 3,
+            sender_type: 'admin',
+            sender_name: 'support',
+            content: 'On it',
+            created_at: 1700000001,
+            attachments: [],
+          },
+        ],
+      },
+    },
+  })
+  vi.spyOn(api, 'post').mockResolvedValue({ data: { success: true } })
+  showDetail(true)
+  expect(await screen.findAllByText('alice (#7)')).toHaveLength(2)
+  expect(screen.getByText('alice@example.com')).toBeVisible()
+  expect(screen.getByText('support (#3)')).toBeVisible()
+})
+
 it('keeps the conversation usable when a thumbnail fails and allows retrying', async () => {
   const user = userEvent.setup()
   let fail = true
