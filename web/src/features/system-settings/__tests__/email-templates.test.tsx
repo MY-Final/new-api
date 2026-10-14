@@ -75,16 +75,38 @@ function showSection(templates: string, layout = '{}') {
   )
 }
 
-it('prefills stored overrides and falls back to the default template', async () => {
+async function openTemplate(
+  user: ReturnType<typeof userEvent.setup>,
+  name: string
+) {
+  await user.click(screen.getByRole('tab', { name }))
+}
+
+it('shows one template at a time and falls back to the default template', async () => {
+  const user = userEvent.setup()
   showSection(
     JSON.stringify({ ticket: { subject: 'Custom', body: '<p>custom</p>' } })
   )
-  expect(screen.getAllByLabelText('Subject')[0]).toHaveValue(
+  expect(screen.getByRole('tab', { name: 'Global settings' })).toBeVisible()
+  await openTemplate(user, 'Verification code')
+  expect(screen.getByLabelText('Subject')).toHaveValue(
     'Default {{.SystemName}} subject'
   )
-  expect(screen.getAllByLabelText('Subject')[1]).toHaveValue('Custom')
-  expect(screen.getAllByLabelText('Body')[1]).toHaveValue('<p>custom</p>')
-  expect(screen.getByText('{{.TicketID}} {{.Content}}')).toBeVisible()
+  await openTemplate(user, 'Ticket notification')
+  expect(screen.getByLabelText('Subject')).toHaveValue('Custom')
+  expect(screen.getByLabelText('Body')).toHaveValue('<p>custom</p>')
+  expect(screen.getByRole('button', { name: '{{.TicketID}}' })).toBeVisible()
+})
+
+it('inserts a clicked variable into the focused field at the cursor', async () => {
+  const user = userEvent.setup()
+  showSection('{}')
+  await openTemplate(user, 'Ticket notification')
+  const subject = screen.getByLabelText('Subject')
+  await user.clear(subject)
+  await user.type(subject, 'Ticket ')
+  await user.click(screen.getByRole('button', { name: '{{.TicketID}}' }))
+  await waitFor(() => expect(subject).toHaveValue('Ticket {{.TicketID}}'))
 })
 
 it('saves every template as a single email template option', async () => {
@@ -93,9 +115,10 @@ it('saves every template as a single email template option', async () => {
     .spyOn(api, 'put')
     .mockResolvedValue({ data: { success: true } })
   showSection('{}')
-  const subjects = screen.getAllByLabelText('Subject')
-  await user.clear(subjects[1])
-  await user.type(subjects[1], 'Custom ticket subject')
+  await openTemplate(user, 'Ticket notification')
+  const subject = screen.getByLabelText('Subject')
+  await user.clear(subject)
+  await user.type(subject, 'Edited ticket subject')
   await user.click(screen.getByRole('button', { name: 'Save email templates' }))
   await waitFor(() =>
     expect(put).toHaveBeenCalledWith(
@@ -107,7 +130,7 @@ it('saves every template as a single email template option', async () => {
     ([, payload]) => (payload as { key: string }).key === 'EmailTemplates'
   )?.[1] as { value: string }
   const saved = JSON.parse(request.value)
-  expect(saved.ticket.subject).toBe('Custom ticket subject')
+  expect(saved.ticket.subject).toBe('Edited ticket subject')
   expect(saved.verify.subject).toBe('Default {{.SystemName}} subject')
 })
 
@@ -119,12 +142,9 @@ it('restores the built-in template before saving', async () => {
   showSection(
     JSON.stringify({ ticket: { subject: 'Custom', body: '<p>custom</p>' } })
   )
-  await user.click(
-    screen.getAllByRole('button', { name: 'Restore default' })[1]
-  )
-  expect(screen.getAllByLabelText('Subject')[1]).toHaveValue(
-    'Ticket {{.TicketID}}'
-  )
+  await openTemplate(user, 'Ticket notification')
+  await user.click(screen.getByRole('button', { name: 'Restore default' }))
+  expect(screen.getByLabelText('Subject')).toHaveValue('Ticket {{.TicketID}}')
   await user.click(screen.getByRole('button', { name: 'Save email templates' }))
   await waitFor(() =>
     expect(put).toHaveBeenCalledWith(
@@ -174,18 +194,21 @@ it('previews the unsaved draft with server-rendered sample values', async () => 
   })
   showSection('{}')
   await user.type(screen.getByLabelText('Brand name'), 'kuncode')
-  const subject = screen.getAllByLabelText('Subject')[1]
+  await openTemplate(user, 'Ticket notification')
+  const subject = screen.getByLabelText('Subject')
   await user.clear(subject)
   await user.type(subject, 'Edited ticket subject')
-  await user.click(screen.getAllByRole('button', { name: 'Preview' })[1])
-  await waitFor(() =>
-    expect(post).toHaveBeenCalledWith('/api/option/email_templates/preview', {
-      key: 'ticket',
-      subject: 'Edited ticket subject',
-      body: '<p>{{.Content}}</p>',
-      brand: 'kuncode',
-      footer: '',
-    })
+  await user.click(screen.getByRole('button', { name: 'Preview' }))
+  await waitFor(
+    () =>
+      expect(post).toHaveBeenCalledWith('/api/option/email_templates/preview', {
+        key: 'ticket',
+        subject: 'Edited ticket subject',
+        body: '<p>{{.Content}}</p>',
+        brand: 'kuncode',
+        footer: '',
+      }),
+    { timeout: 3000 }
   )
   const dialog = await screen.findByRole('dialog', {
     name: 'Ticket notification',
