@@ -74,8 +74,9 @@ export function TicketScreenshot(props: {
       visible ||
       !target.current ||
       typeof IntersectionObserver === 'undefined'
-    )
+    ) {
       return
+    }
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) {
@@ -90,7 +91,9 @@ export function TicketScreenshot(props: {
   }, [visible])
 
   useEffect(() => {
-    if (expiresAt === undefined || expired) return
+    if (expiresAt === undefined || expired) {
+      return
+    }
     const timer = setTimeout(
       () => setNow(Date.now()),
       Math.min(expiresAt * 1000 - Date.now(), 2147483647)
