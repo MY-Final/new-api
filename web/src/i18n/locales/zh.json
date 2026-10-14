@@ -819,6 +819,7 @@
     "Balance queried successfully": "余额查询成功",
     "Balance Query": "余额查询",
     "Balance Query route does not support pass-through": "余额查询路由不支持透传",
+    "Balance reminder": "余额提醒",
     "Balance response not recognized": "无法识别余额响应",
     "Balance updated successfully": "余额更新成功",
     "Balance updated: {{balance}}": "余额已更新：{{balance}}",

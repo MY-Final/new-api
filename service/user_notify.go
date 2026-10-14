@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"strings"
@@ -105,13 +106,27 @@ func NotifyUser(userId int, userEmail string, userSetting dto.UserSetting, data 
 }
 
 func sendEmailNotify(userEmail string, data dto.Notify) error {
+	subject, body := renderEmailNotify(data)
+	return common.SendEmail(subject, userEmail, body)
+}
+
+// renderEmailNotify prefers the configurable template for quota reminders and
+// falls back to the generated content used by every other notification.
+func renderEmailNotify(data dto.Notify) (string, string) {
+	if data.Type == dto.NotifyTypeQuotaExceed && len(data.Variables) > 0 {
+		variables := map[string]string{"Title": data.Title}
+		maps.Copy(variables, data.Variables)
+		if subject, body, err := RenderEmailTemplate("quota", variables); err == nil {
+			return subject, body
+		}
+	}
 	// make email content
 	content := data.Content
 	// 处理占位符
 	for _, value := range data.Values {
 		content = strings.Replace(content, dto.ContentValueParam, fmt.Sprintf("%v", value), 1)
 	}
-	return common.SendEmail(data.Title, userEmail, RenderEmailLayout(content))
+	return data.Title, RenderEmailLayout(content)
 }
 
 func sendBarkNotify(barkURL string, data dto.Notify) error {

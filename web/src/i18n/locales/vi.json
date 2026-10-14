@@ -819,6 +819,7 @@
     "Balance queried successfully": "Truy vấn số dư thành công",
     "Balance Query": "Truy vấn số dư",
     "Balance Query route does not support pass-through": "Tuyến truy vấn số dư không hỗ trợ truyền thẳng",
+    "Balance reminder": "Nhắc nhở số dư",
     "Balance response not recognized": "Không nhận dạng được phản hồi số dư",
     "Balance updated successfully": "Đã cập nhật số dư thành công",
     "Balance updated: {{balance}}": "Số dư đã cập nhật: {{balance}}",

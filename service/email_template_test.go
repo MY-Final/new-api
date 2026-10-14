@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -84,6 +85,28 @@ func TestEmailTemplateDefaultsExposeEveryEditorField(t *testing.T) {
 		assert.NotEmpty(t, item.Body)
 		assert.NotEmpty(t, item.Variables)
 	}
+}
+
+func TestQuotaNotificationsRenderTheQuotaTemplateWithNamedVariables(t *testing.T) {
+	stubEmailTemplates(t, "")
+	subject, body := renderEmailNotify(
+		dto.NewNotify(dto.NotifyTypeQuotaExceed, "您的额度即将用尽", "legacy {{value}} content", []any{"ignored"}).
+			WithVariables(map[string]string{"Remaining": "5,000", "TopUpLink": "https://example.com/wallet"}),
+	)
+	assert.Equal(t, "您的额度即将用尽", subject)
+	assert.Contains(t, body, "5,000")
+	assert.Contains(t, body, "https://example.com/wallet")
+	assert.NotContains(t, body, "legacy ignored content", "quota emails must not mix the legacy body")
+}
+
+func TestNotificationsWithoutNamedVariablesKeepTheLegacyContent(t *testing.T) {
+	stubEmailTemplates(t, "")
+	subject, body := renderEmailNotify(dto.NewNotify(dto.NotifyTypeChannelTest, "通道测试完成", "所有通道测试已完成", nil))
+	assert.Equal(t, "通道测试完成", subject)
+	assert.Contains(t, body, "所有通道测试已完成")
+	subject, body = renderEmailNotify(dto.NewNotify(dto.NotifyTypeQuotaExceed, "额度提醒", "{{value}} 剩余", []any{"5,000"}))
+	assert.Equal(t, "额度提醒", subject)
+	assert.Contains(t, body, "5,000 剩余")
 }
 
 func TestPreviewEmailTemplateRendersSampleValuesInsideTheLayout(t *testing.T) {

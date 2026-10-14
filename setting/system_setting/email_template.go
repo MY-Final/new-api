@@ -93,6 +93,19 @@ func EmailTemplateSpecs() []EmailTemplateSpec {
 			},
 		},
 		{
+			Key:            "quota",
+			DefaultSubject: "{{.Title}}",
+			DefaultBody: "<p>{{.Title}}</p>" +
+				"<p>当前剩余额度：<strong>{{.Remaining}}</strong></p>" +
+				"<p>为了不影响您的使用，请及时充值：<a href=\"{{.TopUpLink}}\">{{.TopUpLink}}</a></p>",
+			Variables: []string{"SystemName", "Brand", "Title", "Remaining", "TopUpLink"},
+			Sample: map[string]string{
+				"Title":     "您的额度即将用尽",
+				"Remaining": "5,000",
+				"TopUpLink": "https://example.com/wallet",
+			},
+		},
+		{
 			Key:            "security",
 			DefaultSubject: "{{.SystemName}} — 账号安全提醒",
 			DefaultBody: "<p>你的账号安全设置发生了变更：{{.Event}}。</p>" +

@@ -819,6 +819,7 @@
     "Balance queried successfully": "Баланс успешно запрошен",
     "Balance Query": "Запрос баланса",
     "Balance Query route does not support pass-through": "Маршрут запроса баланса не поддерживает сквозную передачу",
+    "Balance reminder": "Напоминание о балансе",
     "Balance response not recognized": "Ответ с балансом не распознан",
     "Balance updated successfully": "Баланс успешно обновлён",
     "Balance updated: {{balance}}": "Баланс обновлён: {{balance}}",

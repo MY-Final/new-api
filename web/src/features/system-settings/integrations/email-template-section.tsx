@@ -59,6 +59,7 @@ const TEMPLATE_NAME_KEYS: Record<string, string> = {
   verify: 'Verification code',
   reset: 'Password reset',
   binding: 'Email change confirmation',
+  quota: 'Balance reminder',
   security: 'Account security alert',
   ticket: 'Ticket notification',
 }

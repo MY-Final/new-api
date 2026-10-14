@@ -819,6 +819,7 @@
     "Balance queried successfully": "残高の取得に成功しました",
     "Balance Query": "残高照会",
     "Balance Query route does not support pass-through": "残高照会ルートはパススルーに対応していません",
+    "Balance reminder": "残高リマインダー",
     "Balance response not recognized": "残高レスポンスを認識できません",
     "Balance updated successfully": "残高が正常に更新されました",
     "Balance updated: {{balance}}": "残高更新：{{balance}}",

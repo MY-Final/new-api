@@ -819,6 +819,7 @@
     "Balance queried successfully": "Balance queried successfully",
     "Balance Query": "Balance Query",
     "Balance Query route does not support pass-through": "Balance Query route does not support pass-through",
+    "Balance reminder": "Balance reminder",
     "Balance response not recognized": "Balance response not recognized",
     "Balance updated successfully": "Balance updated successfully",
     "Balance updated: {{balance}}": "Balance updated: {{balance}}",

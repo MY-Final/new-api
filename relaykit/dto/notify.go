@@ -5,6 +5,9 @@ type Notify struct {
 	Title   string `json:"title"`
 	Content string `json:"content"`
 	Values  []any  `json:"values"`
+	// Variables carry named values for channels that render templates instead of
+	// the positional {{value}} placeholders used by webhook, Bark and Gotify.
+	Variables map[string]string `json:"variables,omitempty"`
 }
 
 const ContentValueParam = "{{value}}"
@@ -22,4 +25,9 @@ func NewNotify(t string, title string, content string, values []any) Notify {
 		Content: content,
 		Values:  values,
 	}
+}
+
+func (n Notify) WithVariables(variables map[string]string) Notify {
+	n.Variables = variables
+	return n
 }

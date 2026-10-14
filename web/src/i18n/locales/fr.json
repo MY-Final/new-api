@@ -819,6 +819,7 @@
     "Balance queried successfully": "Solde interrogé avec succès",
     "Balance Query": "Consultation du solde",
     "Balance Query route does not support pass-through": "La route de consultation du solde ne prend pas en charge la transmission directe",
+    "Balance reminder": "Rappel de solde",
     "Balance response not recognized": "Réponse de solde non reconnue",
     "Balance updated successfully": "Solde mis à jour avec succès",
     "Balance updated: {{balance}}": "Solde mis à jour : {{balance}}",
