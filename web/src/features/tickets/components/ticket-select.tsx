@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -35,6 +36,7 @@ export function TicketSelect(props: {
   onChange: (value: string) => void
   disabled?: boolean
   className?: string
+  renderOption?: (value: string) => ReactNode
 }) {
   const { t } = useTranslation()
   return (
@@ -50,14 +52,15 @@ export function TicketSelect(props: {
         className={cn('w-full', props.className)}
       >
         <SelectValue>
-          {t(props.options[props.value] ?? props.value)}
+          {props.renderOption?.(props.value) ??
+            t(props.options[props.value] ?? props.value)}
         </SelectValue>
       </SelectTrigger>
       <SelectContent alignItemWithTrigger={false}>
         <SelectGroup>
           {Object.entries(props.options).map(([value, label]) => (
             <SelectItem key={value} value={value}>
-              {t(label)}
+              {props.renderOption?.(value) ?? t(label)}
             </SelectItem>
           ))}
         </SelectGroup>

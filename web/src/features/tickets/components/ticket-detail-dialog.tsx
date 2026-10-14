@@ -23,9 +23,7 @@ import { useTranslation } from 'react-i18next'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Dialog } from '@/components/dialog'
 import { ErrorState } from '@/components/error-state'
-import { ImagePreviewDialog } from '@/components/image-preview-dialog'
 import { LoadingState } from '@/components/loading-state'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -34,11 +32,13 @@ import { formatTimestampToDate } from '@/lib/format'
 import { handleServerError } from '@/lib/handle-server-error'
 import { useAuthStore } from '@/stores/auth-store'
 
-import { changeTicket, getScreenshot, getTicket, readTicket } from '../api'
+import { changeTicket, getTicket, readTicket } from '../api'
 import { ticketCategories, ticketStatuses } from '../constants'
 import type { TicketStatus } from '../types'
 import { TicketComposer } from './ticket-composer'
+import { TicketScreenshot } from './ticket-screenshot'
 import { TicketSelect } from './ticket-select'
+import { TicketStatusBadge } from './ticket-status-badge'
 
 export function TicketDetailDialog(props: {
   id: number
@@ -53,8 +53,6 @@ export function TicketDetailDialog(props: {
   const [before, setBefore] = useState(0)
   const [closeConfirm, setCloseConfirm] = useState(false)
   const [assignee, setAssignee] = useState('')
-  const [preview, setPreview] = useState<string | null>(null)
-  const previewURL = useRef<string | null>(null)
   const query = useQuery({
     queryKey: ['tickets', 'detail', props.staff, user?.id, props.id, before],
     queryFn: () => getTicket(props.staff, props.id, before),
@@ -77,12 +75,6 @@ export function TicketDetailDialog(props: {
       markRead(version)
     }
   }, [version, before, markRead])
-  useEffect(
-    () => () => {
-      if (previewURL.current) URL.revokeObjectURL(previewURL.current)
-    },
-    []
-  )
   const update = useMutation({
     mutationFn: (input: { status?: TicketStatus; assignee?: number }) =>
       changeTicket(
@@ -95,15 +87,6 @@ export function TicketDetailDialog(props: {
     onSuccess: () => {
       setCloseConfirm(false)
       void client.invalidateQueries({ queryKey: ['tickets'] })
-    },
-    onError: (error) => handleServerError(error, t('Ticket operation failed')),
-  })
-  const screenshot = useMutation({
-    mutationFn: (id: number) => getScreenshot(props.staff, props.id, id),
-    onSuccess: (blob) => {
-      if (previewURL.current) URL.revokeObjectURL(previewURL.current)
-      previewURL.current = URL.createObjectURL(blob)
-      setPreview(previewURL.current)
     },
     onError: (error) => handleServerError(error, t('Ticket operation failed')),
   })
@@ -177,24 +160,12 @@ export function TicketDetailDialog(props: {
                   </p>
                   <div className='flex flex-wrap gap-2'>
                     {message.attachments.map((attachment) => (
-                      <Button
+                      <TicketScreenshot
                         key={attachment.id}
-                        variant='outline'
-                        size='sm'
-                        className='max-w-full truncate'
-                        disabled={
-                          screenshot.isPending ||
-                          (attachment.expires_at !== undefined &&
-                            attachment.expires_at <= Date.now() / 1000)
-                        }
-                        onClick={() => screenshot.mutate(attachment.id)}
-                      >
-                        {attachment.name}
-                        {attachment.expires_at !== undefined &&
-                        attachment.expires_at <= Date.now() / 1000
-                          ? ` · ${t('Image expired')}`
-                          : null}
-                      </Button>
+                        attachment={attachment}
+                        ticketId={props.id}
+                        staff={props.staff}
+                      />
                     ))}
                   </div>
                 </article>
@@ -210,9 +181,7 @@ export function TicketDetailDialog(props: {
               className='min-w-0 space-y-4 text-sm'
               aria-label={t('Ticket details')}
             >
-              <Badge variant='outline'>
-                {t(ticketStatuses[ticket.status])}
-              </Badge>
+              <TicketStatusBadge status={ticket.status} />
               <dl className='space-y-3 [overflow-wrap:anywhere] break-words'>
                 <div>
                   <dt className='text-muted-foreground'>{t('Category')}</dt>
@@ -263,6 +232,9 @@ export function TicketDetailDialog(props: {
                     label={t('Status')}
                     value={ticket.status}
                     options={ticketStatuses}
+                    renderOption={(value) => (
+                      <TicketStatusBadge status={value as TicketStatus} />
+                    )}
                     disabled={update.isPending}
                     onChange={(status) =>
                       update.mutate({ status: status as TicketStatus })
@@ -337,15 +309,6 @@ export function TicketDetailDialog(props: {
         confirmText={t('Close ticket')}
         isLoading={update.isPending}
         handleConfirm={() => update.mutate({ status: 'closed' })}
-      />
-      <ImagePreviewDialog
-        src={preview}
-        alt={t('Screenshot')}
-        onClose={() => {
-          if (previewURL.current) URL.revokeObjectURL(previewURL.current)
-          previewURL.current = null
-          setPreview(null)
-        }}
       />
     </>
   )

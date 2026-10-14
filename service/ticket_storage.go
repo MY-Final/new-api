@@ -64,7 +64,7 @@ func PersistTicketImages(ctx context.Context, message *model.TicketMessage) ([]m
 	now := common.GetTimestamp()
 	for i := range message.Attachments {
 		attachment := &message.Attachments[i]
-		object := model.TicketStoredObject{ObjectKey: "tickets/" + common.GetUUID(), CreatedAt: now, ExpiresAt: now + int64(config.RetentionDays)*86400, Endpoint: config.Endpoint, Bucket: config.Bucket}
+		object := model.TicketStoredObject{ObjectKey: "tickets/" + time.Unix(now, 0).UTC().Format("2006/01/02") + "/" + common.GetUUID(), CreatedAt: now, ExpiresAt: now + int64(config.RetentionDays)*86400, Endpoint: config.Endpoint, Bucket: config.Bucket}
 		if err := model.DB.Create(&object).Error; err != nil {
 			return objects, err
 		}
@@ -181,7 +181,7 @@ func CleanupTicketImages(ctx context.Context) error {
 		return err
 	}
 	for _, attachment := range legacy {
-		object := model.TicketStoredObject{ObjectKey: "tickets/" + common.GetUUID(), CreatedAt: now, ExpiresAt: attachment.ExpiresAt, Endpoint: config.Endpoint, Bucket: config.Bucket}
+		object := model.TicketStoredObject{ObjectKey: "tickets/" + time.Unix(now, 0).UTC().Format("2006/01/02") + "/" + common.GetUUID(), CreatedAt: now, ExpiresAt: attachment.ExpiresAt, Endpoint: config.Endpoint, Bucket: config.Bucket}
 		if err := model.DB.Create(&object).Error; err != nil {
 			return err
 		}

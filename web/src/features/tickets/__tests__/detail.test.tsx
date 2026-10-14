@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
   cleanup,
+  fireEvent,
   render,
   screen,
   waitFor,
@@ -57,11 +58,21 @@ const detail: TicketDetail = {
       sender_type: 'user',
       content: 'Customer description',
       created_at: 1700000000,
-      attachments: [{ id: 7, name: 'error.png', content_type: 'image/png' }],
+      attachments: [],
     },
   ],
   events: [],
   has_more: false,
+}
+
+const screenshotDetail: TicketDetail = {
+  ...detail,
+  messages: [
+    {
+      ...detail.messages[0],
+      attachments: [{ id: 7, name: 'error.png', content_type: 'image/png' }],
+    },
+  ],
 }
 
 beforeEach(() =>
@@ -180,13 +191,13 @@ it('requires confirmation before closing and sends the displayed version', async
   )
 })
 
-it('loads private screenshots as authenticated blobs and releases the preview URL', async () => {
+it('shows private thumbnails automatically and opens the loaded image with the keyboard', async () => {
   const user = userEvent.setup()
   const blob = new Blob(['private image'], { type: 'image/png' })
   const get = vi.spyOn(api, 'get').mockImplementation(async (url) => ({
     data: String(url).includes('/attachments/')
       ? blob
-      : { success: true, data: detail },
+      : { success: true, data: screenshotDetail },
   }))
   vi.spyOn(api, 'post').mockResolvedValue({ data: { success: true } })
   const createURL = vi
@@ -196,17 +207,81 @@ it('loads private screenshots as authenticated blobs and releases the preview UR
     .spyOn(URL, 'revokeObjectURL')
     .mockImplementation(() => undefined)
   const view = showDetail()
-  await user.click(await screen.findByRole('button', { name: 'error.png' }))
+  expect(await screen.findByRole('img', { name: 'error.png' })).toHaveAttribute(
+    'src',
+    'blob:private-screenshot'
+  )
+  const thumbnail = screen.getByRole('button', { name: 'error.png' })
+  thumbnail.focus()
+  await user.keyboard('{Enter}')
   expect(
-    await screen.findByRole('img', { name: 'Screenshot' })
+    within(await screen.findByRole('dialog', { name: 'error.png' })).getByRole(
+      'img'
+    )
   ).toHaveAttribute('src', 'blob:private-screenshot')
   expect(get).toHaveBeenCalledWith('/api/tickets/42/attachments/7', {
     responseType: 'blob',
   })
   expect(createURL).toHaveBeenCalledWith(blob)
+  expect(
+    get.mock.calls.filter(([url]) => String(url).includes('/attachments/'))
+  ).toHaveLength(1)
   view.unmount()
   expect(revokeURL).toHaveBeenCalledWith('blob:private-screenshot')
 })
+
+it('keeps the conversation usable when a thumbnail fails and allows retrying', async () => {
+  const user = userEvent.setup()
+  let fail = true
+  vi.spyOn(api, 'get').mockImplementation(async (url) => {
+    if (!String(url).includes('/attachments/')) {
+      return { data: { success: true, data: screenshotDetail } }
+    }
+    if (fail) throw new Error('Storage unavailable')
+    return { data: new Blob(['image'], { type: 'image/png' }) }
+  })
+  vi.spyOn(api, 'post').mockResolvedValue({ data: { success: true } })
+  vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:retried')
+  vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
+  showDetail()
+  const retry = await screen.findByRole('button', { name: 'error.png · Retry' })
+  expect(retry).toBeEnabled()
+  expect(screen.getByText('Customer description')).toBeVisible()
+  fail = false
+  await user.click(retry)
+  expect(await screen.findByRole('img', { name: 'error.png' })).toHaveAttribute(
+    'src',
+    'blob:retried'
+  )
+  fireEvent.error(screen.getByRole('img', { name: 'error.png' }))
+  expect(
+    screen.getByRole('button', { name: 'error.png · Retry' })
+  ).toBeEnabled()
+})
+
+it.each([
+  ['pending', 'Pending', 'text-warning', 'bg-warning/10'],
+  ['processing', 'In progress', 'text-info', 'bg-info/10'],
+  ['waiting', 'Waiting for information', 'text-chart-4', 'bg-chart-4/10'],
+  ['resolved', 'Resolved', 'text-success', 'bg-success/10'],
+  ['closed', 'Closed', 'text-muted-foreground', 'bg-muted'],
+] as const)(
+  'shows the %s status with its distinct color and readable label',
+  async (status, label, color, background) => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: {
+        success: true,
+        data: { ...detail, ticket: { ...detail.ticket, status } },
+      },
+    })
+    vi.spyOn(api, 'post').mockResolvedValue({ data: { success: true } })
+    showDetail()
+    const badge = (await screen.findByText(label)).closest(
+      '[data-slot="status-badge"]'
+    )
+    expect(badge).toHaveClass(color, background)
+  }
+)
 
 it('omits mutation controls when staff only have read permission', async () => {
   useAuthStore.getState().auth.setUser({

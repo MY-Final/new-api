@@ -37,8 +37,9 @@ import { CreateTicketDialog } from './components/create-ticket-dialog'
 import { TicketDetailDialog } from './components/ticket-detail-dialog'
 import { TicketSelect } from './components/ticket-select'
 import { TicketSettingsDialog } from './components/ticket-settings-dialog'
+import { TicketStatusBadge } from './components/ticket-status-badge'
 import { ticketCategories, ticketStatuses } from './constants'
-import type { Ticket } from './types'
+import type { Ticket, TicketStatus } from './types'
 
 export function TicketsPage(props: { staff: boolean }) {
   const { t } = useTranslation()
@@ -98,11 +99,7 @@ export function TicketsPage(props: { staff: boolean }) {
     {
       accessorKey: 'status',
       header: t('Status'),
-      cell: ({ row }) => (
-        <Badge variant='outline'>
-          {t(ticketStatuses[row.original.status])}
-        </Badge>
-      ),
+      cell: ({ row }) => <TicketStatusBadge status={row.original.status} />,
     },
     {
       accessorKey: 'updated_at',
@@ -140,6 +137,13 @@ export function TicketsPage(props: { staff: boolean }) {
         className='sm:w-44'
         value={filter}
         options={{ all: 'All', ...ticketStatuses }}
+        renderOption={(value) =>
+          value === 'all' ? (
+            t('All')
+          ) : (
+            <TicketStatusBadge status={value as TicketStatus} />
+          )
+        }
         onChange={(value) => {
           setFilter(value)
           setPagination((previous) => ({ ...previous, pageIndex: 0 }))

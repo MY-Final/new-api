@@ -266,7 +266,7 @@ func TestTicketsConfiguredDatabases(t *testing.T) {
 			assert.Empty(t, stored.Data)
 			assert.EqualValues(t, screenshot.Len(), stored.Size)
 			assert.Greater(t, stored.ExpiresAt, time.Now().Unix())
-			assert.True(t, strings.HasPrefix(stored.ObjectKey, "tickets/"))
+			assert.True(t, strings.HasPrefix(stored.ObjectKey, "tickets/"+time.Unix(stored.CreatedAt, 0).UTC().Format("2006/01/02")+"/"))
 			require.NoError(t, db.Model(&model.TicketStoredObject{}).Count(&total).Error)
 			assert.EqualValues(t, 1, total, "duplicate/conflicting requests must discard their uploads")
 			assert.Contains(t, response.Header().Get("Cache-Control"), "no-store")
