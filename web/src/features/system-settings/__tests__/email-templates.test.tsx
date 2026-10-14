@@ -17,13 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import {
-  cleanup,
-  render,
-  screen,
-  waitFor,
-  within,
-} from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, it, vi } from 'vitest'
 
@@ -54,6 +48,14 @@ afterEach(() => {
 })
 
 function showSection(templates: string, layout = '{}') {
+  if (!vi.isMockFunction(api.post)) {
+    vi.spyOn(api, 'post').mockResolvedValue({
+      data: {
+        success: true,
+        data: { subject: 'Preview subject', html: '<p>Preview body</p>' },
+      },
+    })
+  }
   const actions = document.createElement('div')
   document.body.appendChild(actions)
   const client = new QueryClient({
@@ -184,7 +186,7 @@ it('prefills the stored brand and footer for editing', async () => {
   expect(screen.getByLabelText('Footer text')).toHaveValue('kuncode team')
 })
 
-it('previews the unsaved draft with server-rendered sample values', async () => {
+it('renders a live preview that follows the unsaved draft', async () => {
   const user = userEvent.setup()
   const post = vi.spyOn(api, 'post').mockResolvedValue({
     data: {
@@ -198,7 +200,6 @@ it('previews the unsaved draft with server-rendered sample values', async () => 
   const subject = screen.getByLabelText('Subject')
   await user.clear(subject)
   await user.type(subject, 'Edited ticket subject')
-  await user.click(screen.getByRole('button', { name: 'Preview' }))
   await waitFor(
     () =>
       expect(post).toHaveBeenCalledWith('/api/option/email_templates/preview', {
@@ -208,13 +209,10 @@ it('previews the unsaved draft with server-rendered sample values', async () => 
         brand: 'kuncode',
         footer: '',
       }),
-    { timeout: 3000 }
+    { timeout: 4000 }
   )
-  const dialog = await screen.findByRole('dialog', {
-    name: 'Ticket notification',
-  })
-  expect(within(dialog).getByText('Rendered subject')).toBeVisible()
-  expect(within(dialog).getByTitle('Ticket notification')).toHaveAttribute(
+  expect(await screen.findByText('Rendered subject')).toBeVisible()
+  expect(screen.getByTitle('Ticket notification')).toHaveAttribute(
     'srcdoc',
     '<p>Rendered body</p>'
   )

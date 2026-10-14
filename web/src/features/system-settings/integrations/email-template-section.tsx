@@ -20,8 +20,8 @@ import { useMutation } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { Dialog } from '@/components/dialog'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -122,7 +122,6 @@ function EmailTemplateForm(props: {
     parseJSON<EmailLayoutDraft>(props.layout, {})
   )
   const [activeTab, setActiveTab] = useState(LAYOUT_TAB)
-  const [previewKey, setPreviewKey] = useState<string | null>(null)
   const [preview, setPreview] = useState<{
     name: string
     subject: string
@@ -131,6 +130,10 @@ function EmailTemplateForm(props: {
   const subjectRef = useRef<HTMLInputElement | null>(null)
   const bodyRef = useRef<HTMLTextAreaElement | null>(null)
   const lastField = useRef<'subject' | 'body'>('body')
+  // The global tab previews a representative template so brand and footer
+  // changes stay visible while editing them.
+  const previewKey =
+    activeTab === LAYOUT_TAB ? (props.defaults[0]?.key ?? null) : activeTab
   const previewMutation = useMutation({
     mutationFn: async (key: string) => {
       const template = props.defaults.find((item) => item.key === key)
@@ -216,7 +219,7 @@ function EmailTemplateForm(props: {
           value={activeTab}
           onValueChange={(value) => setActiveTab(String(value))}
         >
-          <TabsList className='h-auto w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto'>
+          <TabsList className='h-auto w-fit max-w-full flex-wrap justify-start'>
             <TabsTrigger value={LAYOUT_TAB}>{t('Global settings')}</TabsTrigger>
             {props.defaults.map((template) => (
               <TabsTrigger key={template.key} value={template.key}>
@@ -224,182 +227,182 @@ function EmailTemplateForm(props: {
               </TabsTrigger>
             ))}
           </TabsList>
-          <TabsContent value={LAYOUT_TAB} className='flex flex-col gap-3'>
-            <div className='flex flex-col gap-2'>
-              <Label htmlFor='email-layout-brand'>{t('Brand name')}</Label>
-              <Input
-                id='email-layout-brand'
-                value={layout.brand ?? ''}
-                placeholder='{{.SystemName}}'
-                disabled={updateOption.isPending}
-                onChange={(event) =>
-                  setLayout((current) => ({
-                    ...current,
-                    brand: event.target.value,
-                  }))
-                }
-              />
-            </div>
-            <div className='flex flex-col gap-2'>
-              <Label htmlFor='email-layout-footer'>{t('Footer text')}</Label>
-              <Input
-                id='email-layout-footer'
-                value={layout.footer ?? ''}
-                placeholder='{{.SystemName}}'
-                disabled={updateOption.isPending}
-                onChange={(event) =>
-                  setLayout((current) => ({
-                    ...current,
-                    footer: event.target.value,
-                  }))
-                }
-              />
-            </div>
-            <p className='text-muted-foreground text-xs'>
-              {t(
-                'Leave the brand or footer empty to use the system name. Both support {{.SystemName}}.'
-              )}
-            </p>
-          </TabsContent>
-          {props.defaults.map((template) => (
-            <TabsContent
-              key={template.key}
-              value={template.key}
-              className='flex flex-col gap-3'
-            >
-              <div className='flex flex-wrap items-center justify-between gap-2'>
-                <div className='flex flex-wrap items-center gap-1.5'>
-                  <span className='text-muted-foreground text-xs'>
-                    {t('Variables')}:
-                  </span>
-                  {template.variables.map((name) => (
-                    <Button
-                      key={name}
-                      type='button'
-                      variant='secondary'
-                      size='xs'
+          <div className='grid min-w-0 items-start gap-4 lg:grid-cols-2'>
+            <Card className='min-w-0'>
+              <CardContent className='flex min-w-0 flex-col gap-4'>
+                <TabsContent value={LAYOUT_TAB} className='flex flex-col gap-3'>
+                  <div className='flex max-w-md flex-col gap-2'>
+                    <Label htmlFor='email-layout-brand'>
+                      {t('Brand name')}
+                    </Label>
+                    <Input
+                      id='email-layout-brand'
+                      value={layout.brand ?? ''}
+                      placeholder='{{.SystemName}}'
                       disabled={updateOption.isPending}
-                      onClick={() => insertVariable(template.key, name)}
-                    >
-                      {`{{.${name}}}`}
-                    </Button>
-                  ))}
-                </div>
-                <div className='flex flex-wrap items-center gap-2'>
-                  <Button
-                    type='button'
-                    variant='outline'
-                    size='sm'
-                    disabled={previewMutation.isPending}
-                    onClick={() => setPreviewKey(template.key)}
+                      onChange={(event) =>
+                        setLayout((current) => ({
+                          ...current,
+                          brand: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className='flex max-w-md flex-col gap-2'>
+                    <Label htmlFor='email-layout-footer'>
+                      {t('Footer text')}
+                    </Label>
+                    <Input
+                      id='email-layout-footer'
+                      value={layout.footer ?? ''}
+                      placeholder='{{.SystemName}}'
+                      disabled={updateOption.isPending}
+                      onChange={(event) =>
+                        setLayout((current) => ({
+                          ...current,
+                          footer: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <p className='text-muted-foreground text-xs'>
+                    {t(
+                      'Leave the brand or footer empty to use the system name. Both support {{.SystemName}}.'
+                    )}
+                  </p>
+                </TabsContent>
+                {props.defaults.map((template) => (
+                  <TabsContent
+                    key={template.key}
+                    value={template.key}
+                    className='flex flex-col gap-3'
                   >
-                    {t('Preview')}
-                  </Button>
-                  <Button
-                    type='button'
-                    variant='ghost'
-                    size='sm'
-                    disabled={updateOption.isPending}
-                    onClick={() =>
-                      setDrafts((current) => ({
-                        ...current,
-                        [template.key]: {
-                          subject: template.subject,
-                          body: template.body,
-                        },
-                      }))
-                    }
-                  >
-                    {t('Restore default')}
-                  </Button>
+                    <div className='flex flex-wrap items-center justify-between gap-2'>
+                      <div className='flex flex-wrap items-center gap-1.5'>
+                        <span className='text-muted-foreground text-xs'>
+                          {t('Variables')}:
+                        </span>
+                        {template.variables.map((name) => (
+                          <Button
+                            key={name}
+                            type='button'
+                            variant='secondary'
+                            size='xs'
+                            disabled={updateOption.isPending}
+                            onClick={() => insertVariable(template.key, name)}
+                          >
+                            {`{{.${name}}}`}
+                          </Button>
+                        ))}
+                      </div>
+                      <Button
+                        type='button'
+                        variant='ghost'
+                        size='sm'
+                        disabled={updateOption.isPending}
+                        onClick={() =>
+                          setDrafts((current) => ({
+                            ...current,
+                            [template.key]: {
+                              subject: template.subject,
+                              body: template.body,
+                            },
+                          }))
+                        }
+                      >
+                        {t('Restore default')}
+                      </Button>
+                    </div>
+                    <p className='text-muted-foreground text-xs'>
+                      {t('Click a variable to insert it at the cursor.')}
+                    </p>
+                    <div className='flex max-w-xl flex-col gap-2'>
+                      <Label htmlFor={`email-template-${template.key}-subject`}>
+                        {t('Subject')}
+                      </Label>
+                      <Input
+                        id={`email-template-${template.key}-subject`}
+                        ref={subjectRef}
+                        value={drafts[template.key]?.subject ?? ''}
+                        disabled={updateOption.isPending}
+                        onFocus={() => {
+                          lastField.current = 'subject'
+                        }}
+                        onChange={(event) =>
+                          setDrafts((current) => ({
+                            ...current,
+                            [template.key]: {
+                              ...current[template.key],
+                              subject: event.target.value,
+                            },
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className='flex flex-col gap-2'>
+                      <Label htmlFor={`email-template-${template.key}-body`}>
+                        {t('Body')}
+                      </Label>
+                      <Textarea
+                        id={`email-template-${template.key}-body`}
+                        ref={bodyRef}
+                        className='min-h-40 font-mono text-xs'
+                        value={drafts[template.key]?.body ?? ''}
+                        disabled={updateOption.isPending}
+                        onFocus={() => {
+                          lastField.current = 'body'
+                        }}
+                        onChange={(event) =>
+                          setDrafts((current) => ({
+                            ...current,
+                            [template.key]: {
+                              ...current[template.key],
+                              body: event.target.value,
+                            },
+                          }))
+                        }
+                      />
+                      <p className='text-muted-foreground text-xs'>
+                        {t('Use HTML and the variables listed above.')}
+                      </p>
+                    </div>
+                  </TabsContent>
+                ))}
+              </CardContent>
+            </Card>
+            <Card className='min-w-0 lg:sticky lg:top-4'>
+              <CardContent className='flex min-w-0 flex-col gap-3'>
+                <div className='flex flex-wrap items-center justify-between gap-2'>
+                  <p className='text-sm font-medium'>{t('Live preview')}</p>
+                  <span className='text-muted-foreground text-xs'>
+                    {previewMutation.isPending
+                      ? t('Rendering...')
+                      : t('Preview uses sample values for the variables.')}
+                  </span>
                 </div>
-              </div>
-              <p className='text-muted-foreground text-xs'>
-                {t('Click a variable to insert it at the cursor.')}
-              </p>
-              <div className='flex flex-col gap-2'>
-                <Label htmlFor={`email-template-${template.key}-subject`}>
-                  {t('Subject')}
-                </Label>
-                <Input
-                  id={`email-template-${template.key}-subject`}
-                  ref={subjectRef}
-                  value={drafts[template.key]?.subject ?? ''}
-                  disabled={updateOption.isPending}
-                  onFocus={() => {
-                    lastField.current = 'subject'
-                  }}
-                  onChange={(event) =>
-                    setDrafts((current) => ({
-                      ...current,
-                      [template.key]: {
-                        ...current[template.key],
-                        subject: event.target.value,
-                      },
-                    }))
-                  }
-                />
-              </div>
-              <div className='flex flex-col gap-2'>
-                <Label htmlFor={`email-template-${template.key}-body`}>
-                  {t('Body')}
-                </Label>
-                <Textarea
-                  id={`email-template-${template.key}-body`}
-                  ref={bodyRef}
-                  className='min-h-40 font-mono text-xs'
-                  value={drafts[template.key]?.body ?? ''}
-                  disabled={updateOption.isPending}
-                  onFocus={() => {
-                    lastField.current = 'body'
-                  }}
-                  onChange={(event) =>
-                    setDrafts((current) => ({
-                      ...current,
-                      [template.key]: {
-                        ...current[template.key],
-                        body: event.target.value,
-                      },
-                    }))
-                  }
-                />
-                <p className='text-muted-foreground text-xs'>
-                  {t('Use HTML and the variables listed above.')}
-                </p>
-              </div>
-            </TabsContent>
-          ))}
+                <div className='bg-muted/30 rounded-lg border p-3'>
+                  <div className='bg-background overflow-hidden rounded-md border'>
+                    <div className='border-b px-3 py-2'>
+                      <p className='text-muted-foreground text-xs'>
+                        {preview?.name ?? t('Preview')}
+                      </p>
+                      <p className='truncate text-sm font-medium'>
+                        {preview?.subject ?? ''}
+                      </p>
+                    </div>
+                    <iframe
+                      title={preview?.name ?? t('Preview')}
+                      srcDoc={preview?.html ?? ''}
+                      sandbox=''
+                      className='h-[clamp(320px,45vh,560px)] w-full bg-white'
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </Tabs>
       </SettingsForm>
-      <Dialog
-        open={previewKey !== null}
-        title={preview?.name ?? t('Preview')}
-        description={t('Preview uses sample values for the variables.')}
-        onOpenChange={(open) => {
-          if (!open) {
-            setPreviewKey(null)
-            setPreview(null)
-          }
-        }}
-        contentClassName='sm:max-w-3xl'
-      >
-        {preview && (
-          <div className='flex flex-col gap-3'>
-            <div className='flex flex-col gap-1'>
-              <p className='text-muted-foreground text-xs'>{t('Subject')}</p>
-              <p className='text-sm font-medium [overflow-wrap:anywhere]'>
-                {preview.subject}
-              </p>
-            </div>
-            <iframe
-              title={preview.name}
-              srcDoc={preview.html}
-              sandbox=''
-              className='h-[60vh] w-full rounded-md border bg-white'
-            />
-          </div>
-        )}
-      </Dialog>
     </SettingsSection>
   )
 }
