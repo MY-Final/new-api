@@ -102,6 +102,14 @@ async function renderLogs(props: {
       data = []
     } else if (url === '/api/user/self/groups') {
       data = {}
+    } else if (url === '/api/status') {
+      // The page reads /api/status, which refreshes the persisted currency
+      // config; keep it aligned with the unit these assertions expect.
+      data = {
+        display_in_currency: true,
+        quota_display_type: 'USD',
+        quota_per_unit: testCurrency.quotaPerUnit,
+      }
     }
     return { data: { success: true, data } }
   })
