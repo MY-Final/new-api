@@ -226,3 +226,30 @@ it('rejects an invalid notification email before saving', async () => {
   ).toBeVisible()
   expect(put).not.toHaveBeenCalled()
 })
+
+it('collects several notification addresses as removable entries', async () => {
+  const user = userEvent.setup()
+  vi.spyOn(api, 'get').mockResolvedValue({
+    data: { success: true, data: storage },
+  })
+  const put = vi.spyOn(api, 'put').mockResolvedValue({
+    data: { success: true, data: storage },
+  })
+  showSettings()
+  const email = await screen.findByLabelText('Notification Email')
+  await user.type(email, 'first@example.com{Enter}')
+  await user.type(email, 'second@example.com{Enter}')
+  expect(screen.getByText('first@example.com')).toBeVisible()
+  expect(screen.getByText('second@example.com')).toBeVisible()
+  await user.click(
+    screen.getByRole('button', { name: 'Remove first@example.com' })
+  )
+  expect(screen.queryByText('first@example.com')).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Save Settings' }))
+  await waitFor(() =>
+    expect(put).toHaveBeenCalledWith(
+      '/api/admin/tickets/storage',
+      expect.objectContaining({ notify_email: 'second@example.com' })
+    )
+  )
+})

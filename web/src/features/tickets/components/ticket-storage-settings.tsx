@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { X } from 'lucide-react'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
@@ -26,6 +27,7 @@ import { z } from 'zod'
 import { ErrorState } from '@/components/error-state'
 import { LoadingState } from '@/components/loading-state'
 import { PasswordInput } from '@/components/password-input'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -66,6 +68,7 @@ const schema = z.object({
   secret_key: z.string(),
 })
 type StorageValues = z.infer<typeof schema>
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+$/
 
 export function TicketStorageSettingsPanel() {
   const userID = useAuthStore((state) => state.auth.user?.id)
@@ -90,6 +93,8 @@ function TicketStorageForm(props: { settings: TicketStorageSettings }) {
   const { t } = useTranslation()
   const client = useQueryClient()
   const [saved, setSaved] = useState(false)
+  const [emailDraft, setEmailDraft] = useState('')
+  const [emailInvalid, setEmailInvalid] = useState(false)
   const form = useForm<StorageValues>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -120,11 +125,46 @@ function TicketStorageForm(props: { settings: TicketStorageSettings }) {
     },
     onError: (error) => handleServerError(error, t('Ticket operation failed')),
   })
+  const notifyEmails = (form.watch('notify_email') ?? '')
+    .split(';')
+    .map((value) => value.trim())
+    .filter(Boolean)
+  const setNotifyEmails = (emails: string[]) => {
+    form.setValue('notify_email', emails.join(';'), {
+      shouldDirty: true,
+      shouldValidate: true,
+    })
+  }
+  // Accepts a single address or a pasted list, so nobody has to type separators.
+  const commitEmailDraft = () => {
+    const values = emailDraft
+      .split(/[,;]/)
+      .map((value) => value.trim())
+      .filter(Boolean)
+    if (values.length === 0) {
+      setEmailDraft('')
+      setEmailInvalid(false)
+      return true
+    }
+    if (values.some((value) => !EMAIL_PATTERN.test(value))) {
+      setEmailInvalid(true)
+      return false
+    }
+    const merged = [...notifyEmails]
+    for (const value of values) {
+      if (!merged.includes(value)) merged.push(value)
+    }
+    setNotifyEmails(merged)
+    setEmailDraft('')
+    setEmailInvalid(false)
+    return true
+  }
   return (
     <Form {...form}>
       <form
         className='flex flex-col gap-4'
         onSubmit={form.handleSubmit((values) => {
+          if (!commitEmailDraft()) return
           form.setValue('endpoint', values.endpoint)
           form.setValue('bucket', values.bucket)
           setSaved(false)
@@ -136,17 +176,68 @@ function TicketStorageForm(props: { settings: TicketStorageSettings }) {
         <FormField
           control={form.control}
           name='notify_email'
-          render={({ field }) => (
+          render={() => (
             <FormItem>
               <FormLabel>{t('Notification Email')}</FormLabel>
+              {notifyEmails.length > 0 && (
+                <div className='flex flex-wrap gap-1.5'>
+                  {notifyEmails.map((email) => (
+                    <Badge
+                      key={email}
+                      variant='secondary'
+                      className='gap-1 pr-1'
+                    >
+                      <span className='max-w-56 truncate'>{email}</span>
+                      <Button
+                        type='button'
+                        variant='ghost'
+                        size='icon-xs'
+                        aria-label={`${t('Remove')} ${email}`}
+                        disabled={mutation.isPending}
+                        className='size-4 rounded-full'
+                        onClick={() =>
+                          setNotifyEmails(
+                            notifyEmails.filter((item) => item !== email)
+                          )
+                        }
+                      >
+                        <X />
+                      </Button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
               <FormControl>
                 <Input
-                  {...field}
                   placeholder='support@example.com'
                   disabled={mutation.isPending}
+                  value={emailDraft}
+                  onChange={(event) => {
+                    setEmailDraft(event.target.value)
+                    setEmailInvalid(false)
+                  }}
+                  onKeyDown={(event) => {
+                    if (
+                      event.key === 'Enter' ||
+                      event.key === ',' ||
+                      event.key === ';'
+                    ) {
+                      event.preventDefault()
+                      commitEmailDraft()
+                    }
+                  }}
+                  onBlur={() => commitEmailDraft()}
                 />
               </FormControl>
               <FormMessage />
+              {emailInvalid && (
+                <p role='alert' className='text-destructive text-xs'>
+                  {t('Enter a valid notification email address')}
+                </p>
+              )}
+              <p className='text-muted-foreground text-xs'>
+                {t('Press Enter to add another address.')}
+              </p>
             </FormItem>
           )}
         />

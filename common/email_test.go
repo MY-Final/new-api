@@ -452,6 +452,32 @@ func TestSendEmailSkipsAuthWhenCredentialsAreEmpty(t *testing.T) {
 	}
 }
 
+func TestSendEmailDeliversToEverySemicolonSeparatedRecipient(t *testing.T) {
+	server := newFakeSMTPServerWithSTARTTLSAdvertisement(t, false)
+	defer server.close()
+	withSMTPSettings(t)
+
+	SMTPServer = server.host
+	SMTPPort = server.port
+	SMTPSSLEnabled = false
+	SMTPStartTLSEnabled = false
+	SMTPAccount = ""
+	SMTPToken = ""
+	SMTPFrom = "sender@example.com"
+	SystemName = "New API"
+
+	err := SendEmail("Verification", "first@example.com; second@example.com", "<p>123456</p>")
+	require.NoError(t, err)
+
+	select {
+	case message := <-server.messages:
+		require.Contains(t, message, "To: first@example.com, second@example.com")
+		require.Contains(t, message, "<p>123456</p>")
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for SMTP DATA")
+	}
+}
+
 func TestSendEmailSkipsAuthWhenCredentialsAreIncomplete(t *testing.T) {
 	server := newFakeSMTPServerWithSTARTTLSAdvertisement(t, false)
 	defer server.close()

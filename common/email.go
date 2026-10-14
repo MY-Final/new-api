@@ -86,6 +86,15 @@ func SendEmail(subject string, receiver string, content string) error {
 	if SMTPServer == "" && SMTPAccount == "" {
 		return fmt.Errorf("SMTP 服务器未配置")
 	}
+	recipients := make([]string, 0, 2)
+	for _, candidate := range strings.Split(receiver, ";") {
+		if trimmed := strings.TrimSpace(candidate); trimmed != "" {
+			recipients = append(recipients, trimmed)
+		}
+	}
+	if len(recipients) == 0 {
+		return fmt.Errorf("email receiver is empty")
+	}
 	encodedSubject := fmt.Sprintf("=?UTF-8?B?%s?=", base64.StdEncoding.EncodeToString([]byte(subject)))
 	mail := []byte(fmt.Sprintf("To: %s\r\n"+
 		"From: %s <%s>\r\n"+
@@ -93,10 +102,9 @@ func SendEmail(subject string, receiver string, content string) error {
 		"Date: %s\r\n"+
 		"Message-ID: %s\r\n"+ // 添加 Message-ID 头
 		"Content-Type: text/html; charset=UTF-8\r\n\r\n%s\r\n",
-		receiver, SystemName, SMTPFrom, encodedSubject, time.Now().Format(time.RFC1123Z), id, content))
+		strings.Join(recipients, ", "), SystemName, SMTPFrom, encodedSubject, time.Now().Format(time.RFC1123Z), id, content))
 	auth := getSMTPAuth()
 	addr := fmt.Sprintf("%s:%d", SMTPServer, SMTPPort)
-	to := strings.Split(receiver, ";")
 	var err error
 	client, err := newSMTPClient(addr)
 	if err != nil {
@@ -111,8 +119,8 @@ func SendEmail(subject string, receiver string, content string) error {
 	if err = client.Mail(SMTPFrom); err != nil {
 		return err
 	}
-	for _, receiver := range to {
-		if err = client.Rcpt(receiver); err != nil {
+	for _, recipient := range recipients {
+		if err = client.Rcpt(recipient); err != nil {
 			return err
 		}
 	}
