@@ -125,6 +125,7 @@ func ListTickets(c *gin.Context) {
 	page.PageSize = max(1, page.PageSize)
 	filter := model.TicketFilter{Status: c.Query("status"), Category: c.Query("category"), Keyword: strings.TrimSpace(c.Query("keyword")), Offset: page.GetStartIdx(), Limit: page.PageSize}
 	filter.UserID, _ = strconv.Atoi(c.Query("user_id"))
+	filter.Unread = c.Query("unread") == "true"
 	if (filter.Status != "" && !slices.Contains(model.TicketStatuses, filter.Status)) || (filter.Category != "" && !slices.Contains(model.TicketCategories, filter.Category)) || !model.ValidateTicketText(filter.Keyword, 160, false) {
 		ticketError(c, model.ErrTicketInvalid)
 		return
@@ -137,6 +138,15 @@ func ListTickets(c *gin.Context) {
 	page.SetItems(items)
 	page.SetTotal(int(total))
 	common.ApiSuccess(c, page)
+}
+
+func GetTicketStats(c *gin.Context) {
+	stats, err := model.TicketStatsFor(ticketActor(c))
+	if err != nil {
+		ticketError(c, err)
+		return
+	}
+	common.ApiSuccess(c, stats)
 }
 
 func CreateTicket(c *gin.Context) {

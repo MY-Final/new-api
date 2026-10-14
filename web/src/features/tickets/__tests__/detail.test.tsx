@@ -306,7 +306,7 @@ it.each([
     })
     vi.spyOn(api, 'post').mockResolvedValue({ data: { success: true } })
     showDetail()
-    const badge = (await screen.findByText(label)).closest(
+    const badge = (await screen.findAllByText(label))[0].closest(
       '[data-slot="status-badge"]'
     )
     expect(badge).toHaveClass(color, background)

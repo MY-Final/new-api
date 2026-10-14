@@ -24,6 +24,7 @@ import type {
   TicketDetail,
   TicketMessageInput,
   TicketPage,
+  TicketStats,
   TicketStatus,
   TicketStorageSettings,
 } from './types'
@@ -45,6 +46,11 @@ export async function saveTicketStorage(
 
 export function ticketBase(staff: boolean): string {
   return staff ? '/api/admin/tickets' : '/api/tickets'
+}
+
+export async function getTicketStats(staff: boolean): Promise<TicketStats> {
+  const result = await api.get(`${ticketBase(staff)}/stats`)
+  return requireServerSuccess(result.data).data as TicketStats
 }
 
 export async function listTickets(

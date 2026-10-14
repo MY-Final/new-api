@@ -22,6 +22,7 @@ func registerTicketRoutes(api *gin.RouterGroup) {
 	staff.Use(func(c *gin.Context) { c.Set("ticket_staff", true); c.Next() })
 	staff.GET("", controller.ListTickets)
 	staff.GET("/unread", controller.TicketUnread)
+	staff.GET("/stats", controller.GetTicketStats)
 	staff.GET("/storage", middleware.RootAuth(), controller.GetTicketStorageSettings)
 	staff.PUT("/storage", middleware.RootAuth(), controller.UpdateTicketStorageSettings)
 	staff.GET("/:id", controller.GetTicket)

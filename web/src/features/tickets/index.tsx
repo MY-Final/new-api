@@ -29,36 +29,38 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useStatus } from '@/hooks/use-status'
 import { formatTimestampToDate } from '@/lib/format'
-import { ROLE } from '@/lib/roles'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { listTickets } from './api'
 import { CreateTicketDialog } from './components/create-ticket-dialog'
 import { TicketDetailDialog } from './components/ticket-detail-dialog'
+import { TicketInbox } from './components/ticket-inbox'
 import { TicketSelect } from './components/ticket-select'
-import { TicketSettingsDialog } from './components/ticket-settings-dialog'
 import { TicketStatusBadge } from './components/ticket-status-badge'
 import { ticketCategories, ticketStatuses } from './constants'
 import type { Ticket, TicketStatus } from './types'
 
 export function TicketsPage(props: { staff: boolean }) {
+  if (props.staff) return <TicketInbox />
+  return <MyTicketsPage />
+}
+
+function MyTicketsPage() {
   const { t } = useTranslation()
   const { status: site } = useStatus()
-  const [createOpen, setCreateOpen] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
   const user = useAuthStore((state) => state.auth.user)
-  const isRoot = user?.role === ROLE.SUPER_ADMIN
-  const [selected, setSelected] = useState<number | null>(null)
-  const [filter, setFilter] = useState(props.staff ? 'pending' : 'all')
+  const [createOpen, setCreateOpen] = useState(false)
+  const [filter, setFilter] = useState('all')
   const [category, setCategory] = useState('all')
   const [keyword, setKeyword] = useState('')
   const [search, setSearch] = useState('')
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 20 })
+  const [selected, setSelected] = useState<number | null>(null)
   const query = useQuery({
     queryKey: [
       'tickets',
       'list',
-      props.staff,
+      false,
       user?.id,
       filter,
       category,
@@ -66,7 +68,7 @@ export function TicketsPage(props: { staff: boolean }) {
       pagination,
     ],
     queryFn: () =>
-      listTickets(props.staff, {
+      listTickets(false, {
         p: pagination.pageIndex + 1,
         page_size: pagination.pageSize,
         status: filter === 'all' ? '' : filter,
@@ -107,28 +109,6 @@ export function TicketsPage(props: { staff: boolean }) {
       cell: ({ row }) => formatTimestampToDate(row.original.updated_at),
     },
   ]
-  if (props.staff) {
-    columns.push(
-      {
-        accessorKey: 'user_id',
-        header: t('User ID'),
-        cell: ({ row }) =>
-          row.original.user_name
-            ? `${row.original.user_name} (#${row.original.user_id})`
-            : row.original.user_id,
-      },
-      {
-        accessorKey: 'assignee_id',
-        header: t('Assignee ID'),
-        cell: ({ row }) => {
-          if (row.original.assignee_id === 0) return '-'
-          return row.original.assignee_name
-            ? `${row.original.assignee_name} (#${row.original.assignee_id})`
-            : row.original.assignee_id
-        },
-      }
-    )
-  }
   const { table } = useDataTable({
     data: query.data?.items ?? [],
     columns,
@@ -191,26 +171,17 @@ export function TicketsPage(props: { staff: boolean }) {
   return (
     <>
       <SectionPageLayout fixedContent>
-        <SectionPageLayout.Title>
-          {t(props.staff ? 'Ticket Management' : 'My tickets')}
-        </SectionPageLayout.Title>
+        <SectionPageLayout.Title>{t('My tickets')}</SectionPageLayout.Title>
         <SectionPageLayout.Actions>
-          {!props.staff && (
-            <Button
-              disabled={site?.support_tickets_enabled === false}
-              onClick={() => setCreateOpen(true)}
-            >
-              {t('Submit ticket')}
-            </Button>
-          )}
-          {props.staff && isRoot && (
-            <Button variant='outline' onClick={() => setSettingsOpen(true)}>
-              {t('Ticket settings')}
-            </Button>
-          )}
+          <Button
+            disabled={site?.support_tickets_enabled === false}
+            onClick={() => setCreateOpen(true)}
+          >
+            {t('Submit ticket')}
+          </Button>
         </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
-          {site?.support_tickets_enabled === false && !props.staff && (
+          {site?.support_tickets_enabled === false && (
             <p className='text-muted-foreground mb-3 text-sm'>
               {t('Ticket submissions are disabled')}
             </p>
@@ -247,12 +218,9 @@ export function TicketsPage(props: { staff: boolean }) {
         <TicketDetailDialog
           key={selected}
           id={selected}
-          staff={props.staff}
+          staff={false}
           onClose={() => setSelected(null)}
         />
-      )}
-      {settingsOpen && (
-        <TicketSettingsDialog onClose={() => setSettingsOpen(false)} />
       )}
     </>
   )

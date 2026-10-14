@@ -45,6 +45,18 @@ export interface Ticket {
   unread: boolean
   user_name?: string
   assignee_name?: string
+  preview?: string
+  preview_sender_type?: 'user' | 'admin' | 'note'
+}
+
+export interface TicketStats {
+  pending: number
+  processing: number
+  waiting: number
+  resolved: number
+  closed: number
+  all: number
+  unread: number
 }
 export interface Screenshot {
   name: string

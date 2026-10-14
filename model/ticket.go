@@ -49,6 +49,9 @@ type Ticket struct {
 	// Account names are read-only display fields filled by scoped list queries.
 	UserName     string `json:"user_name" gorm:"->;-:migration"`
 	AssigneeName string `json:"assignee_name" gorm:"->;-:migration"`
+	// Preview is the last message excerpt shown by the staff inbox.
+	Preview           string `json:"preview" gorm:"->;-:migration"`
+	PreviewSenderType string `json:"preview_sender_type" gorm:"->;-:migration"`
 }
 
 type TicketMessage struct {
@@ -121,7 +124,21 @@ type TicketFilter struct {
 	Status, Category, Keyword string
 	UserID                    int
 	Offset, Limit             int
+	Unread                    bool
 }
+
+// TicketStats powers the inbox sidebar counters.
+type TicketStats struct {
+	Pending    int64 `json:"pending"`
+	Processing int64 `json:"processing"`
+	Waiting    int64 `json:"waiting"`
+	Resolved   int64 `json:"resolved"`
+	Closed     int64 `json:"closed"`
+	All        int64 `json:"all"`
+	Unread     int64 `json:"unread"`
+}
+
+const ticketPreviewLimit = 120
 
 func MigrateTickets(db *gorm.DB) error {
 	if err := db.AutoMigrate(&Ticket{}, &TicketMessage{}, &TicketAttachment{}, &TicketEvent{}, &TicketRead{}, &TicketStoredObject{}); err != nil {
@@ -249,6 +266,9 @@ func ListTickets(actor TicketActor, filter TicketFilter) ([]Ticket, int64, error
 			query = query.Where("title LIKE ? OR id = ?", pattern, id)
 		}
 	}
+	if filter.Unread {
+		query = query.Where("tickets.version > COALESCE((SELECT version FROM ticket_reads WHERE ticket_reads.ticket_id = tickets.id AND ticket_reads.user_id = ?), 0)", actor.UserID)
+	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -261,7 +281,99 @@ func ListTickets(actor TicketActor, filter TicketFilter) ([]Ticket, int64, error
 	}
 	err := query.Select(selection, actor.UserID).
 		Order("updated_at DESC, id DESC").Offset(filter.Offset).Limit(filter.Limit).Find(&items).Error
+	if err == nil && actor.Staff {
+		loadTicketPreviews(items)
+	}
 	return items, total, err
+}
+
+// loadTicketPreviews fills the last-message excerpt the staff inbox renders in
+// the ticket list. Two portable queries avoid database-specific SQL.
+func loadTicketPreviews(items []Ticket) {
+	if len(items) == 0 {
+		return
+	}
+	ids := make([]int, 0, len(items))
+	for i := range items {
+		ids = append(ids, items[i].ID)
+	}
+	latest := make([]struct {
+		TicketID  int
+		MessageID int
+	}, 0, len(items))
+	if err := DB.Model(&TicketMessage{}).
+		Select("ticket_id, MAX(id) AS message_id").
+		Where("ticket_id IN ?", ids).
+		Group("ticket_id").
+		Find(&latest).Error; err != nil {
+		return
+	}
+	messageIDs := make([]int, 0, len(latest))
+	for _, row := range latest {
+		messageIDs = append(messageIDs, row.MessageID)
+	}
+	if len(messageIDs) == 0 {
+		return
+	}
+	var messages []TicketMessage
+	if err := DB.Select("id", "ticket_id", "sender_type", "content").
+		Where("id IN ?", messageIDs).
+		Find(&messages).Error; err != nil {
+		return
+	}
+	byTicket := make(map[int]TicketMessage, len(messages))
+	for _, message := range messages {
+		byTicket[message.TicketID] = message
+	}
+	for i := range items {
+		if message, ok := byTicket[items[i].ID]; ok {
+			items[i].Preview = ticketPreviewExcerpt(message.Content)
+			items[i].PreviewSenderType = message.SenderType
+		}
+	}
+}
+
+func ticketPreviewExcerpt(content string) string {
+	collapsed := strings.Join(strings.Fields(content), " ")
+	if utf8.RuneCountInString(collapsed) <= ticketPreviewLimit {
+		return collapsed
+	}
+	return string([]rune(collapsed)[:ticketPreviewLimit]) + "..."
+}
+
+func TicketStatsFor(actor TicketActor) (TicketStats, error) {
+	stats := TicketStats{}
+	var rows []struct {
+		Status string
+		Total  int64
+	}
+	if err := TicketScope(DB.Model(&Ticket{}), actor).
+		Select("status, COUNT(*) AS total").
+		Group("status").
+		Find(&rows).Error; err != nil {
+		return stats, err
+	}
+	for _, row := range rows {
+		switch row.Status {
+		case "pending":
+			stats.Pending = row.Total
+		case "processing":
+			stats.Processing = row.Total
+		case "waiting":
+			stats.Waiting = row.Total
+		case "resolved":
+			stats.Resolved = row.Total
+		case "closed":
+			stats.Closed = row.Total
+		}
+		stats.All += row.Total
+	}
+	if err := TicketScope(DB.Model(&Ticket{}), actor).
+		Where("tickets.version > COALESCE((SELECT version FROM ticket_reads WHERE ticket_reads.ticket_id = tickets.id AND ticket_reads.user_id = ?), 0)", actor.UserID).
+		Count(&stats.Unread).Error; err != nil {
+		return stats, err
+	}
+	return stats, nil
 }
 
 func GetTicketDetail(id int, actor TicketActor, before int) (*TicketDetail, error) {

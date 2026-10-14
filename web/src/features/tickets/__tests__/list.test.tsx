@@ -18,7 +18,6 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 import { api } from '@/lib/api'
@@ -65,86 +64,4 @@ it('shows an empty list and disables new submissions when the site closes intake
   )
   expect(screen.getByText('Ticket submissions are disabled')).toBeVisible()
   expect(screen.getByRole('textbox', { name: 'Search tickets' })).toBeEnabled()
-})
-
-it('starts staff in pending tickets and searches only after the user submits', async () => {
-  const user = userEvent.setup()
-  const get = vi.spyOn(api, 'get').mockImplementation(async (url) => ({
-    data: {
-      success: true,
-      data:
-        url === '/api/status'
-          ? { support_tickets_enabled: true }
-          : { items: [], total: 0, page: 1, page_size: 20 },
-    },
-  }))
-  showList(true)
-  expect(await screen.findByText('No tickets yet')).toBeVisible()
-  expect(get).toHaveBeenCalledWith('/api/admin/tickets', {
-    params: {
-      p: 1,
-      page_size: 20,
-      status: 'pending',
-      category: '',
-      keyword: '',
-    },
-  })
-  await user.type(
-    screen.getByRole('textbox', { name: 'Search tickets' }),
-    '#42'
-  )
-  expect(
-    get.mock.calls.filter(([url]) => url === '/api/admin/tickets')
-  ).toHaveLength(1)
-  await user.click(screen.getByRole('button', { name: 'Search' }))
-  await waitFor(() =>
-    expect(get).toHaveBeenCalledWith('/api/admin/tickets', {
-      params: {
-        p: 1,
-        page_size: 20,
-        status: 'pending',
-        category: '',
-        keyword: '#42',
-      },
-    })
-  )
-})
-
-it('shows account names instead of bare ids for staff lists', async () => {
-  vi.spyOn(api, 'get').mockImplementation(async (url) => ({
-    data: {
-      success: true,
-      data:
-        url === '/api/status'
-          ? { support_tickets_enabled: true }
-          : {
-              items: [
-                {
-                  id: 9,
-                  user_id: 7,
-                  title: 'Cannot call the API',
-                  category: 'api',
-                  status: 'pending',
-                  assignee_id: 3,
-                  version: 1,
-                  request_id: '',
-                  order_number: '',
-                  model_name: '',
-                  occurred_at: 0,
-                  created_at: 1700000000,
-                  updated_at: 1700000000,
-                  unread: false,
-                  user_name: 'alice',
-                  assignee_name: 'support',
-                },
-              ],
-              total: 1,
-              page: 1,
-              page_size: 20,
-            },
-    },
-  }))
-  showList(true)
-  expect(await screen.findByText('alice (#7)')).toBeVisible()
-  expect(screen.getByText('support (#3)')).toBeVisible()
 })
