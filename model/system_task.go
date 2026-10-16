@@ -21,6 +21,7 @@ const (
 	SystemTaskTypeModelUpdate    = "model_update"
 	SystemTaskTypeMidjourneyPoll = "midjourney_poll"
 	SystemTaskTypeAsyncTaskPoll  = "async_task_poll"
+	SystemTaskTypeRequestRefund  = "request_refund"
 )
 
 var ErrSystemTaskLockLost = errors.New("system task lock lost")
@@ -214,7 +215,8 @@ func ListSystemTasks(filter SystemTaskFilter, offset, limit int) ([]*SystemTask,
 
 // DeleteSystemTaskHistory preserves the latest row of every type because the
 // scheduler uses it to determine when the next run is due. Active rows and rows
-// created after this cleanup's snapshot are never removed.
+// created after this cleanup's snapshot are never removed. Refund batches are
+// financial history and retain submission IDs for idempotency, so are excluded.
 func DeleteSystemTaskHistory(filter SystemTaskFilter) (int64, error) {
 	var latestIDs []int64
 	if err := DB.Model(&SystemTask{}).Select("MAX(id)").Group("type").Pluck("MAX(id)", &latestIDs).Error; err != nil {
@@ -228,7 +230,7 @@ func DeleteSystemTaskHistory(filter SystemTaskFilter) (int64, error) {
 		newestID = max(newestID, id)
 	}
 	filter.Scope = "history"
-	result := filter.query().Where("id < ? AND id NOT IN ?", newestID, latestIDs).Delete(&SystemTask{})
+	result := filter.query().Where("type <> ?", SystemTaskTypeRequestRefund).Where("id < ? AND id NOT IN ?", newestID, latestIDs).Delete(&SystemTask{})
 	return result.RowsAffected, result.Error
 }
 

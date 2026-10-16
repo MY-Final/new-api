@@ -198,7 +198,7 @@ func reverseRebateForFinanceTx(tx *gorm.DB, rebate *AffiliateRebate, reason stri
 	if _, err := walletAfterDelta(inviter.AffQuota, -snapshot.AffiliateDebit); err != nil {
 		return snapshot, err
 	}
-	if err := tx.Unscoped().Model(&User{}).Where("id = ?", locked.InviterId).Updates(map[string]interface{}{
+	if err := tx.Unscoped().Model(&User{}).Where("id = ?", locked.InviterId).Updates(map[string]any{
 		"quota":              gorm.Expr("quota - ?", snapshot.MainDebit),
 		"paid_quota":         gorm.Expr("paid_quota - ?", debtOffset),
 		"bonus_quota":        gorm.Expr("bonus_quota - ?", transferred),
@@ -263,7 +263,7 @@ func RefundTopUpByAdmin(tradeNo string, reason string, operatorId int) (alreadyR
 		if err != nil {
 			return err
 		}
-		result := tx.Model(&TopUp{}).Where("id = ? AND status = ?", topUp.Id, common.TopUpStatusSuccess).Updates(map[string]interface{}{
+		result := tx.Model(&TopUp{}).Where("id = ? AND status = ?", topUp.Id, common.TopUpStatusSuccess).Updates(map[string]any{
 			"status": common.TopUpStatusRefunded, "refunded_at": common.GetTimestamp(), "refund_reason": reason, "refunded_by": operatorId,
 		})
 		if result.Error != nil {
@@ -273,7 +273,7 @@ func RefundTopUpByAdmin(tradeNo string, reason string, operatorId int) (alreadyR
 			alreadyRefunded = true
 			return nil
 		}
-		if err := tx.Unscoped().Model(&User{}).Where("id = ?", target.Id).Updates(map[string]interface{}{
+		if err := tx.Unscoped().Model(&User{}).Where("id = ?", target.Id).Updates(map[string]any{
 			"quota": targetAfter, "paid_quota": paidAfter, "bonus_quota": target.BonusQuota,
 		}).Error; err != nil {
 			return err
@@ -386,7 +386,7 @@ func RefundRedemptionByAdmin(redemptionId int, reason string, operatorId int) (a
 			return err
 		}
 		bonusAfter := target.BonusQuota - bonusRefund
-		result := tx.Model(&Redemption{}).Where("id = ? AND status = ?", redemption.Id, common.RedemptionCodeStatusUsed).Updates(map[string]interface{}{
+		result := tx.Model(&Redemption{}).Where("id = ? AND status = ?", redemption.Id, common.RedemptionCodeStatusUsed).Updates(map[string]any{
 			"status": common.RedemptionCodeStatusRefunded, "refunded_at": common.GetTimestamp(), "refund_reason": reason, "refunded_by": operatorId,
 		})
 		if result.Error != nil {
@@ -396,7 +396,7 @@ func RefundRedemptionByAdmin(redemptionId int, reason string, operatorId int) (a
 			alreadyRefunded = true
 			return nil
 		}
-		if err := tx.Unscoped().Model(&User{}).Where("id = ?", target.Id).Updates(map[string]interface{}{
+		if err := tx.Unscoped().Model(&User{}).Where("id = ?", target.Id).Updates(map[string]any{
 			"quota": targetAfter, "paid_quota": paidAfter, "bonus_quota": bonusAfter,
 		}).Error; err != nil {
 			return err
@@ -520,7 +520,7 @@ func ReverseAffiliateRebateByAdmin(rebateId int, reason string, operatorId int) 
 	return alreadyReversed, err
 }
 
-func ApplyFinancialPenalty(targetUserId int, quota int, reason string, requestId string, operatorId int, operatorRole int) (FinancialOperation, bool, error) {
+func ApplyFinancialPenalty(targetUserId int, quota int, reason string, requestId string, operatorId int, operatorRole int, requestBased ...bool) (FinancialOperation, bool, error) {
 	var operation FinancialOperation
 	if targetUserId <= 0 || quota <= 0 || common.ValidateWalletQuota(quota) != nil {
 		return operation, false, ErrInvalidTopUpQuota
@@ -533,10 +533,28 @@ func ApplyFinancialPenalty(targetUserId int, quota int, reason string, requestId
 	if err != nil {
 		return operation, false, err
 	}
+	isRequestBased := len(requestBased) > 0 && requestBased[0]
+	if isRequestBased {
+		var count int64
+		if err := DB.Model(&RequestBilling{}).Where("request_id = ? AND user_id = ?", requestId, targetUserId).Count(&count).Error; err != nil {
+			return operation, false, err
+		}
+		if count == 0 {
+			if err := LOG_DB.Model(&Log{}).Where("request_id = ? AND user_id = ? AND type = ?", requestId, targetUserId, LogTypeConsume).Count(&count).Error; err != nil {
+				return operation, false, err
+			}
+		}
+		if count == 0 {
+			return operation, false, ErrFinancialRequestUserMismatch
+		}
+	}
 	alreadyDone := false
 	err = DB.Transaction(func(tx *gorm.DB) error {
 		operationKey := "penalty:" + requestId
 		if err := tx.Where("operation_key = ?", operationKey).First(&operation).Error; err == nil {
+			if operation.TargetUserId != targetUserId || operation.PrincipalQuota != quota {
+				return ErrFinancialOperationConflict
+			}
 			alreadyDone = true
 			return nil
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -576,9 +594,12 @@ func ApplyFinancialPenalty(targetUserId int, quota int, reason string, requestId
 			TargetMainDelta: -quota, TargetMainBefore: target.Quota, TargetMainAfter: after, Reason: reason,
 			TargetBonusDelta: -allocation.Bonus, TargetPaidDelta: -allocation.Paid,
 		}
-		if err := tx.Unscoped().Model(&User{}).Where("id = ?", target.Id).Updates(map[string]interface{}{
+		if isRequestBased {
+			operation.SourceType, operation.SourceId = "request", requestId
+		}
+		if err := tx.Unscoped().Model(&User{}).Where("id = ?", target.Id).Updates(map[string]any{
 			"quota": after, "bonus_quota": gorm.Expr("bonus_quota - ?", allocation.Bonus),
-			"paid_quota": gorm.Expr("paid_quota - ?", allocation.Paid),
+			"paid_quota": target.PaidQuota - allocation.Paid,
 		}).Error; err != nil {
 			return err
 		}
@@ -639,7 +660,7 @@ func ReverseFinancialPenalty(penaltyId int, reason string, operatorId int, opera
 			TargetMainDelta: penalty.PrincipalQuota, TargetMainBefore: target.Quota, TargetMainAfter: after, Reason: reason,
 			TargetBonusDelta: allocation.Bonus, TargetPaidDelta: allocation.Paid,
 		}
-		if err := tx.Unscoped().Model(&User{}).Where("id = ?", target.Id).Updates(map[string]interface{}{
+		if err := tx.Unscoped().Model(&User{}).Where("id = ?", target.Id).Updates(map[string]any{
 			"quota": after, "bonus_quota": gorm.Expr("bonus_quota + ?", allocation.Bonus),
 			"paid_quota": gorm.Expr("paid_quota + ?", allocation.Paid),
 		}).Error; err != nil {

@@ -19,6 +19,7 @@ import { FinanceFilterBar } from './finance-filter-bar'
 
 export function FinanceTable(props: {
   section: FinanceSection
+  cashRefunds?: boolean
   filters: FinanceFilters
   setFilters: (value: FinanceFilters) => void
   items: FinanceRecord[]
@@ -35,7 +36,8 @@ export function FinanceTable(props: {
     props.section,
     props.onAction,
     props.onRefresh,
-    props.onDetails
+    props.onDetails,
+    props.cashRefunds
   )
 
   const pagination = useMemo<PaginationState>(
@@ -80,6 +82,7 @@ export function FinanceTable(props: {
         <div className='flex flex-wrap items-start gap-2'>
           <FinanceFilterBar
             section={props.section}
+            cashRefunds={props.cashRefunds}
             filters={props.filters}
             setFilters={props.setFilters}
             className='min-w-0 flex-1'

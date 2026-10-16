@@ -51,6 +51,7 @@ func TestMain(m *testing.M) {
 		&ChannelStatusEvent{},
 		&QuotaData{},
 		&QuotaUsageDaily{},
+		&RequestBilling{},
 		&Ability{},
 		&TopUp{},
 		&AffiliateRebate{},
@@ -91,6 +92,7 @@ func truncateTables(t *testing.T) {
 		DB.Exec("DELETE FROM channels")
 		DB.Exec("DELETE FROM channel_status_events")
 		DB.Exec("DELETE FROM quota_data")
+		DB.Exec("DELETE FROM request_billings")
 		DB.Exec("DELETE FROM quota_usage_daily")
 		DB.Exec("DELETE FROM abilities")
 		DB.Exec("DELETE FROM top_ups")

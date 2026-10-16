@@ -22,6 +22,7 @@ import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { DataTableRowActionMenu } from '@/components/data-table'
+import { Button } from '@/components/ui/button'
 import {
   DropdownMenuItem,
   DropdownMenuShortcut,
@@ -41,6 +42,7 @@ import type {
 
 export function FinanceRowActions(props: {
   section: FinanceSection
+  cashRefunds?: boolean
   row: Row<FinanceRecord>
   onAction: (action: FinanceAction) => void
   onRefresh: () => void
@@ -69,6 +71,7 @@ export function FinanceRowActions(props: {
     </DropdownMenuItem>,
   ]
 
+  let refundAction: FinanceAction | undefined
   if (props.section === 'topups') {
     const topup = item as FinanceTopup
     if (topup.status === 'pending') {
@@ -84,7 +87,12 @@ export function FinanceRowActions(props: {
         </DropdownMenuItem>
       )
     }
-    if (topup.status === 'success' && topup.source !== 'subscription') {
+    if (
+      topup.status === 'success' &&
+      topup.source === 'topup' &&
+      (topup.credited_quota || 0) > 0
+    ) {
+      refundAction = { kind: 'topup-refund', item: topup }
       items.push(
         <DropdownMenuItem
           key='refund'
@@ -101,6 +109,7 @@ export function FinanceRowActions(props: {
   } else if (props.section === 'redemptions') {
     const redemption = item as FinanceRedemption
     if (redemption.status === 3 && redemption.type === 'paid') {
+      refundAction = { kind: 'redemption-refund', item: redemption }
       items.push(
         <DropdownMenuItem
           key='refund'
@@ -123,7 +132,9 @@ export function FinanceRowActions(props: {
         <DropdownMenuItem
           key='reverse'
           className='text-destructive focus:text-destructive'
-          onClick={() => props.onAction({ kind: 'rebate-reverse', item: rebate })}
+          onClick={() =>
+            props.onAction({ kind: 'rebate-reverse', item: rebate })
+          }
         >
           {t('Reverse rebate')}
           <DropdownMenuShortcut>
@@ -151,6 +162,24 @@ export function FinanceRowActions(props: {
         </DropdownMenuItem>
       )
     }
+  }
+
+  if (props.cashRefunds) {
+    return (
+      <div className='flex items-center gap-2'>
+        <Button
+          variant='outline'
+          size='sm'
+          disabled={!refundAction}
+          onClick={() => refundAction && props.onAction(refundAction)}
+        >
+          {t('Register refund')}
+        </Button>
+        <Button variant='ghost' size='sm' onClick={() => props.onDetails(item)}>
+          {t('Details')}
+        </Button>
+      </div>
+    )
   }
 
   return (

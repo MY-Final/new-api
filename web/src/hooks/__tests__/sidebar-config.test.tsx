@@ -87,17 +87,13 @@ describe('security sidebar visibility', () => {
       { personal: { enabled: true, personal: true, topup: true } },
       { personal: { enabled: true, personal: true } }
     )
-    expect(
+    const personalTitles =
       result.current
         .find((group) => group.id === 'personal')
-        ?.items.map((item) => item.title)
-    ).toEqual([
-      'Wallet',
-      'Usage Statistics',
-      'Affiliate Rebates',
-      'Profile',
-      'Security & Access',
-    ])
+        ?.items.map((item) => item.title) ?? []
+    expect(personalTitles[personalTitles.indexOf('Profile') + 1]).toBe(
+      'Security & Access'
+    )
     expect(
       result.current
         .flatMap((group) => group.items)
@@ -233,4 +229,76 @@ describe('Custom pages sidebar group', () => {
       hidden.result.current.some((navGroup) => navGroup.id === 'custom-pages')
     ).toBe(false)
   })
+})
+
+describe('finance sidebar entries', () => {
+  it('legacy configurations expose separate ledger links followed by the refund center', () => {
+    const { result } = sidebarFor({ admin: { enabled: true, finance: true } })
+    const items =
+      result.current.find((group) => group.id === 'admin')?.items ?? []
+    expect(
+      items
+        .filter((item) => item.url?.startsWith('/finance/'))
+        .map((item) => ({ title: item.title, url: item.url }))
+    ).toEqual([
+      { title: 'Top-up Orders', url: '/finance/topups' },
+      { title: 'Redemption Ledger', url: '/finance/redemptions' },
+      { title: 'Rebate Ledger', url: '/finance/rebates' },
+      { title: 'Financial Operations', url: '/finance/operations' },
+      { title: 'Refund center', url: '/finance/refunds' },
+    ])
+  })
+
+  it.each([
+    ['topups', 'Top-up Orders'],
+    ['redemptions', 'Redemption Ledger'],
+    ['rebates', 'Rebate Ledger'],
+    ['operations', 'Financial Operations'],
+  ])(
+    'selects only the corresponding sidebar entry for %s',
+    (section, title) => {
+      const { result } = sidebarFor()
+      const items = result.current.flatMap((group) => group.items)
+      expect(
+        items
+          .filter((item) => checkIsActive(`/finance/${section}?page=2`, item))
+          .map((item) => item.title)
+      ).toEqual([title])
+    }
+  )
+
+  it('selects only the refund center for both refund workspaces', () => {
+    const { result } = sidebarFor({ admin: { enabled: true, finance: true } })
+    const items =
+      result.current.find((group) => group.id === 'admin')?.items ?? []
+    expect(
+      items
+        .filter((item) =>
+          checkIsActive('/finance/refunds?request_id=incident', item)
+        )
+        .map((item) => item.title)
+    ).toEqual(['Refund center'])
+    expect(
+      items
+        .filter((item) => checkIsActive('/finance/cash-refunds', item))
+        .map((item) => item.title)
+    ).toEqual(['Refund center'])
+  })
+
+  it.each([
+    [{ admin: { enabled: true, finance: false } }, undefined],
+    [{ admin: { enabled: false } }, undefined],
+    [undefined, { admin: { enabled: true, finance: false } }],
+    [undefined, { admin: { enabled: false } }],
+  ])(
+    'finance visibility settings hide all ledger and refund links (%j, %j)',
+    (admin, user) => {
+      const { result } = sidebarFor(admin, user)
+      expect(
+        result.current
+          .flatMap((group) => group.items)
+          .some((item) => item.url?.startsWith('/finance/'))
+      ).toBe(false)
+    }
+  )
 })

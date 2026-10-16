@@ -27,6 +27,7 @@ import { createInstance } from 'i18next'
 import { I18nextProvider } from 'react-i18next'
 import { afterAll, afterEach, beforeEach, expect, test, vi } from 'vitest'
 
+import * as financeApi from '@/features/finance/api'
 import en from '@/i18n/locales/en.json'
 import zh from '@/i18n/locales/zh.json'
 import {
@@ -37,6 +38,7 @@ import {
 import type { UsageLog } from '../../data/schema'
 import type { LogOtherData } from '../../types'
 import { useCommonLogsColumns } from '../columns/common-logs-columns'
+import { DetailsDialog } from '../dialogs/details-dialog'
 import { UsageLogsProvider } from '../usage-logs-provider'
 
 vi.mock('@lobehub/icons', () => ({}))
@@ -666,3 +668,54 @@ test.each(['missing schema', 'unsupported expression', 'unknown tier'])(
     )
   }
 )
+
+test('request refunds show their own label instead of async task refund', () => {
+  renderPreview(
+    { refund_kind: 'request', original_request_id: 'req-original' },
+    true,
+    6
+  )
+  expect(screen.getByText('Request refund')).toBeInTheDocument()
+  expect(screen.queryByText('Async task refund')).not.toBeInTheDocument()
+})
+
+test('only admins can open a request refund from consumption log details', async () => {
+  const lookup = vi
+    .spyOn(financeApi, 'getRequestBillings')
+    .mockResolvedValue([])
+  const log = makeLog({})
+  const { rerender } = render(
+    <I18nextProvider i18n={i18n}>
+      <QueryClientProvider client={client}>
+        <DetailsDialog
+          log={log}
+          isAdmin={false}
+          isRoot={false}
+          open
+          onOpenChange={() => undefined}
+        />
+      </QueryClientProvider>
+    </I18nextProvider>
+  )
+  expect(
+    screen.queryByRole('button', { name: 'Refund request' })
+  ).not.toBeInTheDocument()
+  rerender(
+    <I18nextProvider i18n={i18n}>
+      <QueryClientProvider client={client}>
+        <DetailsDialog
+          log={log}
+          isAdmin
+          isRoot
+          open
+          onOpenChange={() => undefined}
+        />
+      </QueryClientProvider>
+    </I18nextProvider>
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Refund request' }))
+  expect(
+    await screen.findByRole('dialog', { name: 'Refund request' })
+  ).toBeInTheDocument()
+  expect(lookup).toHaveBeenCalledWith('req-1')
+})

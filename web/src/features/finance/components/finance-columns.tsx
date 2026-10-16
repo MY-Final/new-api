@@ -7,6 +7,7 @@ import { CopyButton } from '@/components/copy-button'
 import { BadgeCell, TruncatedCell } from '@/components/data-table'
 import { StatusBadge } from '@/components/status-badge'
 import { TableId } from '@/components/table-id'
+import { formatCurrency } from '@/features/wallet/lib/format'
 import {
   formatQuota,
   formatQuotaPrecise,
@@ -38,6 +39,7 @@ type ColumnContext = {
   onAction: (action: FinanceAction) => void
   onRefresh: () => void
   onDetails: (item: FinanceRecord) => void
+  cashRefunds?: boolean
 }
 
 function getActionsColumn(
@@ -50,10 +52,11 @@ function getActionsColumn(
     meta: { pinned: 'right' },
     enableSorting: false,
     enableHiding: false,
-    size: 60,
+    size: ctx.cashRefunds ? 180 : 60,
     cell: ({ row }) => (
       <FinanceRowActions
         section={section}
+        cashRefunds={ctx.cashRefunds}
         row={row}
         onAction={ctx.onAction}
         onRefresh={ctx.onRefresh}
@@ -98,17 +101,43 @@ function getTopupColumns(ctx: ColumnContext): ColumnDef<FinanceRecord>[] {
     },
     {
       id: 'amount',
-      header: t('Amount'),
+      header: ctx.cashRefunds ? t('Principal deduction') : t('Amount'),
       size: 120,
       cell: ({ row }) => {
         const topup = row.original as FinanceTopup
         return (
           <span className='font-semibold'>
-            {formatQuota(topup.credited_quota || topup.amount)}
+            {ctx.cashRefunds && !topup.credited_quota
+              ? t('Unknown')
+              : formatQuota(topup.credited_quota || topup.amount)}
           </span>
         )
       },
     },
+    ...(ctx.cashRefunds
+      ? ([
+          {
+            id: 'payment',
+            header: t('Original payment amount'),
+            size: 170,
+            cell: ({ row }) =>
+              t('{{amount}} (order currency)', {
+                amount: formatCurrency((row.original as FinanceTopup).money),
+              }),
+          },
+          {
+            id: 'balance',
+            header: t('Current balance'),
+            size: 130,
+            cell: ({ row }) => {
+              const balance = (row.original as FinanceTopup).user_quota
+              return balance !== undefined
+                ? formatQuotaPrecise(balance)
+                : t('Unknown')
+            },
+          },
+        ] satisfies ColumnDef<FinanceRecord>[])
+      : []),
     {
       id: 'rebate',
       header: t('Rebate'),
@@ -558,14 +587,21 @@ export function useFinanceColumns(
   section: FinanceSection,
   onAction: (action: FinanceAction) => void,
   onRefresh: () => void,
-  onDetails: (item: FinanceRecord) => void
+  onDetails: (item: FinanceRecord) => void,
+  cashRefunds = false
 ): ColumnDef<FinanceRecord>[] {
   const { t } = useTranslation()
   return useMemo(() => {
-    const ctx: ColumnContext = { t, onAction, onRefresh, onDetails }
+    const ctx: ColumnContext = {
+      t,
+      onAction,
+      onRefresh,
+      onDetails,
+      cashRefunds,
+    }
     if (section === 'redemptions') return getRedemptionColumns(ctx)
     if (section === 'rebates') return getRebateColumns(ctx)
     if (section === 'operations') return getOperationColumns(ctx)
     return getTopupColumns(ctx)
-  }, [section, t, onAction, onRefresh, onDetails])
+  }, [section, t, onAction, onRefresh, onDetails, cashRefunds])
 }

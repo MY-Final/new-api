@@ -50,12 +50,14 @@ import {
   Info,
   LogIn,
 } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Dialog } from '@/components/dialog'
 import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
+import { RequestRefundDialog } from '@/features/finance/components/request-refund-dialog'
 import { DynamicPricingBreakdown } from '@/features/pricing/components/dynamic-pricing-breakdown'
 import { usePricingData } from '@/features/pricing/hooks/use-pricing-data'
 import { BILLING_PRICING_VARS } from '@/features/pricing/lib/billing-expr'
@@ -507,6 +509,7 @@ interface DetailsDialogProps {
 }
 
 export function DetailsDialog(props: DetailsDialogProps) {
+  const [refundOpen, setRefundOpen] = useState(false)
   const { t } = useTranslation()
   const { copiedText, copyToClipboard } = useCopyToClipboard({ notify: false })
   const other = parseLogOther(props.log.other)
@@ -672,6 +675,13 @@ export function DetailsDialog(props: DetailsDialogProps) {
         </>
       }
       description={t('View the complete details for this log entry')}
+      footer={
+        props.isAdmin && isConsume && props.log.request_id ? (
+          <Button variant='outline' onClick={() => setRefundOpen(true)}>
+            {t('Refund request')}
+          </Button>
+        ) : undefined
+      }
       contentClassName={cn(
         'min-w-0 overflow-hidden',
         'max-sm:max-h-(--dialog-available-height) max-sm:w-[calc(100vw-1.5rem)] max-sm:max-w-[calc(100vw-1.5rem)] max-sm:p-4',
@@ -912,19 +922,35 @@ export function DetailsDialog(props: DetailsDialogProps) {
         )}
 
         {/* Refund details (type=6) */}
-        {isRefund && other && (other.task_id || other.reason) && (
-          <DetailSection label={t('Refund Details')}>
-            {other.task_id && (
-              <DetailRow label={t('Task ID')} value={other.task_id} mono />
-            )}
-            {other.reason && (
-              <DetailRow
-                label={t('Reason')}
-                value={translateServerText(t, other.reason)}
-              />
-            )}
-          </DetailSection>
-        )}
+        {isRefund &&
+          other &&
+          (other.task_id || other.reason || other.original_request_id) && (
+            <DetailSection label={t('Refund Details')}>
+              {other.original_request_id ? (
+                <DetailRow
+                  label={t('Original request ID')}
+                  value={other.original_request_id}
+                  mono
+                />
+              ) : null}
+              {other.financial_operation_id ? (
+                <DetailRow
+                  label={t('Financial operation ID')}
+                  value={String(other.financial_operation_id)}
+                  mono
+                />
+              ) : null}
+              {other.task_id && (
+                <DetailRow label={t('Task ID')} value={other.task_id} mono />
+              )}
+              {other.reason && (
+                <DetailRow
+                  label={t('Reason')}
+                  value={translateServerText(t, other.reason)}
+                />
+              )}
+            </DetailSection>
+          )}
 
         {props.isAdmin && adminInfo?.task_plugin ? (
           <DetailSection label={t('Task Plugin')}>
@@ -1398,6 +1424,12 @@ export function DetailsDialog(props: DetailsDialogProps) {
           </div>
         )}
       </div>
+      {refundOpen && props.open ? (
+        <RequestRefundDialog
+          requestId={props.log.request_id}
+          onClose={() => setRefundOpen(false)}
+        />
+      ) : null}
     </Dialog>
   )
 }

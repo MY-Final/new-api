@@ -77,8 +77,13 @@ func (w *WalletFunding) Settle(delta int) error {
 		return nil
 	}
 	if delta > 0 {
-		_, err := model.ConsumeUserQuota(w.userId, delta, true)
-		return err
+		allocation, err := model.ConsumeUserQuota(w.userId, delta, true)
+		if err != nil {
+			return err
+		}
+		w.reserved.Bonus += allocation.Bonus
+		w.reserved.Paid += allocation.Paid
+		return nil
 	}
 	refund := -delta
 	if refund > w.reserved.Total() {
@@ -136,6 +141,7 @@ type SubscriptionFunding struct {
 	subscriptionId int
 	preConsumed    int64
 	// 以下字段在 PreConsume 成功后填充，供 RelayInfo 同步使用
+	ResetAt         int64
 	AmountTotal     int64
 	AmountUsedAfter int64
 	PlanId          int
@@ -152,6 +158,7 @@ func (s *SubscriptionFunding) PreConsume(_ int) error {
 	}
 	s.subscriptionId = res.UserSubscriptionId
 	s.preConsumed = res.PreConsumed
+	s.ResetAt = res.LastResetTime
 	s.AmountTotal = res.AmountTotal
 	s.AmountUsedAfter = res.AmountUsedAfter
 	// 获取订阅计划信息

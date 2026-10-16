@@ -68,6 +68,7 @@ export function getCodeTypeLabel(type: string, t: TFunction) {
 }
 
 export function getSourceLabel(source: string, t: TFunction) {
+  if (source === 'request') return t('Request')
   if (source === 'all') return t('All sources')
   if (source === 'signup') return t('Registration')
   if (source === 'topup') return t('Top-up')
@@ -77,6 +78,7 @@ export function getSourceLabel(source: string, t: TFunction) {
 
 export function getOperationTypeLabel(type: string, t: TFunction) {
   const labels: Record<string, string> = {
+    request_refund: 'Refund request',
     topup_refund: 'Refund top-up',
     redemption_refund: 'Refund redemption',
     rebate_reversal: 'Reverse rebate',
@@ -138,6 +140,7 @@ export function getCodeTypeOptions(t: TFunction) {
 export function getOperationTypeOptions(t: TFunction) {
   return [
     { value: 'all', label: t('All operation types') },
+    { value: 'request_refund', label: t('Refund request') },
     { value: 'topup_refund', label: t('Refund top-up') },
     { value: 'redemption_refund', label: t('Refund redemption') },
     { value: 'rebate_reversal', label: t('Reverse rebate') },
@@ -177,6 +180,7 @@ export function getStatusVariant(
 }
 
 const operationTypeVariants: Record<string, StatusVariant> = {
+  request_refund: 'info',
   topup_refund: 'info',
   redemption_refund: 'info',
   rebate_reversal: 'warning',

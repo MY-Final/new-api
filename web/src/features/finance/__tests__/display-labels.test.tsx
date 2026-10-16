@@ -15,7 +15,13 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createInstance } from 'i18next'
 import type { ReactNode } from 'react'
@@ -37,7 +43,11 @@ const reverseFinancePenalty = vi.hoisted(() => vi.fn())
 const searchUsers = vi.hoisted(() => vi.fn())
 
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children }: { children: ReactNode }) => <a href='#'>{children}</a>,
+  Link: (props: { children: ReactNode; 'aria-current'?: 'page' }) => (
+    <a href='#' aria-current={props['aria-current']}>
+      {props.children}
+    </a>
+  ),
 }))
 
 vi.mock('../api', () => ({
@@ -119,20 +129,37 @@ describe('finance display labels', () => {
       mock.mockReset()
     }
     getFinanceTopups.mockResolvedValue({ items: [], total: 0 })
+    getFinanceRedemptions.mockResolvedValue({ items: [], total: 0 })
+    getFinanceRebates.mockResolvedValue({ items: [], total: 0 })
+    getFinancialOperations.mockResolvedValue({ items: [], total: 0 })
     searchUsers.mockResolvedValue({
       success: true,
       data: { items: [], total: 0 },
     })
   })
 
-  test('shows translated tabs and filter labels for the default values', async () => {
+  test.each([
+    ['topups', '充值订单'],
+    ['redemptions', '兑换码台账'],
+    ['rebates', '返佣账本'],
+    ['operations', '财务操作'],
+  ])(
+    'shows a standalone %s page without sibling ledger tabs',
+    (section, title) => {
+      renderPage(section)
+
+      expect(screen.getByRole('heading', { name: title })).toBeInTheDocument()
+      for (const name of ['充值订单', '兑换码台账', '返佣账本', '财务操作']) {
+        expect(screen.queryByRole('link', { name })).not.toBeInTheDocument()
+      }
+    }
+  )
+
+  test('shows translated filter labels for the default values', async () => {
     renderPage()
 
     await waitFor(() => expect(getFinanceTopups).toHaveBeenCalled())
 
-    expect(screen.getByRole('link', { name: '充值订单' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '兑换码台账' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '返佣账本' })).toBeInTheDocument()
     const comboboxes = screen.getAllByRole('combobox')
     expect(comboboxes[0]).toHaveTextContent('全部状态')
     expect(comboboxes[1]).toHaveTextContent('全部支付平台')
@@ -149,6 +176,165 @@ describe('finance display labels', () => {
     ).toBeInTheDocument()
   })
 
+  test('opens offline refund registration separately from consumption refunds', async () => {
+    renderPage('cash-refunds')
+
+    expect(
+      screen.getByRole('heading', { name: 'Offline refund registration' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: /Consumption refunds/ })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: /Offline refund registration/ })
+    ).toHaveAttribute('aria-current', 'page')
+    expect(
+      screen.queryByRole('button', { name: 'Apply penalty' })
+    ).not.toBeInTheDocument()
+    await waitFor(() => expect(getFinanceTopups).toHaveBeenCalled())
+  })
+
+  test('offline registration still switches between top-up and redemption sources', async () => {
+    const user = userEvent.setup()
+    renderPage('cash-refunds')
+
+    expect(screen.getByRole('button', { name: '充值订单' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+    await user.click(screen.getByRole('button', { name: '兑换码台账' }))
+
+    expect(screen.getByRole('button', { name: '兑换码台账' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+    expect(screen.getByRole('button', { name: '充值订单' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    )
+    await waitFor(() => expect(getFinanceRedemptions).toHaveBeenCalled())
+  })
+
+  test('offline registration shows source eligibility as a visible disabled action', async () => {
+    getFinanceTopups.mockResolvedValue({
+      items: [
+        {
+          id: 1,
+          trade_no: 'captured-order',
+          status: 'success',
+          source: 'topup',
+          credited_quota: 1000,
+          user_quota: 2000,
+          money: 50,
+        },
+        {
+          id: 2,
+          trade_no: 'already-refunded',
+          status: 'refunded',
+          source: 'topup',
+          credited_quota: 1000,
+          money: 50,
+        },
+        {
+          id: 3,
+          trade_no: 'subscription-order',
+          status: 'success',
+          source: 'subscription',
+          credited_quota: 1000,
+          money: 50,
+        },
+      ],
+      total: 3,
+    })
+    renderPage('cash-refunds')
+    await screen.findByText('captured-order')
+    expect(
+      within(screen.getByRole('row', { name: /captured-order/ })).getByRole(
+        'button',
+        { name: 'Register refund' }
+      )
+    ).toBeEnabled()
+    expect(
+      within(screen.getByRole('row', { name: /already-refunded/ })).getByRole(
+        'button',
+        { name: 'Register refund' }
+      )
+    ).toBeDisabled()
+    expect(
+      within(screen.getByRole('row', { name: /subscription-order/ })).getByRole(
+        'button',
+        { name: 'Register refund' }
+      )
+    ).toBeDisabled()
+  })
+
+  test('offline registration selects a user from remote search and loads that user orders', async () => {
+    searchUsers.mockResolvedValue({
+      success: true,
+      data: { items: [{ id: 7, username: 'alice', display_name: 'Alice' }] },
+    })
+    const user = userEvent.setup()
+    renderPage('cash-refunds')
+    const input = screen.getByRole('combobox', { name: 'User' })
+    await user.click(input)
+    await user.type(input, 'ali')
+    await user.click(
+      await screen.findByRole('option', { name: 'Alice (@alice) · #7' })
+    )
+    await waitFor(() =>
+      expect(getFinanceTopups).toHaveBeenLastCalledWith(
+        expect.objectContaining({ userId: 7 })
+      )
+    )
+  })
+
+  test('offline filters open in a dialog on mobile without crowding the order list', async () => {
+    const originalMatchMedia = Object.getOwnPropertyDescriptor(
+      window,
+      'matchMedia'
+    )
+    if (!originalMatchMedia) {
+      throw new Error('matchMedia fixture is unavailable')
+    }
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: (query: string) => ({
+        matches: query.includes('max-width: 640px'),
+        media: query,
+        onchange: null,
+        addListener: () => undefined,
+        removeListener: () => undefined,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+        dispatchEvent: () => false,
+      }),
+    })
+    try {
+      const user = userEvent.setup()
+      renderPage('cash-refunds')
+      expect(
+        screen.queryByRole('textbox', { name: 'Order number' })
+      ).not.toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Filters' }))
+      const dialog = screen.getByRole('dialog')
+      expect(
+        within(dialog).getByRole('textbox', { name: 'Order number' })
+      ).toBeInTheDocument()
+      expect(
+        within(dialog).getByRole('combobox', { name: 'User' })
+      ).toBeInTheDocument()
+      await user.click(
+        within(dialog).getByRole('button', { name: 'Apply filters' })
+      )
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      )
+    } finally {
+      Object.defineProperty(window, 'matchMedia', originalMatchMedia)
+    }
+  })
+
   test('renders the mobile list layout on narrow viewports', async () => {
     getFinanceTopups.mockResolvedValue({
       items: [
@@ -162,6 +348,8 @@ describe('finance display labels', () => {
           create_time: 1700000000,
           status: 'success',
           source: 'topup',
+          credited_quota: 1000000,
+          user_quota: 2000000,
         },
       ],
       total: 1,
@@ -214,6 +402,8 @@ describe('finance display labels', () => {
           create_time: 1700000000,
           status: 'success',
           source: 'topup',
+          credited_quota: 1000000,
+          user_quota: 2000000,
         },
       ],
       total: 1,
@@ -305,7 +495,8 @@ describe('finance display labels', () => {
         23,
         1_500_000,
         'Account abuse',
-        expect.stringMatching(/^manual-/)
+        expect.stringMatching(/^manual-/),
+        false
       )
     )
   })

@@ -1,11 +1,15 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
+import { Download } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
+import { ErrorState } from '@/components/error-state'
 import { SectionPageLayout } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import { useDebounce } from '@/hooks/use-debounce'
+import { handleServerError } from '@/lib/handle-server-error'
 
 import {
   getFinanceRebates,
@@ -14,13 +18,9 @@ import {
   getFinancialOperations,
 } from './api'
 import { FinanceActionDialog } from './components/finance-action-dialog'
-import { FinanceTable } from './components/finance-table'
-import { Download } from 'lucide-react'
-import { toast } from 'sonner'
-
-import { handleServerError } from '@/lib/handle-server-error'
-
 import { FinanceDetailDialog } from './components/finance-detail-dialog'
+import { FinanceTable } from './components/finance-table'
+import { RefundNavigation } from './components/refund-navigation'
 import {
   ExportTooLargeError,
   MAX_EXPORT_ROWS,
@@ -31,13 +31,16 @@ import type {
   FinanceAction,
   FinanceFilters,
   FinanceRecord,
-  FinanceSection,
   PageData,
 } from './types'
 
 export function Finance({ section: rawSection }: { section: string }) {
   const { t } = useTranslation()
-  const section = asSection(rawSection)
+  const cashRefunds = rawSection === 'cash-refunds'
+  const [cashSource, setCashSource] = useState<'topups' | 'redemptions'>(
+    'topups'
+  )
+  const section = cashRefunds ? cashSource : asSection(rawSection)
   const queryClient = useQueryClient()
   const [filters, setFilters] = useState<FinanceFilters>({
     page: 1,
@@ -59,7 +62,10 @@ export function Finance({ section: rawSection }: { section: string }) {
       if (section === 'rebates') return getFinanceRebates(queryFilters)
       return getFinancialOperations(queryFilters)
     },
-    placeholderData: (previousData) => previousData,
+    placeholderData: (previousData, previousQuery) =>
+      !cashRefunds && previousQuery?.queryKey[1] === section
+        ? previousData
+        : undefined,
   })
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['finance'] })
@@ -87,12 +93,26 @@ export function Finance({ section: rawSection }: { section: string }) {
 
   const items = (query.data?.items || []) as FinanceRecord[]
   const total = query.data?.total || 0
-  const tabs = useMemo(() => Object.keys(sectionNames) as FinanceSection[], [])
   return (
     <>
       <SectionPageLayout fixedContent>
-        <SectionPageLayout.Title>{t('Finance')}</SectionPageLayout.Title>
+        <SectionPageLayout.Title>
+          {cashRefunds
+            ? t('Offline refund registration')
+            : t(sectionNames[section])}
+        </SectionPageLayout.Title>
         <SectionPageLayout.Actions>
+          <Button
+            variant='outline'
+            render={
+              <Link
+                to='/finance/$section'
+                params={{ section: cashRefunds ? 'operations' : 'refunds' }}
+              />
+            }
+          >
+            {cashRefunds ? t('Financial operations') : t('Refund center')}
+          </Button>
           <Button
             variant='outline'
             disabled={isExporting || total === 0}
@@ -109,38 +129,65 @@ export function Finance({ section: rawSection }: { section: string }) {
         </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
           <div className='flex h-full min-h-0 flex-col gap-2 sm:gap-3'>
-            <div className='flex shrink-0 items-center justify-between gap-2 border-b'>
-              <div className='flex min-w-0 gap-1 overflow-x-auto'>
-                {tabs.map((tab) => (
-                  <Button
-                    key={tab}
-                    variant={tab === section ? 'secondary' : 'ghost'}
-                    size='sm'
-                    render={
-                      <Link to='/finance/$section' params={{ section: tab }} />
-                    }
-                  >
-                    {t(sectionNames[tab])}
-                  </Button>
-                ))}
+            {cashRefunds ? (
+              <>
+                <RefundNavigation active='cash' />
+                <div className='bg-muted/40 shrink-0 rounded-lg border px-3 py-2 text-sm'>
+                  <p className='font-medium'>
+                    {t('Cash returned externally → balance deducted here')}
+                  </p>
+                  <p className='text-muted-foreground mt-1 text-xs'>
+                    {t(
+                      'Find the original top-up or paid redemption, verify the balance deduction, then register the completed external refund. No payment is sent from this page.'
+                    )}
+                  </p>
+                </div>
+              </>
+            ) : null}
+            {cashRefunds ? (
+              <div className='flex shrink-0 items-center justify-between gap-2 border-b'>
+                <div className='flex min-w-0 gap-1 overflow-x-auto'>
+                  {(['topups', 'redemptions'] as const).map((source) => (
+                    <Button
+                      key={source}
+                      variant={source === section ? 'secondary' : 'ghost'}
+                      size='sm'
+                      aria-pressed={source === section}
+                      onClick={() => {
+                        setCashSource(source)
+                        setFilters({ page: 1, pageSize: filters.pageSize })
+                        setDetail(null)
+                        setAction(null)
+                      }}
+                    >
+                      {t(sectionNames[source])}
+                    </Button>
+                  ))}
+                </div>
+                <span className='text-muted-foreground hidden shrink-0 pr-1 text-xs tabular-nums sm:block'>
+                  {t('Total')}: {total}
+                </span>
               </div>
-              <span className='text-muted-foreground hidden shrink-0 pr-1 text-xs tabular-nums sm:block'>
-                {t('Total')}: {total}
-              </span>
-            </div>
-            <FinanceTable
-              section={section}
-              filters={filters}
-              setFilters={setFilters}
-              items={items}
-              total={total}
-              isLoading={query.isLoading}
-              isFetching={query.isFetching}
-              onAction={setAction}
-              onRefresh={refresh}
-              onDetails={setDetail}
-              className='min-h-0 flex-1'
-            />
+            ) : null}
+            {query.isError ? (
+              <ErrorState onRetry={() => void query.refetch()} />
+            ) : (
+              <FinanceTable
+                key={section}
+                section={section}
+                cashRefunds={cashRefunds}
+                filters={filters}
+                setFilters={setFilters}
+                items={items}
+                total={total}
+                isLoading={query.isLoading}
+                isFetching={query.isFetching}
+                onAction={setAction}
+                onRefresh={refresh}
+                onDetails={setDetail}
+                className='min-h-0 flex-1'
+              />
+            )}
           </div>
         </SectionPageLayout.Content>
       </SectionPageLayout>

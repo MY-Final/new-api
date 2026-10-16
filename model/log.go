@@ -338,6 +338,17 @@ type RecordConsumeLogParams struct {
 }
 
 func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams) {
+	if value, exists := c.Get(RequestBillingContextKey); exists {
+		c.Set(RequestBillingContextKey, nil)
+		if billing, ok := value.(*RequestBilling); ok && billing.UserId == userId && billing.Quota == params.Quota {
+			if params.Other == nil {
+				params.Other = NewLogOther()
+			}
+			params.Other.SetPublic("billing_id", billing.Id)
+			params.Other.SetPublic("wallet_bonus_quota", billing.BonusQuota)
+			params.Other.SetPublic("wallet_paid_quota", billing.PaidQuota)
+		}
+	}
 	if !common.LogConsumeEnabled {
 		return
 	}

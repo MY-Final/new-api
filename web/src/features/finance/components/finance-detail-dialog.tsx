@@ -20,6 +20,7 @@ import type { TFunction } from 'i18next'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { CopyButton } from '@/components/copy-button'
 import { Dialog } from '@/components/dialog'
 import { formatNumber, formatQuota, formatTimestamp } from '@/lib/format'
 
@@ -116,7 +117,10 @@ function operationRows(item: FinancialOperation, t: TFunction) {
   }
   rows.push(
     { label: t('Amount'), value: money(item.principal_quota) },
-    { label: t('Target balance'), value: transition(item.target_main_before, item.target_main_after) }
+    {
+      label: t('Target balance'),
+      value: transition(item.target_main_before, item.target_main_after),
+    }
   )
   if (item.target_bonus_delta !== 0 || item.target_paid_delta !== 0) {
     rows.push(
@@ -141,7 +145,23 @@ function operationRows(item: FinancialOperation, t: TFunction) {
     )
   }
   rows.push(
-    { label: t('Source'), value: item.source_id || item.source_type },
+    {
+      label: t('Source'),
+      value: (
+        <span className='inline-flex min-w-0 items-center gap-1'>
+          <span className='break-all'>
+            {getSourceLabel(item.source_type, t)} · {item.source_id}
+          </span>
+          {item.source_id ? (
+            <CopyButton
+              value={item.source_id}
+              size='icon'
+              className='size-7 shrink-0'
+            />
+          ) : null}
+        </span>
+      ),
+    },
     { label: t('Reason'), value: item.reason },
     { label: t('Time'), value: formatTimestamp(item.created_at) },
     { label: t('Operation key'), value: item.operation_key }
@@ -170,7 +190,10 @@ function topupRows(item: FinanceTopup, t: TFunction) {
   if (item.rebate_quota) {
     rows.push(
       { label: t('Rebate'), value: money(item.rebate_quota) },
-      { label: t('Inviter'), value: item.inviter_username ?? item.inviter_id ?? '' }
+      {
+        label: t('Inviter'),
+        value: item.inviter_username ?? item.inviter_id ?? '',
+      }
     )
   }
   if (item.refunded_at) {
@@ -276,7 +299,7 @@ export function FinanceDetailDialog(props: {
         {rows.map((row) => (
           <div key={row.label} className='min-w-0 space-y-0.5'>
             <dt className='text-muted-foreground text-xs'>{row.label}</dt>
-            <dd className='truncate text-sm tabular-nums'>
+            <dd className='min-w-0 text-sm break-all tabular-nums'>
               {row.value}
             </dd>
           </div>

@@ -149,6 +149,9 @@ func StartSystemTaskRunner() {
 				if now.Sub(lastScheduler) >= systemTaskSchedulerInterval {
 					lastScheduler = now
 					runSystemTaskScheduler()
+					if err := model.FlushRequestRefundLogs(100); err != nil {
+						logger.LogWarn(context.Background(), common.LogText("request refund log retry failed: %s", err.Error()))
+					}
 				}
 				runSystemTaskClaimPass(runnerID)
 			}

@@ -44,6 +44,8 @@ type LegacyComboboxProps = {
   options: readonly ComboboxInputOption[]
   value?: string | null
   onValueChange?: (value: string | null) => void
+  onSearchChange?: (value: string) => void
+  filter?: ComboboxPrimitive.Root.Props<ComboboxInputOption>['filter']
   placeholder?: string
   searchPlaceholder?: string
   emptyText?: string
@@ -104,7 +106,8 @@ function OptionCombobox(props: LegacyComboboxProps) {
   const [search, setSearch] = React.useState('')
   const anchor = useComboboxAnchor()
   const selected = props.options.find((option) => option.value === props.value)
-  const displayedValue = selected?.label ?? props.value ?? ''
+  const displayedValue =
+    selected?.label ?? (props.onSearchChange ? search : (props.value ?? ''))
   return (
     <ComboboxPrimitive.Root
       items={props.options}
@@ -114,22 +117,34 @@ function OptionCombobox(props: LegacyComboboxProps) {
       open={open && !props.disabled}
       inputValue={open ? search : displayedValue}
       onInputValueChange={(value, details) => {
-        if (details.reason === 'input-change') setSearch(value)
+        if (details.reason === 'input-change') {
+          setSearch(value)
+          props.onSearchChange?.(value)
+        }
       }}
       onOpenChange={(nextOpen, details) => {
         setOpen(nextOpen)
-        if (details.reason !== 'input-change') setSearch('')
+        if (details.reason !== 'input-change' && !props.onSearchChange) {
+          setSearch('')
+        }
       }}
       onValueChange={(option) => {
-        if (option) props.onValueChange?.(option.value)
+        if (option) {
+          setSearch('')
+          props.onValueChange?.(option.value)
+        }
       }}
-      filter={(option, query) => {
-        const term = query.trim().toLowerCase()
-        return (
-          option.label.toLowerCase().includes(term) ||
-          option.value.toLowerCase().includes(term)
-        )
-      }}
+      filter={
+        props.filter === undefined
+          ? (option, query) => {
+              const term = query.trim().toLowerCase()
+              return (
+                option.label.toLowerCase().includes(term) ||
+                option.value.toLowerCase().includes(term)
+              )
+            }
+          : props.filter
+      }
       isItemEqualToValue={(item, value) => item.value === value.value}
     >
       <div ref={anchor} className={cn('min-w-0', props.className)}>

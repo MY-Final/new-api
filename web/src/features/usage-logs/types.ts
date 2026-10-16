@@ -115,6 +115,9 @@ export interface ToolSurchargeItem {
 }
 
 export interface LogOtherData {
+  refund_kind?: string
+  original_request_id?: string
+  financial_operation_id?: number
   admin_info?: {
     request_policy?: PolicyEvent[]
     is_multi_key?: boolean

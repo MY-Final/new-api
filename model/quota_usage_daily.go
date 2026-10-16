@@ -7,6 +7,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // QuotaUsageDaily 汇总每个用户每天的付费/福利额度净消耗。
@@ -102,45 +103,21 @@ func flushQuotaUsageDaily() {
 	}
 }
 
-func quotaUsageDailyUpdates(allocation QuotaAllocation) map[string]any {
-	return map[string]any{
-		"bonus_quota": gorm.Expr("bonus_quota + ?", allocation.Bonus),
-		"paid_quota":  gorm.Expr("paid_quota + ?", allocation.Paid),
-		"updated_at":  common.GetTimestamp(),
-	}
+// applyQuotaUsageDaily atomically accumulates the daily source totals.
+func applyQuotaUsageDaily(userId int, date string, allocation QuotaAllocation) error {
+	return applyQuotaUsageDailyTx(DB, userId, date, allocation)
 }
 
-// applyQuotaUsageDaily 先原子累加已存在的当日行，不存在时插入；
-// 并发插入撞唯一键时重试一次累加。
-func applyQuotaUsageDaily(userId int, date string, allocation QuotaAllocation) error {
-	result := DB.Model(&QuotaUsageDaily{}).
-		Where("user_id = ? AND date = ?", userId, date).
-		Updates(quotaUsageDailyUpdates(allocation))
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected > 0 {
-		return nil
-	}
-	row := QuotaUsageDaily{
-		UserId:     userId,
-		Date:       date,
-		BonusQuota: allocation.Bonus,
-		PaidQuota:  allocation.Paid,
-		UpdatedAt:  common.GetTimestamp(),
-	}
-	if err := DB.Create(&row).Error; err != nil {
-		retry := DB.Model(&QuotaUsageDaily{}).
-			Where("user_id = ? AND date = ?", userId, date).
-			Updates(quotaUsageDailyUpdates(allocation))
-		if retry.Error != nil {
-			return retry.Error
-		}
-		if retry.RowsAffected == 0 {
-			return err
-		}
-	}
-	return nil
+func applyQuotaUsageDailyTx(tx *gorm.DB, userId int, date string, allocation QuotaAllocation) error {
+	row := QuotaUsageDaily{UserId: userId, Date: date, BonusQuota: allocation.Bonus, PaidQuota: allocation.Paid, UpdatedAt: common.GetTimestamp()}
+	return tx.Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "user_id"}, {Name: "date"}},
+		DoUpdates: clause.Assignments(map[string]any{
+			"bonus_quota": gorm.Expr("? + ?", clause.Column{Table: "quota_usage_daily", Name: "bonus_quota"}, allocation.Bonus),
+			"paid_quota":  gorm.Expr("? + ?", clause.Column{Table: "quota_usage_daily", Name: "paid_quota"}, allocation.Paid),
+			"updated_at":  common.GetTimestamp(),
+		}),
+	}).Create(&row).Error
 }
 
 func quotaUsageDailyQuery(startDate, endDate, username string) *gorm.DB {

@@ -1041,3 +1041,29 @@ func TestUpdateBatchTasksPollClassification(t *testing.T) {
 		})
 	}
 }
+
+func TestPollingWaitsForSubmissionAccounting(t *testing.T) {
+	truncate(t)
+	const channelID = 113
+	seedTaskPollingChannel(t, channelID, false)
+	task := seedPollingTask(t, channelID, "task_accounting_pending", "upstream_accounting_pending")
+	task.PrivateData.BillingId = "pending-billing"
+	tasks := map[string]*model.Task{task.GetUpstreamTaskID(): task}
+	channels := map[int][]string{channelID: {task.GetUpstreamTaskID()}}
+	adaptor := &taskPollingFetchAdaptor{}
+	oldFactory := GetTaskAdaptorFunc
+	GetTaskAdaptorFunc = func(constant.TaskPlatform) TaskPollingAdaptor { return adaptor }
+	t.Cleanup(func() { GetTaskAdaptorFunc = oldFactory })
+	require.NoError(t, UpdateVideoTasks(context.Background(), "kling", channels, tasks))
+	assert.Zero(t, adaptor.fetchCount(), "polling must wait while the charge snapshot is missing")
+	record := model.RequestBilling{Id: task.PrivateData.BillingId, RequestId: "pending-request", TaskId: task.TaskID, UserId: task.UserId, Quota: task.Quota, PaidQuota: task.Quota, FundingSource: "wallet"}
+	require.NoError(t, model.DB.Create(&record).Error)
+	require.NoError(t, UpdateVideoTasks(context.Background(), "kling", channels, tasks))
+	assert.Zero(t, adaptor.fetchCount(), "polling must wait until usage is accounted for")
+	batch := &batchPollingAdaptor{}
+	require.NoError(t, UpdateBatchTasks(context.Background(), batch, channels, tasks))
+	assert.Nil(t, batch.initChannelMeta(), "a pending batch must not reach the adaptor")
+	require.NoError(t, model.DB.Model(&record).Update("usage_recorded", true).Error)
+	require.NoError(t, UpdateVideoTasks(context.Background(), "kling", channels, tasks))
+	assert.Equal(t, 1, adaptor.fetchCount())
+}

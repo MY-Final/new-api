@@ -6,6 +6,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 )
 
@@ -17,10 +18,123 @@ type financeRefundRequest struct {
 }
 
 type financePenaltyRequest struct {
-	UserId    int    `json:"user_id"`
-	Quota     int    `json:"quota"`
+	UserId       int    `json:"user_id"`
+	Quota        int    `json:"quota"`
+	Reason       string `json:"reason"`
+	RequestId    string `json:"request_id"`
+	RequestBased bool   `json:"request_based"`
+}
+
+type financeRequestRefund struct {
+	BillingId string `json:"billing_id"`
 	Reason    string `json:"reason"`
-	RequestId string `json:"request_id"`
+}
+
+func GetFinanceRequestBillings(c *gin.Context) {
+	records, err := model.GetRequestBillings(c.Query("request_id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, records)
+}
+
+func ListFinanceRequestBillings(c *gin.Context) {
+	var filter model.RequestBillingQuery
+	if err := c.ShouldBindQuery(&filter); err != nil || filter.StartTime > 0 && filter.EndTime > 0 && filter.EndTime < filter.StartTime {
+		common.ApiErrorT(c, "Invalid parameters")
+		return
+	}
+	page := common.GetPageQuery(c)
+	records, total, err := model.ListRequestBillings(filter, page)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	page.SetItems(records)
+	page.SetTotal(int(total))
+	common.ApiSuccess(c, page)
+}
+
+func CreateFinanceRefundBatch(c *gin.Context) {
+	var req struct {
+		BillingIds []string `json:"billing_ids"`
+		Reason     string   `json:"reason"`
+		ClientId   string   `json:"client_id"`
+	}
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		common.ApiErrorT(c, "Invalid parameters")
+		return
+	}
+	task, err := service.StartRequestRefundBatch(req.BillingIds, req.Reason, req.ClientId, c.GetInt("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, task.ToResponse())
+}
+
+func ListFinanceRefundBatches(c *gin.Context) {
+	page := common.GetPageQuery(c)
+	tasks, total, err := model.ListSystemTasks(model.SystemTaskFilter{Type: model.SystemTaskTypeRequestRefund}, page.GetStartIdx(), page.GetPageSize())
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	items := make([]model.SystemTaskResponse, 0, len(tasks))
+	for _, task := range tasks {
+		items = append(items, task.ToResponse())
+	}
+	page.SetItems(items)
+	page.SetTotal(int(total))
+	common.ApiSuccess(c, page)
+}
+
+func RetryFinanceRefundBatch(c *gin.Context) {
+	var req struct {
+		ClientId string `json:"client_id"`
+	}
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		common.ApiErrorT(c, "Invalid parameters")
+		return
+	}
+	task, err := service.RetryRequestRefundBatch(c.Param("task_id"), req.ClientId, c.GetInt("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, task.ToResponse())
+}
+
+func GetFinanceUserRequestBillings(c *gin.Context) {
+	userId, err := strconv.Atoi(c.Query("user_id"))
+	if err != nil || userId <= 0 {
+		common.ApiError(c, model.ErrRequestBillingNotFound)
+		return
+	}
+	pageInfo := common.GetPageQuery(c)
+	records, total, err := model.GetUserRequestBillings(userId, pageInfo)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	pageInfo.SetTotal(int(total))
+	pageInfo.SetItems(records)
+	common.ApiSuccess(c, pageInfo)
+}
+
+func RefundFinanceRequest(c *gin.Context) {
+	var req financeRequestRefund
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		common.ApiErrorT(c, "Invalid parameters")
+		return
+	}
+	operation, already, err := model.RefundRequestBilling(req.BillingId, req.Reason, c.GetInt("id"), c.GetInt("role"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{"operation": operation, "already_refunded": already})
 }
 
 type financePenaltyReverseRequest struct {
@@ -141,7 +255,7 @@ func ApplyFinancePenalty(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	operation, already, err := model.ApplyFinancialPenalty(req.UserId, req.Quota, req.Reason, req.RequestId, c.GetInt("id"), c.GetInt("role"))
+	operation, already, err := model.ApplyFinancialPenalty(req.UserId, req.Quota, req.Reason, req.RequestId, c.GetInt("id"), c.GetInt("role"), req.RequestBased)
 	if err != nil {
 		common.ApiError(c, err)
 		return

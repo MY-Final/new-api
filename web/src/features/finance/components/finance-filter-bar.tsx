@@ -1,7 +1,8 @@
-import { X } from 'lucide-react'
+import { Filter, X } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { Dialog } from '@/components/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -13,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
+import { useMediaQuery } from '@/hooks/use-media-query'
 import { cn } from '@/lib/utils'
 
 import {
@@ -26,14 +28,18 @@ import {
   getStatusOptions,
 } from '../lib/labels'
 import type { FinanceFilters, FinanceSection } from '../types'
+import { FinanceUserFilter } from './finance-user-filter'
 
 export function FinanceFilterBar(props: {
   section: FinanceSection
+  cashRefunds?: boolean
   filters: FinanceFilters
   setFilters: (value: FinanceFilters) => void
   className?: string
 }) {
   const { t } = useTranslation()
+  const isMobile = useMediaQuery('(max-width: 640px)')
+  const [mobileOpen, setMobileOpen] = useState(false)
   const [range, setRange] = useState<{ start?: Date; end?: Date }>({})
 
   const update = (key: keyof FinanceFilters, value: string) => {
@@ -91,7 +97,7 @@ export function FinanceFilterBar(props: {
       (option) => option.value === (props.filters.sourceType || 'all')
     )?.label ?? t('All types')
 
-  return (
+  const filters = (
     <div className={cn('flex flex-wrap items-center gap-2', props.className)}>
       <Input
         className='w-full sm:w-56'
@@ -100,17 +106,25 @@ export function FinanceFilterBar(props: {
         placeholder={keywordPlaceholder}
         onChange={(event) => update('keyword', event.target.value)}
       />
-      {(props.section === 'topups' || props.section === 'redemptions') && (
-        <Input
-          className='w-full sm:w-36'
-          type='number'
-          min={1}
-          value={props.filters.userId || ''}
-          aria-label={t('User ID')}
-          placeholder={t('User ID')}
-          onChange={(event) => update('userId', event.target.value)}
-        />
-      )}
+      {(props.section === 'topups' || props.section === 'redemptions') &&
+        (props.cashRefunds ? (
+          <FinanceUserFilter
+            value={props.filters.userId}
+            onChange={(userId) =>
+              props.setFilters({ ...props.filters, page: 1, userId })
+            }
+          />
+        ) : (
+          <Input
+            className='w-full sm:w-36'
+            type='number'
+            min={1}
+            value={props.filters.userId || ''}
+            aria-label={t('User ID')}
+            placeholder={t('User ID')}
+            onChange={(event) => update('userId', event.target.value)}
+          />
+        ))}
       {(props.section === 'rebates' || props.section === 'operations') && (
         <Input
           className='w-full sm:w-36'
@@ -236,4 +250,27 @@ export function FinanceFilterBar(props: {
       ) : null}
     </div>
   )
+  if (props.cashRefunds && isMobile) {
+    return (
+      <>
+        <Button variant='outline' onClick={() => setMobileOpen(true)}>
+          <Filter className='size-4' aria-hidden='true' />
+          {t('Filters')}
+        </Button>
+        <Dialog
+          open={mobileOpen}
+          onOpenChange={setMobileOpen}
+          title={t('Filters')}
+          footer={
+            <Button onClick={() => setMobileOpen(false)}>
+              {t('Apply filters')}
+            </Button>
+          }
+        >
+          {filters}
+        </Dialog>
+      </>
+    )
+  }
+  return filters
 }

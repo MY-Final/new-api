@@ -26,6 +26,7 @@ import (
 // BillingSession 封装单次请求的预扣费/结算/退款生命周期。
 // 实现 relaycommon.BillingSettler 接口。
 type BillingSession struct {
+	billingID        string
 	relayInfo        *relaycommon.RelayInfo
 	funding          FundingSource
 	preConsumedQuota int    // 实际预扣额度（信任用户可能为 0）
@@ -67,6 +68,9 @@ func (s *BillingSession) Settle(actualQuota int) error {
 			tokenErr = model.DecreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, delta)
 		} else {
 			tokenErr = model.IncreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, -delta)
+		}
+		if tokenErr == nil {
+			s.tokenConsumed += delta
 		}
 		if tokenErr != nil {
 			// 资金来源已提交，令牌调整失败只能记录日志；标记 settled 防止 Refund 误退资金
@@ -463,4 +467,48 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 		}
 		return session, nil
 	}
+}
+
+// BillingID identifies a single settlement independently of its request ID.
+func (s *BillingSession) BillingID() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.billingID == "" {
+		s.billingID = common.NewRequestId()
+	}
+	return s.billingID
+}
+
+func (s *BillingSession) recordRequestBilling(c *gin.Context, quota int) error {
+	if quota < 0 || quota == 0 && c.GetString(model.RequestBillingTaskContextKey) == "" {
+		return nil
+	}
+	id := s.BillingID()
+	requestId := s.relayInfo.RequestId
+	if requestId == "" {
+		requestId = c.GetString(common.RequestIdKey)
+	}
+	if requestId == "" {
+		requestId = common.NewRequestId()
+	}
+	record := &model.RequestBilling{
+		Id: id, RequestId: requestId, UserId: s.relayInfo.UserId, Username: c.GetString("username"),
+		ModelName: s.relayInfo.OriginModelName, TokenId: s.relayInfo.TokenId, TokenName: c.GetString("token_name"), ChannelId: s.relayInfo.ChannelId,
+		Group: s.relayInfo.UsingGroup, FundingSource: s.funding.Source(), Quota: quota,
+		SubscriptionId: s.relayInfo.SubscriptionId, TaskId: c.GetString(model.RequestBillingTaskContextKey),
+	}
+	if !s.relayInfo.IsPlayground {
+		record.TokenQuota = s.tokenConsumed
+	}
+	if sub, ok := s.funding.(*SubscriptionFunding); ok {
+		record.SubscriptionResetAt = sub.ResetAt
+	}
+	if wallet, ok := s.funding.(*WalletFunding); ok {
+		record.BonusQuota, record.PaidQuota = wallet.reserved.Bonus, wallet.reserved.Paid
+	}
+	if err := model.RecordRequestBilling(record); err != nil {
+		return err
+	}
+	c.Set(model.RequestBillingContextKey, record)
+	return nil
 }

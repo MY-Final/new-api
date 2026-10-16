@@ -48,6 +48,7 @@ export interface FinanceRebate extends AffiliateRebate {
 }
 
 export type FinanceOperationType =
+  | 'request_refund'
   | 'topup_refund'
   | 'redemption_refund'
   | 'rebate_reversal'
@@ -122,4 +123,65 @@ export interface FinanceFilters {
 export interface PageData<T> {
   items: T[]
   total: number
+}
+
+export interface RequestBilling {
+  billing_id: string
+  request_id: string
+  user_id: number
+  username: string
+  model_name: string
+  channel_id?: number
+  funding_source: 'wallet' | 'subscription'
+  subscription_id: number
+  task_id?: string
+  quota: number
+  bonus_quota: number
+  paid_quota: number
+  refunded_quota: number
+  refunded_at: number
+  refund_operation_id: number
+  created_at: number
+  settled: boolean
+  blocked_reason?: string
+}
+
+export interface RefundQueueFilters {
+  user_id?: number
+  request_id?: string
+  model_name?: string
+  channel_id?: number
+  funding_source?: 'wallet' | 'subscription'
+  status?: 'unrefunded' | 'refunded'
+  start_time?: number
+  end_time?: number
+}
+
+export interface RefundBatchItem {
+  billing_id: string
+  request_id: string
+  username: string
+  quota: number
+  status: 'pending' | 'succeeded' | 'failed'
+  error?: string
+  operation_id?: number
+  already_refunded: boolean
+}
+
+export interface RefundBatchState {
+  items: RefundBatchItem[]
+  total: number
+  processed: number
+  succeeded: number
+  failed: number
+  progress: number
+}
+
+export interface RefundBatch {
+  task_id: string
+  status: 'pending' | 'running' | 'succeeded' | 'failed'
+  payload: { billing_ids: string[]; reason: string; operator_id: number }
+  state: RefundBatchState
+  created_at: number
+  error?: string
 }

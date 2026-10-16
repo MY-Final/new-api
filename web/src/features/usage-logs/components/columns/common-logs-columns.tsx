@@ -146,7 +146,15 @@ function buildTypeDetailSegments(
   }
 
   if (log.type === 6) {
-    return [{ text: t('Async task refund') }]
+    return [
+      {
+        text: t(
+          other?.refund_kind === 'request'
+            ? 'Request refund'
+            : 'Async task refund'
+        ),
+      },
+    ]
   }
 
   if (log.type !== 2) return []

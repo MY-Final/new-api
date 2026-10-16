@@ -206,3 +206,34 @@ func TestFinanceErrorsCarryConsoleMessageKeys(t *testing.T) {
 		})
 	}
 }
+
+func TestFinancialAdjustmentsPreserveWalletSources(t *testing.T) {
+	for _, tc := range []struct {
+		name, mode                        string
+		before, bonus, paid, value, after int
+	}{
+		{"subtract_bonus", "subtract", 300, 100, 200, 120, 180},
+		{"override_bonus", "override", 300, 100, 200, 180, 180},
+		{"add_legacy", "add", 300, 0, 0, 20, 320},
+		{"subtract_legacy", "subtract", 300, 0, 0, 20, 280},
+		{"penalty_legacy", "penalty", 300, 0, 0, 20, 280},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			truncateTables(t)
+			user := User{Username: tc.name, Quota: tc.before, BonusQuota: tc.bonus, PaidQuota: tc.paid}
+			require.NoError(t, DB.Create(&user).Error)
+			if tc.mode == "penalty" {
+				_, _, err := ApplyFinancialPenalty(user.Id, tc.value, "manual correction", "manual-test-"+tc.name, 0, common.RoleRootUser)
+				require.NoError(t, err)
+			} else {
+				_, err := AdjustUserQuota(user.Id, common.RoleRootUser, tc.mode, tc.value)
+				require.NoError(t, err)
+			}
+			var got User
+			require.NoError(t, DB.First(&got, user.Id).Error)
+			assert.Equal(t, tc.after, got.Quota)
+			assert.Equal(t, got.Quota, got.BonusQuota+got.PaidQuota)
+			assert.Equal(t, 0, got.BonusQuota)
+		})
+	}
+}

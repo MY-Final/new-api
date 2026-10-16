@@ -14,33 +14,51 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
-import { ComboboxInput } from '@/components/ui/combobox-input'
+import { Combobox } from '@/components/ui/combobox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { searchUsers } from '@/features/users/api'
 import type { User } from '@/features/users/types'
 import { useDebounce } from '@/hooks/use-debounce'
-import { handleServerError } from '@/lib/handle-server-error'
 import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
 import { formatQuota, parseQuotaFromDollars } from '@/lib/format'
+import { handleServerError } from '@/lib/handle-server-error'
 
 import {
   applyFinancePenalty,
-  refundFinanceRedemption,
-  refundFinanceTopup,
   reverseFinancePenalty,
   reverseFinanceRebate,
 } from '../api'
 import type { FinanceAction, PenaltyMode } from '../types'
+import { CashRefundDialog } from './cash-refund-dialog'
 
-export function FinanceActionDialog(props: {
+type FinanceActionDialogProps = {
   action: FinanceAction | null
   onClose: () => void
   onSuccess: () => void
-}) {
+}
+
+export function FinanceActionDialog(props: FinanceActionDialogProps) {
+  if (
+    props.action?.kind === 'topup-refund' ||
+    props.action?.kind === 'redemption-refund'
+  ) {
+    const action = props.action
+    return (
+      <CashRefundDialog
+        key={`${action.kind}:${action.item.id}`}
+        action={action}
+        onClose={props.onClose}
+        onSuccess={props.onSuccess}
+      />
+    )
+  }
+  return <FinanceAdjustmentDialog {...props} />
+}
+
+function FinanceAdjustmentDialog(props: FinanceActionDialogProps) {
   const { t } = useTranslation()
   const [reason, setReason] = useState('')
-  const [externalConfirmed, setExternalConfirmed] = useState(false)
   const [quota, setQuota] = useState('')
   const [userId, setUserId] = useState('')
   const [penaltyMode, setPenaltyMode] = useState<PenaltyMode>('request')
@@ -77,7 +95,10 @@ export function FinanceActionDialog(props: {
     enabled: action?.kind === 'penalty',
     staleTime: 30_000,
   })
-  const penaltyUsers = penaltyUsersQuery.data || []
+  const searchingPenaltyUsers =
+    penaltyUserSearch.trim() !== debouncedPenaltyUserSearch.trim() ||
+    penaltyUsersQuery.isFetching
+  const penaltyUsers = searchingPenaltyUsers ? [] : penaltyUsersQuery.data || []
   const selectablePenaltyUsers =
     selectedPenaltyUser &&
     !penaltyUsers.some((user) => user.id === selectedPenaltyUser.id)
@@ -103,7 +124,6 @@ export function FinanceActionDialog(props: {
     if (action === null) {
       setConfirming(false)
       setReason('')
-      setExternalConfirmed(false)
       setQuota('')
       setUserId('')
       setPenaltyMode('request')
@@ -123,8 +143,6 @@ export function FinanceActionDialog(props: {
 
   if (action === null) return null
   let title = t('Reverse penalty')
-  if (action?.kind === 'topup-refund') title = t('Refund top-up')
-  if (action?.kind === 'redemption-refund') title = t('Refund redemption')
   if (action?.kind === 'rebate-reverse') title = t('Reverse rebate')
   if (action?.kind === 'penalty') title = t('Apply penalty')
   let description = t(
@@ -133,56 +151,25 @@ export function FinanceActionDialog(props: {
   if (action?.kind === 'rebate-reverse') {
     description = t('The invited user balance will not change.')
   }
-  if (action?.kind.includes('refund')) {
-    description = t(
-      'This changes local accounting only. Complete the external refund first.'
-    )
-  }
-  let targetQuota: number | undefined
-  let principal: number | undefined
   let inviterQuota: number | undefined
   let inviterRebate: number | undefined
-  if (action?.kind === 'topup-refund') {
-    targetQuota = action.item.user_quota
-    principal = action.item.credited_quota || action.item.amount
-    inviterQuota = action.item.inviter_quota
-    inviterRebate = action.item.rebate_quota
-  } else if (action?.kind === 'redemption-refund') {
-    targetQuota = action.item.used_user_quota
-    principal = action.item.quota
-    inviterQuota = action.item.inviter_quota
-    inviterRebate = action.item.rebate_quota
-  } else if (action?.kind === 'rebate-reverse') {
+  if (action.kind === 'rebate-reverse') {
     inviterQuota = action.item.inviter_quota
     inviterRebate = action.item.rebate_quota
   }
   const prepareSubmit = () => {
-    if (
-      !reason.trim() ||
-      penaltyFormInvalid ||
-      (action.kind.includes('refund') && !externalConfirmed)
-    ) {
+    if (!reason.trim() || penaltyFormInvalid) {
       return
     }
     setConfirming(true)
   }
 
   const execute = async () => {
-    if (
-      !reason.trim() ||
-      penaltyFormInvalid ||
-      (action.kind.includes('refund') && !externalConfirmed)
-    ) {
+    if (!reason.trim() || penaltyFormInvalid) {
       return
     }
     setLoading(true)
     try {
-      if (action.kind === 'topup-refund') {
-        await refundFinanceTopup(action.item.trade_no, reason)
-      }
-      if (action.kind === 'redemption-refund') {
-        await refundFinanceRedemption(action.item.id, reason)
-      }
       if (action.kind === 'rebate-reverse') {
         await reverseFinanceRebate(action.item.id, reason)
       }
@@ -191,7 +178,8 @@ export function FinanceActionDialog(props: {
           Number(userId),
           penaltyQuota,
           reason,
-          penaltyRequestId
+          penaltyRequestId,
+          penaltyMode === 'request'
         )
       }
       if (action.kind === 'penalty-reverse') {
@@ -227,35 +215,7 @@ export function FinanceActionDialog(props: {
               <span className='text-muted-foreground'>{t('Operation')}</span>
               <span className='text-right font-medium'>{title}</span>
             </div>
-            {principal !== undefined ? (
-              <>
-                <div className='flex items-start justify-between gap-3'>
-                  <span className='text-muted-foreground'>
-                    {t('Principal deduction')}
-                  </span>
-                  <span className='font-medium'>{formatQuota(principal)}</span>
-                </div>
-                <div className='flex items-start justify-between gap-3'>
-                  <span className='text-muted-foreground'>
-                    {t('After operation')}
-                  </span>
-                  <span className='font-medium'>
-                    {formatQuota((targetQuota || 0) - principal)}
-                  </span>
-                </div>
-                <div className='flex items-start justify-between gap-3'>
-                  <span className='text-muted-foreground'>
-                    {t('Inviter rebate')}
-                  </span>
-                  <span className='text-right font-medium'>
-                    {formatQuota(inviterRebate || 0)}
-                    {inviterQuota !== undefined
-                      ? ` · ${t('Inviter balance')}: ${formatQuota(inviterQuota)}`
-                      : ''}
-                  </span>
-                </div>
-              </>
-            ) : null}
+
             {action.kind === 'penalty' ? (
               <>
                 <div className='flex items-start justify-between gap-3'>
@@ -346,51 +306,9 @@ export function FinanceActionDialog(props: {
               <div className='text-muted-foreground'>{t('Reason')}</div>
               <div className='font-medium break-words'>{reason}</div>
             </div>
-            {action.kind.includes('refund') ? (
-              <div className='text-muted-foreground'>
-                {t('I confirm the external refund has been completed')}
-              </div>
-            ) : null}
           </div>
         ) : (
           <>
-            {principal !== undefined ? (
-              <div className='grid grid-cols-2 gap-3 rounded-lg border p-3 text-sm'>
-                <div>
-                  <div className='text-muted-foreground'>
-                    {t('Current balance')}
-                  </div>
-                  <div className='font-semibold'>
-                    {formatQuota(targetQuota || 0)}
-                  </div>
-                </div>
-                <div>
-                  <div className='text-muted-foreground'>
-                    {t('After operation')}
-                  </div>
-                  <div className='font-semibold'>
-                    {formatQuota((targetQuota || 0) - principal)}
-                  </div>
-                </div>
-                <div>
-                  <div className='text-muted-foreground'>
-                    {t('Principal deduction')}
-                  </div>
-                  <div className='font-semibold'>{formatQuota(principal)}</div>
-                </div>
-                <div>
-                  <div className='text-muted-foreground'>
-                    {t('Inviter rebate')}
-                  </div>
-                  <div className='font-semibold'>
-                    {formatQuota(inviterRebate || 0)}
-                    {inviterQuota !== undefined
-                      ? ` · ${t('Inviter balance')}: ${formatQuota(inviterQuota)}`
-                      : ''}
-                  </div>
-                </div>
-              </div>
-            ) : null}
             {action?.kind === 'penalty' ? (
               <div className='grid gap-3 sm:grid-cols-2'>
                 <div className='space-y-1 sm:col-span-2'>
@@ -428,11 +346,14 @@ export function FinanceActionDialog(props: {
                   <Label htmlFor='finance-penalty-user'>
                     {t('Target user')}
                   </Label>
-                  <ComboboxInput
+                  <Combobox
                     id='finance-penalty-user'
+                    aria-label={t('Target user')}
                     options={penaltyUserOptions}
-                    value={userId || penaltyUserSearch}
+                    filter={null}
+                    value={userId}
                     onValueChange={(value) => {
+                      if (!value) return
                       const user = selectablePenaltyUsers.find(
                         (item) => String(item.id) === value
                       )
@@ -441,10 +362,14 @@ export function FinanceActionDialog(props: {
                       setUserId(value)
                       setPenaltyUserSearch('')
                     }}
-                    onSearchChange={setPenaltyUserSearch}
+                    onSearchChange={(value: string) => {
+                      setPenaltyUserSearch(value)
+                      setSelectedPenaltyUser(null)
+                      setUserId('')
+                    }}
                     placeholder={t('Search by username, name, or ID')}
                     emptyText={
-                      penaltyUsersQuery.isFetching
+                      searchingPenaltyUsers
                         ? t('Loading...')
                         : t('No users found')
                     }
@@ -509,18 +434,6 @@ export function FinanceActionDialog(props: {
                 onChange={(event) => setReason(event.target.value)}
               />
             </div>
-            {action?.kind.includes('refund') ? (
-              <label className='flex items-center gap-2 text-sm'>
-                <input
-                  type='checkbox'
-                  checked={externalConfirmed}
-                  onChange={(event) =>
-                    setExternalConfirmed(event.target.checked)
-                  }
-                />
-                {t('I confirm the external refund has been completed')}
-              </label>
-            ) : null}
           </>
         )}
         <AlertDialogFooter>
@@ -539,11 +452,7 @@ export function FinanceActionDialog(props: {
           )}
           <AlertDialogAction
             disabled={
-              loading ||
-              (!confirming &&
-                (!reason.trim() ||
-                  penaltyFormInvalid ||
-                  (action?.kind.includes('refund') && !externalConfirmed)))
+              loading || (!confirming && (!reason.trim() || penaltyFormInvalid))
             }
             onClick={confirming ? execute : prepareSubmit}
           >
