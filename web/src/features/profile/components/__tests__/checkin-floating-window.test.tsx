@@ -17,8 +17,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import i18next from 'i18next'
 import type { ComponentProps } from 'react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
@@ -28,6 +29,8 @@ import type {
   CheckinStats,
   CheckinStatusResponse,
 } from '@/features/profile/types'
+import { formatQuotaWithCurrency } from '@/lib/currency'
+import { useSystemConfigStore } from '@/stores/system-config-store'
 
 import { CheckinFloatingWindow } from '../checkin-floating-window'
 
@@ -89,6 +92,7 @@ function checkinStatus(
 }
 
 const queryClients: QueryClient[] = []
+const initialCurrency = { ...useSystemConfigStore.getState().config.currency }
 
 function renderCheckinWindow() {
   const queryClient = new QueryClient({
@@ -113,6 +117,7 @@ beforeEach(() => {
   useStatus.mockReset()
   currentPath.value = '/dashboard'
   localStorage.clear()
+  useSystemConfigStore.getState().setConfig({ currency: initialCurrency })
   useStatus.mockReturnValue({
     status: enabledStatus,
     loading: false,
@@ -120,14 +125,160 @@ beforeEach(() => {
   })
 })
 
-afterEach(() => {
+afterEach(async () => {
   for (const queryClient of queryClients) queryClient.clear()
   queryClients.length = 0
   currentPath.value = '/dashboard'
   localStorage.clear()
+  useSystemConfigStore.getState().setConfig({ currency: initialCurrency })
+  await i18next.changeLanguage('en')
 })
 
 describe('CheckinFloatingWindow', () => {
+  test('shows the reward prominently with check-in and earnings totals', async () => {
+    getCheckinStatus.mockResolvedValue(checkinStatus())
+
+    renderCheckinWindow()
+
+    const reward = await screen.findByRole('region', { name: 'Reward range' })
+    expect(reward).toHaveTextContent(
+      `${formatQuotaWithCurrency(1000)} - ${formatQuotaWithCurrency(10_000)}`
+    )
+    expect(
+      screen.getByText('Total check-ins').closest('div')
+    ).toHaveTextContent('12')
+    expect(screen.getByText('Total earned').closest('div')).toHaveTextContent(
+      formatQuotaWithCurrency(120_000)
+    )
+    expect(checkinWindow()).toHaveStyle({ width: '336px' })
+  })
+
+  test('keeps long reward amounts wrappable in a narrow viewport', async () => {
+    vi.stubGlobal('innerWidth', 320)
+    useSystemConfigStore.getState().setConfig({
+      currency: {
+        ...initialCurrency,
+        quotaDisplayType: 'CUSTOM',
+        customCurrencySymbol: 'Reward credits ',
+      },
+    })
+    getCheckinStatus.mockResolvedValue(checkinStatus())
+
+    try {
+      renderCheckinWindow()
+
+      const reward = await screen.findByRole('region', { name: 'Reward range' })
+      expect(checkinWindow()).toHaveStyle({ width: '304px' })
+      expect(
+        within(reward).getByText(
+          `${formatQuotaWithCurrency(1000)} - ${formatQuotaWithCurrency(10_000)}`
+        )
+      ).toHaveClass('wrap-anywhere')
+      expect(screen.getByRole('button', { name: 'View calendar' })).toHaveClass(
+        'whitespace-normal'
+      )
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  test('updates displayed rewards when the site currency changes', async () => {
+    getCheckinStatus.mockResolvedValue(checkinStatus())
+    renderCheckinWindow()
+    await screen.findByRole('region', { name: 'Reward range' })
+
+    act(() => {
+      useSystemConfigStore.getState().setConfig({
+        currency: {
+          ...initialCurrency,
+          quotaDisplayType: 'CUSTOM',
+          customCurrencySymbol: 'Credits ',
+        },
+      })
+    })
+
+    expect(
+      screen.getByRole('region', { name: 'Reward range' })
+    ).toHaveTextContent(
+      `${formatQuotaWithCurrency(1000)} - ${formatQuotaWithCurrency(10_000)}`
+    )
+    expect(screen.getByText('Total earned').closest('div')).toHaveTextContent(
+      formatQuotaWithCurrency(120_000)
+    )
+  })
+
+  test.each([
+    ['zhCN', '1,234'],
+    ['zhTW', '1,234'],
+    ['en', '1,234'],
+    ['fr', '1\u202f234'],
+    ['ja', '1,234'],
+    ['ru', '1\u00a0234'],
+    ['vi', '1.234'],
+    ['invalid_locale', '1,234'],
+  ])(
+    'formats check-in totals after switching to %s',
+    async (language, total) => {
+      getCheckinStatus.mockResolvedValue(
+        checkinStatus({ total_checkins: 1234 })
+      )
+      renderCheckinWindow()
+      await screen.findByRole('region', { name: 'Reward range' })
+
+      await act(async () => {
+        await i18next.changeLanguage(language)
+      })
+
+      expect(
+        screen.getByText('Total check-ins').nextElementSibling?.textContent
+      ).toBe(total)
+    }
+  )
+
+  test('disables the claim button and exposes its loading state during submission', async () => {
+    getCheckinStatus.mockResolvedValue(checkinStatus())
+    let resolveCheckin!: (
+      response: ApiResponse<{ quota_awarded: number; checkin_date: string }>
+    ) => void
+    performCheckin.mockReturnValue(
+      new Promise((resolve) => {
+        resolveCheckin = resolve
+      })
+    )
+    renderCheckinWindow()
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Check in now' })
+    )
+
+    const loadingButton = screen.getByRole('button', { name: 'Loading...' })
+    expect(loadingButton).toBeDisabled()
+    expect(loadingButton).toHaveAttribute('aria-busy', 'true')
+
+    await act(async () => {
+      resolveCheckin({
+        success: true,
+        data: { quota_awarded: 5000, checkin_date: '2026-10-16' },
+      })
+    })
+  })
+
+  test('can be collapsed and reopened using keyboard controls', async () => {
+    getCheckinStatus.mockResolvedValue(checkinStatus())
+    renderCheckinWindow()
+    await screen.findByRole('button', { name: 'Check in now' })
+
+    screen.getByRole('button', { name: 'Collapse panel' }).focus()
+    await userEvent.keyboard('{Enter}')
+
+    expect(checkinWindow()).not.toBeInTheDocument()
+    screen.getByRole('button', { name: 'Expand panel' }).focus()
+    await userEvent.keyboard('{Enter}')
+
+    expect(checkinWindow()).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Check in now' })).toBeEnabled()
+  })
+
   test('stays hidden when the check-in feature is disabled', () => {
     useStatus.mockReturnValue({
       status: { checkin_enabled: false } as SystemStatus,
