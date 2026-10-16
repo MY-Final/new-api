@@ -24,6 +24,7 @@ import { api } from '@/lib/api'
 
 import {
   applyFinancePenalty,
+  createManualCredit,
   refundFinanceTopup,
   reverseFinancePenalty,
 } from '../api'
@@ -37,6 +38,33 @@ await i18n.init({ lng: 'en', resources: { en } })
 
 afterEach(() => {
   vi.mocked(api.post).mockReset()
+})
+
+it('submits separate paid and promotional amounts with a stable request identifier', async () => {
+  const input = {
+    user_id: 7,
+    paid_quota: 500,
+    bonus_quota: 100,
+    reference: 'receipt-1',
+    reason: 'Offline payment',
+    client_id: 'credit-1',
+    payment_received: true,
+  }
+  vi.mocked(api.post).mockResolvedValue({
+    data: {
+      success: true,
+      data: { operation: { id: 1 }, already_applied: false },
+    },
+  })
+  await expect(createManualCredit(input)).resolves.toEqual({
+    operation: { id: 1 },
+    already_applied: false,
+  })
+  expect(api.post).toHaveBeenCalledWith('/api/finance/credits', input)
+  vi.mocked(api.post).mockResolvedValue({
+    data: { success: false, message: 'Permission denied' },
+  })
+  await expect(createManualCredit(input)).rejects.toThrow('Permission denied')
 })
 
 it('rejects a refused refund so the console cannot report success', async () => {
@@ -58,14 +86,13 @@ it('rejects refused penalties and reversals with the server reason', async () =>
     data: {
       success: false,
       message: 'Cannot operate on a user with the same or higher role',
-      message_key:
-        'Cannot operate on a user with the same or higher role',
+      message_key: 'Cannot operate on a user with the same or higher role',
     },
   })
 
-  await expect(
-    applyFinancePenalty(7, 100, 'abuse', 'req-1')
-  ).rejects.toThrow('Cannot operate on a user with the same or higher role')
+  await expect(applyFinancePenalty(7, 100, 'abuse', 'req-1')).rejects.toThrow(
+    'Cannot operate on a user with the same or higher role'
+  )
   await expect(reverseFinancePenalty(9, 'appeal')).rejects.toThrow(
     'Cannot operate on a user with the same or higher role'
   )
@@ -76,7 +103,7 @@ it('returns the payload of an accepted operation', async () => {
     data: { success: true, data: { already_refunded: false } },
   })
 
-  await expect(refundFinanceTopup('trade-2', 'duplicate charge')).resolves.toEqual(
-    { success: true, data: { already_refunded: false } }
-  )
+  await expect(
+    refundFinanceTopup('trade-2', 'duplicate charge')
+  ).resolves.toEqual({ success: true, data: { already_refunded: false } })
 })

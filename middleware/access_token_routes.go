@@ -177,6 +177,7 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"POST /api/finance/redemptions/refund":            accessTokenScopeRule("billing:write"),
 	"POST /api/finance/rebates/reverse":               accessTokenScopeRule("billing:write"),
 	"POST /api/finance/penalties":                     accessTokenScopeRule("billing:write"),
+	"POST /api/finance/credits":                       accessTokenScopeRule("billing:write"),
 	"POST /api/finance/penalties/reverse":             accessTokenScopeRule("billing:write"),
 	"GET /api/ledger/daily":                           accessTokenScopeRule("billing:read"),
 	"GET /api/ledger/summary":                         accessTokenScopeRule("billing:read"),

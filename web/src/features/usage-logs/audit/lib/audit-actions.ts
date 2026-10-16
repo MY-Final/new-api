@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 // Shared by the searchable action filter and audit event summaries.
 export const AUDIT_ACTION_LABELS: Record<string, string> = {
+  'finance.manual_credit': 'Manual credit',
   'finance.request_refund': 'Request refund',
   'finance.topup_refund': 'Top-up refund',
   'finance.redemption_refund': 'Redemption refund',

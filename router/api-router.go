@@ -209,6 +209,7 @@ func SetApiRouter(router *gin.Engine) {
 			financeRoute.GET("/redemptions", controller.GetFinanceRedemptions)
 			financeRoute.GET("/rebates", controller.GetFinanceRebates)
 			financeRoute.GET("/operations", controller.GetFinancialOperations)
+			financeRoute.POST("/credits", controller.CreateFinanceCredit)
 			financeRoute.GET("/requests/by-user", controller.GetFinanceUserRequestBillings)
 			financeRoute.GET("/requests/queue", controller.ListFinanceRequestBillings)
 			financeRoute.GET("/refund-batches", controller.ListFinanceRefundBatches)

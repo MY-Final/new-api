@@ -90,6 +90,12 @@ function QuotaLogPreview(props: { log: UsageLog }) {
 
 const cases = [
   {
+    action: 'finance.manual_credit',
+    params: { paid_delta: 500000, bonus_delta: 250000 },
+    english: 'Manually credited wallet: paid 🥚 1, promotional 🥚 0.5',
+    chinese: '人工充值：实充 🥚 1，赠送 🥚 0.5',
+  },
+  {
     action: 'user.quota_add',
     params: {
       target_user_id: 42,
@@ -102,7 +108,8 @@ const cases = [
     },
     english:
       'Increase quota for user “quota-owner” (ID: 42) · Requested quota: 🥚 1 · 🥚 1 → 🥚 2',
-    chinese: '增加用户「quota-owner」的额度（ID: 42） · 请求数额：🥚 1 · 🥚 1 → 🥚 2',
+    chinese:
+      '增加用户「quota-owner」的额度（ID: 42） · 请求数额：🥚 1 · 🥚 1 → 🥚 2',
   },
   {
     action: 'user.quota_add',

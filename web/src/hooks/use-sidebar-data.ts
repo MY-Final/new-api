@@ -269,6 +269,12 @@ export function useSidebarData(): SidebarData {
         title: t('Finance Management'),
         items: [
           {
+            title: t('Manual credit'),
+            url: '/finance/credits',
+            configUrls: ['/finance'],
+            icon: Wallet,
+          },
+          {
             title: t('Top-up Orders'),
             url: '/finance/topups',
             configUrls: ['/finance'],

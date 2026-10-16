@@ -50,6 +50,7 @@ var auditRouteActions = map[string]string{
 	"POST /api/finance/redemptions/refund":            "finance.redemption_refund",
 	"POST /api/finance/rebates/reverse":               "finance.rebate_reverse",
 	"POST /api/finance/penalties":                     "finance.penalty",
+	"POST /api/finance/credits":                       "finance.manual_credit",
 	"POST /api/finance/penalties/reverse":             "finance.penalty_reverse",
 	"GET /api/channel/test":                           "channel.test_all",
 	"GET /api/channel/test/:id":                       "channel.test",

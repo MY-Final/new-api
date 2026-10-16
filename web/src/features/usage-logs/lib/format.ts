@@ -24,6 +24,7 @@ import {
   splitBillingExprAndRequestRules,
   type ParsedTier,
 } from '@/features/pricing/lib/billing-expr'
+import { formatQuotaPrecise } from '@/lib/format'
 import { translateServerText } from '@/lib/server-error-message'
 
 import type { UsageLog } from '../data/schema'
@@ -638,6 +639,12 @@ export function renderAuditContent(
 ): string | null {
   const op = other?.op
   if (!op?.action) return null
+  if (op.action === 'finance.manual_credit') {
+    return t('Manually credited wallet: paid {{paid}}, promotional {{bonus}}', {
+      paid: formatQuotaPrecise(Number(op.params?.paid_delta ?? 0)),
+      bonus: formatQuotaPrecise(Number(op.params?.bonus_delta ?? 0)),
+    })
+  }
   if (
     op.action === 'redemption.delete_batch' ||
     (op.action === 'redemption.delete' &&

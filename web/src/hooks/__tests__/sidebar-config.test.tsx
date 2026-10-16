@@ -238,13 +238,14 @@ describe('Custom pages sidebar group', () => {
 })
 
 describe('finance sidebar entries', () => {
-  it('legacy configurations group all six finance links separately from administration', () => {
+  it('legacy configurations include manual credit in the finance group', () => {
     const { result } = sidebarFor({ admin: { enabled: true, finance: true } })
     const finance = result.current.find((group) => group.id === 'finance')
     expect(finance?.title).toBe('Finance Management')
     expect(
       finance?.items.map((item) => ({ title: item.title, url: item.url }))
     ).toEqual([
+      { title: 'Manual credit', url: '/finance/credits' },
       { title: 'Top-up Orders', url: '/finance/topups' },
       { title: 'Redemption Ledger', url: '/finance/redemptions' },
       { title: 'Rebate Ledger', url: '/finance/rebates' },
@@ -262,6 +263,7 @@ describe('finance sidebar entries', () => {
   })
 
   it.each([
+    ['/finance/credits', 'Manual credit'],
     ['/finance/topups', 'Top-up Orders'],
     ['/finance/redemptions', 'Redemption Ledger'],
     ['/finance/rebates', 'Rebate Ledger'],

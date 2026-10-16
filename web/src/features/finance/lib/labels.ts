@@ -1,3 +1,21 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
 import type { TFunction } from 'i18next'
 
 import type { StatusVariant } from '@/components/status-badge'
@@ -68,6 +86,7 @@ export function getCodeTypeLabel(type: string, t: TFunction) {
 }
 
 export function getSourceLabel(source: string, t: TFunction) {
+  if (source === 'manual_credit') return t('Manual credit')
   if (source === 'request') return t('Request')
   if (source === 'all') return t('All sources')
   if (source === 'signup') return t('Registration')
@@ -79,6 +98,7 @@ export function getSourceLabel(source: string, t: TFunction) {
 export function getOperationTypeLabel(type: string, t: TFunction) {
   const labels: Record<string, string> = {
     request_refund: 'Refund request',
+    manual_credit: 'Manual credit',
     topup_refund: 'Refund top-up',
     redemption_refund: 'Refund redemption',
     rebate_reversal: 'Reverse rebate',
@@ -140,6 +160,7 @@ export function getCodeTypeOptions(t: TFunction) {
 export function getOperationTypeOptions(t: TFunction) {
   return [
     { value: 'all', label: t('All operation types') },
+    { value: 'manual_credit', label: t('Manual credit') },
     { value: 'request_refund', label: t('Refund request') },
     { value: 'topup_refund', label: t('Refund top-up') },
     { value: 'redemption_refund', label: t('Refund redemption') },
@@ -180,6 +201,7 @@ export function getStatusVariant(
 }
 
 const operationTypeVariants: Record<string, StatusVariant> = {
+  manual_credit: 'success',
   request_refund: 'info',
   topup_refund: 'info',
   redemption_refund: 'info',

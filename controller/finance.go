@@ -255,6 +255,36 @@ func ReverseFinanceRebate(c *gin.Context) {
 	recordFinancialAuditForKey(c, "finance.rebate_reverse", "rebate_reversal:"+strconv.Itoa(req.RebateId), already)
 }
 
+func CreateFinanceCredit(c *gin.Context) {
+	var req struct {
+		UserID          int    `json:"user_id"`
+		PaidQuota       int    `json:"paid_quota"`
+		BonusQuota      int    `json:"bonus_quota"`
+		Reason          string `json:"reason"`
+		Reference       string `json:"reference"`
+		ClientID        string `json:"client_id"`
+		PaymentReceived bool   `json:"payment_received"`
+	}
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		common.ApiErrorT(c, "Invalid parameters")
+		return
+	}
+	if req.PaidQuota > 0 && !req.PaymentReceived {
+		common.ApiErrorT(c, "Confirm that the offline payment has been received")
+		return
+	}
+	operation, already, err := model.CreditUserByAdmin(req.UserID, req.PaidQuota, req.BonusQuota, req.Reason, req.Reference, req.ClientID, c.GetInt("id"), c.GetInt("role"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{"operation": operation, "already_applied": already})
+	recordFinancialAudit(c, "finance.manual_credit", operation, already)
+	if !already {
+		model.RecordLogWithAdminInfo(operation.TargetUserId, model.LogTypeTopup, auditContentEN("finance.manual_credit", map[string]any{"target_user_id": operation.TargetUserId, "paid_delta": operation.TargetPaidDelta, "bonus_delta": operation.TargetBonusDelta}), auditOperatorInfo(c), &model.AuditOperation{Action: "finance.manual_credit", Params: model.AuditFields{"paid_delta": operation.TargetPaidDelta, "bonus_delta": operation.TargetBonusDelta, "financial_operation_id": operation.Id}}, c)
+	}
+}
+
 func ApplyFinancePenalty(c *gin.Context) {
 	var req financePenaltyRequest
 	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
