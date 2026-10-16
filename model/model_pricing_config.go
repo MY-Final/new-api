@@ -471,21 +471,34 @@ func validateModelPricing(name string, values, previous PricingValues) error {
 	return nil
 }
 
+type ModelPricingAuditChange struct {
+	ModelName string        `json:"model_name"`
+	From      PricingValues `json:"from"`
+	To        PricingValues `json:"to"`
+}
+
 func UpdateModelPricing(changes []ModelPricingChange) error {
+	_, err := UpdateModelPricingWithAudit(changes)
+	return err
+}
+
+// UpdateModelPricingWithAudit returns the actual locked transaction snapshots.
+func UpdateModelPricingWithAudit(changes []ModelPricingChange) ([]ModelPricingAuditChange, error) {
+	var audit []ModelPricingAuditChange
 	if len(changes) == 0 {
-		return errors.New("select model pricing changes before saving")
+		return nil, errors.New("select model pricing changes before saving")
 	}
 	seen := make(map[string]bool)
 	for _, change := range changes {
 		if seen[change.ModelName] {
-			return errors.New("duplicate model pricing change")
+			return nil, errors.New("duplicate model pricing change")
 		}
 		seen[change.ModelName] = true
 		if change.ExpectedVersion == "" {
-			return ErrModelPricingConflict
+			return nil, ErrModelPricingConflict
 		}
 	}
-	return mutateModelPricingOptions(func(_ *gorm.DB, values map[string]map[string]any) error {
+	err := mutateModelPricingOptions(func(_ *gorm.DB, values map[string]map[string]any) error {
 		defaults := defaultPricingMaps()
 		for _, change := range changes {
 			previous := modelPricingValues(values, change.ModelName)
@@ -500,9 +513,14 @@ func UpdateModelPricing(changes []ModelPricingChange) error {
 				return err
 			}
 			replaceModelPricing(values, change.ModelName, pricing)
+			audit = append(audit, ModelPricingAuditChange{ModelName: change.ModelName, From: previous, To: modelPricingValues(values, change.ModelName)})
 		}
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	return audit, nil
 }
 
 // UpdateModelPricingOptions keeps legacy single-option callers on the same

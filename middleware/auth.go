@@ -58,6 +58,9 @@ func authHelper(c *gin.Context, minRole int) {
 		writeDashboardAuthError(c, err)
 		return
 	}
+	c.Set("audit_actor_id", user.Id)
+	c.Set("audit_actor_role", user.Role)
+	c.Set("audit_actor_username", user.Username)
 	if user.Status != common.UserStatusEnabled {
 		abortWithWebMessage(c, http.StatusUnauthorized, "AUTH_USER_DISABLED", common.NewMessage("User has been banned"))
 		return
@@ -398,12 +401,24 @@ func abortWithWebMessage(c *gin.Context, status int, code string, message *commo
 		fields = append(fields, gin.H{"code": code})
 	}
 	common.ApiErrorStatus(c, status, message, fields...)
+	if _, accessAudited := c.Get(accessTokenAuditContextKey); !accessAudited && !common.GetContextKeyBool(c, constant.ContextKeyAuditLogged) {
+		id, role, username := c.GetInt("id"), c.GetInt("role"), c.GetString("username")
+		if id == 0 {
+			id, role, username = c.GetInt("audit_actor_id"), c.GetInt("audit_actor_role"), c.GetString("audit_actor_username")
+		}
+		params := model.AuditFields{"code": code}
+		authMethod := "unauthenticated"
+		if id > 0 {
+			authMethod = auditAuthMethod(c)
+		}
+		model.RecordAuditLog(c, model.AuditLog{UserId: id, Username: username, ActorRole: role, Category: model.AuditCategorySecurity, Action: "auth.rejected", Content: "Dashboard authorization rejected", AuthMethod: authMethod, Status: status, Success: false, Other: model.AuditOther{Op: &model.AuditOperation{Action: "auth.rejected", Params: params}}})
+	}
 	c.Abort()
 }
 
 func writeDashboardAuthError(c *gin.Context, err error) {
 	if errors.Is(err, model.ErrDesktopAuthorization) {
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"success": false, "code": "DESKTOP_AUTH_INVALID", "message": "Desktop authorization is invalid or expired."})
+		abortWithWebMessage(c, http.StatusUnauthorized, "DESKTOP_AUTH_INVALID", common.NewMessage("Desktop authorization is invalid or expired."))
 		return
 	}
 	if errors.Is(err, model.ErrAccessTokenExpired) {
@@ -438,7 +453,7 @@ func RequirePermission(permission authz.Permission) func(c *gin.Context) {
 			c.Next()
 			return
 		}
-		abortWithWebMessage(c, http.StatusForbidden, "", common.NewMessage("Unauthorized, insufficient privileges"))
+		abortWithWebMessage(c, http.StatusForbidden, "AUTH_PERMISSION_DENIED", common.NewMessage("Unauthorized, insufficient privileges"))
 	}
 }
 

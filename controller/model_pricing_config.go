@@ -64,7 +64,8 @@ func UpdateModelPricingConfig(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
 		return
 	}
-	if err := model.UpdateModelPricing(request.Changes); err != nil {
+	audit, err := model.UpdateModelPricingWithAudit(request.Changes)
+	if err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, model.ErrModelPricingConflict) {
 			status = http.StatusConflict
@@ -76,6 +77,6 @@ func UpdateModelPricingConfig(c *gin.Context) {
 	for _, change := range request.Changes {
 		names = append(names, change.ModelName)
 	}
-	recordManageAudit(c, "model.pricing.update", map[string]any{"models": names})
+	recordManageAudit(c, "model.pricing.update", map[string]any{"models": names, "changes": audit})
 	common.ApiSuccess(c, gin.H{"updated_models": names})
 }

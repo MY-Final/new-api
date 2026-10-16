@@ -21,12 +21,14 @@ import type { TFunction } from 'i18next'
 import { loginMethodLabel } from '@/features/security/components/login-session-utils'
 import type { PermissionResourceDef } from '@/lib/admin-permissions'
 import dayjs from '@/lib/dayjs'
+import { formatLogQuota } from '@/lib/format'
 import { ROLE } from '@/lib/roles'
 
 import { renderAuditContent } from '../../lib/format'
 import { buildQuotaAuditOperation } from '../../lib/quota-audit-operation'
 import type { LogOtherData } from '../../types'
 import type { AuditLog } from '../api'
+import { AUDIT_ACTION_LABELS } from './audit-actions'
 
 const AUDIT_ROLE_NAMES: Record<number, string> = {
   [ROLE.GUEST]: 'guest',
@@ -82,6 +84,50 @@ export function isAuditDetailObject(
 
 export function auditFieldLabel(key: string, t: TFunction): string {
   switch (key) {
+    case 'source_id':
+      return t('Source ID')
+    case 'billing_id':
+      return t('Billing ID')
+    case 'source_type':
+      return t('Source Type')
+    case 'task_id':
+      return t('Batch ID')
+    case 'financial_operation_id':
+      return t('Financial operation ID')
+    case 'reason':
+      return t('Reason')
+    case 'already_applied':
+      return t('Already applied')
+    case 'bonus_delta':
+      return t('Bonus quota change')
+    case 'paid_delta':
+      return t('Paid quota change')
+    case 'target_main_delta':
+      return t('Balance change')
+    case 'related_user_id':
+      return t('Related user ID')
+    case 'related_main_delta':
+      return t('Related balance change')
+    case 'related_affiliate_delta':
+      return t('Affiliate balance change')
+    case 'rebate_quota':
+      return t('Rebate quota')
+    case 'permissions_before':
+      return t('Previous permissions')
+    case 'permissions_after':
+      return t('New permissions')
+    case 'changes':
+      return t('Changes')
+    case 'model_name':
+      return t('Model')
+    case 'claimed_username':
+      return t('Submitted username')
+    case 'session_ref':
+      return t('Session identifier')
+    case 'succeeded':
+      return t('Succeeded')
+    case 'failed':
+      return t('Failed')
     case 'status':
       return t('Status')
     case 'role':
@@ -440,6 +486,8 @@ export function buildAuditDetails(
   if (entry.category === 'login') fallback = t('Login')
   if (entry.category === 'security') fallback = t('Account security')
   if (entry.category === 'access_token') fallback = t('Access Token')
+  if (entry.content && entry.content !== action) fallback = entry.content
+  if (AUDIT_ACTION_LABELS[action]) fallback = t(AUDIT_ACTION_LABELS[action])
   const summary =
     renderAuditContent(
       {
@@ -453,7 +501,7 @@ export function buildAuditDetails(
         },
       },
       t
-    ) || (entry.content && entry.content !== action ? entry.content : fallback)
+    ) || fallback
   const admin = isAuditDetailObject(metadata.admin_info)
     ? metadata.admin_info
     : {}
@@ -479,6 +527,10 @@ export function buildAuditDetails(
   let authentication = authMethod
   if (authMethod === 'session') authentication = t('Session')
   else if (authMethod === 'access_token') authentication = t('Access Token')
+  else if (authMethod === 'unauthenticated') {
+    authentication = t('Unauthenticated')
+  }
+  else if (authMethod === 'system_task') authentication = t('System Tasks')
   else if (authMethod) authentication = loginMethodLabel(authMethod, t)
 
   let targetName = ''
@@ -498,6 +550,22 @@ export function buildAuditDetails(
     delete params.username
   }
 
+  if (action.startsWith('finance.')) {
+    for (const key of [
+      'quota',
+      'from',
+      'to',
+      'bonus_delta',
+      'paid_delta',
+      'target_main_delta',
+      'related_main_delta',
+      'related_affiliate_delta',
+      'rebate_quota',
+    ]) {
+      const value = params[key]
+      if (typeof value === 'number') params[key] = formatLogQuota(value)
+    }
+  }
   const fields: AuditDetailField[] = []
   if (
     Array.isArray(params.changed_fields) &&

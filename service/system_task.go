@@ -152,6 +152,9 @@ func StartSystemTaskRunner() {
 					if err := model.FlushRequestRefundLogs(100); err != nil {
 						logger.LogWarn(context.Background(), common.LogText("request refund log retry failed: %s", err.Error()))
 					}
+					if err := model.FlushRequestRefundAudits(100); err != nil {
+						logger.LogWarn(context.Background(), common.LogText("refund batch audit retry failed: %v", err))
+					}
 				}
 				runSystemTaskClaimPass(runnerID)
 			}

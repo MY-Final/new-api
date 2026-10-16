@@ -34,6 +34,7 @@ import zh from '@/i18n/locales/zh.json'
 import type { PermissionResourceDef } from '@/lib/admin-permissions'
 import { api } from '@/lib/api'
 import dayjs from '@/lib/dayjs'
+import { formatLogQuota } from '@/lib/format'
 
 import type { AuditLog } from '../api'
 import { AuditLogDetailsDialog } from '../components/audit-log-details-dialog'
@@ -981,4 +982,61 @@ it('does not load scope labels for other records', async () => {
   const get = vi.spyOn(api, 'get')
   await openDetails()
   expect(get).not.toHaveBeenCalled()
+})
+
+it('localizes financial audit fields and formats committed balances without changing stored metadata', async () => {
+  const i18n = createInstance()
+  await i18n.init({ lng: 'zh', resources: { zh } })
+  const params = {
+    target_user_id: 42,
+    source_id: 'order-42',
+    financial_operation_id: 9,
+    quota: 500000,
+    from: 1000000,
+    to: 1500000,
+    already_applied: true,
+    reason: 'incident correction',
+  }
+  const detail = buildAuditDetails(
+    {
+      ...entry,
+      action: 'finance.topup_refund',
+      auth_method: 'system_task',
+      content: 'finance.topup_refund',
+      other: { op: { action: 'finance.topup_refund', params } },
+    },
+    i18n.t
+  )
+  expect(detail.summary).toBe('充值退款')
+  expect(detail.authentication).toBe(i18n.t('System Tasks'))
+  expect(detail.fields).toEqual(
+    expect.arrayContaining([
+      { label: i18n.t('Source ID'), value: 'order-42' },
+      { label: i18n.t('Financial operation ID'), value: 9 },
+      { label: i18n.t('Already applied'), value: true },
+    ])
+  )
+  expect(
+    detail.fields.some((field) => field.value === formatLogQuota(1500000))
+  ).toBe(true)
+  expect(params.to).toBe(1500000)
+})
+
+it('labels unauthenticated security events without treating them as sessions', async () => {
+  const i18n = createInstance()
+  await i18n.init({ lng: 'zh', resources: { zh } })
+  const detail = buildAuditDetails(
+    {
+      ...entry,
+      category: 'security',
+      action: 'auth.rejected',
+      auth_method: 'unauthenticated',
+      other: {
+        op: { action: 'auth.rejected', params: { code: 'AUTH_UNAUTHORIZED' } },
+      },
+    },
+    i18n.t
+  )
+  expect(detail.authentication).toBe('未登录')
+  expect(detail.summary).toBe('授权被拒绝')
 })

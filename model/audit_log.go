@@ -5,13 +5,16 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const (
@@ -46,6 +49,10 @@ type AuditLog struct {
 }
 
 type AuditLogFilter struct {
+	Action          string
+	TargetUserId    int
+	SourceId        string
+	TaskId          string
 	SelfView        bool // Server-selected metadata projection, independent of the viewer's actual role.
 	UserId          int
 	Username        string
@@ -71,9 +78,12 @@ func AccessTokenFingerprint(token string) string {
 
 // RecordAuditLog captures safe request metadata only; raw URLs, query strings,
 // credentials and response/request bodies must never enter this table.
-func RecordAuditLog(c *gin.Context, entry AuditLog) {
+func RecordAuditLog(c *gin.Context, entry AuditLog) error {
 	ctx := context.Background()
 	if c != nil && c.Request != nil {
+		if entry.Category != AuditCategoryAccessToken {
+			common.SetContextKey(c, constant.ContextKeyAuditLogged, true)
+		}
 		ctx = c.Request.Context()
 		entry.RequestId = c.GetString(common.RequestIdKey)
 		entry.Ip = c.ClientIP()
@@ -100,28 +110,42 @@ func RecordAuditLog(c *gin.Context, entry AuditLog) {
 		entry.EventId = common.NewRequestId()
 	}
 	switch entry.ActorRole {
-	case common.RoleCommonUser, common.RoleAdminUser, common.RoleRootUser:
+	case common.RoleGuestUser, common.RoleCommonUser, common.RoleAdminUser, common.RoleRootUser:
 	default:
 		logger.LogError(ctx, common.LogText("audit actor role unavailable (request_id=%s, actor_role=%d)", entry.RequestId, entry.ActorRole))
 		entry.ActorRole = 0 // Unknown actors remain visible to root only.
 	}
-	if entry.Username == "" {
-		entry.Username, _ = GetUsernameById(entry.UserId, false)
+	if entry.Username == "" && entry.UserId > 0 && DB != nil {
+		// Optional enrichment must not depend on the auth cache being available.
+		var user User
+		if err := DB.Select("username").First(&user, entry.UserId).Error; err == nil {
+			entry.Username = user.Username
+		}
 	}
 	ua := []rune(entry.UserAgent)
 	if len(ua) > 512 {
 		entry.UserAgent = string(ua[:512])
 	}
-	if LOG_DB == nil {
-		logger.LogError(ctx, common.LogText("audit log write failed (request_id=%s): log database unavailable", entry.RequestId))
-		return
+	if err := insertAuditLog(&entry); err != nil {
+		logger.LogError(ctx, common.LogText("audit log write failed (request_id=%s): %v", entry.RequestId, err))
+		if queueErr := queueAuditLog(entry); queueErr != nil {
+			logger.LogError(ctx, common.LogText("audit log recovery queue failed (event_id=%s): %v", entry.EventId, queueErr))
+			return queueErr
+		}
 	}
-	var row any = &entry
+	return nil
+}
+
+func insertAuditLog(entry *AuditLog) error {
+	if LOG_DB == nil {
+		return errors.New("log database unavailable")
+	}
+	entry.Id = 0
+	var row any = entry
 	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
 		encoded, err := common.Marshal(entry.Other)
 		if err != nil {
-			logger.LogError(ctx, common.LogText("audit log write failed (request_id=%s): %v", entry.RequestId, err))
-			return
+			return err
 		}
 		// The ClickHouse GORM insert callback passes structs to the native
 		// driver without resolving their Valuer. Bind this column's JSON
@@ -129,15 +153,45 @@ func RecordAuditLog(c *gin.Context, entry AuditLog) {
 		row = &struct {
 			AuditLog     `gorm:"embedded"`
 			EncodedOther string `gorm:"column:other;type:json"`
-		}{AuditLog: entry, EncodedOther: string(encoded)}
+		}{AuditLog: *entry, EncodedOther: string(encoded)}
+		// ponytail: MergeTree has no unique event_id constraint. This covers
+		// sequential replay; use coordinated claims if cross-node exactly-once
+		// delivery is required.
+		var count int64
+		if err := LOG_DB.Model(&AuditLog{}).Where("event_id = ?", entry.EventId).Count(&count).Error; err != nil || count > 0 {
+			return err
+		}
+		return LOG_DB.Table("audit_logs").Create(row).Error
 	}
-	if err := LOG_DB.Table("audit_logs").Create(row).Error; err != nil {
-		logger.LogError(ctx, common.LogText("audit log write failed (request_id=%s): %v", entry.RequestId, err))
-	}
+	return LOG_DB.Table("audit_logs").Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "event_id"}}, DoNothing: true}).Create(entry).Error
 }
 
 func GetAuditLogs(filter AuditLogFilter, start, limit, viewerRole int) ([]*AuditLog, int64, error) {
 	query := LOG_DB.Model(&AuditLog{})
+	if filter.Action != "" {
+		query = query.Where("action = ?", filter.Action)
+	}
+	// Only fixed, allowlisted JSON paths enter SQL; filter values are bound.
+	fields := map[string]string{"target_user_id": "", "source_id": filter.SourceId, "task_id": filter.TaskId}
+	if filter.TargetUserId > 0 {
+		fields["target_user_id"] = strconv.Itoa(filter.TargetUserId)
+	}
+	for field, value := range fields {
+		if value == "" {
+			continue
+		}
+		path := "$.op.params." + field
+		switch common.LogDatabaseType() {
+		case common.DatabaseTypePostgreSQL:
+			query = query.Where("other::jsonb #>> ? = ?", "{op,params,"+field+"}", value)
+		case common.DatabaseTypeMySQL:
+			query = query.Where("JSON_UNQUOTE(JSON_EXTRACT(other, ?)) = ?", path, value)
+		case common.DatabaseTypeClickHouse:
+			query = query.Where("JSON_VALUE(toJSONString(other), ?) = ?", path, value)
+		default:
+			query = query.Where("CAST(json_extract(other, ?) AS TEXT) = ?", path, value)
+		}
+	}
 	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
 		// Decode native JSON through database/sql as text for AuditOther.Scan.
 		// Preserve numeric metadata instead of returning quoted Int64 values.

@@ -120,6 +120,7 @@ func exportLogs(c *gin.Context, all bool) {
 		return
 	}
 	filter.StartTimestamp = startTimestamp
+	c.Set("audit_business_success", false)
 
 	userId := c.GetInt("id")
 	release, ok, err := service.AcquireLogExportLock(userId)
@@ -160,6 +161,7 @@ func exportLogs(c *gin.Context, all bool) {
 	if ctx.Err() != nil {
 		return
 	}
+	c.Set("audit_exported_count", count)
 	// The status is already sent, so the result object becomes the last line.
 	if err != nil {
 		common.SysError(common.LogText("failed to export logs: %s", err.Error()))
@@ -167,6 +169,7 @@ func exportLogs(c *gin.Context, all bool) {
 		return
 	}
 	common.ApiSuccess(c, gin.H{"count": count})
+	c.Set("audit_business_success", true)
 }
 
 // Deprecated: SearchAllLogs 已废弃，前端未使用该接口。

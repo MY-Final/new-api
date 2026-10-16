@@ -29,6 +29,7 @@ import {
   LogsFilterToolbar,
 } from '../../components/logs-filter-toolbar'
 import type { AuditFilters, AuditLog } from '../api'
+import { AUDIT_ACTION_LABELS } from '../lib/audit-actions'
 
 function AuditFilterSelect(props: {
   label: string
@@ -106,6 +107,22 @@ export function AuditLogFilterBar(props: {
           props.onChange({ success: value === 'all' ? undefined : value })
         }
       />
+      {!props.accessOnly && (
+        <AuditFilterSelect
+          label={t('Operation')}
+          value={props.filters.action ?? 'all'}
+          options={[
+            { value: 'all', label: t('All operations') },
+            ...Object.entries(AUDIT_ACTION_LABELS).map(([value, label]) => ({
+              value,
+              label: t(label),
+            })),
+          ]}
+          onChange={(value) =>
+            props.onChange({ action: value === 'all' ? undefined : value })
+          }
+        />
+      )}
       {props.accessOnly ? (
         <AuditFilterSelect
           label={t('Token scope')}
@@ -172,6 +189,47 @@ export function AuditLogFilterBar(props: {
             </LogsFilterField>
           </>
         )}
+        {!props.accessOnly && (
+          <>
+            <LogsFilterField>
+              <LogsFilterInput
+                aria-label={t('Target User ID')}
+                placeholder={t('Target User ID')}
+                inputMode='numeric'
+                value={props.filters.target_user_id ?? ''}
+                onChange={(event) => {
+                  if (/^\d*$/.test(event.target.value)) {
+                    props.onChange({
+                      target_user_id: event.target.value || undefined,
+                    })
+                  }
+                }}
+              />
+            </LogsFilterField>
+            <LogsFilterField>
+              <LogsFilterInput
+                aria-label={t('Source ID')}
+                placeholder={t('Source ID')}
+                value={props.filters.source_id ?? ''}
+                maxLength={255}
+                onChange={(event) =>
+                  props.onChange({ source_id: event.target.value || undefined })
+                }
+              />
+            </LogsFilterField>
+            <LogsFilterField>
+              <LogsFilterInput
+                aria-label={t('Batch ID')}
+                placeholder={t('Batch ID')}
+                value={props.filters.task_id ?? ''}
+                maxLength={64}
+                onChange={(event) =>
+                  props.onChange({ task_id: event.target.value || undefined })
+                }
+              />
+            </LogsFilterField>
+          </>
+        )}
         {props.scope === 'all' && (
           <LogsFilterField>
             <LogsFilterInput
@@ -190,12 +248,16 @@ export function AuditLogFilterBar(props: {
     props.filters.token_ref,
     props.filters.request_id,
     props.filters.username,
+    props.filters.target_user_id,
+    props.filters.source_id,
+    props.filters.task_id,
   ].filter(Boolean).length
   const filterCount =
     advancedCount +
     [
       props.filters.success,
       props.filters.category,
+      props.filters.action,
       props.tokenScope !== props.defaultTokenScope,
     ].filter(Boolean).length
   const hasFilters =

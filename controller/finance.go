@@ -72,6 +72,7 @@ func CreateFinanceRefundBatch(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, task.ToResponse())
+	recordManageAudit(c, "finance.refund_batch.create", map[string]any{"task_id": task.TaskID, "count": len(req.BillingIds), "reason": req.Reason})
 }
 
 func ListFinanceRefundBatches(c *gin.Context) {
@@ -104,6 +105,7 @@ func RetryFinanceRefundBatch(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, task.ToResponse())
+	recordManageAudit(c, "finance.refund_batch.retry", map[string]any{"task_id": task.TaskID, "previous_task_id": c.Param("task_id")})
 }
 
 func GetFinanceUserRequestBillings(c *gin.Context) {
@@ -135,6 +137,7 @@ func RefundFinanceRequest(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, gin.H{"operation": operation, "already_refunded": already})
+	recordFinancialAudit(c, "finance.request_refund", operation, already)
 }
 
 type financePenaltyReverseRequest struct {
@@ -219,6 +222,7 @@ func RefundFinanceTopUp(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, gin.H{"trade_no": req.TradeNo, "already_refunded": already, "status": common.TopUpStatusRefunded})
+	recordFinancialAuditForKey(c, "finance.topup_refund", "topup_refund:"+req.TradeNo, already)
 }
 
 func RefundFinanceRedemption(c *gin.Context) {
@@ -233,6 +237,7 @@ func RefundFinanceRedemption(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, gin.H{"redemption_id": req.RedemptionId, "already_refunded": already, "status": common.RedemptionCodeStatusRefunded})
+	recordFinancialAuditForKey(c, "finance.redemption_refund", "redemption_refund:"+strconv.Itoa(req.RedemptionId), already)
 }
 
 func ReverseFinanceRebate(c *gin.Context) {
@@ -247,6 +252,7 @@ func ReverseFinanceRebate(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, gin.H{"rebate_id": req.RebateId, "already_reversed": already, "status": model.AffiliateRebateStatusReversed})
+	recordFinancialAuditForKey(c, "finance.rebate_reverse", "rebate_reversal:"+strconv.Itoa(req.RebateId), already)
 }
 
 func ApplyFinancePenalty(c *gin.Context) {
@@ -261,6 +267,7 @@ func ApplyFinancePenalty(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, gin.H{"operation": operation, "already_applied": already})
+	recordFinancialAudit(c, "finance.penalty", operation, already)
 }
 
 func ReverseFinancePenalty(c *gin.Context) {
@@ -275,4 +282,31 @@ func ReverseFinancePenalty(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, gin.H{"operation": operation, "already_reversed": already})
+	recordFinancialAudit(c, "finance.penalty_reverse", operation, already)
+}
+
+// Financial operations carry committed accounting values, including on retries.
+func recordFinancialAudit(c *gin.Context, action string, operation model.FinancialOperation, already bool) {
+	recordManageAudit(c, action, map[string]any{
+		"financial_operation_id": operation.Id, "target_user_id": operation.TargetUserId,
+		"source_type": operation.SourceType, "source_id": operation.SourceId,
+		"quota": operation.PrincipalQuota, "from": operation.TargetMainBefore, "to": operation.TargetMainAfter,
+		"bonus_delta": operation.TargetBonusDelta, "paid_delta": operation.TargetPaidDelta,
+		"reason": operation.Reason, "already_applied": already,
+		"related_user_id": operation.RelatedUserId, "related_main_delta": operation.RelatedMainDelta,
+		"related_affiliate_delta": operation.RelatedAffiliateDelta, "rebate_quota": operation.RebateQuota,
+		"target_main_delta": operation.TargetMainDelta,
+	})
+}
+
+func recordFinancialAuditForKey(c *gin.Context, action, key string, already bool) {
+	var operation model.FinancialOperation
+	if err := model.DB.Where("operation_key = ?", key).First(&operation).Error; err != nil {
+		// The money movement already committed. Do not report a false failure or
+		// invent accounting values if its detail cannot be read back.
+		common.SysError(common.LogText("financial audit detail unavailable: %v", err))
+		recordManageAudit(c, action, map[string]any{"operation_key": key, "detail_unavailable": true, "already_applied": already})
+		return
+	}
+	recordFinancialAudit(c, action, operation, already)
 }

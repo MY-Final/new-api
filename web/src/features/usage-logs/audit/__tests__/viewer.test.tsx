@@ -407,7 +407,7 @@ afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
-function renderViewer(scope: 'all' | 'self' = 'self') {
+function renderViewer(scope: 'all' | 'self' = 'self', accessOnly = true) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
@@ -415,12 +415,51 @@ function renderViewer(scope: 'all' | 'self' = 'self') {
     <QueryClientProvider client={client}>
       <AuditLogViewer
         scope={scope}
-        accessOnly
+        accessOnly={accessOnly}
         currentTokenRef={'a'.repeat(64)}
       />
     </QueryClientProvider>
   )
 }
+
+it('filters audit operations by action, target user, source and batch and clears them on reset', async () => {
+  const get = vi.spyOn(api, 'get').mockResolvedValue({
+    data: { success: true, data: { items: [], total: 0 } },
+  })
+  renderViewer('all', false)
+  await userEvent.click(screen.getByRole('combobox', { name: 'Operation' }))
+  await userEvent.click(
+    await screen.findByRole('option', { name: 'Request refund' })
+  )
+  await userEvent.click(screen.getByRole('button', { name: 'Expand' }))
+  fireEvent.change(screen.getByLabelText('Target User ID'), {
+    target: { value: '42' },
+  })
+  fireEvent.change(screen.getByLabelText('Source ID'), {
+    target: { value: 'order-42' },
+  })
+  fireEvent.change(screen.getByLabelText('Batch ID'), {
+    target: { value: 'refund-42' },
+  })
+  await waitFor(() =>
+    expect(get).toHaveBeenLastCalledWith('/api/audit', {
+      params: expect.objectContaining({
+        action: 'finance.request_refund',
+        target_user_id: '42',
+        source_id: 'order-42',
+        task_id: 'refund-42',
+        p: 1,
+      }),
+    })
+  )
+  await userEvent.click(screen.getByRole('button', { name: 'Reset' }))
+  await waitFor(() => {
+    const params = get.mock.lastCall?.[1]?.params
+    for (const key of ['action', 'target_user_id', 'source_id', 'task_id']) {
+      expect(params).not.toHaveProperty(key)
+    }
+  })
+})
 
 it('filters own access history by result, generation and time and resets pagination', async () => {
   const get = vi.spyOn(api, 'get').mockResolvedValue({

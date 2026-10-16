@@ -43,6 +43,10 @@ export interface AuditLog {
   other: Record<string, unknown> | null
 }
 export interface AuditFilters {
+  action?: string
+  target_user_id?: string
+  source_id?: string
+  task_id?: string
   p: number
   page_size: number
   start_timestamp?: number

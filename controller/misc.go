@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -345,7 +344,7 @@ type PasswordResetRequest struct {
 
 func ResetPassword(c *gin.Context) {
 	var req PasswordResetRequest
-	err := json.NewDecoder(c.Request.Body).Decode(&req)
+	err := common.DecodeJson(c.Request.Body, &req)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -370,6 +369,11 @@ func ResetPassword(c *gin.Context) {
 		return
 	}
 	common.DeleteKey(req.Email, common.PasswordResetPurpose)
+	if user, err := model.GetUniqueUserByEmail(req.Email); err == nil {
+		c.Set("audit_actor_id", user.Id)
+		c.Set("audit_actor_role", user.Role)
+		c.Set("audit_actor_username", user.Username)
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",

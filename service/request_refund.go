@@ -79,6 +79,7 @@ func RunRequestRefundBatch(ctx context.Context, task *model.SystemTask, runnerID
 			operation, item.AlreadyRefunded, err = model.RefundRequestBilling(item.BillingId, payload.Reason, payload.OperatorId, operator.Role)
 			if err == nil {
 				item.OperationId = operation.Id
+				item.UserId, item.Quota = operation.TargetUserId, operation.PrincipalQuota
 			}
 		}
 		item.Status = "succeeded"
@@ -102,6 +103,9 @@ func RunRequestRefundBatch(ctx context.Context, task *model.SystemTask, runnerID
 	if err := model.FinishSystemTask(task.TaskID, runnerID, status, state, ""); err != nil {
 		logSystemTaskLockError(ctx, task, err)
 		return
+	}
+	if err := model.PublishRequestRefundBatchAudit(task.TaskID); err != nil {
+		common.SysError(common.LogText("refund batch audit pending: %v", err))
 	}
 	notifySystemTaskRunner()
 }

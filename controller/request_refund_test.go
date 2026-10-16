@@ -88,6 +88,51 @@ func TestRequestRefundBatchPersistsResultsAndRetriesOnlyFailures(t *testing.T) {
 	assert.Equal(t, 1, state.Failed)
 	assert.Equal(t, "request-good", state.Items[0].RequestId)
 	assert.NotEmpty(t, state.Items[1].Error)
+
+	assert.True(t, state.AuditPublished)
+	audits, total, err := model.GetAuditLogs(model.AuditLogFilter{TaskId: task.TaskID}, 0, 10, common.RoleRootUser)
+	require.NoError(t, err)
+	require.EqualValues(t, 3, total)
+	for _, entry := range audits {
+		encoded, err := common.Marshal(entry.Other.Op.Params)
+		require.NoError(t, err)
+		var params struct {
+			TargetUserId         int    `json:"target_user_id"`
+			SourceId             string `json:"source_id"`
+			FinancialOperationId int    `json:"financial_operation_id"`
+			Succeeded, Failed    int
+		}
+		require.NoError(t, common.Unmarshal(encoded, &params))
+		assert.Equal(t, operator.Id, entry.UserId)
+		assert.Equal(t, operator.Role, entry.ActorRole)
+		assert.Equal(t, "system_task", entry.AuthMethod)
+		assert.Equal(t, operator.Username, entry.Username)
+		if entry.Action == "finance.refund_batch.item" {
+			assert.EqualValues(t, target.Id, params.TargetUserId)
+			if entry.Success {
+				assert.Equal(t, "request-good", params.SourceId)
+				assert.NotZero(t, params.FinancialOperationId)
+			} else {
+				assert.NotContains(t, entry.Other.Op.Params, "error")
+			}
+		} else {
+			assert.Equal(t, "finance.refund_batch.complete", entry.Action)
+			assert.False(t, entry.Success)
+			assert.EqualValues(t, 1, params.Succeeded)
+			assert.EqualValues(t, 1, params.Failed)
+		}
+	}
+	// Recover a crash after durable audit insertion but before task acknowledgement.
+	state.AuditPublished = false
+	pendingAudit, err := common.Marshal(state)
+	require.NoError(t, err)
+	require.NoError(t, db.Model(saved).Update("state", string(pendingAudit)).Error)
+	for range 2 {
+		require.NoError(t, model.FlushRequestRefundAudits(10))
+	}
+	_, total, err = model.GetAuditLogs(model.AuditLogFilter{TaskId: task.TaskID}, 0, 10, common.RoleRootUser)
+	require.NoError(t, err)
+	assert.EqualValues(t, 3, total, "completion recovery cannot duplicate item or summary events")
 	require.NoError(t, db.Model(&rows[1]).Update("settled", true).Error)
 	retried, err := service.RetryRequestRefundBatch(task.TaskID, "submit-retry", operator.Id)
 	require.NoError(t, err)
@@ -152,6 +197,30 @@ func TestRequestRefundBatchPersistsResultsAndRetriesOnlyFailures(t *testing.T) {
 	deleted, err := model.DeleteSystemTaskHistory(model.SystemTaskFilter{})
 	require.NoError(t, err)
 	assert.Zero(t, deleted)
+
+	// The synchronous endpoint records the actual committed ledger, including idempotent retries.
+	response := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(response)
+	c.Request = httptest.NewRequest("POST", "/api/finance/requests/refund", strings.NewReader(`{"billing_id":"batch-good","reason":"incident correction"}`))
+	c.Set("id", operator.Id)
+	c.Set("role", common.RoleRootUser)
+	RefundFinanceRequest(c)
+	assert.Contains(t, response.Body.String(), `"success":true`)
+	audits, total, err = model.GetAuditLogs(model.AuditLogFilter{Action: "finance.request_refund", SourceId: "request-good", TargetUserId: target.Id}, 0, 10, common.RoleRootUser)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, total)
+	require.Len(t, audits, 1)
+	encoded, err := common.Marshal(audits[0].Other.Op.Params)
+	require.NoError(t, err)
+	var params struct {
+		AlreadyApplied  bool `json:"already_applied"`
+		Quota, From, To int
+	}
+	require.NoError(t, common.Unmarshal(encoded, &params))
+	assert.True(t, params.AlreadyApplied)
+	assert.EqualValues(t, 20, params.Quota)
+	assert.EqualValues(t, 100, params.From)
+	assert.EqualValues(t, 120, params.To)
 }
 
 func TestRequestRefundAccounting(t *testing.T) {

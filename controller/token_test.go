@@ -1023,7 +1023,16 @@ func verifyAPITokenAudit(t *testing.T) {
 			response := auditRequest(router, tc.method, tc.path, tc.credential)
 			var count int64
 			require.NoError(t, model.LOG_DB.Model(&model.AuditLog{}).Where("request_id = ?", response.Header().Get(common.RequestIdKey)).Count(&count).Error)
-			assert.Zero(t, count)
+			if tc.credential == "" {
+				require.EqualValues(t, 1, count, "unauthenticated writes leave an authorization rejection")
+				var event model.AuditLog
+				require.NoError(t, model.LOG_DB.Where("request_id = ?", response.Header().Get(common.RequestIdKey)).Take(&event).Error)
+				assert.Equal(t, "auth.rejected", event.Action)
+				assert.False(t, event.Success)
+				assert.Zero(t, event.UserId)
+			} else {
+				assert.Zero(t, count)
+			}
 		}
 	})
 

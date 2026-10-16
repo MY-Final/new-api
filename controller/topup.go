@@ -618,4 +618,5 @@ func RefundTopUp(c *gin.Context) {
 		"status":           common.TopUpStatusRefunded,
 		"already_refunded": alreadyRefunded,
 	})
+	recordFinancialAuditForKey(c, "finance.topup_refund", "topup_refund:"+req.TradeNo, alreadyRefunded)
 }

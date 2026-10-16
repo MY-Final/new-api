@@ -1153,6 +1153,7 @@ func TestAllChannels(c *gin.Context) {
 		}})
 		return
 	}
+	c.Set("audit_task_id", task.TaskID)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",

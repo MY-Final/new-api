@@ -2,6 +2,7 @@ package controller
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -64,4 +65,5 @@ func ReverseAffiliateRebate(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, gin.H{"id": req.RebateId, "status": model.AffiliateRebateStatusReversed, "already_reversed": alreadyReversed})
+	recordFinancialAuditForKey(c, "finance.rebate_reverse", fmt.Sprintf("rebate_reversal:%d", req.RebateId), alreadyReversed)
 }

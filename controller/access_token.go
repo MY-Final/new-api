@@ -349,6 +349,19 @@ func GetAuditLogs(c *gin.Context) {
 		return
 	}
 	filter := model.AuditLogFilter{Username: c.Query("username"), Category: c.Query("category"), TokenRef: c.Query("token_ref"), ExcludeTokenRef: c.Query("exclude_token_ref"), RequestId: c.Query("request_id")}
+	filter.Action, filter.SourceId, filter.TaskId = c.Query("action"), c.Query("source_id"), c.Query("task_id")
+	if len(filter.Action) > 128 || len(filter.SourceId) > 255 || len(filter.TaskId) > 64 {
+		common.ApiErrorMsg(c, "Invalid audit filters")
+		return
+	}
+	if raw := c.Query("target_user_id"); raw != "" {
+		id, err := strconv.Atoi(raw)
+		if err != nil || id <= 0 {
+			common.ApiErrorMsg(c, "Invalid audit filters")
+			return
+		}
+		filter.TargetUserId = id
+	}
 	viewerRole := c.GetInt("role")
 	if c.FullPath() == "/api/audit/self" {
 		filter.UserId = c.GetInt("id")

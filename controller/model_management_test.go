@@ -229,11 +229,18 @@ func TestModelPricingConversionDatabaseMatrix(t *testing.T) {
 					pricing["billing_setting.billing_mode"] = "tiered_expr"
 					pricing["billing_setting.billing_expr"] = tc.expression
 					change := model.ModelPricingChange{ModelName: tc.name, ExpectedVersion: before.Entries[0].Version, Pricing: pricing}
-					require.NoError(t, model.UpdateModelPricing([]model.ModelPricingChange{change}))
+					audit, err := model.UpdateModelPricingWithAudit([]model.ModelPricingChange{change})
+					require.NoError(t, err)
+					require.Len(t, audit, 1)
+					assert.Equal(t, tc.name, audit[0].ModelName)
+					assert.Equal(t, before.Entries[0].Configured, audit[0].From)
 					after, err = model.GetModelPricingSnapshot([]string{tc.name})
 					require.NoError(t, err)
 					assert.Equal(t, pricing, after.Entries[0].Configured)
-					assert.ErrorIs(t, model.UpdateModelPricing([]model.ModelPricingChange{change}), model.ErrModelPricingConflict)
+					assert.Equal(t, after.Entries[0].Configured, audit[0].To)
+					conflictAudit, err := model.UpdateModelPricingWithAudit([]model.ModelPricingChange{change})
+					assert.ErrorIs(t, err, model.ErrModelPricingConflict)
+					assert.Empty(t, conflictAudit, "a rolled back change cannot publish a pricing snapshot")
 					change.ExpectedVersion = after.Entries[0].Version
 					change.Pricing["billing_setting.billing_mode"] = "ratio"
 					require.NoError(t, model.UpdateModelPricing([]model.ModelPricingChange{change}))

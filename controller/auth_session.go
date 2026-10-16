@@ -31,6 +31,10 @@ func RefreshAuth(c *gin.Context) {
 		return
 	}
 	service.WriteRefreshCookie(c, bundle.RefreshToken)
+	c.Set("audit_actor_id", user.Id)
+	c.Set("audit_actor_role", user.Role)
+	c.Set("audit_actor_username", user.Username)
+	c.Set("audit_session_id", bundle.Session.SID)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -65,6 +69,12 @@ func AuthLogout(c *gin.Context) {
 				return
 			}
 			cookieCleared := false
+			if user, err := model.GetUserCache(identity.UserID); err == nil {
+				c.Set("audit_actor_id", user.Id)
+				c.Set("audit_actor_role", user.Role)
+				c.Set("audit_actor_username", user.Username)
+			}
+			c.Set("audit_session_id", identity.SessionID)
 			if cookieErr == nil && hasCookieSID && cookieSID == identity.SessionID {
 				if err := service.RevokeByRefreshToken(rawRefreshToken, identity.SessionID, "logout"); err != nil {
 					writeAuthSessionError(c, err)
@@ -90,6 +100,14 @@ func AuthLogout(c *gin.Context) {
 		writeAuthSessionError(c, err)
 		return
 	}
+	if session, err := model.GetUserSessionBySID(cookieSID); err == nil {
+		if user, err := model.GetUserCache(session.UserID); err == nil {
+			c.Set("audit_actor_id", user.Id)
+			c.Set("audit_actor_role", user.Role)
+			c.Set("audit_actor_username", user.Username)
+		}
+	}
+	c.Set("audit_session_id", cookieSID)
 	service.ClearRefreshCookie(c)
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
 }
@@ -126,6 +144,7 @@ func DeleteLoginSession(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"success": false, "code": "AUTH_SESSION_NOT_FOUND", "message": "session not found"})
 		return
 	}
+	c.Set("audit_session_id", sid)
 	if rawRefreshToken, cookieErr := c.Cookie(service.RefreshCookieName); cookieErr == nil {
 		cookieSID, ok := service.RefreshTokenSID(rawRefreshToken)
 		if ok && cookieSID == sid {
@@ -145,6 +164,7 @@ func RevokeOtherLoginSessions(c *gin.Context) {
 		writeAuthSessionError(c, err)
 		return
 	}
+	c.Set("audit_revoked_count", count)
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": gin.H{"revoked_count": count}})
 }
 

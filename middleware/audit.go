@@ -3,6 +3,7 @@ package middleware
 import (
 	"bytes"
 	"strconv"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -42,6 +43,23 @@ func (w *auditResponseWriter) WriteString(s string) (int, error) {
 // 这些是未被 handler 手动埋点的写操作，由中间件兜底记录；前端依据 action 用 i18n 本地化展示。
 // 未命中的写操作回退为 action="generic"，前端展示 "METHOD route"。
 var auditRouteActions = map[string]string{
+	"POST /api/finance/refund-batches":                "finance.refund_batch.create",
+	"POST /api/finance/refund-batches/:task_id/retry": "finance.refund_batch.retry",
+	"POST /api/finance/requests/refund":               "finance.request_refund",
+	"POST /api/finance/topups/refund":                 "finance.topup_refund",
+	"POST /api/finance/redemptions/refund":            "finance.redemption_refund",
+	"POST /api/finance/rebates/reverse":               "finance.rebate_reverse",
+	"POST /api/finance/penalties":                     "finance.penalty",
+	"POST /api/finance/penalties/reverse":             "finance.penalty_reverse",
+	"GET /api/channel/test":                           "channel.test_all",
+	"GET /api/channel/test/:id":                       "channel.test",
+	"GET /api/channel/update_balance":                 "channel.balance_refresh_all",
+	"GET /api/channel/update_balance/:id":             "channel.balance_refresh",
+	"GET /api/log/export":                             "log.export",
+	"GET /api/audit":                                  "audit.read",
+	"GET /api/redemption/":                            "redemption.read",
+	"GET /api/redemption/search":                      "redemption.read",
+	"GET /api/redemption/:id":                         "redemption.read",
 	// 用户管理
 	"POST /api/user/topup/complete":                    "user.topup_complete",
 	"DELETE /api/user/:id/reset_passkey":               "user.reset_passkey",
@@ -107,7 +125,7 @@ var auditRouteActions = map[string]string{
 // 无需在路由上再单独挂一层审计中间件（避免漏挂）。
 func beginAdminAudit(c *gin.Context) *auditResponseWriter {
 	method := c.Request.Method
-	if method != "POST" && method != "PUT" && method != "PATCH" && method != "DELETE" {
+	if method != "POST" && method != "PUT" && method != "PATCH" && method != "DELETE" && auditRouteActions[method+" "+c.FullPath()] == "" {
 		return nil
 	}
 	writer := &auditResponseWriter{
@@ -138,6 +156,9 @@ func finishAdminAudit(c *gin.Context, writer *auditResponseWriter) {
 	ip := c.ClientIP()
 	status := writer.Status()
 	success := auditResponseSuccess(status, writer.body.Bytes())
+	if explicit, exists := c.Get("audit_business_success"); exists {
+		success, _ = explicit.(bool)
+	}
 
 	route := c.FullPath()
 	action := auditRouteActions[method+" "+route]
@@ -155,6 +176,17 @@ func finishAdminAudit(c *gin.Context, writer *auditResponseWriter) {
 	if action == "generic" {
 		opParams["method"] = method
 		opParams["route"] = route
+	}
+	for _, param := range c.Params {
+		if id, err := strconv.Atoi(param.Value); param.Key == "id" && err == nil && id > 0 {
+			opParams["id"] = id
+		}
+	}
+	if taskId := c.GetString("audit_task_id"); taskId != "" {
+		opParams["task_id"] = taskId
+	}
+	if count, exists := c.Get("audit_exported_count"); exists {
+		opParams["count"] = count
 	}
 
 	// content 为英文兜底文本（供导出等非本地化消费者使用）。
@@ -176,6 +208,76 @@ func finishAdminAudit(c *gin.Context, writer *auditResponseWriter) {
 	}
 
 	model.RecordOperationAuditLog(operatorId, operatorRole, content, ip, action, opParams, adminInfo, auditInfo, c)
+}
+
+// SecurityAudit covers public authentication and user security operations that
+// do not pass AdminAuth. Explicit handler events take precedence. Bodies and
+// credentials are never logged; only the fixed result code is copied.
+func SecurityAudit() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		route := c.FullPath()
+		method := c.Request.Method
+		action, category := "", model.AuditCategorySecurity
+		switch {
+		case (method == "POST" && strings.HasPrefix(route, "/api/user/login")) || strings.HasPrefix(route, "/api/user/passkey/login/") || route == "/api/oauth/:provider" || route == "/api/oauth/wechat" || route == "/api/oauth/telegram/login":
+			action, category = "login", model.AuditCategoryLogin
+		case route == "/api/user/reset":
+			action = "user.password_reset"
+		case route == "/api/reset_password":
+			action = "user.password_reset_request"
+		case route == "/api/user/auth/refresh":
+			action = "session.refresh"
+		case route == "/api/user/auth/logout":
+			action = "session.logout"
+		case method == "DELETE" && route == "/api/user/sessions/:sid":
+			action = "session.revoke"
+		case route == "/api/user/sessions/revoke-others":
+			action = "session.revoke_others"
+		case method != "GET" && (route == "/api/verify" || strings.HasPrefix(route, "/api/user/2fa/") || strings.HasPrefix(route, "/api/user/passkey/") || strings.HasPrefix(route, "/api/oauth/") || strings.HasPrefix(route, "/api/user/access_tokens")):
+			action = "user.security_operation"
+		}
+		if action == "" {
+			c.Next()
+			return
+		}
+		writer := &auditResponseWriter{ResponseWriter: c.Writer, body: bytes.NewBuffer(nil), maxSize: 64 * 1024}
+		c.Writer = writer
+		c.Next()
+		if common.GetContextKeyBool(c, constant.ContextKeyAuditLogged) {
+			return
+		}
+		params := model.AuditFields{}
+		var result struct {
+			Code string `json:"code"`
+		}
+		if common.Unmarshal(writer.body.Bytes(), &result) == nil && len(result.Code) <= 64 && result.Code != "" {
+			params["code"] = result.Code
+		}
+		if username := c.GetString("audit_claimed_username"); username != "" {
+			params["claimed_username"] = username
+		}
+		if count, exists := c.Get("audit_revoked_count"); exists {
+			params["count"] = count
+		}
+		if sid := c.GetString("audit_session_id"); sid != "" {
+			params["session_ref"] = model.AccessTokenFingerprint(sid)
+		}
+		userId, role, username := c.GetInt("id"), c.GetInt("role"), c.GetString("username")
+		if userId == 0 {
+			userId, role, username = c.GetInt("audit_actor_id"), c.GetInt("audit_actor_role"), c.GetString("audit_actor_username")
+		}
+		authMethod := "unauthenticated"
+		if userId > 0 {
+			authMethod = auditAuthMethod(c)
+		}
+		if category == model.AuditCategoryLogin {
+			action = "login.failed"
+			if auditResponseSuccess(writer.Status(), writer.body.Bytes()) {
+				action = "login.challenge"
+			}
+		}
+		model.RecordAuditLog(c, model.AuditLog{UserId: userId, Username: username, ActorRole: role, Category: category, Action: action, Content: action, AuthMethod: authMethod, Status: writer.Status(), Success: auditResponseSuccess(writer.Status(), writer.body.Bytes()), Other: model.AuditOther{Op: &model.AuditOperation{Action: action, Params: params}}})
+	}
 }
 
 func auditAuthMethod(c *gin.Context) string {

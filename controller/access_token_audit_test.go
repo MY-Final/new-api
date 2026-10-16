@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -36,6 +37,8 @@ func setupAccessTokenAudit(t *testing.T) (*model.User, string) {
 	previousDB, previousLogDB := model.DB, model.LOG_DB
 	previousMain, previousLog := common.MainDatabaseType(), common.LogDatabaseType()
 	previousRedis := common.RedisEnabled
+	previousLogDir := common.LogDir
+	common.LogDir = common.GetPointer(t.TempDir())
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, i18n.Init())
@@ -53,6 +56,7 @@ func setupAccessTokenAudit(t *testing.T) (*model.User, string) {
 		common.IsMasterNode = previousMaster
 		common.SetDatabaseTypes(previousMain, previousLog)
 		common.RedisEnabled = previousRedis
+		common.LogDir = previousLogDir
 	})
 	token := "legacy-opaque-token"
 	user := &model.User{Username: "audit-owner", Password: "placeholder", Role: common.RoleAdminUser, Status: common.UserStatusEnabled, Group: "default", AccessToken: &token, AuthVersion: 1, AffCode: "audit-owner"}
@@ -74,7 +78,7 @@ func auditRequest(router http.Handler, method, path, token string) *httptest.Res
 // route rules keyed by gin full path apply unchanged.
 func newAccessTokenTestRouter() *gin.Engine {
 	router := gin.New()
-	router.Use(middleware.RequestId(), middleware.AccessTokenAudit())
+	router.Use(middleware.RequestId(), middleware.AccessTokenAudit(), middleware.SecurityAudit())
 	api := router.Group("/api")
 	api.GET("/verify/methods", middleware.UserAuth(), GetVerificationMethods)
 	api.POST("/verify", middleware.UserAuth(), UniversalVerify)
@@ -609,7 +613,7 @@ func TestAuditIsolationVisibilityAndFailureContracts(t *testing.T) {
 	response = auditRequest(router, "GET", "/api/audit?category=security", pat)
 	assert.Contains(t, response.Body.String(), "admin_info")
 	assert.NotContains(t, response.Body.String(), "root-only")
-	for _, query := range []string{"success=bad", "category=bad", "token_ref=secret", "start_timestamp=-1", "start_timestamp=2&end_timestamp=1", "p=-1", "page_size=-1"} {
+	for _, query := range []string{"success=bad", "category=bad", "token_ref=secret", "start_timestamp=-1", "start_timestamp=2&end_timestamp=1", "p=-1", "page_size=-1", "target_user_id=0", "target_user_id=oops", "action=" + strings.Repeat("a", 129), "task_id=" + strings.Repeat("a", 65)} {
 		assert.Contains(t, auditRequest(router, "GET", "/api/audit/self?"+query, pat).Body.String(), `"success":false`)
 	}
 	require.NoError(t, model.LOG_DB.Callback().Query().Before("gorm:query").Register("audit:fail", func(tx *gorm.DB) {
@@ -654,6 +658,11 @@ func TestAuditRoleVisibilityAndPermissions(t *testing.T) {
 	for _, credential := range []string{pat, jwt} {
 		assert.Equal(t, http.StatusForbidden, auditRequest(router, "GET", "/api/audit", credential).Code)
 	}
+	var rejected []model.AuditLog
+	require.NoError(t, model.LOG_DB.Where("action = ?", "auth.rejected").Find(&rejected).Error)
+	require.Len(t, rejected, 1, "session denial is audited once; PAT denial has its own access-token event")
+	assert.False(t, rejected[0].Success)
+	assert.Equal(t, admin.Id, rejected[0].UserId)
 	require.NoError(t, model.DB.Transaction(func(tx *gorm.DB) error {
 		return authz.SetUserPermissionsInTx(tx, admin.Id, authz.PermissionsMap{authz.ResourceAudit: {authz.ActionRead: true}})
 	}))
@@ -669,7 +678,7 @@ func TestAuditRoleVisibilityAndPermissions(t *testing.T) {
 				}
 			}
 			require.NoError(t, common.Unmarshal(response.Body.Bytes(), &result))
-			assert.Equal(t, 2, result.Data.Total)
+			assert.Equal(t, 3, result.Data.Total)
 			require.Len(t, result.Data.Items, 1)
 			assert.Equal(t, 10, result.Data.Items[0].ActorRole)
 			assert.NotContains(t, response.Body.String(), "root-only")
@@ -687,7 +696,7 @@ func TestAuditRoleVisibilityAndPermissions(t *testing.T) {
 	assert.Contains(t, rootSelf.Body.String(), `"actor_role":100`)
 	assert.NotContains(t, rootSelf.Body.String(), "admin_info")
 	rootAll := auditRequest(router, "GET", "/api/audit?category=security", rootToken)
-	assert.Contains(t, rootAll.Body.String(), `"total":7`)
+	assert.Contains(t, rootAll.Body.String(), `"total":8`)
 	assert.Contains(t, rootAll.Body.String(), "root-only")
 	require.NoError(t, authz.SetUserPermissions(admin.Id, authz.PermissionsMap{authz.ResourceAudit: {authz.ActionRead: false}}))
 	for _, credential := range []string{pat, jwt} {
@@ -1149,6 +1158,7 @@ func TestAuditDatabaseMatrix(t *testing.T) {
 					assert.EqualValues(t, 3, total)
 					verifyAuditRoleStorage(t)
 					verifyAuditJSONStorage(t)
+					verifyAuditRecoveryAndFilters(t)
 					require.NoError(t, authz.Init(model.DB))
 					assert.False(t, authz.Can(1, common.RoleAdminUser, authz.AuditRead))
 					require.NoError(t, model.DB.Transaction(func(tx *gorm.DB) error {
@@ -1223,6 +1233,7 @@ func TestIndependentAuditLogStores(t *testing.T) {
 				assert.Zero(t, mainCount)
 				verifyAuditRoleStorage(t)
 				verifyAuditJSONStorage(t)
+				verifyAuditRecoveryAndFilters(t)
 				if tc.kind == "clickhouse" {
 					var create string
 					require.NoError(t, model.LOG_DB.Raw("SHOW CREATE TABLE audit_logs").Scan(&create).Error)
@@ -1262,3 +1273,232 @@ CREATE TABLE IF NOT EXISTS logs (
 ENGINE = MergeTree()
 PARTITION BY toYYYYMM(toDateTime(created_at))
 ORDER BY (created_at, request_id)`
+
+func TestAuditSecurityLifecycle(t *testing.T) {
+	user, _ := setupAccessTokenAudit(t)
+	previousLogin, previousEncryption := common.PasswordLoginEnabled, common.PasswordLoginEncryptionEnabled
+	common.PasswordLoginEnabled, common.PasswordLoginEncryptionEnabled = true, false
+	t.Cleanup(func() {
+		common.PasswordLoginEnabled, common.PasswordLoginEncryptionEnabled = previousLogin, previousEncryption
+	})
+	router := gin.New()
+	router.Use(middleware.RequestId(), middleware.AccessTokenAudit(), middleware.SecurityAudit())
+	router.POST("/api/user/login", Login)
+	router.POST("/api/user/login/2fa", func(c *gin.Context) { common.ApiSuccess(c, gin.H{"challenge_id": "secret-challenge"}) })
+	router.GET("/api/oauth/:provider", func(c *gin.Context) { recordLoginAudit(user, c); common.ApiSuccess(c, nil) })
+	router.POST("/api/verify", middleware.UserAuth(), UniversalVerify)
+	router.POST("/api/user/auth/refresh", RefreshAuth)
+	router.POST("/api/user/auth/logout", AuthLogout)
+	router.DELETE("/api/user/sessions/:sid", middleware.UserAuth(), DeleteLoginSession)
+	router.POST("/api/user/sessions/revoke-others", middleware.UserAuth(), RevokeOtherLoginSessions)
+	_, jwt := createAccessTokenTestSession(t, user.Id, "secret-current-sid")
+	createAccessTokenTestSession(t, user.Id, "secret-delete-sid")
+	createAccessTokenTestSession(t, user.Id, "secret-other-sid")
+	assert.Contains(t, accessTokenRequest(router, "POST", "/api/user/login?token=secret-query", "", "", `{"username":"unknown-actor","password":"secret-password"}`).Body.String(), `"success":false`)
+	assert.Contains(t, accessTokenRequest(router, "POST", "/api/user/login/2fa", "", "", `{}`).Body.String(), `"success":true`)
+	assert.Contains(t, accessTokenRequest(router, "GET", "/api/oauth/github", "", "", "").Body.String(), `"success":true`)
+	assert.Contains(t, accessTokenRequest(router, "POST", "/api/verify", jwt, "secret-proof", `{"method":"password","password":"secret-password"}`).Body.String(), `"success":false`)
+	assert.Equal(t, http.StatusOK, accessTokenRequest(router, "DELETE", "/api/user/sessions/secret-delete-sid", jwt, "", "").Code)
+	assert.Equal(t, http.StatusNotFound, accessTokenRequest(router, "DELETE", "/api/user/sessions/secret-missing-sid", jwt, "", "").Code)
+	assert.Equal(t, http.StatusOK, accessTokenRequest(router, "POST", "/api/user/sessions/revoke-others", jwt, "", "").Code)
+	assert.Equal(t, http.StatusUnauthorized, accessTokenRequest(router, "POST", "/api/user/auth/refresh", "", "", "").Code)
+	bundle, err := service.CreateLoginSession(user.Id, "password", "192.0.2.8", "audit-client")
+	require.NoError(t, err)
+	request := httptest.NewRequest("POST", "/api/user/auth/refresh", nil)
+	request.AddCookie(&http.Cookie{Name: service.RefreshCookieName, Value: bundle.RefreshToken})
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	assert.Equal(t, http.StatusOK, response.Code)
+	// Revoked refresh credentials must fail and leave an audit event.
+	_, err = model.RevokeUserSession(user.Id, bundle.Session.SID, "audit-test-revoke")
+	require.NoError(t, err)
+	replay := httptest.NewRecorder()
+	router.ServeHTTP(replay, request.Clone(context.Background()))
+	assert.Equal(t, http.StatusUnauthorized, replay.Code)
+	assert.Equal(t, http.StatusOK, accessTokenRequest(router, "POST", "/api/user/auth/logout", jwt, "", "").Code)
+	var entries []model.AuditLog
+	require.NoError(t, model.LOG_DB.Order("id ASC").Find(&entries).Error)
+	require.Len(t, entries, 11)
+	encoded, err := common.Marshal(entries)
+	require.NoError(t, err)
+	var metadata []struct {
+		Other struct {
+			Op struct {
+				Params struct {
+					ClaimedUsername string `json:"claimed_username"`
+					SessionRef      string `json:"session_ref"`
+				}
+			}
+		}
+	}
+	require.NoError(t, common.Unmarshal(encoded, &metadata))
+	expected := []string{"login.failed", "login.challenge", "login", "user.security_operation", "session.revoke", "session.revoke", "session.revoke_others", "session.refresh", "session.refresh", "session.refresh", "session.logout"}
+	for i, entry := range entries {
+		assert.Equal(t, expected[i], entry.Action)
+	}
+	assert.False(t, entries[0].Success)
+	assert.Equal(t, "unauthenticated", entries[0].AuthMethod)
+	assert.Equal(t, "unknown-actor", metadata[0].Other.Op.Params.ClaimedUsername)
+	assert.True(t, entries[1].Success)
+	assert.False(t, entries[3].Success)
+	assert.False(t, entries[5].Success)
+	assert.False(t, entries[7].Success)
+	assert.True(t, entries[8].Success)
+	assert.False(t, entries[9].Success)
+	assert.Equal(t, model.AccessTokenFingerprint("secret-delete-sid"), metadata[4].Other.Op.Params.SessionRef)
+	assert.Equal(t, user.Id, entries[10].UserId)
+	assert.Equal(t, model.AccessTokenFingerprint("secret-current-sid"), metadata[10].Other.Op.Params.SessionRef)
+	for _, secret := range []string{"secret-password", "secret-proof", "secret-current-sid", "secret-delete-sid", "secret-other-sid", "secret-missing-sid", "secret-query", "secret-challenge", bundle.RefreshToken, bundle.AccessToken, jwt} {
+		assert.NotContains(t, string(encoded), secret)
+	}
+}
+
+func TestAuditSensitiveGETResults(t *testing.T) {
+	user, _ := setupAccessTokenAudit(t)
+	_, jwt := createAccessTokenTestSession(t, user.Id, "get-audit-session")
+	router := gin.New()
+	router.Use(middleware.RequestId())
+	router.GET("/api/channel/test/:id", middleware.AdminAuth(), func(c *gin.Context) { common.ApiSuccess(c, nil) })
+	router.GET("/api/log/export", middleware.AdminAuth(), func(c *gin.Context) {
+		c.Set("audit_exported_count", 7)
+		c.Set("audit_business_success", false)
+		c.String(http.StatusOK, strings.Repeat("x", 70*1024))
+	})
+	router.GET("/api/channel/", middleware.AdminAuth(), func(c *gin.Context) { common.ApiSuccess(c, nil) })
+	for _, path := range []string{"/api/channel/test/42", "/api/log/export", "/api/channel/"} {
+		require.Equal(t, http.StatusOK, auditRequest(router, "GET", path, jwt).Code)
+	}
+	var entries []model.AuditLog
+	require.NoError(t, model.LOG_DB.Order("id ASC").Find(&entries).Error)
+	require.Len(t, entries, 2, "ordinary read-only GET requests are not audited")
+	assert.Equal(t, "channel.test", entries[0].Action)
+	assert.True(t, entries[0].Success)
+	encoded, err := common.Marshal(entries)
+	require.NoError(t, err)
+	var metadata []struct {
+		Other struct {
+			Op struct{ Params struct{ Id, Count int } }
+		}
+	}
+	require.NoError(t, common.Unmarshal(encoded, &metadata))
+	assert.Equal(t, 42, metadata[0].Other.Op.Params.Id)
+	assert.Equal(t, "log.export", entries[1].Action)
+	assert.False(t, entries[1].Success, "an incomplete streamed export must not become a success")
+	assert.Equal(t, 7, metadata[1].Other.Op.Params.Count)
+}
+
+func TestAuditDurableRecoveryAndFilters(t *testing.T) {
+	setupAccessTokenAudit(t)
+	verifyAuditRecoveryAndFilters(t)
+}
+
+func verifyAuditRecoveryAndFilters(t *testing.T) {
+	t.Helper()
+	previousDir := common.LogDir
+	common.LogDir = common.GetPointer(t.TempDir())
+	t.Cleanup(func() { common.LogDir = previousDir })
+	const eventID = "audit-recovery-event"
+	entry := model.AuditLog{EventId: eventID, UserId: 1, ActorRole: common.RoleAdminUser, Category: model.AuditCategoryOperation, Action: "finance.request_refund", Success: true, Other: model.AuditOther{Op: &model.AuditOperation{Action: "finance.request_refund", Params: model.AuditFields{"target_user_id": 42, "source_id": "order-'42", "task_id": "refund-42"}}}}
+	require.NoError(t, model.LOG_DB.Callback().Create().Before("gorm:create").Register("audit:test-outage", func(tx *gorm.DB) {
+		if tx.Statement.Table == "audit_logs" {
+			tx.AddError(errors.New("simulated audit outage"))
+		}
+	}))
+	require.NoError(t, model.RecordAuditLog(nil, entry), "a durably spooled event is accepted")
+	model.LOG_DB.Callback().Create().Remove("audit:test-outage")
+	pending := filepath.Join(*common.LogDir, "audit-pending")
+	queued := filepath.Join(pending, model.AccessTokenFingerprint(eventID)+".json")
+	info, err := os.Stat(queued)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
+	require.NoError(t, os.WriteFile(filepath.Join(pending, "corrupt.json"), []byte("{bad"), 0600))
+	assert.Error(t, model.FlushPendingAuditLogs(100), "a damaged record must be reported and retained")
+	require.FileExists(t, filepath.Join(pending, "quarantine", "corrupt.json"))
+	require.NoError(t, model.FlushPendingAuditLogs(100))
+	assert.NoFileExists(t, queued)
+	require.NoError(t, model.RecordAuditLog(nil, entry), "replaying the same event must be harmless")
+	filter := model.AuditLogFilter{Action: entry.Action, TargetUserId: 42, SourceId: "order-'42", TaskId: "refund-42"}
+	entries, total, err := model.GetAuditLogs(filter, 0, 10, common.RoleAdminUser)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, total)
+	require.Len(t, entries, 1)
+	assert.Equal(t, eventID, entries[0].EventId)
+	for _, mismatch := range []model.AuditLogFilter{{Action: "finance.nonexistent"}, {TargetUserId: 99}, {SourceId: "' OR 1=1 --"}, {TaskId: "other-batch"}, {UserId: 999}} {
+		_, total, err := model.GetAuditLogs(mismatch, 0, 10, common.RoleRootUser)
+		require.NoError(t, err)
+		assert.Zero(t, total)
+	}
+	// A filesystem outage must remain visible to callers instead of claiming durability.
+	require.NoError(t, os.WriteFile(filepath.Join(*common.LogDir, "blocked"), []byte("file"), 0600))
+	common.LogDir = common.GetPointer(filepath.Join(*common.LogDir, "blocked"))
+	savedDB := model.LOG_DB
+	model.LOG_DB = nil
+	assert.Error(t, model.RecordAuditLog(nil, entry))
+	model.LOG_DB = savedDB
+}
+
+func TestAuditPasswordRecoveryExcludesCredentials(t *testing.T) {
+	user, _ := setupAccessTokenAudit(t)
+	const email, resetToken = "audit-recovery@example.invalid", "secret-reset-token"
+	require.NoError(t, model.DB.Model(user).Update("email", email).Error)
+	common.RegisterVerificationCodeWithKey(email, resetToken, common.PasswordResetPurpose)
+	t.Cleanup(func() { common.DeleteKey(email, common.PasswordResetPurpose) })
+	router := gin.New()
+	router.Use(middleware.RequestId(), middleware.SecurityAudit())
+	router.POST("/api/user/reset", ResetPassword)
+	router.GET("/api/reset_password", SendPasswordResetEmail)
+	body := `{"email":"` + email + `","token":"` + resetToken + `"}`
+	response := accessTokenRequest(router, "POST", "/api/user/reset", "", "", body)
+	require.Contains(t, response.Body.String(), `"success":true`)
+	var password struct{ Data string }
+	require.NoError(t, common.Unmarshal(response.Body.Bytes(), &password))
+	require.NotEmpty(t, password.Data)
+	replay := accessTokenRequest(router, "POST", "/api/user/reset", "", "", body)
+	assert.Contains(t, replay.Body.String(), `"success":false`)
+	assert.Contains(t, accessTokenRequest(router, "GET", "/api/reset_password?email=unknown@example.invalid", "", "", "").Body.String(), `"success":true`)
+	var entries []model.AuditLog
+	require.NoError(t, model.LOG_DB.Order("id ASC").Find(&entries).Error)
+	require.Len(t, entries, 3)
+	assert.Equal(t, "user.password_reset", entries[0].Action)
+	assert.Equal(t, user.Id, entries[0].UserId)
+	assert.True(t, entries[0].Success)
+	assert.False(t, entries[1].Success)
+	assert.Equal(t, "user.password_reset_request", entries[2].Action)
+	encoded, err := common.Marshal(entries)
+	require.NoError(t, err)
+	for _, secret := range []string{email, resetToken, password.Data} {
+		assert.NotContains(t, string(encoded), secret)
+	}
+}
+
+func TestAuditAdminPermissionSnapshots(t *testing.T) {
+	target, _ := setupAccessTokenAudit(t)
+	password, err := common.Password2Hash("permission-password")
+	require.NoError(t, err)
+	root := &model.User{Password: password, Username: "permission-root", Role: common.RoleRootUser, Status: common.UserStatusEnabled, AuthVersion: 1, AffCode: "permission-root", Group: "default"}
+	require.NoError(t, model.DB.Create(root).Error)
+	identity, _ := createAccessTokenTestSession(t, root.Id, "permission-audit-session")
+	require.NoError(t, authz.SetUserPermissions(target.Id, authz.PermissionsMap{authz.ResourceAudit: {authz.ActionRead: false}}))
+	context, err := common.Marshal(service.AdminUserContext{UserID: target.Id})
+	require.NoError(t, err)
+	operation := service.VerificationOperation{Scope: service.VerificationScopeAdminUserUpdate, Context: context}
+	proof := issueSecurityEnrollmentProof(t, identity, operation, service.VerificationMethodPassword)
+	body := fmt.Sprintf(`{"id":%d,"username":"%s","group":"default","admin_permissions":{"audit":{"read":true}}}`, target.Id, target.Username)
+	response := adminUserRequest("PUT", "/api/user/", body, proof, identity, common.RoleRootUser, nil, UpdateUser)
+	require.Contains(t, response.Body.String(), `"success":true`)
+	var event model.AuditLog
+	require.NoError(t, model.LOG_DB.Where("action = ?", "user.update").Take(&event).Error)
+	encoded, err := common.Marshal(event.Other.Op.Params)
+	require.NoError(t, err)
+	var params struct {
+		Before       authz.PermissionsMap `json:"permissions_before"`
+		After        authz.PermissionsMap `json:"permissions_after"`
+		TargetUserId int                  `json:"target_user_id"`
+	}
+	require.NoError(t, common.Unmarshal(encoded, &params))
+	assert.Equal(t, target.Id, params.TargetUserId)
+	assert.False(t, params.Before[authz.ResourceAudit][authz.ActionRead])
+	assert.True(t, params.After[authz.ResourceAudit][authz.ActionRead])
+	assert.NotContains(t, string(encoded), proof)
+	assert.True(t, authz.Can(target.Id, target.Role, authz.AuditRead))
+}

@@ -11,13 +11,70 @@ import (
 
 const MaxRequestRefundBatchSize = 200
 
+// PublishRequestRefundBatchAudit can recover after completion but before audit
+// publication. Only durable audit storage (database or recovery queue) allows
+// the task's publication marker to advance.
+func PublishRequestRefundBatchAudit(taskId string) error {
+	task, err := GetRequestRefundBatch(taskId)
+	if err != nil {
+		return err
+	}
+	if task.Status != SystemTaskStatusSucceeded && task.Status != SystemTaskStatusFailed {
+		return nil
+	}
+	var payload RequestRefundBatchPayload
+	var state RequestRefundBatchState
+	if err := task.DecodePayload(&payload); err != nil {
+		return err
+	}
+	if err := task.DecodeState(&state); err != nil {
+		return err
+	}
+	if state.AuditPublished {
+		return nil
+	}
+	for _, item := range state.Items {
+		params := AuditFields{"task_id": task.TaskID, "source_type": "request", "source_id": item.RequestId, "billing_id": item.BillingId, "target_user_id": item.UserId, "financial_operation_id": item.OperationId, "quota": item.Quota, "already_applied": item.AlreadyRefunded}
+		entry := AuditLog{EventId: AccessTokenFingerprint("refund-item:" + task.TaskID + ":" + item.BillingId), UserId: payload.OperatorId, Username: payload.OperatorUsername, ActorRole: payload.OperatorRole, Category: AuditCategoryOperation, Action: "finance.refund_batch.item", Content: "Batch refund item result", AuthMethod: "system_task", Success: item.Status == "succeeded", Other: AuditOther{Op: &AuditOperation{Action: "finance.refund_batch.item", Params: params}}}
+		if err := RecordAuditLog(nil, entry); err != nil {
+			return err
+		}
+	}
+	params := AuditFields{"task_id": task.TaskID, "total": state.Total, "succeeded": state.Succeeded, "failed": state.Failed, "reason": payload.Reason}
+	if err := RecordAuditLog(nil, AuditLog{EventId: AccessTokenFingerprint("refund-complete:" + task.TaskID), UserId: payload.OperatorId, Username: payload.OperatorUsername, ActorRole: payload.OperatorRole, Category: AuditCategoryOperation, Action: "finance.refund_batch.complete", Content: "Batch refund completed", AuthMethod: "system_task", Success: task.Status == SystemTaskStatusSucceeded && state.Failed == 0 && state.Processed == state.Total, Other: AuditOther{Op: &AuditOperation{Action: "finance.refund_batch.complete", Params: params}}}); err != nil {
+		return err
+	}
+	state.AuditPublished = true
+	encoded, err := common.Marshal(state)
+	if err != nil {
+		return err
+	}
+	return DB.Model(task).Where("state = ?", task.State).Update("state", string(encoded)).Error
+}
+
+func FlushRequestRefundAudits(limit int) error {
+	var tasks []SystemTask
+	if err := DB.Where("type = ? AND status IN ? AND state LIKE ?", SystemTaskTypeRequestRefund, []SystemTaskStatus{SystemTaskStatusSucceeded, SystemTaskStatusFailed}, "%\"audit_published\":false%").Order("id ASC").Limit(limit).Find(&tasks).Error; err != nil {
+		return err
+	}
+	for _, task := range tasks {
+		if err := PublishRequestRefundBatchAudit(task.TaskID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 type RequestRefundBatchPayload struct {
-	BillingIds []string `json:"billing_ids"`
-	Reason     string   `json:"reason"`
-	OperatorId int      `json:"operator_id"`
+	BillingIds       []string `json:"billing_ids"`
+	Reason           string   `json:"reason"`
+	OperatorId       int      `json:"operator_id"`
+	OperatorRole     int      `json:"operator_role"`
+	OperatorUsername string   `json:"operator_username"`
 }
 
 type RequestRefundBatchItem struct {
+	UserId          int    `json:"user_id"`
 	BillingId       string `json:"billing_id"`
 	RequestId       string `json:"request_id"`
 	Username        string `json:"username"`
@@ -29,12 +86,13 @@ type RequestRefundBatchItem struct {
 }
 
 type RequestRefundBatchState struct {
-	Items     []RequestRefundBatchItem `json:"items"`
-	Total     int                      `json:"total"`
-	Processed int                      `json:"processed"`
-	Succeeded int                      `json:"succeeded"`
-	Failed    int                      `json:"failed"`
-	Progress  int                      `json:"progress"`
+	AuditPublished bool                     `json:"audit_published"`
+	Items          []RequestRefundBatchItem `json:"items"`
+	Total          int                      `json:"total"`
+	Processed      int                      `json:"processed"`
+	Succeeded      int                      `json:"succeeded"`
+	Failed         int                      `json:"failed"`
+	Progress       int                      `json:"progress"`
 }
 
 // Queued refunds use the existing leased system-task runner. Each submission
@@ -62,7 +120,11 @@ func CreateRequestRefundBatch(ids []string, reason, clientId string, operatorId 
 			normalized = append(normalized, id)
 		}
 	}
-	payload := RequestRefundBatchPayload{BillingIds: normalized, Reason: reason, OperatorId: operatorId}
+	var operator User
+	if err := DB.Select("id", "username", "role").First(&operator, operatorId).Error; err != nil {
+		return nil, err
+	}
+	payload := RequestRefundBatchPayload{BillingIds: normalized, Reason: reason, OperatorId: operatorId, OperatorRole: operator.Role, OperatorUsername: operator.Username}
 	taskId := "refund_" + strconv.Itoa(operatorId) + "_" + clientId
 	if len(taskId) > 64 {
 		return nil, common.NewMessage("Invalid refund batch")
@@ -80,6 +142,7 @@ func CreateRequestRefundBatch(ids []string, reason, clientId string, operatorId 
 		item := RequestRefundBatchItem{BillingId: id, Status: "pending"}
 		for _, record := range records {
 			if record.Id == id {
+				item.UserId = record.UserId
 				item.RequestId, item.Username, item.Quota = record.RequestId, record.Username, record.Quota
 				break
 			}

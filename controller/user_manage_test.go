@@ -31,6 +31,8 @@ import (
 func setupManageUserTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	require.NoError(t, i18n.Init())
+	previousLogDir := common.LogDir
+	common.LogDir = common.GetPointer(t.TempDir())
 	previousDB, previousLogDB := model.DB, model.LOG_DB
 	previousRedisEnabled, previousSecret := common.RedisEnabled, common.SessionSecret
 	previousMainDatabaseType, previousLogDatabaseType := common.MainDatabaseType(), common.LogDatabaseType()
@@ -54,6 +56,7 @@ func setupManageUserTestDB(t *testing.T) *gorm.DB {
 	common.SetDatabaseTypes(databaseTypes[dialect], databaseTypes[dialect])
 
 	t.Cleanup(func() {
+		common.LogDir = previousLogDir
 		model.DB, model.LOG_DB = previousDB, previousLogDB
 		common.RedisEnabled, common.SessionSecret = previousRedisEnabled, previousSecret
 		common.SetDatabaseTypes(previousMainDatabaseType, previousLogDatabaseType)

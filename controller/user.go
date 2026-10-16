@@ -62,6 +62,8 @@ func Login(c *gin.Context) {
 		return
 	}
 	username := loginRequest.Username
+	claimedUsername := []rune(strings.TrimSpace(username))
+	c.Set("audit_claimed_username", string(claimedUsername[:min(64, len(claimedUsername))]))
 	password := loginRequest.Password
 	if common.PasswordLoginEncryptionEnabled {
 		if loginRequest.PasswordEncrypted == "" || loginRequest.EncryptionKeyID == "" {
@@ -718,6 +720,7 @@ func UpdateUser(c *gin.Context) {
 		return
 	}
 	updatedUser.Role = originUser.Role
+	previousPermissions := authz.Capabilities(originUser.Id, originUser.Role)
 	myRole := c.GetInt("role")
 	if !canManageTargetRole(myRole, originUser.Role) {
 		common.ApiErrorT(c, "No permission to update users of same or higher permission level")
@@ -738,6 +741,9 @@ func UpdateUser(c *gin.Context) {
 		auditParams["verification_method"] = authorization.Method
 		auditParams["password_reset"] = updatePassword
 		auditParams["admin_permissions_updated"] = updatedUser.AdminPermissions != nil
+		if updatedUser.AdminPermissions != nil {
+			auditParams["permissions_before"] = previousPermissions
+		}
 	}
 	authzTouched := false
 	if err := model.DB.Transaction(func(tx *gorm.DB) error {
@@ -766,6 +772,9 @@ func UpdateUser(c *gin.Context) {
 	if err := model.PublishUserAuthCache(updatedUser.Id); err != nil {
 		common.ApiError(c, err)
 		return
+	}
+	if updatedUser.AdminPermissions != nil {
+		auditParams["permissions_after"] = authz.Capabilities(updatedUser.Id, updatedUser.Role)
 	}
 	recordManageAuditFor(c, updatedUser.Id, "user.update", auditParams)
 	c.JSON(http.StatusOK, gin.H{
