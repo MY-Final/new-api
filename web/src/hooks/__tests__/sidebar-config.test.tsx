@@ -30,8 +30,14 @@ import type { CustomPage } from '@/lib/custom-pages'
 import { ROLE } from '@/lib/roles'
 import { useAuthStore } from '@/stores/auth-store'
 
-import { useSidebarConfig } from '../use-sidebar-config'
-import { useSidebarData } from '../use-sidebar-data'
+import { useSidebarView } from '../use-sidebar-view'
+
+vi.mock('@tanstack/react-router', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tanstack/react-router')>()),
+  useLocation: (options: {
+    select: (location: { pathname: string }) => unknown
+  }) => options.select({ pathname: '/finance/topups' }),
+}))
 
 beforeEach(() => {
   vi.stubGlobal('localStorage', {
@@ -51,7 +57,8 @@ function sidebarFor(
   admin?: object,
   user?: object,
   canConfigure = true,
-  customPages: CustomPage[] = []
+  customPages: CustomPage[] = [],
+  role: number = ROLE.ADMIN
 ) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -63,7 +70,7 @@ function sidebarFor(
   useAuthStore.getState().auth.setUser({
     id: 1,
     username: 'alice',
-    role: 1,
+    role,
     permissions: { sidebar_settings: canConfigure },
     sidebar_modules: user ? JSON.stringify(user) : '',
   })
@@ -74,10 +81,9 @@ function sidebarFor(
       </QueryClientProvider>
     )
   }
-  const result = renderHook(
-    () => useSidebarConfig(useSidebarData().navGroups),
-    { wrapper: Wrapper }
-  )
+  const result = renderHook(() => useSidebarView().navGroups, {
+    wrapper: Wrapper,
+  })
   return result
 }
 
@@ -232,45 +238,49 @@ describe('Custom pages sidebar group', () => {
 })
 
 describe('finance sidebar entries', () => {
-  it('legacy configurations expose separate ledger links followed by the refund center', () => {
+  it('legacy configurations group all six finance links separately from administration', () => {
     const { result } = sidebarFor({ admin: { enabled: true, finance: true } })
-    const items =
-      result.current.find((group) => group.id === 'admin')?.items ?? []
+    const finance = result.current.find((group) => group.id === 'finance')
+    expect(finance?.title).toBe('Finance Management')
     expect(
-      items
-        .filter((item) => item.url?.startsWith('/finance/'))
-        .map((item) => ({ title: item.title, url: item.url }))
+      finance?.items.map((item) => ({ title: item.title, url: item.url }))
     ).toEqual([
       { title: 'Top-up Orders', url: '/finance/topups' },
       { title: 'Redemption Ledger', url: '/finance/redemptions' },
       { title: 'Rebate Ledger', url: '/finance/rebates' },
       { title: 'Financial Operations', url: '/finance/operations' },
       { title: 'Refund center', url: '/finance/refunds' },
+      { title: 'General Ledger', url: '/ledger' },
     ])
+    const admin = result.current.find((group) => group.id === 'admin')
+    expect(admin?.items.some((item) => item.url === '/channels')).toBe(true)
+    expect(
+      admin?.items.some((item) =>
+        finance?.items.some((entry) => entry.url === item.url)
+      )
+    ).toBe(false)
   })
 
   it.each([
-    ['topups', 'Top-up Orders'],
-    ['redemptions', 'Redemption Ledger'],
-    ['rebates', 'Rebate Ledger'],
-    ['operations', 'Financial Operations'],
-  ])(
-    'selects only the corresponding sidebar entry for %s',
-    (section, title) => {
-      const { result } = sidebarFor()
-      const items = result.current.flatMap((group) => group.items)
-      expect(
-        items
-          .filter((item) => checkIsActive(`/finance/${section}?page=2`, item))
-          .map((item) => item.title)
-      ).toEqual([title])
-    }
-  )
+    ['/finance/topups', 'Top-up Orders'],
+    ['/finance/redemptions', 'Redemption Ledger'],
+    ['/finance/rebates', 'Rebate Ledger'],
+    ['/finance/operations', 'Financial Operations'],
+    ['/ledger', 'General Ledger'],
+  ])('selects only the corresponding sidebar entry for %s', (url, title) => {
+    const { result } = sidebarFor()
+    const items = result.current.flatMap((group) => group.items)
+    expect(
+      items
+        .filter((item) => checkIsActive(`${url}?page=2`, item))
+        .map((item) => item.title)
+    ).toEqual([title])
+  })
 
   it('selects only the refund center for both refund workspaces', () => {
     const { result } = sidebarFor({ admin: { enabled: true, finance: true } })
     const items =
-      result.current.find((group) => group.id === 'admin')?.items ?? []
+      result.current.find((group) => group.id === 'finance')?.items ?? []
     expect(
       items
         .filter((item) =>
@@ -294,10 +304,34 @@ describe('finance sidebar entries', () => {
     'finance visibility settings hide all ledger and refund links (%j, %j)',
     (admin, user) => {
       const { result } = sidebarFor(admin, user)
+      expect(result.current.some((group) => group.id === 'finance')).toBe(false)
       expect(
         result.current
           .flatMap((group) => group.items)
-          .some((item) => item.url?.startsWith('/finance/'))
+          .some(
+            (item) =>
+              item.url?.startsWith('/finance/') || item.url === '/ledger'
+          )
+      ).toBe(false)
+    }
+  )
+
+  it.each([ROLE.GUEST, ROLE.USER])(
+    'hides the finance group and its links from role %s',
+    (role) => {
+      const { result } = sidebarFor(undefined, undefined, true, [], role)
+      expect(
+        result.current.some(
+          (group) => group.id === 'finance' || group.id === 'admin'
+        )
+      ).toBe(false)
+      expect(
+        result.current
+          .flatMap((group) => group.items)
+          .some(
+            (item) =>
+              item.url?.startsWith('/finance/') || item.url === '/ledger'
+          )
       ).toBe(false)
     }
   )

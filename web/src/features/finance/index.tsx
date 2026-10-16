@@ -1,5 +1,4 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
 import { Download } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -102,17 +101,6 @@ export function Finance({ section: rawSection }: { section: string }) {
             : t(sectionNames[section])}
         </SectionPageLayout.Title>
         <SectionPageLayout.Actions>
-          <Button
-            variant='outline'
-            render={
-              <Link
-                to='/finance/$section'
-                params={{ section: cashRefunds ? 'operations' : 'refunds' }}
-              />
-            }
-          >
-            {cashRefunds ? t('Financial operations') : t('Refund center')}
-          </Button>
           <Button
             variant='outline'
             disabled={isExporting || total === 0}

@@ -17,7 +17,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
 import type { PaginationState } from '@tanstack/react-table'
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -127,16 +126,6 @@ export function RefundWorkspace(props: { initialRequestId?: string }) {
     <>
       <SectionPageLayout fixedContent>
         <SectionPageLayout.Title>{t('Refund center')}</SectionPageLayout.Title>
-        <SectionPageLayout.Actions>
-          <Button
-            variant='outline'
-            render={
-              <Link to='/finance/$section' params={{ section: 'operations' }} />
-            }
-          >
-            {t('Financial operations')}
-          </Button>
-        </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
           <Tabs
             value={tab}

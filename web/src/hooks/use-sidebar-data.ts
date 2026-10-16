@@ -244,6 +244,31 @@ export function useSidebarData(): SidebarData {
             icon: CreditCard,
           },
           {
+            title: t('System Info'),
+            url: '/system-info',
+            icon: ServerCog,
+            requiredRole: ROLE.SUPER_ADMIN,
+          },
+          {
+            title: t('Task Plugins'),
+            url: '/task-plugins',
+            icon: PlugZap,
+            requiredRole: ROLE.SUPER_ADMIN,
+          },
+          {
+            title: t('System Settings'),
+            url: '/system-settings/site',
+            activeUrls: ['/system-settings'],
+            icon: Settings,
+            requiredRole: ROLE.SUPER_ADMIN,
+          },
+        ],
+      },
+      {
+        id: 'finance',
+        title: t('Finance Management'),
+        items: [
+          {
             title: t('Top-up Orders'),
             url: '/finance/topups',
             configUrls: ['/finance'],
@@ -277,26 +302,8 @@ export function useSidebarData(): SidebarData {
           {
             title: t('General Ledger'),
             url: '/ledger',
+            configUrls: ['/finance'],
             icon: BookOpen,
-          },
-          {
-            title: t('System Info'),
-            url: '/system-info',
-            icon: ServerCog,
-            requiredRole: ROLE.SUPER_ADMIN,
-          },
-          {
-            title: t('Task Plugins'),
-            url: '/task-plugins',
-            icon: PlugZap,
-            requiredRole: ROLE.SUPER_ADMIN,
-          },
-          {
-            title: t('System Settings'),
-            url: '/system-settings/site',
-            activeUrls: ['/system-settings'],
-            icon: Settings,
-            requiredRole: ROLE.SUPER_ADMIN,
           },
         ],
       },

@@ -149,6 +149,12 @@ describe('finance display labels', () => {
       renderPage(section)
 
       expect(screen.getByRole('heading', { name: title })).toBeInTheDocument()
+      expect(
+        screen.queryByRole('link', { name: 'Refund center' })
+      ).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: 'Refund center' })
+      ).not.toBeInTheDocument()
       for (const name of ['充值订单', '兑换码台账', '返佣账本', '财务操作']) {
         expect(screen.queryByRole('link', { name })).not.toBeInTheDocument()
       }
@@ -190,6 +196,12 @@ describe('finance display labels', () => {
     ).toHaveAttribute('aria-current', 'page')
     expect(
       screen.queryByRole('button', { name: 'Apply penalty' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'Financial operations' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Financial operations' })
     ).not.toBeInTheDocument()
     await waitFor(() => expect(getFinanceTopups).toHaveBeenCalled())
   })

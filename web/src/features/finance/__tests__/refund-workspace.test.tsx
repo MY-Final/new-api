@@ -125,6 +125,25 @@ beforeEach(() => {
   })
   api.getRefundBatches.mockResolvedValue({ items: [], total: 0 })
 })
+test('refund page keeps refund navigation without a duplicate financial operations shortcut', () => {
+  show()
+  expect(
+    screen.getByRole('heading', { name: 'Refund center' })
+  ).toBeInTheDocument()
+  expect(
+    screen.getByRole('link', { name: /Consumption refunds/ })
+  ).toBeInTheDocument()
+  expect(
+    screen.getByRole('link', { name: /Offline refund registration/ })
+  ).toBeInTheDocument()
+  expect(
+    screen.queryByRole('link', { name: 'Financial operations' })
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'Financial operations' })
+  ).not.toBeInTheDocument()
+})
+
 test('filters are submitted to the server and changing them clears selected charges', async () => {
   const user = userEvent.setup()
   show()
