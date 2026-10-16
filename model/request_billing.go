@@ -48,6 +48,7 @@ type RequestBilling struct {
 	RefundedQuota       int    `json:"refunded_quota" gorm:"type:bigint"`
 	RefundedAt          int64  `json:"refunded_at" gorm:"type:bigint"`
 	RefundOperationId   int    `json:"refund_operation_id"`
+	RefundReason        string `json:"refund_reason,omitempty" gorm:"-"`
 	RefundLogPending    bool   `json:"-" gorm:"index"`
 	UsageRecorded       bool   `json:"-"`
 	Settled             bool   `json:"settled"`
@@ -193,6 +194,11 @@ func ListRequestBillings(filter RequestBillingQuery, page *common.PageInfo) ([]R
 
 func validateRequestBillingRefund(tx *gorm.DB, record *RequestBilling) error {
 	if record.RefundOperationId != 0 {
+		var operation FinancialOperation
+		if err := tx.Select("reason").First(&operation, record.RefundOperationId).Error; err != nil {
+			return err
+		}
+		record.RefundReason = operation.Reason
 		return nil
 	}
 	if record.TaskId == "" && !record.Settled {

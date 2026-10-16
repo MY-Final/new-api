@@ -40,6 +40,14 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { getUser } from '@/features/users/api'
 import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
@@ -48,7 +56,11 @@ import { handleServerError } from '@/lib/handle-server-error'
 import { requireServerSuccess } from '@/lib/server-error-message'
 
 import { createManualCredit } from '../api'
-import { creditSchema, type CreditForm } from '../lib/manual-credit'
+import {
+  creditSchema,
+  paymentChannels,
+  type CreditForm,
+} from '../lib/manual-credit'
 import type { ManualCreditInput } from '../types'
 import { FinanceUserFilter } from './finance-user-filter'
 
@@ -61,7 +73,13 @@ export function ManualCreditForm() {
   const [received, setReceived] = useState(false)
   const form = useForm<CreditForm>({
     resolver: zodResolver(creditSchema),
-    defaultValues: { paid: '', bonus: '', reference: '', reason: '' },
+    defaultValues: {
+      paid: '',
+      bonus: '',
+      paymentChannel: '',
+      reference: '',
+      reason: '',
+    },
   })
   const user = useQuery({
     queryKey: ['finance-credit-user', userId],
@@ -70,6 +88,7 @@ export function ManualCreditForm() {
     retry: false,
     meta: { errorToast: false },
   })
+  const paymentChannel = form.watch('paymentChannel')
   const paidAmount = Number(form.watch('paid'))
   const bonusAmount = Number(form.watch('bonus'))
   const paid = parseQuotaFromDollars(paidAmount)
@@ -133,6 +152,7 @@ export function ManualCreditForm() {
       bonus_quota: bonus,
       reason: values.reason,
       reference: values.reference,
+      paymentChannel: values.paymentChannel,
       client_id: clientId,
       payment_received: false,
     })
@@ -196,6 +216,52 @@ export function ManualCreditForm() {
                   </div>
                   <FormField
                     control={form.control}
+                    name='paymentChannel'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Payment channel')} *</FormLabel>
+                        <Select
+                          items={paymentChannels.map((channel) => ({
+                            value: channel.value,
+                            label: t(channel.label),
+                          }))}
+                          name={field.name}
+                          value={field.value || null}
+                          onValueChange={(value) => field.onChange(value ?? '')}
+                          disabled={mutation.isPending || Boolean(preview)}
+                          required
+                        >
+                          <FormControl>
+                            <SelectTrigger
+                              ref={field.ref}
+                              onBlur={field.onBlur}
+                              aria-required='true'
+                              className='w-full'
+                            >
+                              <SelectValue
+                                placeholder={t('Select a payment channel')}
+                              />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent alignItemWithTrigger={false}>
+                            <SelectGroup>
+                              {paymentChannels.map((channel) => (
+                                <SelectItem
+                                  key={channel.value}
+                                  value={channel.value}
+                                >
+                                  {t(channel.label)}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
                     name='reference'
                     render={({ field }) => (
                       <FormItem>
@@ -230,6 +296,7 @@ export function ManualCreditForm() {
                       user.isError ||
                       user.isFetching ||
                       !validTotal ||
+                      !paymentChannel ||
                       !Number.isSafeInteger(user.data.quota + total)
                     }
                   >
@@ -337,6 +404,14 @@ export function ManualCreditForm() {
           <p>
             {t('Promotional credit')}:{' '}
             {formatQuotaPrecise(preview?.bonus_quota || 0)}
+          </p>
+          <p>
+            {t('Payment channel')}:{' '}
+            {t(
+              paymentChannels.find(
+                (channel) => channel.value === preview?.paymentChannel
+              )?.label || 'Unknown'
+            )}
           </p>
           <p className='break-all'>
             {t('Payment reference')}: {preview?.reference || '—'}

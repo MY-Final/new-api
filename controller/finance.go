@@ -262,6 +262,7 @@ func CreateFinanceCredit(c *gin.Context) {
 		BonusQuota      int    `json:"bonus_quota"`
 		Reason          string `json:"reason"`
 		Reference       string `json:"reference"`
+		PaymentChannel  string `json:"payment_channel"`
 		ClientID        string `json:"client_id"`
 		PaymentReceived bool   `json:"payment_received"`
 	}
@@ -273,7 +274,7 @@ func CreateFinanceCredit(c *gin.Context) {
 		common.ApiErrorT(c, "Confirm that the offline payment has been received")
 		return
 	}
-	operation, already, err := model.CreditUserByAdmin(req.UserID, req.PaidQuota, req.BonusQuota, req.Reason, req.Reference, req.ClientID, c.GetInt("id"), c.GetInt("role"))
+	operation, already, err := model.CreditUserByAdmin(req.UserID, req.PaidQuota, req.BonusQuota, req.Reason, req.Reference, req.PaymentChannel, req.ClientID, c.GetInt("id"), c.GetInt("role"))
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -322,7 +323,7 @@ func recordFinancialAudit(c *gin.Context, action string, operation model.Financi
 		"source_type": operation.SourceType, "source_id": operation.SourceId,
 		"quota": operation.PrincipalQuota, "from": operation.TargetMainBefore, "to": operation.TargetMainAfter,
 		"bonus_delta": operation.TargetBonusDelta, "paid_delta": operation.TargetPaidDelta,
-		"reason": operation.Reason, "already_applied": already,
+		"reason": operation.Reason, "payment_channel": operation.PaymentChannel, "already_applied": already,
 		"related_user_id": operation.RelatedUserId, "related_main_delta": operation.RelatedMainDelta,
 		"related_affiliate_delta": operation.RelatedAffiliateDelta, "rebate_quota": operation.RebateQuota,
 		"target_main_delta": operation.TargetMainDelta,

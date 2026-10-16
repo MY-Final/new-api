@@ -80,9 +80,10 @@ export const getFinancialOperations = (filters: FinanceFilters) =>
   getPage<FinancialOperation>('/api/finance/operations', filters)
 
 export async function createManualCredit(input: ManualCreditInput) {
+  const { paymentChannel, ...credit } = input
   const response = await api.post<
     ApiResponse<{ operation: FinancialOperation; already_applied: boolean }>
-  >('/api/finance/credits', input)
+  >('/api/finance/credits', { ...credit, payment_channel: paymentChannel })
   const data = requireServerSuccess(response.data).data
   if (!data?.operation) {
     throw createServerError({ message_key: 'Invalid response' })

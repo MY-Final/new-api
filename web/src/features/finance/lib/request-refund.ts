@@ -27,3 +27,18 @@ export function canRefundRequest(record: RequestBilling) {
     record.quota > 0
   )
 }
+
+export const refundReasons = [
+  'System error',
+  'Model quality issue',
+  'User complaint',
+  'Wrong channel',
+  'Test refund',
+  'Other reason',
+] as const
+
+export function formatRefundReason(reason: string, details: string) {
+  return reason === 'Other reason' && details.trim()
+    ? `${reason}: ${details.trim()}`
+    : reason
+}

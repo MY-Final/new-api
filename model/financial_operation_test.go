@@ -60,6 +60,59 @@ func TestPaidRedemptionRefundReclaimsBuyerQuotaAndReversesRebate(t *testing.T) {
 	assert.Equal(t, -1, operation.RelatedAffiliateDelta)
 }
 
+func TestPaidRedemptionRefundReclaimsSpentRebateAndRepaysDebt(t *testing.T) {
+	truncateTables(t)
+	inviter, invitee := createAffiliateUsers(t)
+	originalRate := common.AffiliateRedemptionRebateRate
+	common.AffiliateRedemptionRebateRate = 1000
+	t.Cleanup(func() { common.AffiliateRedemptionRebateRate = originalRate })
+	redemption := &Redemption{
+		UserId: invitee.Id, Key: "finance-spent-rebate-refund", Name: "paid",
+		Quota: 10_000_000, Status: common.RedemptionCodeStatusEnabled, Type: RedemptionTypePaid,
+	}
+	require.NoError(t, redemption.Insert())
+	_, err := Redeem(redemption.Key, invitee.Id)
+	require.NoError(t, err)
+	var owner User
+	require.NoError(t, DB.First(&owner, inviter.Id).Error)
+	require.NoError(t, owner.TransferAffQuotaToQuota(1_000_000))
+	_, err = ConsumeUserQuota(inviter.Id, 1_000_000, false)
+	require.NoError(t, err)
+
+	already, err := RefundRedemptionByAdmin(redemption.Id, "offline refund", 0)
+	require.NoError(t, err)
+	assert.False(t, already)
+	already, err = RefundRedemptionByAdmin(redemption.Id, "retry", 0)
+	require.NoError(t, err)
+	assert.True(t, already)
+	require.NoError(t, DB.First(&owner, inviter.Id).Error)
+	assert.Equal(t, -1_000_000, owner.Quota)
+	assert.Equal(t, -1_000_000, owner.BonusQuota)
+	assert.Zero(t, owner.AffQuota)
+	var operation FinancialOperation
+	require.NoError(t, DB.Where("operation_key = ?", fmt.Sprintf("redemption_refund:%d", redemption.Id)).First(&operation).Error)
+	assert.Equal(t, -1_000_000, operation.RelatedMainDelta)
+	assert.Equal(t, -1_000_000, operation.RelatedMainAfter)
+	assert.Zero(t, operation.RelatedAffiliateDelta)
+	reserved, err := TryReserveUserQuota(inviter.Id, 1)
+	require.NoError(t, err)
+	assert.False(t, reserved)
+
+	require.NoError(t, DB.Transaction(func(tx *gorm.DB) error {
+		_, _, err := createAffiliateRebateTx(tx, inviter.Id, invitee.Id, AffiliateRebateSourceRedemption, "later-redemption", 5_000_000, 1000)
+		return err
+	}))
+	require.NoError(t, DB.First(&owner, inviter.Id).Error)
+	assert.Equal(t, -500_000, owner.Quota)
+	assert.Zero(t, owner.AffQuota)
+	require.NoError(t, DB.Transaction(func(tx *gorm.DB) error {
+		return creditTopUpQuota(tx, inviter.Id, 1_000_000, nil)
+	}))
+	require.NoError(t, DB.First(&owner, inviter.Id).Error)
+	assert.Equal(t, 500_000, owner.Quota)
+	assert.Equal(t, owner.Quota, owner.PaidQuota+owner.BonusQuota)
+}
+
 func TestRebateOnlyReversalDoesNotChangeInviteeQuota(t *testing.T) {
 	truncateTables(t)
 	originalRate := common.AffiliateRedemptionRebateRate

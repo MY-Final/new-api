@@ -18,6 +18,29 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { z } from 'zod'
 
+export const paymentChannels = [
+  {
+    value: 'wechat',
+    label: 'WeChat Pay',
+    variant: 'success',
+    className: 'bg-success/10',
+  },
+  {
+    value: 'alipay',
+    label: 'Alipay',
+    variant: 'blue',
+    className: 'bg-chart-1/10',
+  },
+  {
+    value: 'bank_transfer',
+    label: 'Bank transfer',
+    variant: 'purple',
+    className: 'bg-chart-4/10',
+  },
+  { value: 'usdt', label: 'USDT', variant: 'cyan', className: 'bg-chart-2/10' },
+  { value: 'other', label: 'Other', variant: 'neutral', className: 'bg-muted' },
+] as const
+
 export const creditSchema = z.object({
   paid: z
     .string()
@@ -30,6 +53,12 @@ export const creditSchema = z.object({
     .refine(
       (value) => Number.isFinite(Number(value)) && Number(value) >= 0,
       'Invalid amount'
+    ),
+  paymentChannel: z
+    .string()
+    .refine(
+      (value) => paymentChannels.some((channel) => channel.value === value),
+      'Select a valid payment channel'
     ),
   reference: z.string().trim().max(128, 'Invalid parameters'),
   reason: z

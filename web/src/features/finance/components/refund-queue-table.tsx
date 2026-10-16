@@ -27,6 +27,7 @@ import { formatQuotaPrecise, formatTimestampToDate } from '@/lib/format'
 
 import { canRefundRequest } from '../lib/request-refund'
 import type { RequestBilling } from '../types'
+import { RefundReasonBadge } from './refund-reason'
 
 export function RefundQueueTable(props: {
   records: RequestBilling[]
@@ -175,6 +176,14 @@ export function RefundQueueTable(props: {
           />
         )
       },
+    },
+    {
+      id: 'refund_reason',
+      header: t('Refund reason'),
+      size: 200,
+      cell: ({ row }) => (
+        <RefundReasonBadge reason={row.original.refund_reason} />
+      ),
     },
   ]
   const { table } = useDataTable({

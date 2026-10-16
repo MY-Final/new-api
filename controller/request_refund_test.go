@@ -24,13 +24,14 @@ import (
 
 func TestRequestRefundQueueFilters(t *testing.T) {
 	db := setupManageUserTestDB(t)
-	require.NoError(t, db.AutoMigrate(&model.RequestBilling{}, &model.UserSubscription{}))
+	require.NoError(t, db.AutoMigrate(&model.RequestBilling{}, &model.UserSubscription{}, &model.FinancialOperation{}))
 	rows := []model.RequestBilling{
 		{Id: "queue-a", RequestId: "incident-a", UserId: 1, ModelName: "model-a", ChannelId: 17, FundingSource: "wallet", Quota: 20, PaidQuota: 20, Settled: true, CreatedAt: 100},
 		{Id: "queue-b", RequestId: "incident-b", UserId: 2, ModelName: "model-a", ChannelId: 17, FundingSource: "wallet", Quota: 30, PaidQuota: 30, Settled: true, CreatedAt: 200},
 		{Id: "queue-c", RequestId: "incident-c", UserId: 2, ModelName: "model-b", ChannelId: 18, FundingSource: "wallet", Quota: 40, PaidQuota: 40, Settled: true, CreatedAt: 300, RefundOperationId: 1, RefundedQuota: 40},
 	}
 	require.NoError(t, db.Create(&rows).Error)
+	require.NoError(t, db.Create(&model.FinancialOperation{Id: 1, OperationKey: "queue-c-refund", Reason: "Other reason: historical incident"}).Error)
 	page := &common.PageInfo{Page: 1, PageSize: 20}
 	for _, tc := range []struct {
 		name   string
@@ -49,6 +50,11 @@ func TestRequestRefundQueueFilters(t *testing.T) {
 			ids := make([]string, 0, len(records))
 			for _, record := range records {
 				ids = append(ids, record.Id)
+				if record.RefundOperationId > 0 {
+					assert.Equal(t, "Other reason: historical incident", record.RefundReason)
+				} else {
+					assert.Empty(t, record.RefundReason)
+				}
 			}
 			assert.Equal(t, tc.ids, ids)
 		})
@@ -151,6 +157,21 @@ func TestRequestRefundBatchPersistsResultsAndRetriesOnlyFailures(t *testing.T) {
 	var count int64
 	require.NoError(t, db.Model(&model.FinancialOperation{}).Where("operation_type = ?", model.FinancialOperationRequestRefund).Count(&count).Error)
 	assert.Equal(t, int64(2), count)
+	page := &common.PageInfo{Page: 1, PageSize: 20}
+	queue, _, err := model.ListRequestBillings(model.RequestBillingQuery{Status: "refunded", UserId: target.Id}, page)
+	require.NoError(t, err)
+	require.Len(t, queue, 2)
+	for _, record := range queue {
+		assert.Equal(t, "incident correction", record.RefundReason)
+	}
+	userRecords, _, err := model.GetUserRequestBillings(target.Id, page)
+	require.NoError(t, err)
+	require.Len(t, userRecords, 2)
+	assert.Equal(t, "incident correction", userRecords[0].RefundReason)
+	exactRecords, err := model.GetRequestBillings("request-good")
+	require.NoError(t, err)
+	require.Len(t, exactRecords, 1)
+	assert.Equal(t, "incident correction", exactRecords[0].RefundReason)
 	// Authority is checked again by the worker, after submission.
 	queued, err := service.StartRequestRefundBatch([]string{"batch-good"}, "already refunded", "revoked", operator.Id)
 	require.NoError(t, err)

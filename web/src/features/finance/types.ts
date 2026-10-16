@@ -75,6 +75,7 @@ export type FinanceOperationType =
   | 'penalty_reversal'
 
 export interface ManualCreditInput {
+  paymentChannel: string
   user_id: number
   paid_quota: number
   bonus_quota: number
@@ -86,6 +87,7 @@ export interface ManualCreditInput {
 
 export interface FinancialOperation {
   id: number
+  payment_channel?: string
   operation_type: FinanceOperationType
   operation_key: string
   reversal_of_id: number
@@ -170,6 +172,7 @@ export interface RequestBilling {
   refunded_quota: number
   refunded_at: number
   refund_operation_id: number
+  refund_reason?: string
   created_at: number
   settled: boolean
   blocked_reason?: string

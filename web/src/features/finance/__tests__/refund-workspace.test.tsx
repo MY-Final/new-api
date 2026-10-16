@@ -179,18 +179,27 @@ test('preview shows each funding destination and confirmation creates a persiste
   expect(within(confirmation).getByText('Paid quota')).toBeVisible()
   expect(within(confirmation).getByText('Subscription')).toBeVisible()
   const submit = within(confirmation).getByRole('button', {
-    name: 'Create refund batch',
+    name: 'Confirm and refund',
   })
   expect(submit).toBeDisabled()
-  await user.type(
-    within(confirmation).getByRole('textbox', { name: 'Refund reason' }),
-    'Provider incident'
+  expect(api.createRefundBatch).not.toHaveBeenCalled()
+  expect(
+    within(confirmation).getByRole('heading', {
+      name: 'Confirm refund operation',
+    })
+  ).toBeVisible()
+  expect(
+    within(confirmation).getByText(/Refund 2 requests for a total of/)
+  ).toBeVisible()
+  await user.click(
+    within(confirmation).getByRole('combobox', { name: /Refund reason/ })
   )
+  await user.click(await screen.findByRole('option', { name: 'System error' }))
   await user.click(submit)
   await waitFor(() =>
     expect(api.createRefundBatch).toHaveBeenCalledWith(
       ['charge-1', 'charge-2'],
-      'Provider incident',
+      'System error',
       expect.any(String)
     )
   )
@@ -279,18 +288,18 @@ test('a failed submission retries the same batch identifier and payload', async 
   )
   await user.click(screen.getByRole('button', { name: /Preview refund/ }))
   const dialog = await screen.findByRole('alertdialog')
-  await user.type(
-    within(dialog).getByRole('textbox', { name: 'Refund reason' }),
-    'Outage'
-  )
   await user.click(
-    within(dialog).getByRole('button', { name: 'Create refund batch' })
+    within(dialog).getByRole('combobox', { name: /Refund reason/ })
+  )
+  await user.click(await screen.findByRole('option', { name: 'System error' }))
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Confirm and refund' })
   )
   await screen.findByText('Retry to check the same submission safely.', {
     exact: false,
   })
   await user.click(
-    within(dialog).getByRole('button', { name: 'Create refund batch' })
+    within(dialog).getByRole('button', { name: 'Confirm and refund' })
   )
   await waitFor(() => expect(api.createRefundBatch).toHaveBeenCalledTimes(2))
   expect(api.createRefundBatch.mock.calls[1]).toEqual(
@@ -366,12 +375,12 @@ test('a total outside safe integer precision cannot be submitted', async () => {
   expect(within(dialog).getByRole('alert')).toHaveTextContent(
     'The total is too large. Select fewer requests.'
   )
-  await user.type(
-    within(dialog).getByRole('textbox', { name: 'Refund reason' }),
-    'Correction'
+  await user.click(
+    within(dialog).getByRole('combobox', { name: /Refund reason/ })
   )
+  await user.click(await screen.findByRole('option', { name: 'System error' }))
   expect(
-    within(dialog).getByRole('button', { name: 'Create refund batch' })
+    within(dialog).getByRole('button', { name: 'Confirm and refund' })
   ).toBeDisabled()
   expect(api.createRefundBatch).not.toHaveBeenCalled()
 })
@@ -436,4 +445,98 @@ test('applied model filters remain visible after returning from batch history', 
   ).not.toBeInTheDocument()
   await user.click(screen.getByRole('tab', { name: 'Request charges' }))
   expect(screen.getByRole('textbox', { name: 'Model' })).toHaveValue('model-a')
+})
+
+test('other refund reason accepts optional details and cancel does not submit', async () => {
+  const user = userEvent.setup()
+  api.createRefundBatch.mockResolvedValue({ ...batch, status: 'pending' })
+  show()
+  await user.click(
+    await screen.findByRole('checkbox', { name: 'Select request-1' })
+  )
+  await user.click(screen.getByRole('button', { name: /Preview refund/ }))
+  const dialog = await screen.findByRole('alertdialog')
+  const reason = within(dialog).getByRole('combobox', { name: /Refund reason/ })
+  expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument()
+  await user.click(reason)
+  for (const name of [
+    'System error',
+    'Model quality issue',
+    'User complaint',
+    'Wrong channel',
+    'Test refund',
+    'Other reason',
+  ]) {
+    expect(screen.getByRole('option', { name })).toBeInTheDocument()
+  }
+  await user.click(await screen.findByRole('option', { name: 'Other reason' }))
+  expect(
+    within(dialog).getByRole('button', { name: 'Confirm and refund' })
+  ).toBeEnabled()
+  const details = within(dialog).getByRole('textbox', {
+    name: /Additional details/,
+  })
+  expect(details).not.toBeRequired()
+  await user.type(details, 'Approved goodwill credit')
+  await user.click(reason)
+  await user.click(
+    await screen.findByRole('option', { name: 'User complaint' })
+  )
+  expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument()
+  await user.click(reason)
+  await user.click(await screen.findByRole('option', { name: 'Other reason' }))
+  expect(within(dialog).getByRole('textbox')).toHaveValue('')
+  await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+  expect(api.createRefundBatch).not.toHaveBeenCalled()
+  await user.click(screen.getByRole('button', { name: /Preview refund/ }))
+  const reopened = await screen.findByRole('alertdialog')
+  expect(
+    within(reopened).getByRole('combobox', { name: /Refund reason/ })
+  ).toHaveTextContent('Select a refund reason')
+  await user.click(
+    within(reopened).getByRole('combobox', { name: /Refund reason/ })
+  )
+  await user.click(await screen.findByRole('option', { name: 'Other reason' }))
+  await user.type(
+    within(reopened).getByRole('textbox', { name: /Additional details/ }),
+    'Approved goodwill credit'
+  )
+  await user.click(
+    within(reopened).getByRole('button', { name: 'Confirm and refund' })
+  )
+  await waitFor(() =>
+    expect(api.createRefundBatch).toHaveBeenCalledWith(
+      ['charge-1'],
+      'Other reason: Approved goodwill credit',
+      expect.any(String)
+    )
+  )
+})
+
+test('refund history displays saved categories and legacy free-text reasons beside status', async () => {
+  api.getRefundQueue.mockResolvedValue({
+    items: [
+      {
+        ...record,
+        refund_operation_id: 9,
+        refunded_quota: record.quota,
+        refund_reason: 'System error',
+      },
+      {
+        ...record,
+        billing_id: 'legacy',
+        request_id: 'legacy-request',
+        refund_operation_id: 10,
+        refunded_quota: record.quota,
+        refund_reason: 'Historical support refund',
+      },
+    ],
+    total: 2,
+  })
+  show()
+  expect(
+    await screen.findByRole('columnheader', { name: 'Refund reason' })
+  ).toBeVisible()
+  expect(await screen.findByText('System error')).toBeVisible()
+  expect(screen.getByText('Historical support refund')).toBeVisible()
 })

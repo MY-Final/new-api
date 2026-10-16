@@ -49,7 +49,9 @@ import {
   getUserRequestBillings,
   refundRequestBilling,
 } from '../api'
+import { formatRefundReason } from '../lib/request-refund'
 import type { RequestBilling } from '../types'
+import { RefundReasonFields } from './refund-reason'
 
 type SearchMode = 'request' | 'user'
 type RefundBatch = { records: RequestBilling[]; reason: string }
@@ -87,6 +89,7 @@ export function RequestRefundDialog(props: {
     RequestBilling[] | null
   >(null)
   const [reason, setReason] = useState('')
+  const [reasonDetails, setReasonDetails] = useState('')
   const debouncedUserSearch = useDebounce(userSearch, 250)
 
   const requestQuery = useQuery({
@@ -186,6 +189,7 @@ export function RequestRefundDialog(props: {
     clearSelection()
     setSelectedRecords(null)
     setReason('')
+    setReasonDetails('')
     if (mode === 'user') {
       setRequestId('')
     } else {
@@ -429,6 +433,7 @@ export function RequestRefundDialog(props: {
                     disabled={mutation.isPending}
                     onClick={() => {
                       setReason('')
+                      setReasonDetails('')
                       setSelectedRecords(selected)
                     }}
                   >
@@ -549,6 +554,7 @@ export function RequestRefundDialog(props: {
                         disabled={!canRefund(record) || mutation.isPending}
                         onClick={() => {
                           setReason('')
+                          setReasonDetails('')
                           setSelectedRecords([record])
                         }}
                       >
@@ -596,42 +602,39 @@ export function RequestRefundDialog(props: {
         onOpenChange={(open) => {
           if (!open && !mutation.isPending) setSelectedRecords(null)
         }}
-        title={t('Confirm request refund')}
-        desc={
-          selectedRecords
-            ? `${t('{{count}} requests selected', {
-                count: selectedRecords.length,
-              })} · ${formatQuotaPrecise(
-                selectedRecords.reduce((sum, record) => sum + record.quota, 0)
-              )}`
-            : ''
-        }
-        confirmText={
-          selectedRecords?.length && selectedRecords.length > 1
-            ? t('Refund selected')
-            : t('Refund full amount')
-        }
+        title={t('Confirm refund operation')}
+        desc={t('Refund {{count}} requests for a total of {{amount}}.', {
+          count: selectedRecords?.length || 0,
+          amount: formatQuotaPrecise(
+            (selectedRecords || []).reduce(
+              (sum, record) => sum + record.quota,
+              0
+            )
+          ),
+        })}
+        confirmText={t('Confirm and refund')}
         isLoading={mutation.isPending}
         disabled={!reason.trim()}
         handleConfirm={() => {
           if (selectedRecords && reason.trim()) {
-            mutation.mutate({ records: selectedRecords, reason: reason.trim() })
+            mutation.mutate({
+              records: selectedRecords,
+              reason: formatRefundReason(reason, reasonDetails),
+            })
           }
         }}
       >
         <p className='text-muted-foreground text-sm'>
           {t('Return the settled charge to its original funding source.')}
         </p>
-        <div className='space-y-2'>
-          <Label htmlFor='request-refund-reason'>{t('Refund reason')}</Label>
-          <Input
-            id='request-refund-reason'
-            value={reason}
-            maxLength={255}
-            disabled={mutation.isPending}
-            onChange={(event) => setReason(event.target.value)}
-          />
-        </div>
+        <RefundReasonFields
+          id='request-refund-reason'
+          reason={reason}
+          details={reasonDetails}
+          onReasonChange={setReason}
+          onDetailsChange={setReasonDetails}
+          disabled={mutation.isPending}
+        />
       </ConfirmDialog>
     </>
   )

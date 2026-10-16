@@ -34,6 +34,7 @@ import { getServerErrorMessage } from '@/lib/server-error-message'
 
 import { getRefundBatches, retryRefundBatch } from '../api'
 import type { RefundBatch } from '../types'
+import { RefundReasonBadge } from './refund-reason'
 
 export function RefundBatches() {
   const { t } = useTranslation()
@@ -147,7 +148,9 @@ export function RefundBatches() {
                 {t('View results')}
               </Button>
             </div>
-            <p className='my-2 text-sm break-words'>{batch.payload.reason}</p>
+            <div className='my-2'>
+              <RefundReasonBadge reason={batch.payload.reason} />
+            </div>
             <p className='text-muted-foreground text-xs tabular-nums'>
               {t('Processed')}: {batch.state.processed}/{batch.state.total} ·{' '}
               {t('Succeeded')}: {batch.state.succeeded} · {t('Failed')}:{' '}
@@ -217,6 +220,13 @@ export function RefundBatches() {
                   id: 'amount',
                   header: t('Refund amount'),
                   cell: (item) => formatQuotaPrecise(item.quota),
+                },
+                {
+                  id: 'reason',
+                  header: t('Refund reason'),
+                  cell: () => (
+                    <RefundReasonBadge reason={detail.payload.reason} />
+                  ),
                 },
                 {
                   id: 'result',

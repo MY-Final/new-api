@@ -13,7 +13,7 @@ const FinancialOperationManualCredit = "manual_credit"
 
 // CreditUserByAdmin records offline paid credit and promotional credit together,
 // without initiating a payment or granting an automatic referral rebate.
-func CreditUserByAdmin(userID, paid, bonus int, reason, reference, clientID string, operatorID, operatorRole int) (FinancialOperation, bool, error) {
+func CreditUserByAdmin(userID, paid, bonus int, reason, reference, paymentChannel, clientID string, operatorID, operatorRole int) (FinancialOperation, bool, error) {
 	var operation FinancialOperation
 	reason, err := validateFinancialReason(reason)
 	if err != nil {
@@ -26,6 +26,11 @@ func CreditUserByAdmin(userID, paid, bonus int, reason, reference, clientID stri
 	if paid > 0 && reference == "" {
 		return operation, false, common.NewMessage("Payment reference is required for paid credit")
 	}
+	switch paymentChannel {
+	case "wechat", "alipay", "bank_transfer", "usdt", "other":
+	default:
+		return operation, false, common.NewMessage("Select a valid payment channel")
+	}
 	key := fmt.Sprintf("manual_credit:%d:%s", operatorID, clientID)
 	already := false
 	err = DB.Transaction(func(tx *gorm.DB) error {
@@ -37,7 +42,7 @@ func CreditUserByAdmin(userID, paid, bonus int, reason, reference, clientID stri
 			return ErrFinancialRoleForbidden
 		}
 		if err := tx.Where("operation_key = ?", key).First(&operation).Error; err == nil {
-			if operation.TargetUserId != userID || operation.TargetPaidDelta != paid || operation.TargetBonusDelta != bonus || operation.Reason != reason || operation.SourceId != reference {
+			if operation.TargetUserId != userID || operation.TargetPaidDelta != paid || operation.TargetBonusDelta != bonus || operation.Reason != reason || operation.SourceId != reference || operation.PaymentChannel != paymentChannel {
 				return ErrFinancialOperationConflict
 			}
 			already = true
@@ -72,7 +77,7 @@ func CreditUserByAdmin(userID, paid, bonus int, reason, reference, clientID stri
 			SourceType: FinancialOperationManualCredit, SourceId: reference,
 			PrincipalQuota: paid + bonus, TargetMainDelta: paid + bonus,
 			TargetMainBefore: target.Quota, TargetMainAfter: after,
-			TargetPaidDelta: paid, TargetBonusDelta: bonus, Reason: reason,
+			TargetPaidDelta: paid, TargetBonusDelta: bonus, Reason: reason, PaymentChannel: paymentChannel,
 		}
 		return tx.Create(&operation).Error
 	})

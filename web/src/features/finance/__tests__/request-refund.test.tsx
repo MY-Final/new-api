@@ -119,18 +119,18 @@ test('full refund requires a reason, locks while pending and then shows refunded
   )
   const confirmation = screen.getByRole('alertdialog')
   const confirm = within(confirmation).getByRole('button', {
-    name: 'Refund full amount',
+    name: 'Confirm and refund',
   })
   expect(confirm).toBeDisabled()
-  await user.type(
-    within(confirmation).getByRole('textbox', { name: 'Refund reason' }),
-    'Upstream failed'
+  await user.click(
+    within(confirmation).getByRole('combobox', { name: /Refund reason/ })
   )
+  await user.click(await screen.findByRole('option', { name: 'System error' }))
   await user.click(confirm)
   await waitFor(() =>
     expect(refundRequestBilling).toHaveBeenCalledWith(
       'billing-1',
-      'Upstream failed'
+      'System error'
     )
   )
   expect(confirm).toBeDisabled()
@@ -218,23 +218,25 @@ test('user lookup allows selecting and refunding multiple requests in one confir
   await user.click(checkboxes[2])
   await user.click(screen.getByRole('button', { name: 'Refund selected (2)' }))
   const confirmation = screen.getByRole('alertdialog')
-  await user.type(
-    within(confirmation).getByRole('textbox', { name: 'Refund reason' }),
-    'User requested correction'
+  await user.click(
+    within(confirmation).getByRole('combobox', { name: /Refund reason/ })
   )
   await user.click(
-    within(confirmation).getByRole('button', { name: 'Refund selected' })
+    await screen.findByRole('option', { name: 'User complaint' })
+  )
+  await user.click(
+    within(confirmation).getByRole('button', { name: 'Confirm and refund' })
   )
   await waitFor(() => expect(refundRequestBilling).toHaveBeenCalledTimes(2))
   expect(refundRequestBilling).toHaveBeenNthCalledWith(
     1,
     'billing-1',
-    'User requested correction'
+    'User complaint'
   )
   expect(refundRequestBilling).toHaveBeenNthCalledWith(
     2,
     'billing-2',
-    'User requested correction'
+    'User complaint'
   )
 })
 

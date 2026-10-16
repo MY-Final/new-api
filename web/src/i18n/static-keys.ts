@@ -19,6 +19,18 @@ For commercial licensing, please contact support@quantumnous.com
 // Static translation keys that don't get picked up by the t('...') regex.
 // These cover dynamic labels (e.g. constants, configs) that are passed into t at runtime.
 export const STATIC_I18N_KEYS = [
+  'WeChat Pay',
+  'Alipay',
+  'Bank transfer',
+  'USDT',
+  'Other',
+  'System error',
+  'Model quality issue',
+  'User complaint',
+  'Wrong channel',
+  'Test refund',
+  'Other reason',
+  'Select a valid payment channel',
   'Invalid amount',
   'Reason is required',
   'Payment reference is required for paid credit',

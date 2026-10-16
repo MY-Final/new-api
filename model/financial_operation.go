@@ -55,6 +55,7 @@ type FinancialOperation struct {
 	RelatedMainAfter       int    `json:"related_main_after" gorm:"type:bigint"`
 	RelatedAffiliateBefore int    `json:"related_affiliate_before" gorm:"type:bigint"`
 	RelatedAffiliateAfter  int    `json:"related_affiliate_after" gorm:"type:bigint"`
+	PaymentChannel         string `json:"payment_channel" gorm:"type:varchar(32)"`
 	Reason                 string `json:"reason" gorm:"type:varchar(255)"`
 	CreatedAt              int64  `json:"created_at" gorm:"bigint;autoCreateTime;index"`
 	// ReversedById is filled by the list query with the reversal operation that

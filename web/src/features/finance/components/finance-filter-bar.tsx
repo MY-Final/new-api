@@ -33,6 +33,7 @@ import { FinanceUserFilter } from './finance-user-filter'
 export function FinanceFilterBar(props: {
   section: FinanceSection
   cashRefunds?: boolean
+  manualCredits?: boolean
   filters: FinanceFilters
   setFilters: (value: FinanceFilters) => void
   className?: string
@@ -40,7 +41,14 @@ export function FinanceFilterBar(props: {
   const { t } = useTranslation()
   const isMobile = useMediaQuery('(max-width: 640px)')
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [range, setRange] = useState<{ start?: Date; end?: Date }>({})
+  const range = {
+    start: props.filters.startTime
+      ? new Date(props.filters.startTime * 1000)
+      : undefined,
+    end: props.filters.endTime
+      ? new Date(props.filters.endTime * 1000)
+      : undefined,
+  }
 
   const update = (key: keyof FinanceFilters, value: string) => {
     props.setFilters({
@@ -76,7 +84,6 @@ export function FinanceFilterBar(props: {
   )
 
   const clearFilters = () => {
-    setRange({})
     props.setFilters({ page: 1, pageSize: props.filters.pageSize })
   }
 
@@ -84,7 +91,9 @@ export function FinanceFilterBar(props: {
   const statusLabel = getStatusLabel(props.filters.status || 'all', t)
   const userFilterKey = props.section === 'rebates' ? 'inviterId' : 'operatorId'
   const userFilterLabel = filterUserLabel(props.section, t)
-  const keywordPlaceholder = filterPlaceholder(props.section, t)
+  const keywordPlaceholder = props.manualCredits
+    ? t('Payment reference or username (exact match)')
+    : filterPlaceholder(props.section, t)
   const operationTypeOptions = getOperationTypeOptions(t)
   const providerOptions = getProviderOptions(t)
   const codeTypeOptions = getCodeTypeOptions(t)
@@ -106,6 +115,14 @@ export function FinanceFilterBar(props: {
         placeholder={keywordPlaceholder}
         onChange={(event) => update('keyword', event.target.value)}
       />
+      {props.manualCredits ? (
+        <FinanceUserFilter
+          value={props.filters.userId}
+          onChange={(userId) =>
+            props.setFilters({ ...props.filters, page: 1, userId })
+          }
+        />
+      ) : null}
       {(props.section === 'topups' || props.section === 'redemptions') &&
         (props.cashRefunds ? (
           <FinanceUserFilter
@@ -136,7 +153,7 @@ export function FinanceFilterBar(props: {
           onChange={(event) => update(userFilterKey, event.target.value)}
         />
       )}
-      {props.section === 'operations' ? (
+      {props.section === 'operations' && !props.manualCredits ? (
         <Select
           items={operationTypeOptions}
           value={props.filters.operationType || 'all'}
@@ -159,7 +176,8 @@ export function FinanceFilterBar(props: {
             </SelectGroup>
           </SelectContent>
         </Select>
-      ) : (
+      ) : null}
+      {props.section !== 'operations' ? (
         <Select
           items={statusOptions}
           value={props.filters.status || 'all'}
@@ -178,7 +196,7 @@ export function FinanceFilterBar(props: {
             </SelectGroup>
           </SelectContent>
         </Select>
-      )}
+      ) : null}
       {props.section === 'topups' && (
         <Select
           items={providerOptions}
@@ -224,7 +242,6 @@ export function FinanceFilterBar(props: {
         end={range.end}
         className='w-full sm:w-72'
         onChange={(next) => {
-          setRange(next)
           props.setFilters({
             ...props.filters,
             page: 1,

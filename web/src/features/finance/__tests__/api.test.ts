@@ -46,6 +46,7 @@ it('submits separate paid and promotional amounts with a stable request identifi
     paid_quota: 500,
     bonus_quota: 100,
     reference: 'receipt-1',
+    paymentChannel: 'wechat',
     reason: 'Offline payment',
     client_id: 'credit-1',
     payment_received: true,
@@ -60,7 +61,11 @@ it('submits separate paid and promotional amounts with a stable request identifi
     operation: { id: 1 },
     already_applied: false,
   })
-  expect(api.post).toHaveBeenCalledWith('/api/finance/credits', input)
+  const { paymentChannel, ...credit } = input
+  expect(api.post).toHaveBeenCalledWith('/api/finance/credits', {
+    ...credit,
+    payment_channel: paymentChannel,
+  })
   vi.mocked(api.post).mockResolvedValue({
     data: { success: false, message: 'Permission denied' },
   })

@@ -28,20 +28,19 @@ import { ErrorState } from '@/components/error-state'
 import { SectionPageLayout } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatQuotaPrecise } from '@/lib/format'
 import { handleServerError } from '@/lib/handle-server-error'
 import { getServerErrorMessage } from '@/lib/server-error-message'
 
 import { createRefundBatch, getRefundQueue } from '../api'
-import { canRefundRequest } from '../lib/request-refund'
+import { canRefundRequest, formatRefundReason } from '../lib/request-refund'
 import type { RefundQueueFilters, RequestBilling } from '../types'
 import { RefundBatches } from './refund-batches'
 import { RefundNavigation } from './refund-navigation'
 import { RefundQueueFilterBar } from './refund-queue-filters'
 import { RefundQueueTable } from './refund-queue-table'
+import { RefundReasonFields } from './refund-reason'
 
 export function RefundWorkspace(props: { initialRequestId?: string }) {
   const { t } = useTranslation()
@@ -61,6 +60,7 @@ export function RefundWorkspace(props: { initialRequestId?: string }) {
     clientId: string
   } | null>(null)
   const [reason, setReason] = useState('')
+  const [reasonDetails, setReasonDetails] = useState('')
   const query = useQuery({
     queryKey: ['finance', 'refund-queue', filters, pagination],
     queryFn: () =>
@@ -208,6 +208,7 @@ export function RefundWorkspace(props: { initialRequestId?: string }) {
                     onClick={() => {
                       mutation.reset()
                       setReason('')
+                      setReasonDetails('')
                       setPreview({ records, clientId: crypto.randomUUID() })
                     }}
                   >
@@ -253,12 +254,13 @@ export function RefundWorkspace(props: { initialRequestId?: string }) {
         onOpenChange={(open) => {
           if (!open && !mutation.isPending) setPreview(null)
         }}
-        title={t('Refund preview')}
-        desc={t(
-          'Review the requests and original refund destinations before creating the batch.'
-        )}
+        title={t('Confirm refund operation')}
+        desc={t('Refund {{count}} requests for a total of {{amount}}.', {
+          count: preview?.records.length || 0,
+          amount: formatQuotaPrecise(totals.total),
+        })}
         className='data-[size=default]:max-w-[calc(100%-2rem)] data-[size=default]:sm:max-w-3xl'
-        confirmText={t('Create refund batch')}
+        confirmText={t('Confirm and refund')}
         isLoading={mutation.isPending}
         disabled={!reason.trim() || !safeTotals}
         handleConfirm={() => {
@@ -270,7 +272,7 @@ export function RefundWorkspace(props: { initialRequestId?: string }) {
                     billingIds: preview.records.map(
                       (record) => record.billing_id
                     ),
-                    reason: reason.trim(),
+                    reason: formatRefundReason(reason, reasonDetails),
                     clientId: preview.clientId,
                   }
             )
@@ -331,16 +333,14 @@ export function RefundWorkspace(props: { initialRequestId?: string }) {
             ]}
           />
         </div>
-        <div className='space-y-2'>
-          <Label htmlFor='batch-refund-reason'>{t('Refund reason')}</Label>
-          <Input
-            id='batch-refund-reason'
-            maxLength={255}
-            value={reason}
-            disabled={mutation.isPending || mutation.isError}
-            onChange={(event) => setReason(event.target.value)}
-          />
-        </div>
+        <RefundReasonFields
+          id='batch-refund-reason'
+          reason={reason}
+          details={reasonDetails}
+          onReasonChange={setReason}
+          onDetailsChange={setReasonDetails}
+          disabled={mutation.isPending || mutation.isError}
+        />
         {mutation.isError ? (
           <p role='alert' className='text-destructive text-sm'>
             {getServerErrorMessage(mutation.error)} ·{' '}
