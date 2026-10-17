@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/pkg/consoleevents"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/config"
@@ -332,6 +334,23 @@ func UpdateOption(key string, value string) error {
 	return updateOptionMap(key, value)
 }
 
+// ReloadOptionFromDatabase re-applies one persisted option to the in-memory
+// option map. Other instances trigger it through pkg/consoleevents when they
+// report an option change, so this instance serves the new console content
+// before its next periodic sync.
+func ReloadOptionFromDatabase(key string) {
+	var option Option
+	if err := DB.Where(&Option{Key: key}).First(&option).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			common.SysLog(common.LogText("failed to reload option %s: %s", key, err.Error()))
+		}
+		return
+	}
+	if err := updateOptionMap(key, option.Value); err != nil {
+		common.SysLog(common.LogText("failed to apply reloaded option %s: %s", key, err.Error()))
+	}
+}
+
 // UpdateOptionsBulk persists multiple key/value pairs in a single database
 // transaction, then dispatches them through updateOptionMap in one pass. If
 // any DB write fails the whole transaction rolls back and no in-memory state
@@ -408,10 +427,14 @@ func updateOptionMap(key string, value string) (err error) {
 	}
 	common.OptionMapRWMutex.Lock()
 	defer common.OptionMapRWMutex.Unlock()
+	previous, existed := common.OptionMap[key]
 	common.OptionMap[key] = value
 
 	// 检查是否是模型配置 - 使用更规范的方式处理
 	if handleConfigUpdate(key, value) {
+		if !existed || previous != value {
+			consoleevents.PublishOptionChange(key)
+		}
 		return nil // 已由配置系统处理
 	}
 
@@ -738,6 +761,9 @@ func updateOptionMap(key string, value string) (err error) {
 		// WaffoPayMethods is read directly from OptionMap via setting.GetWaffoPayMethods().
 		// The value is already stored in OptionMap at the top of this function (line: common.OptionMap[key] = value).
 		// No additional in-memory variable to update.
+	}
+	if err == nil && (!existed || previous != value) {
+		consoleevents.PublishOptionChange(key)
 	}
 	return err
 }

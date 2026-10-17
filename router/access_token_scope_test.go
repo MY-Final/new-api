@@ -30,6 +30,7 @@ var accessTokenExemptRoutes = []string{
 	"GET /api/uptime/status",
 	"GET /api/contact/qrcode",
 	"GET /api/notice",
+	"GET /api/notifications/stream",
 	"GET /api/user-agreement",
 	"GET /api/privacy-policy",
 	"GET /api/about",

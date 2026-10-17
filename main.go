@@ -23,6 +23,7 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/oauth"
+	"github.com/QuantumNous/new-api/pkg/consoleevents"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
 	"github.com/QuantumNous/new-api/pkg/wsmanager"
@@ -106,6 +107,8 @@ func main() {
 		go model.SyncChannelCache(common.SyncFrequency)
 	}
 	wsmanager.StartSubscriber(context.Background())
+	consoleevents.SetReloadOptionFunc(model.ReloadOptionFromDatabase)
+	consoleevents.StartSubscriber(context.Background())
 
 	// Warm pricing after channel cache initialization so Advanced Custom
 	// endpoint inference can read cached route settings on first request.
@@ -231,6 +234,10 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-quit
 	common.SysLog(common.LogText("received signal: %v, shutting down...", sig))
+
+	// Close long-lived console event streams so the graceful shutdown below
+	// does not wait for them.
+	consoleevents.Shutdown()
 
 	// SSE streams may run for minutes; give them time to finish before forced exit
 	shutdownTimeout := time.Duration(common.GetEnvOrDefault("SHUTDOWN_TIMEOUT_SECONDS", 120)) * time.Second

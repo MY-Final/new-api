@@ -32,6 +32,8 @@ const STATUS_RELATED_KEYS = new Set([
   'HeaderNavModules',
   'SidebarModulesAdmin',
   'Notice',
+  'console_setting.announcements',
+  'console_setting.announcements_enabled',
   'LogConsumeEnabled',
   'log_setting.user_export_enabled',
   'log_setting.max_range_days',

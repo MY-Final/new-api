@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/pkg/consoleevents"
+	"github.com/QuantumNous/new-api/setting/console_setting"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -177,4 +179,35 @@ func TestRetiredThemeOptionIsPersistedButNotPublished(t *testing.T) {
 	assert.Equal(t, "default", requireOptionValue(t, db, retiredThemeOptionKey))
 	_, published := common.OptionMap[retiredThemeOptionKey]
 	assert.False(t, published)
+}
+
+func TestReloadOptionFromDatabaseAppliesPersistedValueAndBroadcasts(t *testing.T) {
+	db := useFrontendOptionMigrationDB(t)
+	previousMap := common.OptionMap
+	t.Cleanup(func() { common.OptionMap = previousMap })
+	common.OptionMap = map[string]string{}
+
+	consoleConfig := console_setting.GetConsoleSetting()
+	previousAnnouncements := consoleConfig.Announcements
+	t.Cleanup(func() { consoleConfig.Announcements = previousAnnouncements })
+
+	value := `[{"id":1,"content":"maintenance","publishDate":"2026-07-20T00:00:00Z","type":"warning"}]`
+	require.NoError(t, db.Create(&Option{Key: "console_setting.announcements", Value: value}).Error)
+
+	events, unsubscribe := consoleevents.Subscribe()
+	defer unsubscribe()
+
+	ReloadOptionFromDatabase("console_setting.announcements")
+
+	assert.Equal(t, value, common.OptionMap["console_setting.announcements"])
+	assert.Equal(t, value, consoleConfig.Announcements)
+	select {
+	case event := <-events:
+		assert.Equal(t, []string{consoleevents.TopicAnnouncements}, event.Topics)
+	default:
+		t.Fatal("reload should broadcast the announcements topic")
+	}
+
+	ReloadOptionFromDatabase("console_setting.missing")
+	assert.NotContains(t, common.OptionMap, "console_setting.missing")
 }
