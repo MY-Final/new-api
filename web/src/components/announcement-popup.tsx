@@ -20,6 +20,7 @@ import { Megaphone } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { AnnouncementImages } from '@/components/announcement-images'
 import { Dialog } from '@/components/dialog'
 import { RichContent } from '@/components/rich-content'
 import { Button } from '@/components/ui/button'
@@ -53,9 +54,7 @@ const TYPE_CHIP_CLASS: Record<string, string> = {
 export function AnnouncementPopup() {
   const { t } = useTranslation()
   const { items, loading } = useAnnouncements()
-  const readKeys = useNotificationStore(
-    (state) => state.readAnnouncementKeys
-  )
+  const readKeys = useNotificationStore((state) => state.readAnnouncementKeys)
   const markAnnouncementRead = useNotificationStore(
     (state) => state.markAnnouncementRead
   )
@@ -137,6 +136,7 @@ export function AnnouncementPopup() {
               <RichContent breaks content={active.content} />
             </div>
           )}
+          <AnnouncementImages images={active.images} />
           {active.extra && (
             <RichContent
               breaks

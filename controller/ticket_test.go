@@ -81,7 +81,7 @@ func ticketDatabase(t *testing.T, dialect string) *gorm.DB {
 		common.OptionMapRWMutex.Unlock()
 		_ = sqlDB.Close()
 	})
-	for _, entity := range []any{&model.TicketStoredObject{}, &model.TicketRead{}, &model.TicketAttachment{}, &model.TicketEvent{}, &model.TicketMessage{}, &model.Ticket{}, &model.UserSession{}, &model.CasbinRule{}, &model.AuthzRole{}, &model.UserAccessToken{}, &model.Option{}, &model.AuditLog{}, &model.Log{}, &model.User{}} {
+	for _, entity := range []any{&model.ConsoleImage{}, &model.TicketStoredObject{}, &model.TicketRead{}, &model.TicketAttachment{}, &model.TicketEvent{}, &model.TicketMessage{}, &model.Ticket{}, &model.UserSession{}, &model.CasbinRule{}, &model.AuthzRole{}, &model.UserAccessToken{}, &model.Option{}, &model.AuditLog{}, &model.Log{}, &model.User{}} {
 		require.NoError(t, db.Migrator().DropTable(entity))
 	}
 	var version string
@@ -139,7 +139,7 @@ func ticketObjectStorage(t *testing.T) *ticketR2Fixture {
 		assert.Contains(t, request.Header.Get("Authorization"), "Credential=test-access/")
 		assert.Contains(t, request.Header.Get("Authorization"), "/auto/s3/aws4_request")
 		assert.NotEmpty(t, request.Header.Get("X-Amz-Content-Sha256"))
-		assert.True(t, strings.HasPrefix(request.URL.Path, "/ticket-images/tickets/"))
+		assert.True(t, strings.HasPrefix(request.URL.Path, "/ticket-images/tickets/") || strings.HasPrefix(request.URL.Path, "/ticket-images/console/"))
 		switch request.Method {
 		case "PUT":
 			if fixture.failPut {

@@ -42,6 +42,7 @@ func accessTokenScopeRule(scope string) accessTokenRouteRule {
 // Casbin-guarded routes declare themselves through
 // DeclareAccessTokenPermissionRoute when they are registered.
 var accessTokenRouteRules = map[string]accessTokenRouteRule{
+	"POST /api/console-images": accessTokenSessionRule,
 	// Support conversations contain private customer data and require a dashboard session.
 	"GET /api/tickets":                                   accessTokenSessionRule,
 	"GET /api/tickets/unread":                            accessTokenSessionRule,

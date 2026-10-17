@@ -1,6 +1,7 @@
 package console_setting
 
 import (
+	"math"
 	"net/url"
 	"regexp"
 	"sort"
@@ -204,6 +205,21 @@ func validateAnnouncements(announcementsStr string) error {
 		if extra, exists := ann["extra"]; exists {
 			if extraStr, ok := extra.(string); ok && exceedsMaxCharacters(extraStr, 100) {
 				return common.NewMessage("Announcement #{{index}} note cannot exceed 100 characters", map[string]any{"index": i + 1})
+			}
+		}
+		if images, exists := ann["images"]; exists {
+			list, ok := images.([]any)
+			if !ok {
+				return common.NewMessage("Announcement #{{index}} has an invalid image list", map[string]any{"index": i + 1})
+			}
+			if len(list) > 9 {
+				return common.NewMessage("Announcement #{{index}} cannot exceed 9 images", map[string]any{"index": i + 1})
+			}
+			for _, value := range list {
+				number, ok := value.(float64)
+				if !ok || number < 1 || number != math.Trunc(number) {
+					return common.NewMessage("Announcement #{{index}} has an invalid image list", map[string]any{"index": i + 1})
+				}
 			}
 		}
 	}

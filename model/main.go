@@ -391,6 +391,9 @@ func migrateDB() error {
 	if err := MigrateTickets(DB); err != nil {
 		return err
 	}
+	if err := MigrateConsoleImages(DB); err != nil {
+		return err
+	}
 	if err := migrateUserQuotaSources(); err != nil {
 		return err
 	}

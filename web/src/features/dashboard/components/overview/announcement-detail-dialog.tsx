@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useTranslation } from 'react-i18next'
 
+import { AnnouncementImages } from '@/components/announcement-images'
 import { Dialog } from '@/components/dialog'
 import { RichContent } from '@/components/rich-content'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -32,6 +33,7 @@ interface AnnouncementDetailModalProps {
     tag?: string
     publishDate?: string
     extra?: string
+    images?: number[]
   } | null
 }
 
@@ -63,6 +65,7 @@ export function AnnouncementDetailModal({
               <RichContent breaks content={announcement.content} />
             </div>
           )}
+          <AnnouncementImages images={announcement?.images} />
           {announcement?.extra && (
             <div>
               <h4 className='mb-2 font-medium'>

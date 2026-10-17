@@ -1,14 +1,9 @@
 package controller
 
 import (
-	"bytes"
 	"crypto/sha256"
-	"encoding/base64"
 	"errors"
 	"fmt"
-	"image"
-	_ "image/jpeg"
-	_ "image/png"
 	"net/http"
 	"slices"
 	"strconv"
@@ -100,21 +95,12 @@ func decodeTicketRequest(c *gin.Context) (*ticketRequest, *model.TicketMessage, 
 	}
 	message := &model.TicketMessage{Content: strings.TrimSpace(request.Content), RequestKey: request.RequestKey, RequestHash: fmt.Sprintf("%x", sha256.Sum256(encoded)), Attachments: make([]model.TicketAttachment, 0)}
 	for _, file := range request.Screenshots {
-		data, err := base64.StdEncoding.DecodeString(file.Data)
-		if err != nil || len(data) == 0 || len(data) > 5*1024*1024 || !model.ValidateTicketText(file.Name, 160, true) {
+		data, contentType, ok := decodeUploadedImage(file.Data)
+		if !ok || !model.ValidateTicketText(file.Name, 160, true) {
 			ticketError(c, model.ErrTicketInvalid)
 			return nil, nil, false
 		}
-		config, format, err := image.DecodeConfig(bytes.NewReader(data))
-		if err != nil || (format != "png" && format != "jpeg") || config.Width < 1 || config.Height < 1 || int64(config.Width)*int64(config.Height) > 40000000 {
-			ticketError(c, model.ErrTicketInvalid)
-			return nil, nil, false
-		}
-		if _, _, err := image.Decode(bytes.NewReader(data)); err != nil {
-			ticketError(c, model.ErrTicketInvalid)
-			return nil, nil, false
-		}
-		message.Attachments = append(message.Attachments, model.TicketAttachment{Name: file.Name, ContentType: "image/" + format, Data: data})
+		message.Attachments = append(message.Attachments, model.TicketAttachment{Name: file.Name, ContentType: contentType, Data: data})
 	}
 	return &request, message, true
 }

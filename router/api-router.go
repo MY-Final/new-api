@@ -47,6 +47,8 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/status/test", middleware.AdminAuth(), controller.TestStatus)
 		apiRouter.GET("/notice", controller.GetNotice)
 		apiRouter.GET("/notifications/stream", controller.NotificationStream)
+		apiRouter.GET("/console-images/:id", controller.GetConsoleImage)
+		apiRouter.POST("/console-images", middleware.RootAuth(), middleware.UploadRateLimit(), controller.UploadConsoleImage)
 		apiRouter.GET("/user-agreement", controller.GetUserAgreement)
 		apiRouter.GET("/privacy-policy", controller.GetPrivacyPolicy)
 		apiRouter.GET("/contact/qrcode", controller.GetContactQRCode)

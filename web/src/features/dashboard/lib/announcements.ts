@@ -43,6 +43,7 @@ export function getAnnouncementKey(item: AnnouncementItem): string {
     type: legacyItem.type || '',
     title: (legacyItem.title || '').trim(),
     link: (legacyItem.link || '').trim(),
+    images: (legacyItem.images || []).join(','),
   })
   return `hash:${hashString(fingerprint)}`
 }

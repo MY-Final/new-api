@@ -126,6 +126,7 @@ func GetStatus(c *gin.Context) {
 		"support_tickets_enabled":     common.OptionMap["SupportTicketsEnabled"] != "false",
 		"ticket_images_enabled":       ticketStorage.Enabled && ticketStorage.Ready(),
 		"ticket_image_retention_days": ticketStorage.RetentionDays,
+		"console_images_enabled":      ticketStorage.Ready(),
 		"user_agreement_enabled":      legalSetting.UserAgreement != "",
 		"privacy_policy_enabled":      legalSetting.PrivacyPolicy != "",
 		"checkin_enabled":             operation_setting.GetCheckinSetting().Enabled,

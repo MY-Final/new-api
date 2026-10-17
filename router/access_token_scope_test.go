@@ -31,6 +31,7 @@ var accessTokenExemptRoutes = []string{
 	"GET /api/contact/qrcode",
 	"GET /api/notice",
 	"GET /api/notifications/stream",
+	"GET /api/console-images/:id",
 	"GET /api/user-agreement",
 	"GET /api/privacy-policy",
 	"GET /api/about",

@@ -393,6 +393,7 @@ func InitResources() error {
 
 	service.StartAuthArtifactCleanup()
 	service.StartTicketImageCleanup()
+	service.StartConsoleImageCleanup()
 
 	return nil
 }

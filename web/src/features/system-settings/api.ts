@@ -30,6 +30,7 @@ import type {
   SystemTaskResponse,
   UpdateOptionRequest,
   UpdateOptionResponse,
+  UploadConsoleImageResponse,
   UpdatePasskeyDomainsRequest,
   UpdatePasskeyDomainsResponse,
   UpstreamChannelsResponse,
@@ -43,6 +44,14 @@ export async function getSystemOptions() {
 
 export async function updateSystemOption(request: UpdateOptionRequest) {
   const res = await api.put<UpdateOptionResponse>('/api/option/', request)
+  return res.data
+}
+
+export async function uploadConsoleImage(data: string) {
+  const res = await api.post<UploadConsoleImageResponse>(
+    '/api/console-images',
+    { data }
+  )
   return res.data
 }
 

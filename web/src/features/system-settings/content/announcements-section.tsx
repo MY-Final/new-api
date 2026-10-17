@@ -18,7 +18,13 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Pin, Plus, Trash2, Save } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ClipboardEvent,
+} from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -61,6 +67,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { sortAnnouncements } from '@/features/dashboard/lib/announcements'
+import { useStatus } from '@/hooks/use-status'
 import { toIntlLocale } from '@/i18n/languages'
 import dayjs from '@/lib/dayjs'
 import { formatTimestampRelative } from '@/lib/format'
@@ -69,6 +76,11 @@ import { handleServerError } from '@/lib/handle-server-error'
 import { SettingsSwitchField } from '../components/settings-form-layout'
 import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
+import {
+  appendConsoleImages,
+  consoleImageFilesFromClipboard,
+} from '../lib/console-images'
+import { AnnouncementImagesField } from './announcement-images-field'
 
 type Announcement = {
   id: number
@@ -77,6 +89,7 @@ type Announcement = {
   type: 'default' | 'ongoing' | 'success' | 'warning' | 'error'
   extra?: string
   pinned: boolean
+  images: number[]
 }
 
 type AnnouncementsSectionProps = {
@@ -96,6 +109,7 @@ const announcementSchema = z.object({
     .max(100, 'Extra must be less than 100 characters')
     .optional(),
   pinned: z.boolean(),
+  images: z.array(z.number()).max(9, 'Up to 9 images are allowed'),
 })
 
 type AnnouncementFormValues = z.infer<typeof announcementSchema>
@@ -142,11 +156,14 @@ export function AnnouncementsSection({
   const { t, i18n } = useTranslation()
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const updateOption = useUpdateOption()
+  const { status } = useStatus()
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [isEnabled, setIsEnabled] = useState(enabled)
   const [hasChanges, setHasChanges] = useState(false)
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [showDialog, setShowDialog] = useState(false)
+  const [uploadingImages, setUploadingImages] = useState(false)
+  const imageUploadPending = useRef(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [editingAnnouncement, setEditingAnnouncement] =
     useState<Announcement | null>(null)
@@ -160,6 +177,7 @@ export function AnnouncementsSection({
       type: 'default',
       extra: '',
       pinned: false,
+      images: [],
     },
   })
 
@@ -172,6 +190,12 @@ export function AnnouncementsSection({
             ...item,
             id: item.id || idx + 1,
             pinned: item.pinned === true,
+            images: Array.isArray(item.images)
+              ? item.images.filter(
+                  (value: unknown): value is number =>
+                    typeof value === 'number' && value > 0
+                )
+              : [],
           }))
         )
       }
@@ -205,6 +229,7 @@ export function AnnouncementsSection({
       type: 'default',
       extra: '',
       pinned: false,
+      images: [],
     })
     setShowDialog(true)
   }
@@ -217,6 +242,7 @@ export function AnnouncementsSection({
       type: announcement.type,
       extra: announcement.extra || '',
       pinned: announcement.pinned,
+      images: announcement.images ?? [],
     })
     setShowDialog(true)
   }
@@ -260,6 +286,7 @@ export function AnnouncementsSection({
   }
 
   const handleSubmitForm = (values: AnnouncementFormValues) => {
+    if (imageUploadPending.current) return
     if (editingAnnouncement) {
       setAnnouncements((prev) =>
         prev.map((item) =>
@@ -274,6 +301,34 @@ export function AnnouncementsSection({
     }
     setHasChanges(true)
     setShowDialog(false)
+  }
+
+  const handleImageUpload = async (files: File[]) => {
+    if (imageUploadPending.current || files.length === 0) return
+    imageUploadPending.current = true
+    setUploadingImages(true)
+    try {
+      const images = await appendConsoleImages(
+        form.getValues('images') ?? [],
+        files
+      )
+      form.setValue('images', images, {
+        shouldDirty: true,
+        shouldValidate: true,
+      })
+    } catch (error) {
+      handleServerError(error, t('Failed to upload image'))
+    } finally {
+      imageUploadPending.current = false
+      setUploadingImages(false)
+    }
+  }
+
+  const handlePaste = (event: ClipboardEvent<HTMLFormElement>) => {
+    const files = consoleImageFilesFromClipboard(event.clipboardData)
+    if (files.length === 0 || status?.console_images_enabled !== true) return
+    event.preventDefault()
+    void handleImageUpload(files)
   }
 
   const handleSaveAll = async () => {
@@ -451,7 +506,10 @@ export function AnnouncementsSection({
 
       <Dialog
         open={showDialog}
-        onOpenChange={setShowDialog}
+        onOpenChange={(open) => {
+          if (!imageUploadPending.current) setShowDialog(open)
+        }}
+        showCloseButton={!uploadingImages}
         title={
           editingAnnouncement ? t('Edit Announcement') : t('Add Announcement')
         }
@@ -466,11 +524,16 @@ export function AnnouncementsSection({
             <Button
               type='button'
               variant='outline'
+              disabled={uploadingImages}
               onClick={() => setShowDialog(false)}
             >
               {t('Cancel')}
             </Button>
-            <Button type='submit' form={ANNOUNCEMENT_FORM_ID}>
+            <Button
+              type='submit'
+              form={ANNOUNCEMENT_FORM_ID}
+              disabled={uploadingImages}
+            >
               {editingAnnouncement ? t('Update') : t('Add')}
             </Button>
           </>
@@ -480,6 +543,7 @@ export function AnnouncementsSection({
           <form
             id={ANNOUNCEMENT_FORM_ID}
             onSubmit={form.handleSubmit(handleSubmitForm)}
+            onPaste={handlePaste}
             className='space-y-4'
           >
             <FormField
@@ -592,6 +656,24 @@ export function AnnouncementsSection({
                       'Optional supplementary information (max 100 characters)'
                     )}
                   </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='images'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Images')}</FormLabel>
+                  <FormControl>
+                    <AnnouncementImagesField
+                      value={field.value}
+                      onChange={field.onChange}
+                      onUpload={handleImageUpload}
+                      disabled={uploadingImages}
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}

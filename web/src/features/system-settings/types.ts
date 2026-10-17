@@ -39,6 +39,14 @@ export type UpdateOptionResponse = {
   message: string
 }
 
+export type UploadConsoleImageResponse = {
+  success: boolean
+  message: string
+  data?: {
+    id: number
+  }
+}
+
 export type PreviewEmailTemplateRequest = {
   key: string
   subject: string

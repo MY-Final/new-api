@@ -23,11 +23,11 @@ var ErrTicketImageExpired = errors.New("Ticket image has expired")
 
 // Never follow a redirect with R2 authorization headers. Credentials stay on
 // the configured Cloudflare host; all object access uses AWS's SigV4 signer.
-var ticketR2Client = &http.Client{Timeout: time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+var r2StorageClient = &http.Client{Timeout: time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 
-func ticketR2Request(ctx context.Context, config system_setting.TicketStorageConfig, method, key, contentType string, data []byte) (*http.Response, error) {
+func r2StorageRequest(ctx context.Context, config system_setting.TicketStorageConfig, method, key, contentType string, data []byte) (*http.Response, error) {
 	if !config.Ready() {
-		return nil, errors.New("Ticket image storage is unavailable")
+		return nil, errors.New("Image storage is unavailable")
 	}
 	request, err := http.NewRequestWithContext(ctx, method, strings.TrimSuffix(config.Endpoint, "/")+"/"+config.Bucket+"/"+key, bytes.NewReader(data))
 	if err != nil {
@@ -41,11 +41,11 @@ func ticketR2Request(ctx context.Context, config system_setting.TicketStorageCon
 	request.Header.Set("X-Amz-Content-Sha256", hash)
 	err = v4.NewSigner().SignHTTP(ctx, aws.Credentials{AccessKeyID: config.AccessKey, SecretAccessKey: config.SecretKey}, request, hash, "s3", "auto", time.Now())
 	if err != nil {
-		return nil, errors.New("Ticket image storage signing failed")
+		return nil, errors.New("Image storage signing failed")
 	}
-	response, err := ticketR2Client.Do(request)
+	response, err := r2StorageClient.Do(request)
 	if err != nil {
-		return nil, errors.New("Ticket image storage request failed")
+		return nil, errors.New("Image storage request failed")
 	}
 	return response, nil
 }
@@ -69,7 +69,7 @@ func PersistTicketImages(ctx context.Context, message *model.TicketMessage) ([]m
 			return objects, err
 		}
 		objects = append(objects, object)
-		response, err := ticketR2Request(ctx, config, http.MethodPut, object.ObjectKey, attachment.ContentType, attachment.Data)
+		response, err := r2StorageRequest(ctx, config, http.MethodPut, object.ObjectKey, attachment.ContentType, attachment.Data)
 		if err != nil {
 			return objects, err
 		}
@@ -100,7 +100,7 @@ func DiscardTicketImages(objects []model.TicketStoredObject) {
 func deleteTicketObject(ctx context.Context, object model.TicketStoredObject) error {
 	config := model.TicketStorageConfig()
 	config.Endpoint, config.Bucket = object.Endpoint, object.Bucket
-	response, err := ticketR2Request(ctx, config, http.MethodDelete, object.ObjectKey, "", nil)
+	response, err := r2StorageRequest(ctx, config, http.MethodDelete, object.ObjectKey, "", nil)
 	if err != nil {
 		return err
 	}
@@ -124,7 +124,7 @@ func ReadTicketImage(ctx context.Context, attachment *model.TicketAttachment) ([
 	}
 	config := model.TicketStorageConfig()
 	config.Endpoint, config.Bucket = attachment.Endpoint, attachment.Bucket
-	response, err := ticketR2Request(ctx, config, http.MethodGet, attachment.ObjectKey, "", nil)
+	response, err := r2StorageRequest(ctx, config, http.MethodGet, attachment.ObjectKey, "", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +185,7 @@ func CleanupTicketImages(ctx context.Context) error {
 		if err := model.DB.Create(&object).Error; err != nil {
 			return err
 		}
-		response, err := ticketR2Request(ctx, config, http.MethodPut, object.ObjectKey, attachment.ContentType, attachment.Data)
+		response, err := r2StorageRequest(ctx, config, http.MethodPut, object.ObjectKey, attachment.ContentType, attachment.Data)
 		if err != nil {
 			failures = append(failures, err)
 			continue
