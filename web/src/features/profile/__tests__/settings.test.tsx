@@ -17,9 +17,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { api } from '@/lib/api'
+import { ROLE } from '@/lib/roles'
+import {
+  DEFAULT_CURRENCY_CONFIG,
+  useSystemConfigStore,
+} from '@/stores/system-config-store'
 
 import { updateUserSettings } from '../api'
 import { NotificationTab } from '../components/tabs/notification-tab'
@@ -56,7 +61,23 @@ const settings = {
   upstream_model_update_notify_enabled: true,
 }
 
-afterEach(() => vi.restoreAllMocks())
+beforeEach(() => {
+  useSystemConfigStore.getState().setConfig({
+    currency: { ...DEFAULT_CURRENCY_CONFIG, quotaDisplayType: 'USD' },
+  })
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
+  useSystemConfigStore.getState().setConfig({
+    currency: { ...DEFAULT_CURRENCY_CONFIG },
+  })
+})
+
+/** The body a PUT sends over the wire: undefined fields are left out. */
+function sentBody(put: { mock: { calls: unknown[][] } }): unknown {
+  return JSON.parse(JSON.stringify(put.mock.calls[0][1]))
+}
 
 describe('user settings saves across profile and security', () => {
   it('disabling IP recording sends the latest complete notification settings', async () => {
@@ -77,15 +98,16 @@ describe('user settings saves across profile and security', () => {
     })
   })
 
-  it('saving IP recording for a user with no settings supplies the existing defaults', async () => {
+  it('saving IP recording for a user with no settings supplies the defaults and leaves unchosen switches unset', async () => {
     vi.spyOn(api, 'get').mockResolvedValue({
-      data: { success: true, data: profile },
+      data: { success: true, data: { ...profile, role: ROLE.SUPER_ADMIN } },
     })
     const put = vi
       .spyOn(api, 'put')
       .mockResolvedValue({ data: { success: true } })
     await updateUserSettings({ record_ip_log: true })
-    expect(put).toHaveBeenCalledWith('/api/user/setting', {
+    expect(put.mock.calls[0][0]).toBe('/api/user/setting')
+    expect(sentBody(put)).toEqual({
       notify_type: 'email',
       quota_warning_threshold: 0,
       notification_email: '',
@@ -175,13 +197,15 @@ describe('user settings saves across profile and security', () => {
       <NotificationTab
         profile={{ ...profile, setting: JSON.stringify(settings) }}
         onUpdate={onUpdate}
+        quotaRemindEnabled
+        quotaRemindThreshold={1000}
       />
     )
     expect(
       screen.queryByRole('switch', { name: 'Record IP Address' })
     ).not.toBeInTheDocument()
     fireEvent.change(
-      screen.getByRole('spinbutton', { name: /Balance Warning Threshold/ }),
+      screen.getByRole('spinbutton', { name: /Reminder threshold/ }),
       { target: { value: '0.0054' } }
     )
     fireEvent.click(screen.getByRole('button', { name: 'Save Settings' }))
@@ -191,5 +215,150 @@ describe('user settings saves across profile and security', () => {
       quota_warning_threshold: 2700,
       record_ip_log: false,
     })
+  })
+})
+
+describe('notifications a user receives', () => {
+  function renderNotificationTab(
+    role: number,
+    setting: Record<string, unknown>,
+    quotaRemindEnabled = true
+  ) {
+    const onUpdate = vi.fn()
+    render(
+      <NotificationTab
+        profile={{ ...profile, role, setting: JSON.stringify(setting) }}
+        onUpdate={onUpdate}
+        quotaRemindEnabled={quotaRemindEnabled}
+        quotaRemindThreshold={1000}
+      />
+    )
+    return onUpdate
+  }
+
+  function mockSave(role: number, setting: Record<string, unknown>) {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: {
+        success: true,
+        data: { ...profile, role, setting: JSON.stringify(setting) },
+      },
+    })
+    return vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } })
+  }
+
+  async function save(onUpdate: () => void) {
+    fireEvent.click(screen.getByRole('button', { name: 'Save Settings' }))
+    await waitFor(() => expect(onUpdate).toHaveBeenCalled())
+  }
+
+  it.each([
+    { name: 'user', role: ROLE.USER, channel: undefined },
+    { name: 'admin', role: ROLE.ADMIN, channel: false },
+    { name: 'root', role: ROLE.SUPER_ADMIN, channel: true },
+  ])(
+    'a $name who never chose sees the reminder on and the channel switch as $channel',
+    (row) => {
+      renderNotificationTab(row.role, { notify_type: 'email' })
+      expect(
+        screen.getByRole('switch', { name: 'Low balance reminder' })
+      ).toBeChecked()
+      const channel = screen.queryByRole('switch', {
+        name: 'Channel notifications',
+      })
+      const upstream = screen.queryByRole('switch', {
+        name: 'Upstream Model Updates',
+      })
+      if (row.channel === undefined) {
+        expect(channel).not.toBeInTheDocument()
+        expect(upstream).not.toBeInTheDocument()
+        return
+      }
+      expect(channel?.getAttribute('aria-checked')).toBe(String(row.channel))
+      expect(upstream).not.toBeChecked()
+    }
+  )
+
+  it('a user on a site with reminders off sees one line instead of notification settings', () => {
+    renderNotificationTab(ROLE.USER, { notify_type: 'email' }, false)
+    expect(
+      screen.getByText('No notifications are available to you right now')
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Notification Method')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('switch', { name: 'Low balance reminder' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('an admin on a site with reminders off keeps only the administrator notifications', () => {
+    renderNotificationTab(ROLE.ADMIN, { notify_type: 'email' }, false)
+    expect(
+      screen.queryByRole('switch', { name: 'Low balance reminder' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('switch', { name: 'Channel notifications' })
+    ).toBeInTheDocument()
+    expect(screen.getByText('Notification Method')).toBeInTheDocument()
+  })
+
+  it('an empty threshold shows the site default and saves as the site default', async () => {
+    const put = mockSave(ROLE.USER, { notify_type: 'email' })
+    const onUpdate = renderNotificationTab(ROLE.USER, { notify_type: 'email' })
+    const threshold = screen.getByRole('spinbutton', {
+      name: /Reminder threshold/,
+    })
+    expect(threshold).toHaveValue(null)
+    expect(threshold).toHaveAttribute('placeholder', '0.002')
+    expect(
+      screen.getByText('Leave empty to use the site default ($0.002)')
+    ).toBeInTheDocument()
+    await save(onUpdate)
+    expect(sentBody(put)).toMatchObject({ quota_warning_threshold: 0 })
+  })
+
+  it('an untouched threshold is saved as stored, in quota units', async () => {
+    const setting = { notify_type: 'email', quota_warning_threshold: 1234 }
+    const put = mockSave(ROLE.USER, setting)
+    const onUpdate = renderNotificationTab(ROLE.USER, setting)
+    expect(
+      screen.getByRole('spinbutton', { name: /Reminder threshold/ })
+    ).toHaveValue(0.0025)
+    expect(
+      screen.getByRole('spinbutton', { name: /Reminder threshold/ })
+    ).toHaveAttribute('step', '0.0001')
+    await save(onUpdate)
+    expect(sentBody(put)).toMatchObject({ quota_warning_threshold: 1234 })
+  })
+
+  it('turning the reminder off hides its threshold and saves the switch', async () => {
+    const put = mockSave(ROLE.USER, { notify_type: 'email' })
+    const onUpdate = renderNotificationTab(ROLE.USER, { notify_type: 'email' })
+    fireEvent.click(
+      screen.getByRole('switch', { name: 'Low balance reminder' })
+    )
+    expect(
+      screen.queryByRole('spinbutton', { name: /Reminder threshold/ })
+    ).not.toBeInTheDocument()
+    await save(onUpdate)
+    expect(sentBody(put)).toMatchObject({ quota_warning_enabled: false })
+  })
+
+  it('switches root never touched stay unset when it saves', async () => {
+    const put = mockSave(ROLE.SUPER_ADMIN, { notify_type: 'email' })
+    const onUpdate = renderNotificationTab(ROLE.SUPER_ADMIN, {
+      notify_type: 'email',
+    })
+    await save(onUpdate)
+    expect(sentBody(put)).not.toHaveProperty('channel_notify_enabled')
+    expect(sentBody(put)).not.toHaveProperty('quota_warning_enabled')
+  })
+
+  it('an admin turning channel notifications on saves the switch', async () => {
+    const put = mockSave(ROLE.ADMIN, { notify_type: 'email' })
+    const onUpdate = renderNotificationTab(ROLE.ADMIN, { notify_type: 'email' })
+    fireEvent.click(
+      screen.getByRole('switch', { name: 'Channel notifications' })
+    )
+    await save(onUpdate)
+    expect(sentBody(put)).toMatchObject({ channel_notify_enabled: true })
   })
 })

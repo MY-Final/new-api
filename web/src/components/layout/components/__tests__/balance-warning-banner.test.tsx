@@ -19,7 +19,6 @@ import { render, screen, waitFor } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
-import { DEFAULT_QUOTA_WARNING_THRESHOLD } from '@/features/profile/constants'
 import { useAuthStore, type AuthUser } from '@/stores/auth-store'
 
 import { BalanceWarningBanner } from '../balance-warning-banner'
@@ -44,7 +43,12 @@ const baseUser: AuthUser = {
 
 const queryClients: QueryClient[] = []
 
-function renderBanner() {
+function renderBanner(
+  props: ComponentProps<typeof BalanceWarningBanner> = {
+    quotaRemindEnabled: true,
+    quotaRemindThreshold: 0,
+  }
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
@@ -52,7 +56,7 @@ function renderBanner() {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <BalanceWarningBanner />
+      <BalanceWarningBanner {...props} />
     </QueryClientProvider>
   )
 }
@@ -101,6 +105,32 @@ describe('BalanceWarningBanner', () => {
     expectBannerVisible()
   })
 
+  test('uses the site threshold when the user has not set one', () => {
+    const user = setUser({ quota: 50, setting: { quota_warning_threshold: 0 } })
+    getSelf.mockResolvedValue({ success: true, data: user })
+    renderBanner({ quotaRemindEnabled: true, quotaRemindThreshold: 100 })
+    expectBannerVisible()
+  })
+
+  test.each([
+    { quotaRemindEnabled: false, quota_warning_enabled: true },
+    { quotaRemindEnabled: true, quota_warning_enabled: false },
+  ])('hides when the site or user reminder switch is off: %j', (row) => {
+    const user = setUser({
+      quota: 50,
+      setting: {
+        quota_warning_threshold: 100,
+        quota_warning_enabled: row.quota_warning_enabled,
+      },
+    })
+    getSelf.mockResolvedValue({ success: true, data: user })
+    renderBanner({
+      quotaRemindEnabled: row.quotaRemindEnabled,
+      quotaRemindThreshold: 100,
+    })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   test('shows a negative balance and links to the wallet', () => {
     const user = setUser({
       quota: -1,
@@ -130,7 +160,7 @@ describe('BalanceWarningBanner', () => {
 
   test('falls back to the default threshold for an invalid custom value', () => {
     const user = setUser({
-      quota: DEFAULT_QUOTA_WARNING_THRESHOLD,
+      quota: 0,
       setting: { quota_warning_threshold: 'invalid' },
     })
     getSelf.mockResolvedValue({ success: true, data: user })
@@ -161,7 +191,7 @@ describe('BalanceWarningBanner', () => {
   })
 
   test('keeps the existing balance when the refresh request fails', async () => {
-    setUser({ quota: DEFAULT_QUOTA_WARNING_THRESHOLD + 1 })
+    setUser({ quota: 1 })
     getSelf.mockRejectedValue(new Error('network error'))
 
     renderBanner()

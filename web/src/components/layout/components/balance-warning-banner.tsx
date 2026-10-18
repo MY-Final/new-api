@@ -27,13 +27,17 @@ import {
   AlertTitle,
 } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { DEFAULT_QUOTA_WARNING_THRESHOLD } from '@/features/profile/constants'
 import { parseUserSettings } from '@/features/profile/lib'
 import { getSelf } from '@/lib/api'
 import { formatQuotaPrecise } from '@/lib/format'
 import { useAuthStore, type AuthUser } from '@/stores/auth-store'
 
-export function BalanceWarningBanner() {
+interface BalanceWarningBannerProps {
+  quotaRemindEnabled: boolean
+  quotaRemindThreshold: number
+}
+
+export function BalanceWarningBanner(props: BalanceWarningBannerProps) {
   const { t } = useTranslation()
   const user = useAuthStore((state) => state.auth.user)
   const setUser = useAuthStore((state) => state.auth.setUser)
@@ -70,9 +74,10 @@ export function BalanceWarningBanner() {
   const quota = Number(currentUser?.quota)
   const settings = parseUserSettings(currentUser?.setting)
   const configuredThreshold = Number(settings.quota_warning_threshold)
-  const threshold = Number.isFinite(configuredThreshold)
-    ? configuredThreshold
-    : DEFAULT_QUOTA_WARNING_THRESHOLD
+  const threshold =
+    Number.isFinite(configuredThreshold) && configuredThreshold > 0
+      ? configuredThreshold
+      : props.quotaRemindThreshold
   const warningKey = currentUser ? `${currentUser.id}:${threshold}` : ''
   const dismissalStorageKey = currentUser
     ? `balance-warning-dismissed:v1:${currentUser.id}:${threshold}`
@@ -97,6 +102,8 @@ export function BalanceWarningBanner() {
   if (!currentUser || !Number.isFinite(quota)) return null
 
   if (
+    !props.quotaRemindEnabled ||
+    settings.quota_warning_enabled === false ||
     threshold <= 0 ||
     quota > threshold ||
     dismissedWarningKey === warningKey
