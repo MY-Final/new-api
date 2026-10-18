@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -20,6 +21,9 @@ import (
 func DecideRelayRetry(c *gin.Context, err *types.NewAPIError, retryTimes int) PolicyDecision {
 	if err == nil {
 		return PolicyDecision{Action: "stop", Reason: "request_completed", Source: "system"}
+	}
+	if c != nil && c.Request != nil && c.Request.Context().Err() != nil {
+		return PolicyDecision{Action: "stop", Reason: "request_cancelled", Source: "system"}
 	}
 	if ShouldSkipRetryAfterChannelAffinityFailure(c) {
 		source := RequestPolicy(c).SessionModeSource
@@ -60,8 +64,19 @@ func ShouldRetryRelayError(c *gin.Context, openaiErr *types.NewAPIError, retryTi
 	return DecideRelayRetry(c, openaiErr, retryTimes).Action == "retry"
 }
 
+// Transport error masking can discard the original cancellation cause. Require
+// the request to have ended, and preserve independent upstream/channel failures.
+func isRelayRequestCancelled(c *gin.Context, err *types.NewAPIError) bool {
+	if err == nil || c == nil || c.Request == nil || c.Request.Context().Err() == nil {
+		return false
+	}
+	requestErr := c.Request.Context().Err()
+	return errors.Is(err, requestErr) || err.Error() == requestErr.Error() ||
+		err.GetErrorCode() == types.ErrorCodeDoRequestFailed
+}
+
 func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *types.NewAPIError, relayInfo *relaycommon.RelayInfo) {
-	if err == nil {
+	if err == nil || isRelayRequestCancelled(c, err) {
 		return
 	}
 	logger.LogError(c, common.LogText("channel error (channel #%d, status code: %d): %s", channelError.ChannelId, err.StatusCode, common.LocalLogPreview(err.MaskSensitiveErrorWithStatusCode())))

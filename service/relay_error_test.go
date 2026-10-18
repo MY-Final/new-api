@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -136,6 +137,19 @@ func TestDecideRelayRetryReasons(t *testing.T) {
 		setup   func(*gin.Context)
 		want    PolicyDecision
 	}{
+		{name: "cancelled request stops status retry", err: upstream(http.StatusTooManyRequests), retries: 1, setup: func(c *gin.Context) {
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			c.Request = httptest.NewRequest(http.MethodPost, "/relay", nil).WithContext(ctx)
+		}, want: PolicyDecision{Action: "stop", Reason: "request_cancelled", Source: "system"}},
+		{name: "expired request stops channel retry", err: types.NewError(errors.New("no key"), types.ErrorCodeChannelNoAvailableKey), retries: 1, setup: func(c *gin.Context) {
+			ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+			defer cancel()
+			c.Request = httptest.NewRequest(http.MethodPost, "/relay", nil).WithContext(ctx)
+		}, want: PolicyDecision{Action: "stop", Reason: "request_cancelled", Source: "system"}},
+		{name: "live request still retries", err: upstream(http.StatusTooManyRequests), retries: 1, setup: func(c *gin.Context) {
+			c.Request = httptest.NewRequest(http.MethodPost, "/relay", nil)
+		}, want: PolicyDecision{Action: "retry", Reason: "retry_status_matched", Source: "global"}},
 		{name: "retry status matched", err: upstream(http.StatusTooManyRequests), retries: 1, want: PolicyDecision{Action: "retry", Reason: "retry_status_matched", Source: "global"}},
 		{name: "status outside retry rules", err: upstream(http.StatusBadRequest), retries: 1, want: PolicyDecision{Action: "stop", Reason: "status_not_retryable", Source: "global"}},
 		{name: "attempt budget exhausted", err: upstream(http.StatusTooManyRequests), retries: 0, want: PolicyDecision{Action: "stop", Reason: "attempt_budget_exhausted", Source: "global"}},
@@ -160,6 +174,64 @@ func TestDecideRelayRetryReasons(t *testing.T) {
 			decision := DecideRelayRetry(c, tc.err, tc.retries)
 			assert.Equal(t, tc.want, decision)
 			assert.Equal(t, tc.want.Action == "retry", ShouldRetryRelayError(c, tc.err, tc.retries))
+		})
+	}
+}
+
+func TestClientCancellationDoesNotFailChannelHealth(t *testing.T) {
+	previousAutoDisable, previousErrorLog := common.AutomaticDisableChannelEnabled, constant.ErrorLogEnabled
+	common.AutomaticDisableChannelEnabled, constant.ErrorLogEnabled = true, true
+	t.Cleanup(func() {
+		common.AutomaticDisableChannelEnabled, constant.ErrorLogEnabled = previousAutoDisable, previousErrorLog
+	})
+	for _, cause := range []error{context.Canceled, context.DeadlineExceeded} {
+		t.Run(cause.Error(), func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			if cause == context.DeadlineExceeded {
+				cancel()
+				ctx, cancel = context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+			}
+			cancel()
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/relay", nil).WithContext(ctx)
+			c.Set("auto_ban", true)
+			state := RequestPolicy(c)
+			state.BeginAttempt(&model.Channel{Id: 7}, "default")
+			apiErr := types.NewError(cause, types.ErrorCodeDoRequestFailed, types.ErrOptionWithHideErrMsg("upstream error: do request failed"))
+			require.False(t, errors.Is(apiErr, cause), "the transport error mask discards the original cause")
+			RecordPolicyFailure(c, 7, apiErr, DecideRelayRetry(c, apiErr, 2))
+			events := state.Events()
+			require.Len(t, events, 2)
+			assert.Equal(t, PolicyDecision{Action: "stop", Reason: "request_cancelled", Source: "system"}, events[1].Decision)
+			assert.Equal(t, "unchanged", events[1].Health)
+			assert.Equal(t, "local", events[1].ErrorSource)
+			// A cancellation needs neither database access nor a channel failure log.
+			require.NotPanics(t, func() { ProcessChannelError(c, types.ChannelError{ChannelId: 7, AutoBan: true}, apiErr, nil) })
+
+			upstreamErr := types.NewOpenAIError(errors.New("invalid credential"), types.ErrorCodeBadResponseStatusCode, http.StatusUnauthorized)
+			RecordPolicyFailure(c, 7, upstreamErr, DecideRelayRetry(c, upstreamErr, 2))
+			events = state.Events()
+			assert.Equal(t, "upstream", events[2].ErrorSource, "a definite upstream failure remains auditable after the client leaves")
+			assert.Equal(t, "channel_disable_requested", events[3].Health)
+			assert.Equal(t, "request_cancelled", events[3].Decision.Reason, "an ended request still must not retry")
+
+			providerErr := types.NewOpenAIError(errors.New("Permission denied"), types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+			RecordPolicyFailure(c, 7, providerErr, DecideRelayRetry(c, providerErr, 2))
+			events = state.Events()
+			require.Len(t, events, 6, "a provider error must not be mistaken for cancellation because its response error code is broad")
+			assert.Equal(t, "upstream_failure", events[4].Decision.Reason)
+			assert.Equal(t, "channel_disable_requested", events[5].Health)
+
+			for _, readErr := range []*types.NewAPIError{
+				types.NewError(fmt.Errorf("read response: %w", cause), types.ErrorCodeBadResponseBody),
+				types.NewOpenAIError(cause, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError),
+			} {
+				RecordPolicyFailure(c, 7, readErr, DecideRelayRetry(c, readErr, 2))
+				events = state.Events()
+				assert.Equal(t, PolicyDecision{Action: "stop", Reason: "request_cancelled", Source: "system"}, events[len(events)-1].Decision)
+				assert.Equal(t, "unchanged", events[len(events)-1].Health)
+				require.NotPanics(t, func() { ProcessChannelError(c, types.ChannelError{ChannelId: 7, AutoBan: true}, readErr, nil) })
+			}
 		})
 	}
 }

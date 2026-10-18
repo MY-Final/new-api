@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -95,5 +96,21 @@ func TestProcessChannelErrorUsesSnapshotWithoutLeakingChannelMetadata(t *testing
 	assert.NotContains(t, userOther, "admin_info")
 	for _, key := range []string{"channel_id", "channel_name", "channel_type"} {
 		assert.NotContains(t, userOther, key)
+	}
+}
+
+func TestRelayRejectsCancelledRequestBeforeRoutingOrBilling(t *testing.T) {
+	for _, relayFormat := range []types.RelayFormat{types.RelayFormatOpenAI, types.RelayFormatClaude, types.RelayFormatGemini} {
+		t.Run(string(relayFormat), func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil).WithContext(ctx)
+			Relay(c, relayFormat)
+			assert.Equal(t, http.StatusRequestTimeout, recorder.Code)
+			assert.Empty(t, c.GetStringSlice("use_channel"))
+			assert.Contains(t, recorder.Body.String(), "context canceled")
+		})
 	}
 }

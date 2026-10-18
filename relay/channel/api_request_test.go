@@ -2,9 +2,16 @@ package channel
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/QuantumNous/new-api/service"
 
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/gin-gonic/gin"
@@ -215,5 +222,130 @@ func TestToWebSocketURL(t *testing.T) {
 		"ws://127.0.0.1:3000/backend-api/codex/responses": "ws://127.0.0.1:3000/backend-api/codex/responses",
 	} {
 		assert.Equal(t, want, toWebSocketURL(input), input)
+	}
+}
+
+type cancellationAdaptor struct {
+	Adaptor
+	url string
+}
+
+func (a cancellationAdaptor) GetRequestURL(*relaycommon.RelayInfo) (string, error) {
+	return a.url, nil
+}
+
+func (a cancellationAdaptor) SetupRequestHeader(*gin.Context, *http.Header, *relaycommon.RelayInfo) error {
+	return nil
+}
+
+func TestDoAPIRequestsHonorClientCancellation(t *testing.T) {
+	service.InitHttpClient()
+	for _, entry := range []struct {
+		name string
+		do   func(Adaptor, *gin.Context, *relaycommon.RelayInfo, io.Reader) (*http.Response, error)
+	}{
+		{name: "JSON", do: DoApiRequest},
+		{name: "form", do: DoFormRequest},
+	} {
+		for _, beforeDispatch := range []bool{true, false} {
+			t.Run(fmt.Sprintf("%s/before_dispatch=%t", entry.name, beforeDispatch), func(t *testing.T) {
+				var requests atomic.Int32
+				started, stopped, release := make(chan struct{}), make(chan struct{}), make(chan struct{})
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					requests.Add(1)
+					_, _ = io.Copy(io.Discard, r.Body)
+					close(started)
+					select {
+					case <-r.Context().Done():
+						close(stopped)
+					case <-release:
+					}
+				}))
+				t.Cleanup(server.Close)
+				t.Cleanup(func() { close(release) })
+				ctx, cancel := context.WithCancel(context.Background())
+				t.Cleanup(cancel)
+				c, _ := gin.CreateTestContext(httptest.NewRecorder())
+				c.Request = httptest.NewRequest(http.MethodPost, "/relay", nil).WithContext(ctx)
+				info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}}
+				if beforeDispatch {
+					cancel()
+				}
+				completed := make(chan error, 1)
+				go func() {
+					resp, err := entry.do(cancellationAdaptor{url: server.URL}, c, info, strings.NewReader("payload"))
+					if resp != nil {
+						_ = resp.Body.Close()
+					}
+					completed <- err
+				}()
+				if !beforeDispatch {
+					select {
+					case <-started:
+					case <-time.After(3 * time.Second):
+						t.Fatal("upstream request did not start")
+					}
+					cancel()
+				}
+				select {
+				case err := <-completed:
+					require.Error(t, err)
+				case <-time.After(3 * time.Second):
+					t.Fatal("request did not stop after client cancellation")
+				}
+				if beforeDispatch {
+					assert.Zero(t, requests.Load())
+					return
+				}
+				select {
+				case <-stopped:
+				case <-time.After(3 * time.Second):
+					t.Fatal("upstream did not observe cancellation")
+				}
+			})
+		}
+	}
+}
+
+func TestDoAPIRequestsKeepStreamingContextUntilClientCancellation(t *testing.T) {
+	service.InitHttpClient()
+	for _, entry := range []struct {
+		name string
+		do   func(Adaptor, *gin.Context, *relaycommon.RelayInfo, io.Reader) (*http.Response, error)
+	}{
+		{name: "JSON", do: DoApiRequest},
+		{name: "form", do: DoFormRequest},
+	} {
+		t.Run(entry.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = io.Copy(io.Discard, r.Body)
+				_, _ = io.WriteString(w, "data: first\n\n")
+				w.(http.Flusher).Flush()
+				<-r.Context().Done()
+			}))
+			t.Cleanup(server.Close)
+			deadline := time.Now().Add(3 * time.Second)
+			type contextKey struct{}
+			ctx, cancel := context.WithDeadline(context.WithValue(context.Background(), contextKey{}, "trace"), deadline)
+			t.Cleanup(cancel)
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/relay", nil).WithContext(ctx)
+			info := &relaycommon.RelayInfo{IsStream: true, DisablePing: true, ChannelMeta: &relaycommon.ChannelMeta{}}
+			resp, err := entry.do(cancellationAdaptor{url: server.URL}, c, info, strings.NewReader("payload"))
+			require.NoError(t, err)
+			defer resp.Body.Close()
+			assert.NoError(t, resp.Request.Context().Err(), "returning headers must not cancel the stream")
+			assert.Equal(t, "trace", resp.Request.Context().Value(contextKey{}))
+			gotDeadline, ok := resp.Request.Context().Deadline()
+			require.True(t, ok)
+			assert.Equal(t, deadline, gotDeadline)
+			first := make([]byte, len("data: first\n\n"))
+			_, err = io.ReadFull(resp.Body, first)
+			require.NoError(t, err)
+			assert.Equal(t, "data: first\n\n", string(first))
+			cancel()
+			_, err = io.ReadAll(resp.Body)
+			require.ErrorIs(t, err, context.Canceled)
+		})
 	}
 }
