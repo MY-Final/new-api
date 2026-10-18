@@ -215,7 +215,11 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 		})
 	}
 
-	dataChan := make(chan string, 10)
+	type streamData struct {
+		data       string
+		receivedAt time.Time
+	}
+	dataChan := make(chan streamData, 10)
 
 	wg.Add(1)
 	gopool.Go(func() {
@@ -230,13 +234,14 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 		sr := newStreamResult(info.StreamStatus)
 		for data := range dataChan {
 			sr.reset()
+			sr.DataReceivedAt = data.receivedAt
 			func() {
 				writeMutex.Lock()
 				defer writeMutex.Unlock()
 				if !option.Buffered {
 					ExtendWriteDeadline(c)
 				}
-				dataHandler(data, sr)
+				dataHandler(data.data, sr)
 			}()
 			if sr.IsStopped() {
 				return
@@ -272,8 +277,9 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			data := scanner.Text()
 			logger.LogDebug(c, "stream scanner data: %s", data)
 			if option.RawLines {
+				message := streamData{data: data, receivedAt: time.Now()}
 				select {
-				case dataChan <- data:
+				case dataChan <- message:
 				case <-ctx.Done():
 					return
 				case <-stopChan:
@@ -294,11 +300,12 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 				continue
 			}
 			if !strings.HasPrefix(data, "[DONE]") {
+				message := streamData{data: data, receivedAt: time.Now()}
 				info.SetFirstResponseTime()
 				info.ReceivedResponseCount++
 
 				select {
-				case dataChan <- data:
+				case dataChan <- message:
 				case <-ctx.Done():
 					return
 				case <-stopChan:

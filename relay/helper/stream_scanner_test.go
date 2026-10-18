@@ -15,6 +15,7 @@ import (
 
 	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -25,6 +26,82 @@ func init() {
 	gin.SetMode(gin.TestMode)
 	if constant.StreamingTimeout == 0 {
 		constant.StreamingTimeout = 30
+	}
+}
+
+type failingStreamRecorder struct {
+	*httptest.ResponseRecorder
+	remaining  int
+	flushPanic bool
+	flushes    int
+}
+
+func (r *failingStreamRecorder) Write(data []byte) (int, error) {
+	if r.remaining < 0 {
+		return r.ResponseRecorder.Write(data)
+	}
+	if len(data) > r.remaining {
+		n, _ := r.ResponseRecorder.Write(data[:r.remaining])
+		r.remaining = 0
+		return n, io.ErrClosedPipe
+	}
+	r.remaining -= len(data)
+	return r.ResponseRecorder.Write(data)
+}
+
+func (r *failingStreamRecorder) Flush() {
+	r.flushes++
+	if r.flushPanic {
+		panic("client connection closed")
+	}
+	r.ResponseRecorder.Flush()
+}
+
+func TestStreamDataPreservesEventsAndPropagatesWriteFailures(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		send func(*gin.Context) error
+		want string
+	}{
+		{"OpenAI", func(c *gin.Context) error { return StringData(c, "hello") }, "data: hello\n\n"},
+		{"Claude", func(c *gin.Context) error { return ClaudeData(c, dto.ClaudeResponse{Type: "message_stop"}) }, "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			for _, remaining := range []int{-1, 0, 3, len(test.want) - 1} {
+				t.Run(fmt.Sprintf("bytes_before_failure=%d", remaining), func(t *testing.T) {
+					writer := &failingStreamRecorder{ResponseRecorder: httptest.NewRecorder(), remaining: remaining}
+					c, _ := gin.CreateTestContext(writer)
+					c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+					err := test.send(c)
+					if remaining < 0 {
+						require.NoError(t, err)
+						assert.Equal(t, test.want, writer.Body.String())
+						assert.Equal(t, "text/event-stream", writer.Header().Get("Content-Type"))
+						assert.Equal(t, 1, writer.flushes)
+						return
+					}
+					require.ErrorIs(t, err, io.ErrClosedPipe)
+					assert.Equal(t, test.want[:remaining], writer.Body.String())
+					assert.Zero(t, writer.flushes, "a failed event must not be flushed as successful output")
+				})
+			}
+			t.Run("cancelled", func(t *testing.T) {
+				writer := &failingStreamRecorder{ResponseRecorder: httptest.NewRecorder(), remaining: -1}
+				c, _ := gin.CreateTestContext(writer)
+				ctx, cancel := context.WithCancel(context.Background())
+				c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil).WithContext(ctx)
+				cancel()
+				require.ErrorIs(t, test.send(c), context.Canceled)
+				assert.Empty(t, writer.Body.String())
+				assert.Zero(t, writer.flushes)
+			})
+			t.Run("flush failure", func(t *testing.T) {
+				writer := &failingStreamRecorder{ResponseRecorder: httptest.NewRecorder(), remaining: -1, flushPanic: true}
+				c, _ := gin.CreateTestContext(writer)
+				c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+				require.ErrorContains(t, test.send(c), "flush panic recovered")
+			})
+		})
 	}
 }
 
@@ -135,6 +212,31 @@ func TestStreamScannerHandler_OrderPreserved(t *testing.T) {
 	for i := range numChunks {
 		expected := fmt.Sprintf("{\"id\":%d,\"choices\":[{\"delta\":{\"content\":\"token_%d\"}}]}", i, i)
 		assert.Equal(t, expected, received[i], "chunk %d out of order", i)
+	}
+}
+
+func TestStreamScannerHandlerPreservesReceiveTimePerCallback(t *testing.T) {
+	for _, raw := range []bool{false, true} {
+		t.Run(fmt.Sprintf("raw=%t", raw), func(t *testing.T) {
+			body := "data: first\ndata: second\ndata: [DONE]\n"
+			want := []string{"first", "second"}
+			if raw {
+				body = "first\nsecond\n"
+			}
+			c, resp, info := setupStreamTest(t, strings.NewReader(body))
+			started := time.Now()
+			var received []string
+			var stamps []time.Time
+			StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
+				received = append(received, data)
+				stamps = append(stamps, sr.DataReceivedAt)
+				assert.False(t, sr.DataReceivedAt.Before(started))
+				assert.False(t, sr.DataReceivedAt.After(time.Now()), "the timestamp precedes callback delivery")
+			}, StreamScannerOptions{Buffered: true, RawLines: raw})
+			assert.Equal(t, want, received)
+			require.Len(t, stamps, len(want))
+			assert.False(t, stamps[1].Before(stamps[0]))
+		})
 	}
 }
 

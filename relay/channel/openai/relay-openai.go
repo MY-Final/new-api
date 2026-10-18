@@ -88,7 +88,9 @@ func sendStreamData(c *gin.Context, info *relaycommon.RelayInfo, data string, fo
 				response.Choices[j].Delta.Reasoning = nil
 			}
 			info.ThinkingContentInfo.SendLastThinkingContent = true
-			helper.ObjectData(c, response)
+			if err := helper.ObjectData(c, response); err != nil {
+				return err
+			}
 		}
 
 		// Convert reasoning content to regular content if any
@@ -135,30 +137,69 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	var toolCount int
 	var usage = &dto.Usage{}
 	var lastStreamData string
+	var pendingStreamData string
 	var secondLastStreamData string // 保留倒数第二个stream data；部分兼容网关把完整usage放在倒数第二个事件
 	seenStreamToolCalls := make(map[string]struct{})
 	var streamFunctionCallNames []string
 	var hasOutput bool
+	var firstOutputReceived, firstOutputWritten bool
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
-		if lastStreamData != "" {
-			if err := HandleStreamFormat(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent); err != nil {
-				common.SysLog(common.LogText("error handling stream format: %s", err.Error()))
-				sr.Error(err)
+		if data == "" {
+			return
+		}
+		frame := gjson.Parse(data)
+		frameHasOutput := hasChatCompletionOutput(frame, true)
+		frameIsRejection := false
+		for _, choice := range frame.Get("choices").Array() {
+			frameIsRejection = frameIsRejection || choice.Get("finish_reason").String() == constant.FinishReasonContentFilter
+		}
+		if info.RelayMode == relayconstant.RelayModeCompletions {
+			for _, choice := range frame.Get("choices").Array() {
+				frameHasOutput = frameHasOutput || choice.Get("text").String() != ""
 			}
 		}
-		if len(data) > 0 {
-			hasOutput = hasOutput || hasChatCompletionOutput(gjson.Parse(data), true)
-			if lastStreamData != "" {
-				secondLastStreamData = lastStreamData
-			}
+		hasOutput = hasOutput || frameHasOutput || frameIsRejection
+		isFirstFrame := lastStreamData == ""
+		if lastStreamData != "" {
+			secondLastStreamData = lastStreamData
+		}
+		lastStreamData = data
+		if frameHasOutput && !firstOutputReceived {
+			info.MarkFirstOutputReceivedAt(sr.DataReceivedAt)
+			firstOutputReceived = true
+		}
+		observeStreamChoices(info, data, seenStreamToolCalls, &streamFunctionCallNames)
+		if err := processTokenData(info, data, &responseTextBuilder, &toolCount); err != nil {
+			logger.LogError(c, common.LogText("error processing stream token data: %s", err.Error()))
+			sr.Error(err)
+		}
 
-			lastStreamData = data
-			observeStreamChoices(info, data, seenStreamToolCalls, &streamFunctionCallNames)
-			if err := processTokenData(info, data, &responseTextBuilder, &toolCount); err != nil {
-				logger.LogError(c, common.LogText("error processing stream token data: %s", err.Error()))
+		// Keep tail snapshots for accounting, but never hold output for the next frame.
+		if info.RelayFormat == types.RelayFormatOpenAI && !info.ShouldIncludeUsage &&
+			len(frame.Get("choices").Array()) == 0 && frame.Get("usage").IsObject() {
+			return
+		}
+		// Preserve the safe retry of a single bookkeeping-only response.
+		// Meaningful output is always sent in this callback, without a frame delay.
+		if isFirstFrame && !hasOutput {
+			pendingStreamData = data
+			return
+		}
+		if pendingStreamData != "" {
+			if err := HandleStreamFormat(c, info, pendingStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent, true); err != nil {
 				sr.Error(err)
+				return
 			}
+			pendingStreamData = ""
+		}
+		sizeBefore := c.Writer.Size()
+		if err := HandleStreamFormat(c, info, data, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent, true); err != nil {
+			sr.Error(err)
+		} else if info.RelayFormat == types.RelayFormatOpenAI && frameHasOutput &&
+			!firstOutputWritten && c.Writer.Size() > sizeBefore && c.Request.Context().Err() == nil {
+			info.MarkFirstOutputWritten()
+			firstOutputWritten = true
 		}
 	})
 
@@ -173,9 +214,8 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	}
 
 	// 处理最后的响应
-	shouldSendLastResp := true
 	if err := handleLastResponse(lastStreamData, &responseId, &createAt, &systemFingerprint, &model, &usage,
-		&containStreamUsage, info, &shouldSendLastResp); err != nil {
+		&containStreamUsage); err != nil {
 		logger.LogError(c, common.LogText("error handling last response: %s, lastStreamData: [%s]", err.Error(), lastStreamData))
 	}
 
@@ -202,12 +242,6 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 		}
 	}
 
-	if info.RelayFormat == types.RelayFormatOpenAI {
-		if shouldSendLastResp {
-			_ = sendStreamData(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent)
-		}
-	}
-
 	if !containStreamUsage {
 		usage = service.ResponseText2Usage(c, responseTextBuilder.String(), info.UpstreamModelName, info.GetEstimatePromptTokens())
 		usage.CompletionTokens += toolCount * 7
@@ -219,7 +253,14 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 		info.CountBillableToolCall(dto.BuildInCallFunctionCall, name)
 	}
 
-	HandleFinalResponse(c, info, lastStreamData, responseId, createAt, model, systemFingerprint, usage, containStreamUsage)
+	if c.Request.Context().Err() == nil && info.StreamStatus.IsNormalEnd() && !info.StreamStatus.HasErrors() &&
+		(info.StreamStatus.EndReason == relaycommon.StreamEndReasonDone || info.StreamStatus.ResponseOutcome() == string(relaycommon.ResponseOutcomeCompleted)) {
+		if err := HandleFinalResponse(c, info, lastStreamData, responseId, createAt, model, systemFingerprint, usage, containStreamUsage, true); err != nil {
+			info.StreamStatus.RecordError(err.Error())
+		} else if c.Request.Context().Err() == nil {
+			info.MarkResponseCompleted()
+		}
+	}
 
 	return usage, nil
 }
@@ -228,9 +269,6 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 // tool calls, reasoning, multimodal output, or an explicit safety refusal.
 func hasChatCompletionOutput(response gjson.Result, stream bool) bool {
 	for _, choice := range response.Get("choices").Array() {
-		if choice.Get("finish_reason").String() == constant.FinishReasonContentFilter {
-			return true
-		}
 		message := choice.Get("message")
 		if stream {
 			message = choice.Get("delta")
@@ -583,18 +621,19 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	if oaiError := simpleResponse.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
 		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
 	}
-	if info.RelayMode == relayconstant.RelayModeChatCompletions && !hasChatCompletionOutput(gjson.ParseBytes(responseBody), false) {
-		info.StreamStatus.MarkFailed(string(types.ErrorCodeBadResponseBody), string(types.ErrorCodeBadResponseBody), http.StatusBadGateway)
-		return nil, types.NewOpenAIError(fmt.Errorf("upstream returned no chat completion output"), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
-	}
-
+	hasOutput := hasChatCompletionOutput(gjson.ParseBytes(responseBody), false)
 	info.ObserveResponseModel(simpleResponse.Model)
 	for _, choice := range simpleResponse.Choices {
 		if choice.FinishReason == constant.FinishReasonContentFilter {
+			hasOutput = true
 			info.PerformanceBusinessRejection = true
 			common.SetContextKey(c, constant.ContextKeyAdminRejectReason, "openai_finish_reason=content_filter")
 			break
 		}
+	}
+	if info.RelayMode == relayconstant.RelayModeChatCompletions && !hasOutput {
+		info.StreamStatus.MarkFailed(string(types.ErrorCodeBadResponseBody), string(types.ErrorCodeBadResponseBody), http.StatusBadGateway)
+		return nil, types.NewOpenAIError(fmt.Errorf("upstream returned no chat completion output"), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
 	}
 
 	for _, choice := range simpleResponse.Choices {

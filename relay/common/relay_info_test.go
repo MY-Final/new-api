@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"net/http/httptest"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -16,6 +18,116 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestRelayTimingSnapshotPreservesStagesAndOmitsUnavailableOutput(t *testing.T) {
+	entry := time.Date(2026, time.October, 18, 12, 0, 0, 0, time.UTC)
+	info := &RelayInfo{
+		StartTime:         entry.Add(5 * time.Millisecond),
+		FirstResponseTime: entry.Add(30 * time.Millisecond),
+		timing: &relayTiming{
+			entry:               entry,
+			entrySource:         "request_entry",
+			relayStarted:        entry.Add(10 * time.Millisecond),
+			attempt:             2,
+			channelID:           8,
+			upstreamRequested:   entry.Add(20 * time.Millisecond),
+			upstreamHeaders:     entry.Add(30 * time.Millisecond),
+			firstOutputReceived: entry.Add(40 * time.Millisecond),
+			firstOutputWritten:  entry.Add(41 * time.Millisecond),
+			responseCompleted:   entry.Add(90 * time.Millisecond),
+		},
+	}
+	snapshot := info.TimingSnapshot()
+	for key, value := range map[string]any{
+		"offsets_from": "request_entry", "attempt": 2, "channel_id": 8,
+		"relay_start_ms": 10.0, "upstream_request_ms": 20.0, "upstream_headers_ms": 30.0,
+		"first_output_received_ms": 40.0, "first_output_written_ms": 41.0, "response_completed_ms": 90.0,
+	} {
+		assert.Equal(t, value, snapshot[key], key)
+	}
+	snapshot["first_output_received_ms"] = -1.0
+	assert.Equal(t, 40.0, info.TimingSnapshot()["first_output_received_ms"], "log metadata is a detached snapshot")
+	assert.Equal(t, entry.Add(5*time.Millisecond), info.StartTime)
+	assert.Equal(t, entry.Add(30*time.Millisecond), info.FirstResponseTime)
+
+	info.beginTimingAttempt(3, 9)
+	info.MarkFirstOutputWritten()
+	snapshot = info.TimingSnapshot()
+	assert.Equal(t, 3, snapshot["attempt"])
+	assert.Equal(t, 9, snapshot["channel_id"])
+	assert.Equal(t, 10.0, snapshot["relay_start_ms"])
+	for _, key := range []string{"upstream_request_ms", "upstream_headers_ms", "first_output_received_ms", "first_output_written_ms", "response_completed_ms"} {
+		assert.NotContains(t, snapshot, key, "a retry cannot inherit output or completion from its predecessor")
+	}
+	info.MarkUpstreamRequestStarted()
+	info.MarkUpstreamResponseHeaders()
+	snapshot = info.TimingSnapshot()
+	assert.Contains(t, snapshot, "upstream_request_ms")
+	assert.Contains(t, snapshot, "upstream_headers_ms")
+	assert.NotContains(t, snapshot, "first_output_received_ms", "headers do not imply output in an empty or cancelled response")
+	assert.NotContains(t, snapshot, "first_output_written_ms")
+	assert.NotContains(t, snapshot, "response_completed_ms", "sampling a log cannot complete an unfinished response")
+	receivedAt := entry.Add(100 * time.Millisecond)
+	info.MarkFirstOutputReceivedAt(receivedAt)
+	info.MarkFirstOutputReceivedAt(entry.Add(110 * time.Millisecond))
+	info.MarkFirstOutputWritten()
+	info.MarkResponseCompleted()
+	snapshot = info.TimingSnapshot()
+	assert.Equal(t, 100.0, snapshot["first_output_received_ms"], "queued handler time must not replace the scanner receive timestamp")
+	for _, key := range []string{"first_output_received_ms", "first_output_written_ms", "response_completed_ms"} {
+		assert.Greater(t, snapshot[key].(float64), 90.0, "retry reset also reopens the one-time marker")
+	}
+	info.MarkUpstreamRequestStarted()
+	snapshot = info.TimingSnapshot()
+	assert.NotContains(t, snapshot, "first_output_received_ms")
+	assert.NotContains(t, snapshot, "first_output_written_ms")
+	assert.NotContains(t, snapshot, "response_completed_ms")
+}
+
+func TestRelayTimingCapturesEntryAndConcurrentFirstOutputOnce(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
+	entry := time.Now().Add(-10 * time.Millisecond)
+	relayStart := entry.Add(5 * time.Millisecond)
+	start := entry.Add(2 * time.Millisecond)
+	common.SetContextKey(ctx, constant.ContextKeyRequestEntryTime, entry)
+	common.SetContextKey(ctx, constant.ContextKeyRelayStartTime, relayStart)
+	common.SetContextKey(ctx, constant.ContextKeyRequestStartTime, start)
+	info, err := GenRelayInfo(ctx, types.RelayFormatOpenAI, &dto.GeneralOpenAIRequest{Model: "gpt-test"}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, start, info.StartTime)
+	assert.Equal(t, 5.0, info.TimingSnapshot()["relay_start_ms"])
+	info.InitChannelMeta(ctx)
+	info.MarkFirstOutputReceived()
+	info.MarkFirstOutputWritten()
+	info.MarkResponseCompleted()
+	first := info.TimingSnapshot()
+	copyInfo := *info
+
+	var wg sync.WaitGroup
+	for _, mark := range []func(){info.MarkFirstOutputReceived, info.MarkFirstOutputWritten, info.MarkResponseCompleted} {
+		wg.Go(mark)
+	}
+	wg.Go(func() { _ = info.TimingSnapshot() })
+	wg.Go(copyInfo.MarkFirstOutputWritten)
+	wg.Go(func() { _ = copyInfo.TimingSnapshot() })
+	wg.Wait()
+	last := info.TimingSnapshot()
+	for _, key := range []string{"first_output_received_ms", "first_output_written_ms", "response_completed_ms"} {
+		assert.Equal(t, first[key], last[key], key+" is recorded only once")
+	}
+
+	// A directly constructed RelayInfo must also initialize safely when a
+	// handler and log sampler are the first concurrent callers.
+	lazy := &RelayInfo{}
+	wg.Go(lazy.MarkFirstOutputReceived)
+	wg.Go(func() { _ = lazy.TimingSnapshot() })
+	wg.Wait()
+	assert.Contains(t, lazy.TimingSnapshot(), "first_output_received_ms")
+	assert.Equal(t, "timing_initialized", lazy.TimingSnapshot()["offsets_from"])
+	assert.NotContains(t, lazy.TimingSnapshot(), "relay_start_ms")
+}
 
 func TestRelayInfoGetFinalRequestRelayFormatPrefersExplicitFinal(t *testing.T) {
 	info := &RelayInfo{

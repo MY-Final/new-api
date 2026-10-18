@@ -90,6 +90,7 @@ type RelayInfo struct {
 	TokenUnlimited    bool
 	StartTime         time.Time
 	FirstResponseTime time.Time
+	timing            *relayTiming
 	isFirstResponse   bool
 	//SendLastReasoningResponse bool
 	IsStream               bool
@@ -328,6 +329,7 @@ func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 	}
 
 	info.ChannelMeta = channelMeta
+	info.beginTimingAttempt(info.RetryIndex+1, channelMeta.ChannelId)
 
 	// Channel identity feeds the converter options snapshot (e.g.
 	// OpenRouterDialect); drop the cache so a cross-channel retry rebuilds it.
@@ -614,7 +616,15 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 	}
 	reasoningEffort := reasoningEffortFromRequest(request)
 	originModelName := common.GetContextKeyString(c, constant.ContextKeyOriginalModel)
+	entryTime := common.GetContextKeyTime(c, constant.ContextKeyRequestEntryTime)
+	entrySource := "request_entry"
+	if entryTime.IsZero() {
+		entryTime = startTime
+		entrySource = "request_start"
+	}
+	relayStart := common.GetContextKeyTime(c, constant.ContextKeyRelayStartTime)
 	info := &RelayInfo{
+		timing:          &relayTiming{entry: entryTime, entrySource: entrySource, relayStarted: relayStart},
 		Request:         request,
 		ReasoningEffort: reasoningEffort,
 

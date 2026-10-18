@@ -2,6 +2,7 @@ package helper
 
 import (
 	"errors"
+	"time"
 
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -11,8 +12,10 @@ import (
 // to record soft errors, signal fatal stops, or mark normal completion.
 // StreamScannerHandler checks IsStopped() after each callback invocation.
 type StreamResult struct {
-	status  *relaycommon.StreamStatus
-	stopped bool
+	// DataReceivedAt is recorded before queueing this frame for the handler.
+	DataReceivedAt time.Time
+	status         *relaycommon.StreamStatus
+	stopped        bool
 }
 
 func newStreamResult(status *relaycommon.StreamStatus) *StreamResult {
