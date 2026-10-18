@@ -18,10 +18,79 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type nonStreamResponseBilling struct {
+	settlements int
+	refunds     int
+}
+
+func (b *nonStreamResponseBilling) Settle(int) error       { b.settlements++; return nil }
+func (b *nonStreamResponseBilling) Refund(*gin.Context)    { b.refunds++ }
+func (b *nonStreamResponseBilling) NeedsRefund() bool      { return b.settlements == 0 && b.refunds == 0 }
+func (*nonStreamResponseBilling) GetPreConsumedQuota() int { return 1 }
+func (*nonStreamResponseBilling) Reserve(int) error        { return nil }
+
+func TestTextHelperRejectsEmptyNonStreamSSEAndRefunds(t *testing.T) {
+	service.InitHttpClient()
+	settings := model_setting.GetGlobalSettings()
+	previousSettings := *settings
+	previousTimeout := constant.StreamingTimeout
+	settings.PassThroughRequestEnabled = false
+	settings.ChatCompletionsToResponsesPolicy.Enabled = false
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() {
+		*settings = previousSettings
+		constant.StreamingTimeout = previousTimeout
+	})
+	for _, tc := range []struct{ name, response string }{
+		{name: "empty response"},
+		{name: "done only", response: "data: [DONE]\n\n"},
+		{name: "usage only", response: "data: {\"id\":\"chat_1\",\"choices\":[],\"usage\":{\"prompt_tokens\":2,\"completion_tokens\":3,\"total_tokens\":5}}\n\ndata: [DONE]\n\n"},
+		{name: "role without output", response: "data: {\"id\":\"chat_1\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":2,\"completion_tokens\":3,\"total_tokens\":5}}\n\ndata: [DONE]\n\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			received := make(chan []byte, 1)
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, _ := io.ReadAll(r.Body)
+				received <- body
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = io.WriteString(w, tc.response)
+			}))
+			t.Cleanup(upstream.Close)
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+			c.Request.Header.Set("Content-Type", "application/json")
+			common.SetContextKey(c, constant.ContextKeyChannelType, constant.ChannelTypeOpenAI)
+			common.SetContextKey(c, constant.ContextKeyChannelBaseUrl, upstream.URL)
+			common.SetContextKey(c, constant.ContextKeyOriginalModel, "gpt-4o")
+			billing := &nonStreamResponseBilling{}
+			info := &relaycommon.RelayInfo{
+				Request:         &dto.GeneralOpenAIRequest{Model: "gpt-4o", Stream: common.GetPointer(false), Messages: []dto.Message{{Role: "user", Content: "hello"}}},
+				OriginModelName: "gpt-4o", RequestURLPath: c.Request.URL.Path, RelayFormat: types.RelayFormatOpenAI,
+				RelayMode: relayconstant.RelayModeChatCompletions, IsStream: true, DisablePing: true, Billing: billing, StartTime: time.Now(),
+			}
+			apiErr := TextHelper(c, info)
+			require.NotNil(t, apiErr, "empty output must fail before billing settlement")
+			require.Len(t, received, 1, "the failure must come from the upstream response")
+			var submitted dto.GeneralOpenAIRequest
+			require.NoError(t, common.Unmarshal(<-received, &submitted))
+			require.NotNil(t, submitted.Stream)
+			assert.False(t, *submitted.Stream, "the original non-stream request survives a prior stream attempt")
+			assert.Zero(t, billing.settlements)
+			assert.Empty(t, recorder.Body.String(), "no successful SSE or JSON response reaches the client")
+			assert.False(t, c.Writer.Written())
+			require.Same(t, apiErr, RefundFailedRequestBilling(c, info, apiErr))
+			assert.Equal(t, 1, billing.refunds)
+			assert.Zero(t, billing.settlements)
+		})
+	}
+}
 
 func TestResponseModelComparisonAndLog(t *testing.T) {
 	for _, tc := range []struct {

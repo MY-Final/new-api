@@ -29,6 +29,8 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	if !ok {
 		return types.NewErrorWithStatusCode(fmt.Errorf("invalid request type, expected dto.GeneralOpenAIRequest, got %T", info.Request), types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 	}
+	// A previous attempt's upstream Content-Type must not change the next request.
+	info.IsStream = textReq.IsStream(c.Request)
 
 	request, err := common.DeepCopy(textReq)
 	if err != nil {

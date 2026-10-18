@@ -1,9 +1,12 @@
 package openai
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -11,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relay/channel/openrouter"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -18,6 +22,7 @@ import (
 	"github.com/QuantumNous/new-api/tokenkit"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
 )
 
 func sendStreamData(c *gin.Context, info *relaycommon.RelayInfo, data string, forceFormat bool, thinkToContent bool) error {
@@ -106,6 +111,18 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 		logger.LogError(c, common.LogText("invalid response or response body"))
 		return nil, types.NewOpenAIError(fmt.Errorf("invalid response"), types.ErrorCodeBadResponse, http.StatusInternalServerError)
 	}
+	if info.RelayMode == relayconstant.RelayModeChatCompletions {
+		clientStream := info.IsStream
+		if info.Request != nil {
+			clientStream = info.Request.IsStream(c.Request)
+		} else if value, exists := c.Get(string(constant.ContextKeyIsStream)); exists {
+			clientStream, _ = value.(bool)
+		}
+		if !clientStream {
+			info.IsStream = false
+			return OpenaiHandler(c, info, resp)
+		}
+	}
 
 	defer service.CloseResponseBodyGracefully(resp)
 
@@ -121,6 +138,7 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	var secondLastStreamData string // 保留倒数第二个stream data；部分兼容网关把完整usage放在倒数第二个事件
 	seenStreamToolCalls := make(map[string]struct{})
 	var streamFunctionCallNames []string
+	var hasOutput bool
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 		if lastStreamData != "" {
@@ -130,6 +148,7 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 			}
 		}
 		if len(data) > 0 {
+			hasOutput = hasOutput || hasChatCompletionOutput(gjson.Parse(data), true)
 			if lastStreamData != "" {
 				secondLastStreamData = lastStreamData
 			}
@@ -144,6 +163,14 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	})
 
 	info.StreamStatus.RequireTerminal()
+	if info.RelayMode == relayconstant.RelayModeChatCompletions && !hasOutput {
+		apiErr := types.NewOpenAIError(fmt.Errorf("upstream returned no chat completion output"), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+		info.StreamStatus.MarkFailed(string(apiErr.GetErrorCode()), apiErr.ToOpenAIError().Type, apiErr.StatusCode)
+		if c.Writer.Written() {
+			types.ErrOptionWithSkipRetry()(apiErr)
+		}
+		return nil, apiErr
+	}
 
 	// 处理最后的响应
 	shouldSendLastResp := true
@@ -195,6 +222,233 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	HandleFinalResponse(c, info, lastStreamData, responseId, createAt, model, systemFingerprint, usage, containStreamUsage)
 
 	return usage, nil
+}
+
+// hasChatCompletionOutput excludes bookkeeping-only responses without rejecting
+// tool calls, reasoning, multimodal output, or an explicit safety refusal.
+func hasChatCompletionOutput(response gjson.Result, stream bool) bool {
+	for _, choice := range response.Get("choices").Array() {
+		if choice.Get("finish_reason").String() == constant.FinishReasonContentFilter {
+			return true
+		}
+		message := choice.Get("message")
+		if stream {
+			message = choice.Get("delta")
+		}
+		for _, field := range []string{"content", "reasoning_content", "reasoning", "refusal"} {
+			value := message.Get(field)
+			if value.Type == gjson.String && value.String() != "" {
+				return true
+			}
+			for _, part := range value.Array() {
+				if part.Get("text").String() != "" || part.Get("image_url.url").String() != "" || part.Get("refusal").String() != "" {
+					return true
+				}
+			}
+		}
+		for _, tool := range message.Get("tool_calls").Array() {
+			if tool.Get("function.name").String() != "" || tool.Get("function.arguments").String() != "" {
+				return true
+			}
+		}
+		for _, field := range []string{"function_call.name", "function_call.arguments", "audio.data", "audio.transcript"} {
+			if message.Get(field).String() != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// bufferChatCompletionStream builds the same JSON response OpenaiHandler already
+// validates, converts, and accounts for. Nothing is written before validation.
+func bufferChatCompletionStream(body []byte, info *relaycommon.RelayInfo) ([]byte, error) {
+	response := map[string]any{"object": "chat.completion", "model": info.UpstreamModelName}
+	choices := make(map[int]map[string]any)
+	var usage *dto.Usage
+	var sawDone bool
+	if info.StreamStatus == nil {
+		info.StreamStatus = relaycommon.NewStreamStatus()
+	}
+	info.StreamStatus.RequireTerminal()
+	scanner := helper.NewStreamScanner(bytes.NewReader(body))
+	for scanner.Scan() {
+		data, ok := strings.CutPrefix(scanner.Text(), "data:")
+		if !ok {
+			continue
+		}
+		data = strings.TrimSpace(data)
+		if data == "[DONE]" {
+			sawDone = true
+			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonDone, nil)
+			break
+		}
+		if data == "" {
+			continue
+		}
+		var frame struct {
+			ID                string  `json:"id"`
+			Model             string  `json:"model"`
+			Created           int64   `json:"created"`
+			SystemFingerprint *string `json:"system_fingerprint"`
+			Choices           []struct {
+				Index        int            `json:"index"`
+				Delta        map[string]any `json:"delta"`
+				FinishReason *string        `json:"finish_reason"`
+				Logprobs     map[string]any `json:"logprobs"`
+			} `json:"choices"`
+			Usage *dto.Usage `json:"usage"`
+			Error any        `json:"error"`
+		}
+		if err := common.UnmarshalJsonStr(data, &frame); err != nil {
+			return nil, fmt.Errorf("invalid chat completion stream: %w", err)
+		}
+		if frame.Error != nil {
+			return nil, fmt.Errorf("upstream chat completion stream returned an error")
+		}
+		info.SetFirstResponseTime()
+		info.ReceivedResponseCount++
+		if frame.ID != "" {
+			response["id"] = frame.ID
+		}
+		if frame.Model != "" {
+			response["model"] = frame.Model
+		}
+		if frame.Created != 0 {
+			response["created"] = frame.Created
+		}
+		if frame.SystemFingerprint != nil {
+			response["system_fingerprint"] = *frame.SystemFingerprint
+		}
+		if frame.Usage == nil {
+			frame.Usage = &dto.Usage{}
+		}
+		applyUsagePostProcessing(info, frame.Usage, common.StringToByteSlice(data))
+		usage = dto.MergeUsageNonZero(usage, frame.Usage)
+		for _, delta := range frame.Choices {
+			if tools, ok := delta.Delta["tool_calls"].([]any); ok {
+				for _, item := range tools {
+					tool, ok := item.(map[string]any)
+					if !ok {
+						return nil, fmt.Errorf("invalid chat completion tool call")
+					}
+					if value, exists := tool["index"]; exists {
+						index, ok := value.(float64)
+						if !ok || index < 0 || index != math.Trunc(index) {
+							return nil, fmt.Errorf("invalid chat completion tool index")
+						}
+					} else if id, _ := tool["id"].(string); id == "" {
+						return nil, fmt.Errorf("chat completion tool call has no index or id")
+					}
+					if value, exists := tool["id"]; exists {
+						if _, ok := value.(string); !ok {
+							return nil, fmt.Errorf("invalid chat completion tool id")
+						}
+					}
+				}
+			}
+			choice := choices[delta.Index]
+			if choice == nil {
+				choice = map[string]any{"index": delta.Index, "message": map[string]any{"role": "assistant", "content": nil}, "finish_reason": nil}
+				choices[delta.Index] = choice
+			}
+			mergeChatCompletionDelta(choice["message"].(map[string]any), delta.Delta)
+			if delta.FinishReason != nil && *delta.FinishReason != "" {
+				choice["finish_reason"] = *delta.FinishReason
+				info.StreamStatus.MarkCompleted()
+			}
+			if delta.Logprobs != nil {
+				if choice["logprobs"] == nil {
+					choice["logprobs"] = make(map[string]any)
+				}
+				mergeChatCompletionDelta(choice["logprobs"].(map[string]any), delta.Logprobs)
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonEOF, nil)
+	indexes := make([]int, 0, len(choices))
+	for index := range choices {
+		indexes = append(indexes, index)
+	}
+	slices.Sort(indexes)
+	ordered := make([]map[string]any, 0, len(indexes))
+	for _, index := range indexes {
+		choice := choices[index]
+		if !sawDone && choice["finish_reason"] == nil {
+			return nil, fmt.Errorf("upstream chat completion stream ended without completion")
+		}
+		message := choice["message"].(map[string]any)
+		if tools, ok := message["tool_calls"].([]any); ok {
+			for _, tool := range tools {
+				delete(tool.(map[string]any), "index")
+			}
+		}
+		ordered = append(ordered, choice)
+	}
+	response["choices"] = ordered
+	response["usage"] = usage
+	return common.Marshal(response)
+}
+
+// mergeChatCompletionDelta preserves compatible extensions while joining only
+// fragment fields; tool calls are joined by index rather than appended per chunk.
+func mergeChatCompletionDelta(message, delta map[string]any) {
+	for field, value := range delta {
+		switch value := value.(type) {
+		case string:
+			switch field {
+			case "content", "reasoning_content", "reasoning", "refusal", "arguments", "name", "data", "transcript":
+				previous, _ := message[field].(string)
+				message[field] = previous + value
+			default:
+				message[field] = value
+			}
+		case map[string]any:
+			previous, _ := message[field].(map[string]any)
+			if previous == nil {
+				previous = make(map[string]any)
+				message[field] = previous
+			}
+			mergeChatCompletionDelta(previous, value)
+		case []any:
+			previous, _ := message[field].([]any)
+			if field != "tool_calls" {
+				message[field] = append(previous, value...)
+				continue
+			}
+			for _, item := range value {
+				tool, ok := item.(map[string]any)
+				if !ok {
+					continue
+				}
+				var existing map[string]any
+				for _, candidate := range previous {
+					call := candidate.(map[string]any)
+					index, indexed := tool["index"].(float64)
+					previousIndex, previousIndexed := call["index"].(float64)
+					id, _ := tool["id"].(string)
+					previousID, _ := call["id"].(string)
+					if indexed && previousIndexed && index == previousIndex || !indexed && id != "" && id == previousID {
+						existing = call
+						break
+					}
+				}
+				if existing == nil {
+					existing = make(map[string]any)
+					previous = append(previous, existing)
+				}
+				mergeChatCompletionDelta(existing, tool)
+			}
+			message[field] = previous
+		default:
+			if value != nil {
+				message[field] = value
+			}
+		}
+	}
 }
 
 // observeStreamChoices collects billable function call names and records the
@@ -250,14 +504,61 @@ func observeStreamChoices(info *relaycommon.RelayInfo, data string, seen map[str
 }
 
 func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
+	if resp == nil || resp.Body == nil {
+		return nil, types.NewOpenAIError(fmt.Errorf("invalid response"), types.ErrorCodeBadResponse, http.StatusBadGateway)
+	}
 	defer service.CloseResponseBodyGracefully(resp)
 
 	var simpleResponse dto.OpenAITextResponse
-	responseBody, err := io.ReadAll(resp.Body)
+	var responseBody []byte
+	var err error
+	bufferedChatStream := info.RelayMode == relayconstant.RelayModeChatCompletions && strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "text/event-stream")
+	if bufferedChatStream {
+		var body bytes.Buffer
+		helper.StreamScannerHandler(c, resp, info, func(line string, result *helper.StreamResult) {
+			if strings.TrimSpace(line) != "" {
+				info.SetFirstResponseTime()
+			}
+			body.WriteString(line)
+			body.WriteByte('\n')
+			data, ok := strings.CutPrefix(line, "data:")
+			if ok && strings.TrimSpace(data) == "[DONE]" {
+				result.Done()
+			}
+		}, helper.StreamScannerOptions{Buffered: true, RawLines: true})
+		if requestErr := c.Request.Context().Err(); requestErr != nil {
+			return nil, types.NewErrorWithStatusCode(requestErr, types.ErrorCodeDoRequestFailed, http.StatusRequestTimeout, types.ErrOptionWithSkipRetry())
+		}
+		if !info.StreamStatus.IsNormalEnd() || info.StreamStatus.HasErrors() {
+			return nil, types.NewOpenAIError(fmt.Errorf("failed to read chat completion response: %s", info.StreamStatus.EndReason), types.ErrorCodeReadResponseBodyFailed, http.StatusBadGateway)
+		}
+		responseBody = bytes.TrimSuffix(body.Bytes(), []byte{'\n'})
+	} else {
+		responseBody, err = io.ReadAll(resp.Body)
+	}
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)
 	}
+	if requestErr := c.Request.Context().Err(); requestErr != nil {
+		return nil, types.NewErrorWithStatusCode(requestErr, types.ErrorCodeDoRequestFailed, http.StatusRequestTimeout, types.ErrOptionWithSkipRetry())
+	}
 	logger.LogDebug(c, "upstream response body: %s", responseBody)
+	if info.RelayMode == relayconstant.RelayModeChatCompletions {
+		if !gjson.ValidBytes(responseBody) {
+			responseBody, err = bufferChatCompletionStream(responseBody, info)
+			if err != nil {
+				info.StreamStatus.MarkFailed(string(types.ErrorCodeBadResponseBody), string(types.ErrorCodeBadResponseBody), http.StatusBadGateway)
+				return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+			}
+			bufferedChatStream = true
+		}
+		// Both buffered SSE and JSON mislabeled as SSE are JSON to this client.
+		if resp.Header == nil {
+			resp.Header = make(http.Header)
+		}
+		resp.Header.Set("Content-Type", "application/json; charset=utf-8")
+		resp.Header.Del("Transfer-Encoding")
+	}
 	// Unmarshal to simpleResponse
 	if info.ChannelType == constant.ChannelTypeOpenRouter && info.ChannelOtherSettings.IsOpenRouterEnterprise() {
 		// 尝试解析为 openrouter enterprise
@@ -281,6 +582,10 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 
 	if oaiError := simpleResponse.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
 		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
+	}
+	if info.RelayMode == relayconstant.RelayModeChatCompletions && !hasChatCompletionOutput(gjson.ParseBytes(responseBody), false) {
+		info.StreamStatus.MarkFailed(string(types.ErrorCodeBadResponseBody), string(types.ErrorCodeBadResponseBody), http.StatusBadGateway)
+		return nil, types.NewOpenAIError(fmt.Errorf("upstream returned no chat completion output"), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
 	}
 
 	info.ObserveResponseModel(simpleResponse.Model)
@@ -335,7 +640,9 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 			bodyMap["usage"] = simpleResponse.Usage
 			responseBody, _ = common.Marshal(bodyMap)
 		}
-		if forceFormat {
+		// Buffered chat is already normalized; the legacy DTO drops extensions
+		// such as refusal, function_call, and audio from that response.
+		if forceFormat && !bufferedChatStream {
 			responseBody, err = common.Marshal(simpleResponse)
 			if err != nil {
 				return nil, types.NewError(err, types.ErrorCodeBadResponseBody)

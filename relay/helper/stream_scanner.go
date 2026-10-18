@@ -80,10 +80,21 @@ func ExtendWriteDeadline(c *gin.Context) {
 	_ = http.NewResponseController(c.Writer).SetWriteDeadline(time.Now().Add(streamWriteTimeout))
 }
 
-func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo, dataHandler func(data string, sr *StreamResult)) {
+type StreamScannerOptions struct {
+	// Buffered readers must not commit SSE headers, pings, or write deadlines.
+	Buffered bool
+	// RawLines also delivers JSON bodies mislabeled as event streams.
+	RawLines bool
+}
+
+func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo, dataHandler func(data string, sr *StreamResult), options ...StreamScannerOptions) {
 
 	if resp == nil || dataHandler == nil {
 		return
+	}
+	var option StreamScannerOptions
+	if len(options) > 0 {
+		option = options[0]
 	}
 
 	// 无条件新建 StreamStatus
@@ -111,7 +122,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	}
 
 	generalSettings := operation_setting.GetGeneralSetting()
-	pingEnabled := generalSettings.PingIntervalEnabled && !info.DisablePing
+	pingEnabled := generalSettings.PingIntervalEnabled && !info.DisablePing && !option.Buffered
 	pingInterval := time.Duration(generalSettings.PingIntervalSeconds) * time.Second
 	if pingInterval <= 0 {
 		pingInterval = DefaultPingInterval
@@ -147,8 +158,10 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	defer cleanup()
 
 	scanner.Split(bufio.ScanLines)
-	copyCodexSSEHeaders(c, resp)
-	SetEventStreamHeaders(c)
+	if !option.Buffered {
+		copyCodexSSEHeaders(c, resp)
+		SetEventStreamHeaders(c)
+	}
 
 	ctx = context.WithValue(ctx, "stop_chan", stopChan)
 
@@ -220,7 +233,9 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			func() {
 				writeMutex.Lock()
 				defer writeMutex.Unlock()
-				ExtendWriteDeadline(c)
+				if !option.Buffered {
+					ExtendWriteDeadline(c)
+				}
 				dataHandler(data, sr)
 			}()
 			if sr.IsStopped() {
@@ -256,6 +271,16 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			ticker.Reset(streamingTimeout)
 			data := scanner.Text()
 			logger.LogDebug(c, "stream scanner data: %s", data)
+			if option.RawLines {
+				select {
+				case dataChan <- data:
+				case <-ctx.Done():
+					return
+				case <-stopChan:
+					return
+				}
+				continue
+			}
 
 			if len(data) < 6 {
 				continue
