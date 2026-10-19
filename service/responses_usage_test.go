@@ -8,6 +8,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/tokenkit"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -107,6 +108,90 @@ func TestResponsesUsageAccumulatorInterruptedTextFallback(t *testing.T) {
 			accumulator.Observe(&dto.ResponsesStreamResponse{Type: "response.output_text.delta", Delta: " late output"}, nil)
 			assert.Equal(t, usage, accumulator.Finish())
 			assert.Equal(t, 1, usage.CompletionTokens)
+		})
+	}
+}
+
+func TestResponsesUsageAccountingSources(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		events     []string
+		wantInput  int
+		wantOutput int
+		wantCache  int
+		wantSource string
+		wantPath   string
+		wantFinal  bool
+		wantReason int
+	}{
+		{
+			name:      "disconnect estimates received output without inventing cache usage",
+			events:    []string{`{"type":"response.output_text.delta","delta":"hello"}`},
+			wantInput: 100, wantOutput: 1, wantSource: "estimated", wantPath: "estimated",
+		},
+		{
+			name:      "disconnect before output leaves output unknown",
+			events:    []string{`{"type":"response.created","response":{"status":"in_progress"}}`},
+			wantInput: 100, wantSource: "estimated", wantPath: "estimated",
+		},
+		{
+			name:      "disconnect preserves an earlier upstream usage snapshot",
+			events:    []string{`{"type":"response.in_progress","response":{"usage":{"input_tokens":20,"output_tokens":5,"input_tokens_details":{"cached_tokens":4}}}}`},
+			wantInput: 20, wantOutput: 5, wantCache: 4, wantSource: "upstream", wantPath: "upstream",
+		},
+		{
+			name: "final upstream usage replaces estimates and retains reasoning details",
+			events: []string{
+				`{"type":"response.output_text.delta","delta":"hello"}`,
+				`{"type":"response.completed","response":{"usage":{"input_tokens":20,"output_tokens":5,"input_tokens_details":{"cached_tokens":4},"output_tokens_details":{"reasoning_tokens":2}}}}`,
+			},
+			wantInput: 20, wantOutput: 5, wantCache: 4, wantReason: 2, wantSource: "upstream", wantPath: "upstream", wantFinal: true,
+		},
+		{
+			name: "completed usage preserves explicitly reported zeros",
+			events: []string{
+				`{"type":"response.output_text.delta","delta":"hello"}`,
+				`{"type":"response.completed","response":{"usage":{"input_tokens":20,"output_tokens":0,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}}}}`,
+			},
+			wantInput: 20, wantSource: "upstream", wantPath: "upstream", wantFinal: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gpt-4o"}, StreamStatus: relaycommon.NewStreamStatus()}
+			info.SetEstimatePromptTokens(100)
+			accumulator := NewResponsesUsageAccumulator(info)
+			for _, raw := range tc.events {
+				var event dto.ResponsesStreamResponse
+				require.NoError(t, common.UnmarshalJsonStr(raw, &event))
+				accumulator.Observe(&event, []byte(raw))
+			}
+			usage := accumulator.Finish()
+			assert.Equal(t, tc.wantInput, usage.PromptTokens)
+			assert.Equal(t, tc.wantOutput, usage.CompletionTokens)
+			assert.Equal(t, tc.wantCache, usage.PromptTokensDetails.CachedTokens)
+			assert.Equal(t, tc.wantReason, usage.CompletionTokenDetails.ReasoningTokens)
+			require.NotNil(t, info.UsageSources)
+			other := GenerateTextOtherInfo(&gin.Context{}, info, 1, 1, 1, tc.wantCache, 1, 0, 1)
+			assert.Equal(t, info.UsageSources, other.Snapshot()["usage_sources"], "accounting sources must be public log metadata")
+			appendUsageBillingPathForLog(other, false, usage, info.UsageSources)
+			assert.Equal(t, tc.wantPath, other.Snapshot()["admin_info"].(map[string]any)["usage_billing_path"])
+			assert.Equal(t, tc.wantSource, info.UsageSources.InputTokens)
+			assert.Equal(t, tc.wantFinal, info.UsageSources.Final)
+			if tc.wantSource == "estimated" {
+				assert.Equal(t, "unavailable", info.UsageSources.CacheTokens)
+				assert.Equal(t, "unavailable", info.UsageSources.ReasoningTokens)
+				if tc.wantOutput == 0 {
+					assert.Equal(t, "unavailable", info.UsageSources.OutputTokens)
+				} else {
+					assert.Equal(t, "estimated", info.UsageSources.OutputTokens)
+				}
+			} else {
+				assert.Equal(t, "upstream", info.UsageSources.OutputTokens)
+				assert.Equal(t, "upstream", info.UsageSources.CacheTokens)
+				if tc.wantFinal {
+					assert.Equal(t, "upstream", info.UsageSources.ReasoningTokens)
+				}
+			}
 		})
 	}
 }

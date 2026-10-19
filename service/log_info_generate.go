@@ -106,6 +106,9 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	other.SetPublic("completion_ratio", completionRatio)
 	other.SetPublic("cache_tokens", cacheTokens)
 	other.SetPublic("cache_ratio", cacheRatio)
+	if relayInfo.UsageSources != nil {
+		other.SetPublic("usage_sources", relayInfo.UsageSources)
+	}
 	other.SetPublic("model_price", modelPrice)
 	other.SetPublic("user_group_ratio", userGroupRatio)
 	other.SetPublic("frt", float64(relayInfo.FirstResponseTime.UnixMilli()-relayInfo.StartTime.UnixMilli()))

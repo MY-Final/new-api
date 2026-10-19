@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert"
 	"github.com/QuantumNous/new-api/tokenkit"
+	"github.com/tidwall/gjson"
 )
 
 // ResponsesUsageAccumulator owns the accounting facts for one Responses stream.
@@ -23,10 +24,13 @@ type ResponsesUsageAccumulator struct {
 	imageCommitted bool
 	started        bool
 	finished       bool
+	sources        relaycommon.UsageSources
 }
 
 func NewResponsesUsageAccumulator(info *relaycommon.RelayInfo) *ResponsesUsageAccumulator {
-	return &ResponsesUsageAccumulator{info: info, usage: &dto.Usage{}}
+	return &ResponsesUsageAccumulator{info: info, usage: &dto.Usage{}, sources: relaycommon.UsageSources{
+		InputTokens: "unavailable", OutputTokens: "unavailable", CacheTokens: "unavailable", ReasoningTokens: "unavailable",
+	}}
 }
 
 // Observe feeds one decoded stream event. raw is the same event's wire bytes;
@@ -37,13 +41,36 @@ func (a *ResponsesUsageAccumulator) Observe(event *dto.ResponsesStreamResponse, 
 	}
 	if event.Response != nil {
 		a.info.ObserveResponseModel(event.Response.Model)
+		if usage := event.Response.Usage; usage != nil {
+			// Some providers send usage before a terminal event. Keep those
+			// snapshots if the client disconnects before the final report.
+			ApplyResponsesUsage(a.usage, usage)
+			wire := gjson.GetBytes(raw, "response.usage")
+			if usage.InputTokens != 0 || wire.Get("input_tokens").Type == gjson.Number {
+				a.sources.InputTokens = "upstream"
+			}
+			if usage.OutputTokens != 0 || wire.Get("output_tokens").Type == gjson.Number {
+				a.sources.OutputTokens = "upstream"
+			}
+			if usage.PromptCacheHitTokens != 0 || a.usage.PromptTokensDetails.CachedTokens != 0 ||
+				wire.Get("input_tokens_details.cached_tokens").Type == gjson.Number ||
+				wire.Get("prompt_cache_hit_tokens").Type == gjson.Number ||
+				(len(raw) == 0 && usage.InputTokensDetails != nil) {
+				a.sources.CacheTokens = "upstream"
+			}
+			if a.usage.CompletionTokenDetails.ReasoningTokens != 0 ||
+				wire.Get("output_tokens_details.reasoning_tokens").Type == gjson.Number ||
+				(len(raw) == 0 && usage.OutputTokensDetails != nil) {
+				a.sources.ReasoningTokens = "upstream"
+			}
+		}
 	}
 	a.started = true
 	ObserveResponsesOutcome(a.info, event)
 	switch event.Type {
 	case "response.completed", "response.done", "response.failed", "response.incomplete", "response.cancelled", "response.canceled":
 		if event.Response != nil {
-			ApplyResponsesUsage(a.usage, event.Response.Usage)
+			a.sources.Final = a.sources.Final || event.Response.Usage != nil
 			if a.outputText.Len() == 0 {
 				// Some upstreams carry the output only on the terminal event.
 				a.outputText.WriteString(relayconvert.ExtractOutputTextFromResponses(event.Response))
@@ -96,22 +123,29 @@ func (a *ResponsesUsageAccumulator) Finish() *dto.Usage {
 		a.imageCounter.Commit(a.info)
 		a.imageCommitted = true
 	}
-	if a.usage.CompletionTokens == 0 {
+	if a.usage.CompletionTokens == 0 && a.sources.OutputTokens == "unavailable" {
 		if output := a.outputText.String(); output != "" {
 			a.usage.CompletionTokens = tokenkit.Count(a.info.GetUpstreamModelName(), output)
+			if a.usage.CompletionTokens > 0 {
+				a.sources.OutputTokens = "estimated"
+			}
 		}
 	}
 	// Upstream bills the prompt as soon as it starts generating, so a stream
 	// that produced any event but no usage still owes its input tokens unless
 	// upstream reported an explicit failure.
 	billsPrompt := a.usage.CompletionTokens != 0 || (a.started && !a.info.StreamStatus.ResponseFailed())
-	if a.usage.PromptTokens == 0 && billsPrompt {
+	if a.usage.PromptTokens == 0 && a.sources.InputTokens == "unavailable" && billsPrompt {
 		a.usage.PromptTokens = a.info.GetEstimatePromptTokens()
+		if a.usage.PromptTokens > 0 {
+			a.sources.InputTokens = "estimated"
+		}
 	}
 	a.usage.TotalTokens = a.usage.PromptTokens + a.usage.CompletionTokens
 	if a.usage.BillingUsage != nil {
 		a.usage.BillingUsage = dto.CloneBillingUsageWithEstimatedCompletion(a.usage.BillingUsage, a.usage.CompletionTokens)
 	}
+	a.info.UsageSources = &a.sources
 	return a.usage
 }
 

@@ -2,12 +2,15 @@ package service
 
 import (
 	"github.com/QuantumNous/new-api/model"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 )
 
 const (
 	usageBillingPathLocal              = "local"
 	usageBillingPathUpstream           = "upstream"
+	usageBillingPathEstimated          = "estimated"
+	usageBillingPathUnavailable        = "unavailable"
 	usageBillingPathOpenAI             = "billing-usage-openai"
 	usageBillingPathOpenAIEstimated    = "billing-usage-openai-estimated"
 	usageBillingPathAnthropic          = "billing-usage-anthropic"
@@ -53,11 +56,20 @@ func usageBillingPathForLog(isLocalCountTokens bool, usage *dto.Usage) string {
 	return usageBillingPathUpstream
 }
 
-func appendUsageBillingPathForLog(other *model.LogOther, isLocalCountTokens bool, usage *dto.Usage) {
+func appendUsageBillingPathForLog(other *model.LogOther, isLocalCountTokens bool, usage *dto.Usage, sources *relaycommon.UsageSources) {
 	if other == nil {
 		return
 	}
-	other.SetAdmin("usage_billing_path", usageBillingPathForLog(isLocalCountTokens, usage))
+	path := usageBillingPathForLog(isLocalCountTokens, usage)
+	if sources != nil {
+		switch {
+		case sources.InputTokens == "estimated" || sources.OutputTokens == "estimated":
+			path = usageBillingPathEstimated
+		case sources.InputTokens == "unavailable" && sources.OutputTokens == "unavailable":
+			path = usageBillingPathUnavailable
+		}
+	}
+	other.SetAdmin("usage_billing_path", path)
 }
 
 func usageFromBillingUsage(usage *dto.Usage) (*dto.Usage, bool) {

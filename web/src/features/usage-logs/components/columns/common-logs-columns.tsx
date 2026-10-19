@@ -59,6 +59,7 @@ import {
   formatModelName,
   decodeBillingExprB64,
   getInputTokenBreakdown,
+  formatUsageTokenCount,
   getReasoningEffortVariant,
   getTieredBillingSummary,
   hasAnyCacheTokens,
@@ -80,6 +81,7 @@ import { LogCostDisplay } from '../log-cost-display'
 import { ModelBadge } from '../model-badge'
 import { TimingMetricsCell, StreamTpsCell } from '../timing-metrics-cell'
 import { useUsageLogsContext } from '../usage-logs-provider'
+import { UsageSourceNotice } from '../usage-source-notice'
 
 interface DetailSegment {
   text: string
@@ -787,7 +789,11 @@ export function useCommonLogsColumns(
 
           const promptTokens = log.prompt_tokens || 0
           const completionTokens = log.completion_tokens || 0
-          if (promptTokens === 0 && completionTokens === 0) {
+          if (
+            promptTokens === 0 &&
+            completionTokens === 0 &&
+            !other?.usage_sources
+          ) {
             return <span className='text-muted-foreground text-xs'>-</span>
           }
 
@@ -795,12 +801,19 @@ export function useCommonLogsColumns(
             promptTokens,
             other
           )
-          const showCacheMiss = missed > 0 && missed < promptTokens
+          const showCacheMiss =
+            other?.usage_sources?.cache_tokens !== 'unavailable' &&
+            missed > 0 &&
+            missed < promptTokens
           const hasCacheBreakdown =
             cacheRead > 0 || showCacheMiss || cacheWrite > 0
           const cacheWriteShown = Math.min(cacheWrite, missed)
           const freshMiss = Math.max(missed - cacheWriteShown, 0)
           const inputTotal = cacheRead + missed
+          const showCacheComposition =
+            hasCacheBreakdown &&
+            inputTotal > 0 &&
+            other?.usage_sources?.cache_tokens !== 'unavailable'
           const cacheHitRateLabel =
             inputTotal > 0
               ? `${((cacheRead / inputTotal) * 100).toFixed(1).replace(/\.0$/, '')}%`
@@ -814,7 +827,11 @@ export function useCommonLogsColumns(
                     {t('Input')}
                   </span>
                   <span className='text-foreground font-mono font-semibold'>
-                    {promptTokens.toLocaleString()}
+                    {formatUsageTokenCount(
+                      promptTokens,
+                      other?.usage_sources?.input_tokens,
+                      t
+                    )}
                   </span>
                 </span>
                 <span aria-hidden='true' className='text-muted-foreground/40'>
@@ -825,10 +842,15 @@ export function useCommonLogsColumns(
                     {t('Output')}
                   </span>
                   <span className='text-foreground font-mono font-semibold'>
-                    {completionTokens.toLocaleString()}
+                    {formatUsageTokenCount(
+                      completionTokens,
+                      other?.usage_sources?.output_tokens,
+                      t
+                    )}
                   </span>
                 </span>
               </div>
+              <UsageSourceNotice sources={other?.usage_sources} />
               {hasCacheBreakdown && (
                 <div className='text-muted-foreground/70 flex items-baseline text-[11px] whitespace-nowrap tabular-nums'>
                   {cacheRead > 0 && (
@@ -867,7 +889,7 @@ export function useCommonLogsColumns(
                   )}
                 </div>
               )}
-              {hasCacheBreakdown && inputTotal > 0 && (
+              {showCacheComposition && (
                 <span className='mt-0.5 flex items-center gap-2'>
                   <span
                     data-slot='token-composition-bar'
@@ -877,13 +899,17 @@ export function useCommonLogsColumns(
                     {cacheRead > 0 && (
                       <span
                         className='bg-primary/70 h-full'
-                        style={{ width: `${(cacheRead / inputTotal) * 100}%` }}
+                        style={{
+                          width: `${(cacheRead / inputTotal) * 100}%`,
+                        }}
                       />
                     )}
                     {freshMiss > 0 && (
                       <span
                         className='bg-muted-foreground/25 h-full'
-                        style={{ width: `${(freshMiss / inputTotal) * 100}%` }}
+                        style={{
+                          width: `${(freshMiss / inputTotal) * 100}%`,
+                        }}
                       />
                     )}
                     {cacheWriteShown > 0 && (

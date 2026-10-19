@@ -55,6 +55,16 @@ type ResponsesUsageInfo struct {
 	BuiltInTools map[string]*BuildInToolInfo
 }
 
+// UsageSources distinguishes reported counters from local estimates and missing
+// counters. It is public accounting metadata, never a replacement for usage.
+type UsageSources struct {
+	InputTokens     string `json:"input_tokens"`
+	OutputTokens    string `json:"output_tokens"`
+	CacheTokens     string `json:"cache_tokens"`
+	ReasoningTokens string `json:"reasoning_tokens"`
+	Final           bool   `json:"final"`
+}
+
 type ChannelMeta struct {
 	ChannelType          int
 	ChannelId            int
@@ -218,6 +228,7 @@ type RelayInfo struct {
 	// the request boundary, independently of billing success or failure.
 	PerformanceOutputTokens      int64
 	PerformanceBusinessRejection bool
+	UsageSources                 *UsageSources
 
 	// convOptions caches the converter settings snapshot (see ConvOptions).
 	convOptions *convmeta.Options

@@ -97,6 +97,8 @@ export interface ChannelAffinityInfo {
 export const USAGE_BILLING_PATH = {
   LOCAL: 'local',
   UPSTREAM: 'upstream',
+  ESTIMATED: 'estimated',
+  UNAVAILABLE: 'unavailable',
   OPENAI: 'billing-usage-openai',
   OPENAI_ESTIMATED: 'billing-usage-openai-estimated',
   ANTHROPIC: 'billing-usage-anthropic',
@@ -112,6 +114,16 @@ export interface ToolSurchargeItem {
   name: string
   count: number
   price: number
+}
+
+export type UsageSource = 'upstream' | 'estimated' | 'unavailable'
+
+export interface UsageSources {
+  input_tokens: UsageSource
+  output_tokens: UsageSource
+  cache_tokens: UsageSource
+  reasoning_tokens: UsageSource
+  final: boolean
 }
 
 export interface LogOtherData {
@@ -189,6 +201,8 @@ export interface LogOtherData {
   text_input?: number
   text_output?: number
   cache_tokens?: number
+  usage_sources?: UsageSources
+  reasoning_tokens?: number
   image_cache_tokens?: number
   billing_tokens?: Record<string, number>
   cache_creation_tokens?: number

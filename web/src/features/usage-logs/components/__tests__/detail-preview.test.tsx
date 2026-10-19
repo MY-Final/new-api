@@ -207,6 +207,27 @@ function renderTokenPreview(overrides: Partial<UsageLog> = {}) {
   )
 }
 
+test('token preview distinguishes estimates and unavailable cache usage after cancellation', () => {
+  renderTokenPreview({
+    prompt_tokens: 1000,
+    completion_tokens: 0,
+    other: JSON.stringify({
+      usage_sources: {
+        input_tokens: 'estimated',
+        output_tokens: 'unavailable',
+        cache_tokens: 'unavailable',
+        reasoning_tokens: 'unavailable',
+        final: false,
+      },
+    }),
+  })
+  expect(screen.getByText('≈ 1,000')).toBeVisible()
+  expect(screen.getByText('Not reported')).toBeVisible()
+  expect(screen.getByText('Includes estimates')).toBeVisible()
+  expect(screen.getByText('Final usage not received')).toBeVisible()
+  expect(screen.getByText('Cache usage not reported')).toBeVisible()
+})
+
 function renderTokenNamePreview(overrides: Partial<UsageLog> = {}) {
   render(
     <I18nextProvider i18n={i18n}>

@@ -55,6 +55,30 @@ const log = usageLogSchema.parse({
   }),
 })
 
+it('keeps unavailable output and cache visible in a cancelled mobile request', () => {
+  renderLogs({
+    logs: [
+      {
+        ...log,
+        completion_tokens: 0,
+        other: JSON.stringify({
+          usage_sources: {
+            input_tokens: 'estimated',
+            output_tokens: 'unavailable',
+            cache_tokens: 'unavailable',
+            reasoning_tokens: 'unavailable',
+            final: false,
+          },
+        }),
+      },
+    ],
+  })
+  expect(screen.getByText('≈ 1,200')).toBeVisible()
+  expect(screen.getByText('Not reported')).toBeVisible()
+  expect(screen.getByText('Includes estimates')).toBeVisible()
+  expect(screen.getByText('Cache usage not reported')).toBeVisible()
+})
+
 function Fixture(props: {
   admin?: boolean
   visibility?: VisibilityState

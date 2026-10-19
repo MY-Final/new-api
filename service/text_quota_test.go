@@ -759,14 +759,14 @@ func TestAppendUsageBillingPathForLogWritesAdminInfo(t *testing.T) {
 	other := model.NewLogOther()
 	appendUsageBillingPathForLog(other, true, &dto.Usage{
 		BillingUsage: dto.NewClaudeMessagesBillingUsage(&dto.ClaudeUsage{InputTokens: 1}),
-	})
+	}, nil)
 
 	adminInfo, ok := other.Snapshot()["admin_info"].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, usageBillingPathAnthropic, adminInfo["usage_billing_path"])
 
 	other = model.NewLogOther()
-	appendUsageBillingPathForLog(other, true, nil)
+	appendUsageBillingPathForLog(other, true, nil, nil)
 	adminInfo, ok = other.Snapshot()["admin_info"].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, usageBillingPathLocal, adminInfo["usage_billing_path"])

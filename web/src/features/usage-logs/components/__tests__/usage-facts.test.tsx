@@ -114,6 +114,56 @@ test('shows the recorded request and response models in log details', () => {
 describe('usage facts billing details', () => {
   const queryClients: QueryClient[] = []
 
+  test('shows estimated input and unknown output and cache to ordinary users after cancellation', () => {
+    queryClients.push(
+      renderDetails(
+        {
+          usage_sources: {
+            input_tokens: 'estimated',
+            output_tokens: 'unavailable',
+            cache_tokens: 'unavailable',
+            reasoning_tokens: 'unavailable',
+            final: false,
+          },
+          stream_status: {
+            end_reason: 'client_gone',
+            end_error: 'context canceled',
+          },
+        },
+        1000
+      )
+    )
+    expect(rowValue('Input Tokens')).toBe('≈ 1,000')
+    expect(rowValue('Output Tokens')).toBe('Not reported')
+    expect(rowValue('Cache Hit')).toBe('Not reported')
+    expect(rowValue('Reasoning Tokens')).toBe('Not reported')
+    expect(screen.getByText('Includes estimates')).toBeVisible()
+    expect(screen.getByText('Final usage not received')).toBeVisible()
+    expect(screen.getByText('Total Cost')).toBeVisible()
+  })
+
+  test('keeps an upstream-confirmed zero cache count visible after cancellation', () => {
+    queryClients.push(
+      renderDetails(
+        {
+          cache_tokens: 0,
+          usage_sources: {
+            input_tokens: 'upstream',
+            output_tokens: 'upstream',
+            cache_tokens: 'upstream',
+            reasoning_tokens: 'unavailable',
+            final: false,
+          },
+        },
+        1000
+      )
+    )
+    expect(rowValue('Input Tokens')).toBe('1,000')
+    expect(rowValue('Cache Hit')).toBe('0')
+    expect(screen.getByText('Upstream usage')).toBeVisible()
+    expect(screen.queryByText('Includes estimates')).toBeNull()
+  })
+
   test('shows the settled image count and a per-image price', () => {
     const queryClient = renderDetails({
       billing_mode: 'tiered_expr',

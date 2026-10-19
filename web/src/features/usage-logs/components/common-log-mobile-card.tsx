@@ -35,6 +35,7 @@ import type { UsageLog } from '../data/schema'
 import {
   formatModelName,
   getInputTokenBreakdown,
+  formatUsageTokenCount,
   getReasoningEffortVariant,
   logTokenName,
   parseLogOther,
@@ -47,6 +48,7 @@ import {
 import { ModelBadge, ResponseModelDetails } from './model-badge'
 import { StreamTpsCell, TimingMetricsCell } from './timing-metrics-cell'
 import { useUsageLogsContext } from './usage-logs-provider'
+import { UsageSourceNotice } from './usage-source-notice'
 
 type FieldName =
   | 'model'
@@ -137,7 +139,10 @@ export function CommonLogMobileCard<TData>(props: {
     log.prompt_tokens || 0,
     other
   )
-  const showCacheMiss = missed > 0 && missed < (log.prompt_tokens || 0)
+  const showCacheMiss =
+    other?.usage_sources?.cache_tokens !== 'unavailable' &&
+    missed > 0 &&
+    missed < (log.prompt_tokens || 0)
   const endpoint = other?.request_path?.trim()
   const reasoningEffort = other?.reasoning_effort?.trim()
   const showTokens =
@@ -145,6 +150,7 @@ export function CommonLogMobileCard<TData>(props: {
     props.cells.has('prompt_tokens') &&
     (log.prompt_tokens > 0 ||
       log.completion_tokens > 0 ||
+      !!other?.usage_sources ||
       cacheRead > 0 ||
       cacheWrite > 0)
 
@@ -329,7 +335,11 @@ export function CommonLogMobileCard<TData>(props: {
           <span>
             {t('Input')}{' '}
             <span className='text-foreground tabular-nums'>
-              {log.prompt_tokens.toLocaleString()}
+              {formatUsageTokenCount(
+                log.prompt_tokens,
+                other?.usage_sources?.input_tokens,
+                t
+              )}
             </span>
           </span>
           {showCacheMiss && (
@@ -343,7 +353,11 @@ export function CommonLogMobileCard<TData>(props: {
           <span>
             {t('Output')}{' '}
             <span className='text-foreground tabular-nums'>
-              {log.completion_tokens.toLocaleString()}
+              {formatUsageTokenCount(
+                log.completion_tokens,
+                other?.usage_sources?.output_tokens,
+                t
+              )}
             </span>
           </span>
           {cacheRead > 0 && (
@@ -358,6 +372,7 @@ export function CommonLogMobileCard<TData>(props: {
           )}
         </div>
       )}
+      {showTokens && <UsageSourceNotice sources={other?.usage_sources} />}
       {contentCell && (
         <div className='relative min-w-0 border-t pt-2 [&_button]:min-h-8 [&_button]:w-full [&_button]:max-w-full [&_button]:pr-5 [&_button]:text-sm [&_button>span]:line-clamp-2 [&_button>span]:[overflow-wrap:anywhere] [&_button>span]:whitespace-normal'>
           {flexRender(

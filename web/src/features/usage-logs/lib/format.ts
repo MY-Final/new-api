@@ -24,14 +24,24 @@ import {
   splitBillingExprAndRequestRules,
   type ParsedTier,
 } from '@/features/pricing/lib/billing-expr'
-import { formatQuotaPrecise } from '@/lib/format'
+import { formatNumber, formatQuotaPrecise } from '@/lib/format'
 import { translateServerText } from '@/lib/server-error-message'
 
 import type { UsageLog } from '../data/schema'
-import type { LogOtherData } from '../types'
+import type { LogOtherData, UsageSource } from '../types'
 import { buildQuotaAuditOperation } from './quota-audit-operation'
 
 export { normalizeTierLabel }
+
+export function formatUsageTokenCount(
+  count: number,
+  source: UsageSource | undefined,
+  t: (key: string) => string
+): string {
+  if (source === 'unavailable') return t('Not reported')
+  const formatted = formatNumber(count)
+  return source === 'estimated' ? `≈ ${formatted}` : formatted
+}
 
 const PARAM_OVERRIDE_ACTION_MAP: Record<string, string> = {
   set: 'Set',

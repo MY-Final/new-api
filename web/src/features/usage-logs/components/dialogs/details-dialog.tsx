@@ -77,6 +77,7 @@ import {
   parseAuditLine,
   decodeBillingExprB64,
   getInputTokenBreakdown,
+  formatUsageTokenCount,
   getTieredBillingSummary,
   hasAnyCacheTokens,
   isViolationFeeLog,
@@ -96,6 +97,7 @@ import {
 import { USAGE_BILLING_PATH, type LogOtherData } from '../../types'
 import { ResponseModelDetails } from '../model-badge'
 import { PluginAuthorLink } from '../plugin-author-link'
+import { UsageSourceNotice } from '../usage-source-notice'
 import { DetailRow, DetailSection } from './log-detail-layout'
 
 // Maps a channel-update changed-field token (as recorded by the backend audit)
@@ -134,6 +136,10 @@ function getUsageBillingPathLabel(
   adminInfo: LogOtherData['admin_info']
 ): string {
   switch (adminInfo?.usage_billing_path) {
+    case USAGE_BILLING_PATH.ESTIMATED:
+      return t('Includes estimates')
+    case USAGE_BILLING_PATH.UNAVAILABLE:
+      return t('Usage not reported')
     case USAGE_BILLING_PATH.LOCAL:
       return t('Local Billing')
     case USAGE_BILLING_PATH.OPENAI:
@@ -404,24 +410,28 @@ function TokenBreakdown(props: { log: UsageLog; other: LogOtherData }) {
   const cacheWrite5m = other.cache_creation_tokens_5m || 0
   const cacheWrite1h = other.cache_creation_tokens_1h || 0
   const hasTokens = promptTokens > 0 || completionTokens > 0
+  const sources = other.usage_sources
 
-  if (!hasTokens) return null
+  if (!hasTokens && !sources) return null
 
   const { missed } = getInputTokenBreakdown(promptTokens, other)
   const showCacheMiss = missed > 0 && missed < promptTokens
 
   const rows: Array<{ label: string; value: string }> = []
 
-  rows.push({ label: t('Input Tokens'), value: promptTokens.toLocaleString() })
+  rows.push({
+    label: t('Input Tokens'),
+    value: formatUsageTokenCount(promptTokens, sources?.input_tokens, t),
+  })
 
-  if (cacheRead > 0) {
+  if (cacheRead > 0 || sources) {
     rows.push({
       label: t('Cache Hit'),
-      value: cacheRead.toLocaleString(),
+      value: formatUsageTokenCount(cacheRead, sources?.cache_tokens, t),
     })
   }
 
-  if (showCacheMiss) {
+  if (showCacheMiss && sources?.cache_tokens !== 'unavailable') {
     rows.push({
       label: t('Cache Miss'),
       value: missed.toLocaleString(),
@@ -430,8 +440,19 @@ function TokenBreakdown(props: { log: UsageLog; other: LogOtherData }) {
 
   rows.push({
     label: t('Output Tokens'),
-    value: completionTokens.toLocaleString(),
+    value: formatUsageTokenCount(completionTokens, sources?.output_tokens, t),
   })
+
+  if (sources) {
+    rows.push({
+      label: t('Reasoning Tokens'),
+      value: formatUsageTokenCount(
+        other.reasoning_tokens ?? 0,
+        sources.reasoning_tokens,
+        t
+      ),
+    })
+  }
 
   if (other.image_cache_tokens !== undefined) {
     rows.push({
@@ -470,6 +491,7 @@ function TokenBreakdown(props: { log: UsageLog; other: LogOtherData }) {
 
   return (
     <DetailSection label={t('Token Breakdown')}>
+      <UsageSourceNotice sources={sources} detailed />
       {rows.map((row) => (
         <DetailRow key={row.label} label={row.label} value={row.value} mono />
       ))}
