@@ -99,6 +99,13 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 
 	// 无条件新建 StreamStatus
 	info.StreamStatus = relaycommon.NewStreamStatus()
+	lifetime := info.ResponsesStreamLifetime
+	clientDone := c.Request.Context().Done()
+	var upstreamDone <-chan struct{}
+	if lifetime != nil {
+		clientDone = lifetime.ClientDone()
+		upstreamDone = lifetime.Context().Done()
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -142,6 +149,9 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 		cleanupOnce.Do(func() {
 			cancel()
 			stop()
+			if lifetime != nil {
+				lifetime.Close()
+			}
 			if resp.Body != nil {
 				_ = resp.Body.Close()
 			}
@@ -191,12 +201,23 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 					func() {
 						writeMutex.Lock()
 						defer writeMutex.Unlock()
+						if lifetime != nil && lifetime.Disconnected() {
+							return
+						}
 						ExtendWriteDeadline(c)
 						err = PingData(c)
 					}()
 					if err != nil {
 						logger.LogError(c, common.LogText("ping data error: %s", err.Error()))
-						info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonPingFail, err)
+						if lifetime != nil {
+							lifetime.Disconnect(err)
+							info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, lifetime.ClientError())
+						} else {
+							info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonPingFail, err)
+						}
+						return
+					}
+					if lifetime != nil && lifetime.Disconnected() {
 						return
 					}
 					logger.LogDebug(c, "ping data sent")
@@ -238,7 +259,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			func() {
 				writeMutex.Lock()
 				defer writeMutex.Unlock()
-				if !option.Buffered {
+				if !option.Buffered && (lifetime == nil || !lifetime.Disconnected()) {
 					ExtendWriteDeadline(c)
 				}
 				dataHandler(data.data, sr)
@@ -318,6 +339,10 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			}
 		}
 
+		if lifetime != nil && lifetime.Disconnected() {
+			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, lifetime.ClientError())
+			return
+		}
 		if requestErr := c.Request.Context().Err(); requestErr != nil {
 			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, requestErr)
 			return
@@ -331,16 +356,30 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 		info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonEOF, nil)
 	})
 
-	// 主循环等待完成或超时
-	select {
-	case <-ticker.C:
-		info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonTimeout, nil)
-	case <-stopChan:
-		// EndReason already set by the goroutine that triggered stopChan
-	case <-c.Request.Context().Done():
-		// 客户端断开：立即 cleanup 关闭上游 resp.Body，解除 scanner 阻塞并让上游停止生成，
-		// 避免为已放弃的请求继续消费上游 token。
-		info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
+	// Native Responses can finish collecting usage after the client leaves.
+	// Its independent lifetime bounds the entire grace period, even when the
+	// upstream keeps sending frames that reset the ordinary idle timeout.
+	for {
+		select {
+		case <-ticker.C:
+			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonTimeout, nil)
+		case <-stopChan:
+			// EndReason already set by the goroutine that triggered stopChan.
+		case <-clientDone:
+			if lifetime != nil {
+				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, lifetime.ClientError())
+				clientDone = nil
+				continue
+			}
+			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
+		case <-upstreamDone:
+			err := lifetime.ClientError()
+			if err == nil {
+				err = lifetime.Context().Err()
+			}
+			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, err)
+		}
+		break
 	}
 
 	cleanup()

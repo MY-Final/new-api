@@ -312,13 +312,55 @@ func applyHeaderOverrideToRequest(req *http.Request, headerOverride map[string]s
 	}
 }
 
-func DoApiRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody io.Reader) (*http.Response, error) {
+type responsesStreamBody struct {
+	io.ReadCloser
+	lifetime *common.ResponsesStreamLifetime
+}
+
+func (b *responsesStreamBody) Close() error {
+	b.lifetime.Close()
+	return b.ReadCloser.Close()
+}
+
+func DoApiRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody io.Reader) (_ *http.Response, returnErr error) {
+	requestCtx := c.Request.Context()
+	if err := requestCtx.Err(); err != nil {
+		return nil, types.NewError(err, types.ErrorCodeDoRequestFailed, types.ErrOptionWithSkipRetry())
+	}
 	fullRequestURL, err := a.GetRequestURL(info)
 	if err != nil {
 		return nil, fmt.Errorf("get request url failed: %w", err)
 	}
 	logger.LogDebug(c, "fullRequestURL: %s", common.SanitizeURLForLog(fullRequestURL))
-	req, err := http.NewRequestWithContext(c.Request.Context(), c.Request.Method, fullRequestURL, requestBody)
+	var lifetime *common.ResponsesStreamLifetime
+	// A pass-through request can leave the final format at its incoming value.
+	// Only adaptors using the native Responses handler can keep reading usage.
+	nativeResponses := false
+	switch info.ApiType {
+	case appconstant.APITypeOpenAI, appconstant.APITypeOpenRouter, appconstant.APITypeXinference,
+		appconstant.APITypeCodex, appconstant.APITypeNewAPI, appconstant.APITypeSub2API,
+		appconstant.APITypeAdvancedCustom, appconstant.APITypeOllama, appconstant.APITypeXai,
+		appconstant.APITypeVolcEngine, appconstant.APITypeMoonshot, appconstant.APITypeZhipuV4,
+		appconstant.APITypeAli, appconstant.APITypeCloudflare, appconstant.APITypeSiliconFlow,
+		appconstant.APITypeBaiduV2, appconstant.APITypePerplexity, appconstant.APITypeDeepSeek,
+		appconstant.APITypeMiniMax:
+		nativeResponses = true
+	case appconstant.APITypeTencent:
+		// Tencent's dispatch adaptor selects native Hunyuan for legacy keys.
+		nativeResponses = !strings.Contains(info.ApiKey, "|")
+	}
+	if nativeResponses && appconstant.ResponsesDisconnectGraceSeconds > 0 && info.IsStream &&
+		info.RelayFormat == types.RelayFormatOpenAIResponses && info.GetFinalRequestRelayFormat() == types.RelayFormatOpenAIResponses {
+		lifetime = common.NewResponsesStreamLifetime(requestCtx, time.Duration(appconstant.ResponsesDisconnectGraceSeconds)*time.Second)
+		info.ResponsesStreamLifetime = lifetime
+		requestCtx = lifetime.Context()
+		defer func() {
+			if returnErr != nil {
+				lifetime.Close()
+			}
+		}()
+	}
+	req, err := http.NewRequestWithContext(requestCtx, c.Request.Method, fullRequestURL, requestBody)
 	if err != nil {
 		return nil, fmt.Errorf("new request failed: %w", err)
 	}
@@ -338,6 +380,9 @@ func DoApiRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 	resp, err := doRequest(c, req, info)
 	if err != nil {
 		return nil, fmt.Errorf("do request failed: %w", err)
+	}
+	if lifetime != nil {
+		resp.Body = &responsesStreamBody{ReadCloser: resp.Body, lifetime: lifetime}
 	}
 	return resp, nil
 }
@@ -440,7 +485,7 @@ func toWebSocketURL(raw string) string {
 	}
 }
 
-func startPingKeepAlive(c *gin.Context, pingInterval time.Duration) (context.CancelFunc, <-chan struct{}) {
+func startPingKeepAlive(c *gin.Context, pingInterval time.Duration, lifetime *common.ResponsesStreamLifetime) (context.CancelFunc, <-chan struct{}) {
 	pingerCtx, stopPinger := context.WithCancel(context.Background())
 	done := make(chan struct{})
 
@@ -478,6 +523,9 @@ func startPingKeepAlive(c *gin.Context, pingInterval time.Duration) (context.Can
 			// 发送 ping 数据
 			case <-ticker.C:
 				if err := sendPingData(c, &pingMutex); err != nil {
+					if lifetime != nil {
+						lifetime.Disconnect(err)
+					}
 					logger.LogDebug(c, "SSE ping error, stopping goroutine: %s", err.Error())
 					return
 				}
@@ -553,7 +601,7 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 		generalSettings := operation_setting.GetGeneralSetting()
 		if generalSettings.PingIntervalEnabled && !info.DisablePing {
 			pingInterval := time.Duration(generalSettings.PingIntervalSeconds) * time.Second
-			stopPinger, pingerDone = startPingKeepAlive(c, pingInterval)
+			stopPinger, pingerDone = startPingKeepAlive(c, pingInterval, info.ResponsesStreamLifetime)
 			// 使用defer确保在任何情况下都能停止ping goroutine
 			defer func() {
 				if stopPinger != nil {
@@ -566,11 +614,21 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 	}
 
 	common2.SetContextKey(c, appconstant.ContextKeyUpstreamRequestOrigin, req.URL.Scheme+"://"+req.URL.Host)
+	if err := c.Request.Context().Err(); err != nil {
+		return nil, types.NewError(err, types.ErrorCodeDoRequestFailed, types.ErrOptionWithSkipRetry())
+	}
+	if lifetime := info.ResponsesStreamLifetime; lifetime != nil && lifetime.Disconnected() {
+		return nil, types.NewError(lifetime.ClientError(), types.ErrorCodeDoRequestFailed, types.ErrOptionWithSkipRetry())
+	}
 	info.MarkUpstreamRequestStarted()
 	resp, err := relayClient.Do(req)
 	if err != nil {
 		logger.LogError(c, common2.LogText("do request failed: %s", err.Error()))
-		return nil, types.NewError(err, types.ErrorCodeDoRequestFailed, types.ErrOptionWithHideErrMsg("upstream error: do request failed"))
+		apiErr := types.NewError(err, types.ErrorCodeDoRequestFailed, types.ErrOptionWithHideErrMsg("upstream error: do request failed"))
+		if c.Request.Context().Err() != nil || (info.ResponsesStreamLifetime != nil && info.ResponsesStreamLifetime.Disconnected()) {
+			types.ErrOptionWithSkipRetry()(apiErr)
+		}
+		return nil, apiErr
 	}
 	if resp == nil {
 		return nil, errors.New("resp is nil")

@@ -2,24 +2,298 @@ package openai
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
+	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type responsesDisconnectWriter struct {
+	gin.ResponseWriter
+	firstEvent chan struct{}
+	fail       bool
+	writes     atomic.Int64
+	once       sync.Once
+}
+
+func (w *responsesDisconnectWriter) Write(p []byte) (int, error) {
+	w.writes.Add(1)
+	if w.fail {
+		w.once.Do(func() { close(w.firstEvent) })
+		return 0, io.ErrClosedPipe
+	}
+	return w.ResponseWriter.Write(p)
+}
+
+func (w *responsesDisconnectWriter) WriteString(s string) (int, error) {
+	return w.Write([]byte(s))
+}
+
+func (w *responsesDisconnectWriter) Flush() {
+	w.ResponseWriter.Flush()
+	w.once.Do(func() { close(w.firstEvent) })
+}
+
+type responsesTrackedBody struct {
+	io.ReadCloser
+	closed atomic.Bool
+}
+
+func (b *responsesTrackedBody) Close() error {
+	b.closed.Store(true)
+	return b.ReadCloser.Close()
+}
+
+func awaitResponsesStreamSignal(t *testing.T, signal <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-signal:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Responses stream did not reach the expected lifecycle state")
+	}
+}
+
+func TestResponsesDisconnectGracePreservesRequestDeadline(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		clientCtx, cancelClient := context.WithDeadline(context.Background(), time.Now().Add(2*time.Second))
+		defer cancelClient()
+		lifetime := relaycommon.NewResponsesStreamLifetime(clientCtx, time.Minute)
+		defer lifetime.Close()
+
+		cancelClient()
+		<-lifetime.ClientDone()
+		require.NoError(t, lifetime.Context().Err(), "client cancellation allows usage collection")
+		<-lifetime.Context().Done()
+		assert.ErrorIs(t, lifetime.Context().Err(), context.DeadlineExceeded, "the original request deadline still bounds grace")
+	})
+}
+
+func TestResponsesDisconnectCollectsUsageBeforeSettlement(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	oldGrace, oldTimeout := constant.ResponsesDisconnectGraceSeconds, constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() {
+		constant.ResponsesDisconnectGraceSeconds = oldGrace
+		constant.StreamingTimeout = oldTimeout
+	})
+
+	for _, tc := range []struct {
+		name      string
+		failWrite bool
+		timeout   bool
+	}{
+		{name: "client cancels after first event"},
+		{name: "write fails while client context is active", failWrite: true},
+		{name: "heartbeats do not extend disconnect grace", timeout: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			constant.ResponsesDisconnectGraceSeconds = 60
+			if tc.timeout {
+				constant.ResponsesDisconnectGraceSeconds = 1
+			}
+			releaseTerminal, upstreamDone := make(chan struct{}), make(chan struct{})
+			var upstreamContinued atomic.Bool
+			var heartbeats atomic.Int64
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				defer close(upstreamDone)
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = io.WriteString(w, "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_test\",\"status\":\"in_progress\"}}\n\n")
+				w.(http.Flusher).Flush()
+				if tc.timeout {
+					ticker := time.NewTicker(100 * time.Millisecond)
+					defer ticker.Stop()
+					for {
+						select {
+						case <-r.Context().Done():
+							return
+						case <-ticker.C:
+							_, _ = io.WriteString(w, ": keepalive\n\n")
+							w.(http.Flusher).Flush()
+							heartbeats.Add(1)
+						}
+					}
+				}
+				select {
+				case <-r.Context().Done():
+					return
+				case <-releaseTerminal:
+				}
+				upstreamContinued.Store(r.Context().Err() == nil)
+				_, _ = io.WriteString(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_test\",\"status\":\"completed\",\"usage\":{\"input_tokens\":1000,\"input_tokens_details\":{\"cached_tokens\":900},\"output_tokens\":10,\"output_tokens_details\":{\"reasoning_tokens\":5},\"total_tokens\":1010}}}\n\n")
+				w.(http.Flusher).Flush()
+				// A protocol terminal must finish the relay without [DONE] or EOF.
+				<-r.Context().Done()
+			}))
+			t.Cleanup(upstream.Close)
+
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			clientCtx, cancelClient := context.WithCancel(context.Background())
+			t.Cleanup(cancelClient)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil).WithContext(clientCtx)
+			writer := &responsesDisconnectWriter{ResponseWriter: c.Writer, firstEvent: make(chan struct{}), fail: tc.failWrite}
+			c.Writer = writer
+			const expression = `tier("base", p * 2 + cr * 0.2 + c * 10)`
+			info := &relaycommon.RelayInfo{
+				RelayMode: relayconstant.RelayModeResponses, RelayFormat: types.RelayFormatOpenAIResponses,
+				RequestURLPath: "/v1/responses", OriginModelName: "gpt-5.1", IsStream: true, DisablePing: true,
+				ChannelMeta: &relaycommon.ChannelMeta{ChannelType: constant.ChannelTypeOpenAI, ChannelBaseUrl: upstream.URL, UpstreamModelName: "gpt-5.1"},
+				TieredBillingSnapshot: &billingexpr.BillingSnapshot{
+					BillingMode: "tiered_expr", ExprString: expression, ExprHash: billingexpr.ExprHashString(expression),
+					GroupRatio: 0.25, QuotaPerUnit: 500_000, EstimatedPromptTokens: 1000,
+				},
+			}
+			info.SetEstimatePromptTokens(1000)
+			adaptor := &Adaptor{}
+			adaptor.Init(info)
+			resp, err := channel.DoApiRequest(adaptor, c, info, strings.NewReader(`{"model":"gpt-5.1","stream":true}`))
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = resp.Body.Close() })
+			require.NotNil(t, info.ResponsesStreamLifetime)
+			body := &responsesTrackedBody{ReadCloser: resp.Body}
+			resp.Body = body
+
+			var usage *dto.Usage
+			var apiErr *types.NewAPIError
+			handlerDone := make(chan struct{})
+			go func() {
+				usage, apiErr = OaiResponsesStreamHandler(c, info, resp)
+				close(handlerDone)
+			}()
+			t.Cleanup(func() {
+				_ = body.Close()
+				awaitResponsesStreamSignal(t, handlerDone)
+			})
+			awaitResponsesStreamSignal(t, writer.firstEvent)
+			if !tc.failWrite {
+				cancelClient()
+			}
+			awaitResponsesStreamSignal(t, info.ResponsesStreamLifetime.ClientDone())
+			require.NoError(t, info.ResponsesStreamLifetime.Context().Err())
+			writesBeforeDrain := writer.writes.Load()
+			if !tc.timeout {
+				close(releaseTerminal)
+			}
+			awaitResponsesStreamSignal(t, handlerDone)
+			awaitResponsesStreamSignal(t, upstreamDone)
+
+			require.Nil(t, apiErr)
+			require.NotNil(t, usage)
+			require.NotNil(t, info.UsageSources)
+			assert.True(t, body.closed.Load())
+			assert.Equal(t, writesBeforeDrain, writer.writes.Load(), "draining must not write to the disconnected client")
+			assert.NotContains(t, recorder.Body.String(), "response.completed")
+			assert.Equal(t, relaycommon.StreamEndReasonClientGone, info.StreamStatus.EndReason)
+			if tc.failWrite {
+				assert.NoError(t, clientCtx.Err(), "a failed write must start grace independently of request cancellation")
+				assert.ErrorIs(t, info.StreamStatus.EndError, io.ErrClosedPipe)
+			} else {
+				assert.ErrorIs(t, info.StreamStatus.EndError, context.Canceled)
+			}
+			params := service.BuildTieredTokenParams(usage, false, billingexpr.UsedVars(expression))
+			applies, quota, settlement := service.TryTieredSettle(info, params)
+			require.True(t, applies)
+			require.NotNil(t, settlement)
+			if tc.timeout {
+				assert.Positive(t, heartbeats.Load())
+				assert.Equal(t, 1000, usage.PromptTokens)
+				assert.Zero(t, usage.CompletionTokens)
+				assert.Zero(t, usage.PromptTokensDetails.CachedTokens)
+				assert.Equal(t, &relaycommon.UsageSources{InputTokens: "estimated", OutputTokens: "unavailable", CacheTokens: "unavailable", ReasoningTokens: "unavailable"}, info.UsageSources)
+				assert.Equal(t, 250, quota, "missing usage retains existing input estimation")
+				return
+			}
+			assert.True(t, upstreamContinued.Load())
+			assert.Equal(t, 1000, usage.PromptTokens)
+			assert.Equal(t, 900, usage.PromptTokensDetails.CachedTokens)
+			assert.Equal(t, 10, usage.CompletionTokens)
+			assert.Equal(t, 5, usage.CompletionTokenDetails.ReasoningTokens)
+			assert.Equal(t, &relaycommon.UsageSources{InputTokens: "upstream", OutputTokens: "upstream", CacheTokens: "upstream", ReasoningTokens: "upstream", Final: true}, info.UsageSources)
+			assert.Equal(t, "completed", info.StreamStatus.ResponseOutcome())
+			assert.Equal(t, 60, quota, "final cache usage must replace the full-price input estimate")
+		})
+	}
+}
+
+func TestResponsesDisconnectGraceLeavesOtherRequestsCancellable(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	oldGrace := constant.ResponsesDisconnectGraceSeconds
+	t.Cleanup(func() { constant.ResponsesDisconnectGraceSeconds = oldGrace })
+	for _, tc := range []struct {
+		name        string
+		grace       int
+		stream      bool
+		apiType     int
+		format      types.RelayFormat
+		finalFormat types.RelayFormat
+	}{
+		{name: "disabled", stream: true, format: types.RelayFormatOpenAIResponses, finalFormat: types.RelayFormatOpenAIResponses},
+		{name: "chat completions", grace: 60, stream: true, format: types.RelayFormatOpenAI, finalFormat: types.RelayFormatOpenAI},
+		{name: "Responses converted to chat", grace: 60, stream: true, format: types.RelayFormatOpenAIResponses, finalFormat: types.RelayFormatOpenAI},
+		{name: "non-stream Responses", grace: 60, format: types.RelayFormatOpenAIResponses, finalFormat: types.RelayFormatOpenAIResponses},
+		{name: "Anthropic passthrough without conversion metadata", grace: 60, stream: true, apiType: constant.APITypeAnthropic, format: types.RelayFormatOpenAIResponses},
+		{name: "Gemini passthrough without conversion metadata", grace: 60, stream: true, apiType: constant.APITypeGemini, format: types.RelayFormatOpenAIResponses},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			constant.ResponsesDisconnectGraceSeconds = tc.grace
+			upstreamDone := make(chan struct{})
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				w.WriteHeader(http.StatusOK)
+				w.(http.Flusher).Flush()
+				<-r.Context().Done()
+				close(upstreamDone)
+			}))
+			t.Cleanup(upstream.Close)
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			clientCtx, cancelClient := context.WithCancel(context.Background())
+			t.Cleanup(cancelClient)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil).WithContext(clientCtx)
+			info := &relaycommon.RelayInfo{
+				RelayMode: relayconstant.RelayModeResponses, RelayFormat: tc.format, FinalRequestRelayFormat: tc.finalFormat,
+				RequestURLPath: "/v1/responses", IsStream: tc.stream, DisablePing: true,
+				ChannelMeta: &relaycommon.ChannelMeta{ChannelType: constant.ChannelTypeOpenAI, ApiType: tc.apiType, ChannelBaseUrl: upstream.URL},
+			}
+			adaptor := &Adaptor{}
+			adaptor.Init(info)
+			resp, err := channel.DoApiRequest(adaptor, c, info, strings.NewReader(`{}`))
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = resp.Body.Close() })
+			assert.Nil(t, info.ResponsesStreamLifetime)
+			var readErr error
+			readerDone := make(chan struct{})
+			go func() {
+				_, readErr = io.Copy(io.Discard, resp.Body)
+				close(readerDone)
+			}()
+			cancelClient()
+			awaitResponsesStreamSignal(t, readerDone)
+			awaitResponsesStreamSignal(t, upstreamDone)
+			assert.ErrorIs(t, readErr, context.Canceled)
+		})
+	}
+}
 
 func TestOaiResponsesHandlerCountsOutputCallsNotDeclarations(t *testing.T) {
 	gin.SetMode(gin.TestMode)

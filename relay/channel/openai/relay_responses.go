@@ -76,6 +76,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	defer service.CloseResponseBodyGracefully(resp)
 
 	accumulator := service.NewResponsesUsageAccumulator(info)
+	lifetime := info.ResponsesStreamLifetime
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 
@@ -89,8 +90,20 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		if streamResponse.Response != nil {
 			data = string(rewriteSGLangResponsesCreatedAt(info, []byte(data), "response.created_at", streamResponse.Response.CreatedAt))
 		}
-		sendResponsesStreamData(c, streamResponse, data)
 		accumulator.Observe(&streamResponse, common.StringToByteSlice(data))
+		if lifetime == nil || !lifetime.Disconnected() {
+			if err := helper.ResponseChunkData(c, streamResponse, data); err != nil && lifetime != nil {
+				lifetime.Disconnect(err)
+			}
+		}
+		if lifetime != nil && lifetime.Disconnected() {
+			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, lifetime.ClientError())
+		}
+		// Responses ends with a protocol terminal event; [DONE] and EOF are
+		// not required. Observe usage before closing the upstream body.
+		if info.StreamStatus.ResponseOutcome() != "" {
+			sr.Done()
+		}
 	})
 
 	common.SetContextKey(c, constant.ContextKeyResponseStreamStatus, info.StreamStatus)
