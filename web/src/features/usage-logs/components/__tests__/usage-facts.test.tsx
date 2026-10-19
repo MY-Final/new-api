@@ -24,6 +24,7 @@ import { afterEach, beforeAll, describe, expect, test } from 'vitest'
 import type { UsageLog } from '../../data/schema'
 import type { LogOtherData } from '../../types'
 import { DetailsDialog } from '../dialogs/details-dialog'
+import { UsageSourceNotice } from '../usage-source-notice'
 
 const i18nKeys = {
   'Log Details': 'Log Details',
@@ -160,9 +161,30 @@ describe('usage facts billing details', () => {
     )
     expect(rowValue('Input Tokens')).toBe('1,000')
     expect(rowValue('Cache Hit')).toBe('0')
-    expect(screen.getByText('Upstream usage')).toBeVisible()
+    expect(screen.queryByText('Upstream usage')).toBeNull()
+    expect(screen.getByText('Final usage not received')).toBeVisible()
     expect(screen.queryByText('Includes estimates')).toBeNull()
   })
+
+  test.each([false, true])(
+    'hides notices and extra spacing for final upstream usage (detailed: %s)',
+    (detailed) => {
+      const { container } = render(
+        <UsageSourceNotice
+          sources={{
+            input_tokens: 'upstream',
+            output_tokens: 'upstream',
+            cache_tokens: 'upstream',
+            reasoning_tokens: 'upstream',
+            final: true,
+          }}
+          detailed={detailed}
+        />
+      )
+
+      expect(container).toBeEmptyDOMElement()
+    }
+  )
 
   test('shows the settled image count and a per-image price', () => {
     const queryClient = renderDetails({

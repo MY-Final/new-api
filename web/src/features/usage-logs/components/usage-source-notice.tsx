@@ -33,7 +33,7 @@ export function UsageSourceNotice(props: {
   const estimated =
     sources.input_tokens === 'estimated' ||
     sources.output_tokens === 'estimated'
-  let label = t('Upstream usage')
+  let label = ''
   if (estimated) {
     label = t('Includes estimates')
   } else if (
@@ -43,19 +43,24 @@ export function UsageSourceNotice(props: {
     label = t('Usage not reported')
   }
 
+  const missingCache = !props.detailed && sources.cache_tokens === 'unavailable'
+  if (!label && sources.final && !missingCache) return null
+
   return (
     <div className='text-muted-foreground space-y-1 text-xs [overflow-wrap:anywhere]'>
-      <div className='flex flex-wrap items-center gap-1.5'>
-        <StatusBadge
-          label={label}
-          variant={estimated ? 'warning' : 'neutral'}
-          size='sm'
-        />
-        {!sources.final && <span>{t('Final usage not received')}</span>}
-      </div>
-      {!props.detailed && sources.cache_tokens === 'unavailable' && (
-        <p>{t('Cache usage not reported')}</p>
+      {(label || !sources.final) && (
+        <div className='flex flex-wrap items-center gap-1.5'>
+          {label && (
+            <StatusBadge
+              label={label}
+              variant={estimated ? 'warning' : 'neutral'}
+              size='sm'
+            />
+          )}
+          {!sources.final && <span>{t('Final usage not received')}</span>}
+        </div>
       )}
+      {missingCache && <p>{t('Cache usage not reported')}</p>}
       {props.detailed && (!sources.final || estimated) && (
         <p>
           {t(
