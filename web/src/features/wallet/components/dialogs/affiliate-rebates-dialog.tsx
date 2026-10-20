@@ -67,6 +67,7 @@ const sourceLabels: Record<AffiliateRebateSource, string> = {
   signup: 'Registration',
   topup: 'Top-up',
   redemption: 'Redemption code',
+  manual_credit: 'Manual credit',
 }
 
 type SourceFilter = AffiliateRebateSource | 'all'
@@ -150,7 +151,8 @@ function RebateRow({
         ) : null}
         {isAdmin &&
         (rebate.source_type === 'redemption' ||
-          rebate.source_type === 'topup') &&
+          rebate.source_type === 'topup' ||
+          rebate.source_type === 'manual_credit') &&
         rebate.status === 'settled' ? (
           <Button
             variant='ghost'
@@ -324,6 +326,7 @@ export function AffiliateRebatesDialog({
             { value: 'signup', label: t('Registration') },
             { value: 'topup', label: t('Top-up') },
             { value: 'redemption', label: t('Redemption code') },
+            { value: 'manual_credit', label: t('Manual credit') },
           ]}
           value={sourceFilter}
           onValueChange={handleSourceFilterChange}
@@ -341,6 +344,9 @@ export function AffiliateRebatesDialog({
               <SelectItem value='signup'>{t('Registration')}</SelectItem>
               <SelectItem value='topup'>{t('Top-up')}</SelectItem>
               <SelectItem value='redemption'>{t('Redemption code')}</SelectItem>
+              <SelectItem value='manual_credit'>
+                {t('Manual credit')}
+              </SelectItem>
             </SelectGroup>
           </SelectContent>
         </Select>
@@ -398,7 +404,7 @@ export function AffiliateRebatesDialog({
               {t(
                 reverseTarget?.source_type === 'topup'
                   ? 'This will refund the selected top-up locally and reverse its referral rebate. Confirm the payment provider refund first.'
-                  : "This will reverse the selected paid-code rebate and debit the inviter's wallet."
+                  : "This will reverse the selected referral rebate and debit the inviter's wallet."
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>

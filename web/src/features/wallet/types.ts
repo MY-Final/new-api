@@ -332,7 +332,11 @@ export interface BillingHistoryResponse {
   total: number
 }
 
-export type AffiliateRebateSource = 'signup' | 'topup' | 'redemption'
+export type AffiliateRebateSource =
+  | 'signup'
+  | 'topup'
+  | 'redemption'
+  | 'manual_credit'
 
 export interface AffiliateRebate {
   id: number

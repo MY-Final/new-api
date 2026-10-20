@@ -362,7 +362,7 @@ export function ManualCreditForm() {
             )}
             <p className='text-muted-foreground text-sm leading-relaxed'>
               {t(
-                'Manual credits update the wallet only. They do not collect payment or generate referral rebates. Paid and promotional amounts are recorded separately.'
+                'Manual credits do not collect payment. Paid amounts earn referral rebates at the top-up rebate rate; promotional amounts do not.'
               )}
             </p>
             <p className='text-muted-foreground text-xs'>

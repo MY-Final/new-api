@@ -3,6 +3,7 @@ package model
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -12,7 +13,7 @@ import (
 const FinancialOperationManualCredit = "manual_credit"
 
 // CreditUserByAdmin records offline paid credit and promotional credit together,
-// without initiating a payment or granting an automatic referral rebate.
+// granting a top-up referral rebate on the paid portion without initiating a payment.
 func CreditUserByAdmin(userID, paid, bonus int, reason, reference, paymentChannel, clientID string, operatorID, operatorRole int) (FinancialOperation, bool, error) {
 	var operation FinancialOperation
 	reason, err := validateFinancialReason(reason)
@@ -79,12 +80,21 @@ func CreditUserByAdmin(userID, paid, bonus int, reason, reference, paymentChanne
 			TargetMainBefore: target.Quota, TargetMainAfter: after,
 			TargetPaidDelta: paid, TargetBonusDelta: bonus, Reason: reason, PaymentChannel: paymentChannel,
 		}
-		return tx.Create(&operation).Error
+		if err := tx.Create(&operation).Error; err != nil {
+			return err
+		}
+		if paid > 0 && target.InviterId > 0 {
+			_, _, err := createAffiliateRebateTx(tx, target.InviterId, userID,
+				AffiliateRebateSourceManualCredit, strconv.Itoa(operation.Id), paid, common.AffiliateTopupRebateRate)
+			return err
+		}
+		return nil
 	})
 	if err == nil && !already {
 		if _, cacheErr := cacheApplyUserQuotaSourceDelta(userID, QuotaAllocation{Paid: paid, Bonus: bonus}); cacheErr != nil {
 			common.SysError(common.LogText("failed to sync manual quota adjustment for user %d: %s", userID, cacheErr))
 		}
+		invalidateAffiliateRebateUserCache(AffiliateRebateSourceManualCredit, strconv.Itoa(operation.Id), "manual credit rebate")
 	}
 	return operation, already, err
 }

@@ -476,7 +476,7 @@ func ReverseAffiliateRebateByAdmin(rebateId int, reason string, operatorId int) 
 		if err := lockForUpdate(tx).Where("id = ?", rebateId).First(&rebate).Error; err != nil {
 			return ErrAffiliateRebateNotFound
 		}
-		if rebate.SourceType != AffiliateRebateSourceTopUp && rebate.SourceType != AffiliateRebateSourceRedemption {
+		if rebate.SourceType != AffiliateRebateSourceTopUp && rebate.SourceType != AffiliateRebateSourceRedemption && rebate.SourceType != AffiliateRebateSourceManualCredit {
 			return ErrAffiliateSourceInvalid
 		}
 		if rebate.Status == AffiliateRebateStatusReversed || rebate.ReversedQuota >= rebate.RebateQuota {

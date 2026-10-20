@@ -82,40 +82,48 @@ describe('affiliate rebate filters', () => {
     ).toBeInTheDocument()
   })
 
-  test('renders rebate rows with source and status labels in the table', async () => {
-    getAffiliateRebates.mockResolvedValue({
-      data: {
-        items: [
-          {
-            id: 1,
-            inviter_id: 1,
-            invitee_id: 2,
-            invitee_username: 'alice',
-            source_type: 'topup',
-            source_id: 'trade-1',
-            source_key: '',
-            base_quota: 1000000,
-            rate: 500,
-            rebate_quota: 50000,
-            reversed_quota: 0,
-            transferred_quota: 50000,
-            debt_offset_quota: 0,
-            status: 'settled',
-            created_at: 1700000000,
-            settled_at: 1700000000,
-            reversed_at: 0,
-          },
-        ],
-        total: 1,
-      },
-    })
+  test.each([
+    ['topup', 'Top-up'],
+    ['manual_credit', 'Manual credit'],
+  ])(
+    'renders %s rebates with readable source and status labels',
+    async (source, label) => {
+      getAffiliateRebates.mockResolvedValue({
+        data: {
+          items: [
+            {
+              id: 1,
+              inviter_id: 1,
+              invitee_id: 2,
+              invitee_username: 'alice',
+              source_type: source,
+              source_id: 'trade-1',
+              source_key: '',
+              base_quota: 1000000,
+              rate: 500,
+              rebate_quota: 50000,
+              reversed_quota: 0,
+              transferred_quota: 50000,
+              debt_offset_quota: 0,
+              status: 'settled',
+              created_at: 1700000000,
+              settled_at: 1700000000,
+              reversed_at: 0,
+            },
+          ],
+          total: 1,
+        },
+      })
 
-    renderPage()
+      renderPage()
 
-    await screen.findByText('alice')
-    expect(screen.getByRole('cell', { name: /Top-up/ })).toBeInTheDocument()
-    expect(screen.getByRole('cell', { name: /Settled/ })).toBeInTheDocument()
-  })
+      await screen.findByText('alice')
+      expect(
+        screen.getByRole('cell', { name: new RegExp(label) })
+      ).toBeInTheDocument()
+      expect(screen.getByRole('cell', { name: /Settled/ })).toBeInTheDocument()
+    }
+  )
 
   test('renders the mobile list layout on narrow viewports', async () => {
     getAffiliateRebates.mockResolvedValue({

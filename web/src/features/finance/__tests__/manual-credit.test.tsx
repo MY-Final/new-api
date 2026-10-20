@@ -104,6 +104,11 @@ async function selectAlice(withPaymentChannel = true) {
 
 test('paid credit requires a payment reference and receipt confirmation before submission', async () => {
   show()
+  expect(
+    screen.getByText(
+      'Manual credits do not collect payment. Paid amounts earn referral rebates at the top-up rebate rate; promotional amounts do not.'
+    )
+  ).toBeVisible()
   const user = await selectAlice()
   await user.type(screen.getByRole('spinbutton', { name: /Paid credit/ }), '50')
   await user.type(

@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	AffiliateRebateSourceSignup     = "signup"
-	AffiliateRebateSourceTopUp      = "topup"
-	AffiliateRebateSourceRedemption = "redemption"
+	AffiliateRebateSourceSignup       = "signup"
+	AffiliateRebateSourceTopUp        = "topup"
+	AffiliateRebateSourceRedemption   = "redemption"
+	AffiliateRebateSourceManualCredit = "manual_credit"
 
 	AffiliateRebateStatusSettled  = "settled"
 	AffiliateRebateStatusReversed = "reversed"
@@ -70,7 +71,7 @@ var (
 
 func affiliateSourceAllowed(sourceType string) bool {
 	switch sourceType {
-	case AffiliateRebateSourceSignup, AffiliateRebateSourceTopUp, AffiliateRebateSourceRedemption:
+	case AffiliateRebateSourceSignup, AffiliateRebateSourceTopUp, AffiliateRebateSourceRedemption, AffiliateRebateSourceManualCredit:
 		return true
 	default:
 		return false

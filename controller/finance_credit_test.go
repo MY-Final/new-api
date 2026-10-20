@@ -59,6 +59,100 @@ func TestManualFinanceCreditSeparatesPaidAndBonusAndRejectsConflictingRetries(t 
 	assert.EqualValues(t, 1, count)
 }
 
+func TestManualFinanceCreditReferralRebate(t *testing.T) {
+	for _, tc := range []struct {
+		name                                 string
+		paid, bonus, rate, inviterQuota      int
+		noInviter, deletedInviter, wantError bool
+		wantRebate, wantOffset               int
+	}{
+		{name: "paid only", paid: 1000, rate: 1250, wantRebate: 125},
+		{name: "bonus excluded", paid: 1000, bonus: 300, rate: 1250, wantRebate: 125},
+		{name: "bonus only", bonus: 300, rate: 1250},
+		{name: "rebates disabled", paid: 1000},
+		{name: "no inviter", paid: 1000, rate: 1250, noInviter: true},
+		{name: "soft deleted inviter", paid: 1000, rate: 1250, deletedInviter: true, wantRebate: 125},
+		{name: "debt offset", paid: 1000, rate: 1250, inviterQuota: -50, wantRebate: 125, wantOffset: 50},
+		{name: "invalid rate rolls back credit", paid: 1000, bonus: 300, rate: 10001, wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db := setupManageUserTestDB(t)
+			require.NoError(t, db.AutoMigrate(&model.FinancialOperation{}, &model.AffiliateRebate{}))
+			previousRate := common.AffiliateTopupRebateRate
+			common.AffiliateTopupRebateRate = tc.rate
+			t.Cleanup(func() { common.AffiliateTopupRebateRate = previousRate })
+			operator := model.User{Username: "rebate-operator", AffCode: "rebate-operator", Role: common.RoleRootUser}
+			inviter := model.User{Username: "rebate-inviter", AffCode: "rebate-inviter", Quota: tc.inviterQuota, PaidQuota: tc.inviterQuota}
+			require.NoError(t, db.Create(&operator).Error)
+			require.NoError(t, db.Create(&inviter).Error)
+			target := model.User{Username: "rebate-target", AffCode: "rebate-target", InviterId: inviter.Id}
+			if tc.noInviter {
+				target.InviterId = 0
+			}
+			require.NoError(t, db.Create(&target).Error)
+			if tc.deletedInviter {
+				require.NoError(t, db.Delete(&inviter).Error)
+			}
+
+			operation, already, err := model.CreditUserByAdmin(target.Id, tc.paid, tc.bonus, "offline payment", "shared-receipt", "alipay", "referral-credit", operator.Id, operator.Role)
+			if tc.wantError {
+				require.Error(t, err)
+				require.NoError(t, db.First(&target, target.Id).Error)
+				assert.Zero(t, target.Quota)
+				assert.Zero(t, target.PaidQuota)
+				assert.Zero(t, target.BonusQuota)
+				var count int64
+				require.NoError(t, db.Model(&model.FinancialOperation{}).Count(&count).Error)
+				assert.Zero(t, count)
+				require.NoError(t, db.Model(&model.AffiliateRebate{}).Count(&count).Error)
+				assert.Zero(t, count)
+				return
+			}
+			require.NoError(t, err)
+			assert.False(t, already)
+			// A retry must keep the original rate snapshot and credit each wallet once.
+			common.AffiliateTopupRebateRate = 5000
+			retry, already, err := model.CreditUserByAdmin(target.Id, tc.paid, tc.bonus, "offline payment", "shared-receipt", "alipay", "referral-credit", operator.Id, operator.Role)
+			require.NoError(t, err)
+			assert.True(t, already)
+			assert.Equal(t, operation.Id, retry.Id)
+			require.NoError(t, db.First(&target, target.Id).Error)
+			assert.Equal(t, tc.paid+tc.bonus, target.Quota)
+			assert.Equal(t, tc.paid, target.PaidQuota)
+			assert.Equal(t, tc.bonus, target.BonusQuota)
+			require.NoError(t, db.Unscoped().First(&inviter, inviter.Id).Error)
+			assert.Equal(t, tc.wantRebate-tc.wantOffset, inviter.AffQuota)
+			assert.Equal(t, tc.wantRebate, inviter.AffHistoryQuota)
+			assert.Equal(t, tc.inviterQuota+tc.wantOffset, inviter.Quota)
+			var rebates []model.AffiliateRebate
+			require.NoError(t, db.Find(&rebates).Error)
+			if tc.paid == 0 || tc.noInviter {
+				assert.Empty(t, rebates)
+				return
+			}
+			require.Len(t, rebates, 1)
+			rebate := rebates[0]
+			assert.Equal(t, "manual_credit", rebate.SourceType)
+			assert.Equal(t, strconv.Itoa(operation.Id), rebate.SourceId)
+			assert.Equal(t, tc.paid, rebate.BaseQuota)
+			assert.Equal(t, tc.rate, rebate.Rate)
+			assert.Equal(t, tc.wantRebate, rebate.RebateQuota)
+			assert.Equal(t, tc.wantOffset, rebate.DebtOffsetQuota)
+			if tc.wantRebate == 0 {
+				return
+			}
+			for _, retry := range []bool{false, true} {
+				already, err := model.ReverseAffiliateRebateByAdmin(rebate.Id, "offline payment corrected", operator.Id)
+				require.NoError(t, err)
+				assert.Equal(t, retry, already)
+			}
+			require.NoError(t, db.Unscoped().First(&inviter, inviter.Id).Error)
+			assert.Zero(t, inviter.AffQuota)
+			assert.Equal(t, tc.inviterQuota, inviter.Quota)
+		})
+	}
+}
+
 func TestManualFinanceCreditValidationAndAtomicity(t *testing.T) {
 	for _, tc := range []struct {
 		name                     string
@@ -177,10 +271,15 @@ func TestManualFinanceCreditAPIRequiresReceiptConfirmationAndRecordsAudit(t *tes
 
 func TestManualFinanceCreditPreservesCachedReservationsAndDoesNotCreditRetriesTwice(t *testing.T) {
 	db := setupManageUserTestDB(t)
-	require.NoError(t, db.AutoMigrate(&model.FinancialOperation{}))
+	require.NoError(t, db.AutoMigrate(&model.FinancialOperation{}, &model.AffiliateRebate{}))
+	previousRate := common.AffiliateTopupRebateRate
+	common.AffiliateTopupRebateRate = 1000
+	t.Cleanup(func() { common.AffiliateTopupRebateRate = previousRate })
 	operator := model.User{Username: "cached-credit-operator", AffCode: "cached-credit-operator", Role: common.RoleRootUser}
-	target := model.User{Username: "cached-credit-target", AffCode: "cached-credit-target", Quota: 100, PaidQuota: 60, BonusQuota: 40, Role: common.RoleCommonUser}
+	inviter := model.User{Username: "cached-credit-inviter", AffCode: "cached-credit-inviter", Quota: -3, PaidQuota: -3}
 	require.NoError(t, db.Create(&operator).Error)
+	require.NoError(t, db.Create(&inviter).Error)
+	target := model.User{Username: "cached-credit-target", AffCode: "cached-credit-target", Quota: 100, PaidQuota: 60, BonusQuota: 40, Role: common.RoleCommonUser, InviterId: inviter.Id}
 	require.NoError(t, db.Create(&target).Error)
 	server := miniredis.RunT(t)
 	previousRDB := common.RDB
@@ -188,6 +287,8 @@ func TestManualFinanceCreditPreservesCachedReservationsAndDoesNotCreditRetriesTw
 	common.RedisEnabled = true
 	t.Cleanup(func() { _ = common.RDB.Close(); common.RDB = previousRDB })
 	_, err := model.GetUserCache(target.Id)
+	require.NoError(t, err)
+	_, err = model.GetUserCache(inviter.Id)
 	require.NoError(t, err)
 	var key string
 	for _, candidate := range server.Keys() {
@@ -206,6 +307,10 @@ func TestManualFinanceCreditPreservesCachedReservationsAndDoesNotCreditRetriesTw
 		assert.Equal(t, "140", server.HGet(key, "Quota"))
 		assert.Equal(t, "110", server.HGet(key, "PaidQuota"))
 		assert.Equal(t, "30", server.HGet(key, "BonusQuota"))
+		inviterCache, err := model.GetUserCache(inviter.Id)
+		require.NoError(t, err)
+		assert.Zero(t, inviterCache.Quota, "the debt offset must invalidate the inviter's cached balance")
+		assert.Zero(t, inviterCache.PaidQuota)
 	}
 }
 

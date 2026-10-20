@@ -5,6 +5,7 @@ export function getSourceLabel(source: string, t: TFunction) {
   if (source === 'signup') return t('Registration')
   if (source === 'topup') return t('Top-up')
   if (source === 'redemption') return t('Redemption code')
+  if (source === 'manual_credit') return t('Manual credit')
   return source
 }
 
@@ -14,6 +15,7 @@ export function getSourceOptions(t: TFunction) {
     { value: 'signup', label: t('Registration') },
     { value: 'topup', label: t('Top-up') },
     { value: 'redemption', label: t('Redemption code') },
+    { value: 'manual_credit', label: t('Manual credit') },
   ]
 }
 
