@@ -38,6 +38,9 @@ type EmailTemplateSpec struct {
 	DefaultSubject string
 	DefaultBody    string
 	Variables      []string
+	// HTMLVariables are rendered as trusted HTML instead of text. They are
+	// always produced by the server, never by user input.
+	HTMLVariables []string
 	// Sample values replace the variables in the admin preview.
 	Sample map[string]string
 }
@@ -134,6 +137,39 @@ func EmailTemplateSpecs() []EmailTemplateSpec {
 				"Status":   "pending",
 				"User":     "alice",
 				"Content":  "The request returns 500 since this morning.",
+			},
+		},
+		{
+			Key:            "usage",
+			DefaultSubject: "{{.SystemName}} — 用量日报",
+			DefaultBody: "<p style=\"margin:0 0 4px;font-size:15px;font-weight:600;\">{{.Greeting}}</p>" +
+				"<p style=\"margin:0 0 16px;color:#6b7280;font-size:13px;\">{{.DateRange}}</p>" +
+				"<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse:separate;border-spacing:8px 0;\"><tr>" +
+				"<td width=\"33%\" style=\"border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;\"><div style=\"color:#6b7280;font-size:12px;\">请求数</div><div style=\"font-size:18px;font-weight:600;margin-top:2px;\">{{.RequestCount}}</div></td>" +
+				"<td width=\"33%\" style=\"border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;\"><div style=\"color:#6b7280;font-size:12px;\">额度消耗</div><div style=\"font-size:18px;font-weight:600;margin-top:2px;\">{{.Quota}}</div></td>" +
+				"<td width=\"33%\" style=\"border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;\"><div style=\"color:#6b7280;font-size:12px;\">Tokens</div><div style=\"font-size:18px;font-weight:600;margin-top:2px;\">{{.TotalTokens}}</div></td>" +
+				"</tr></table>" +
+				"<p style=\"margin:12px 0 0;color:#4b5563;font-size:13px;\">{{.QuotaNote}}</p>" +
+				"<p style=\"margin:20px 0 8px;font-size:14px;font-weight:600;\">{{.GroupTitle}}</p>" +
+				"{{.GroupTable}}" +
+				"<p style=\"margin:18px 0 0;color:#9ca3af;font-size:12px;\">{{.Footer}}</p>",
+			Variables: []string{
+				"SystemName", "Brand", "Greeting", "DateRange", "RequestCount", "Quota", "TotalTokens",
+				"QuotaNote", "GroupTitle", "GroupTable", "Footer",
+			},
+			HTMLVariables: []string{"GroupTable"},
+			Sample: map[string]string{
+				"Greeting":     "alice，这是你 2026-10-21 的用量日报。",
+				"DateRange":    "统计范围：2026-10-21 00:00–22:00（北京时间）",
+				"RequestCount": "128",
+				"Quota":        "$1.23",
+				"TotalTokens":  "1,204,880",
+				"QuotaNote":    "余额扣费 $1.00 · 订阅用量 $0.23 · 合计 $1.23",
+				"GroupTitle":   "分组明细",
+				"GroupTable": "<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse:collapse;font-size:13px;\">" +
+					"<tr style=\"color:#6b7280;font-size:12px;text-align:left;\"><th style=\"padding:6px 4px;border-bottom:1px solid #e5e7eb;font-weight:500;\">分组</th><th style=\"padding:6px 4px;border-bottom:1px solid #e5e7eb;font-weight:500;\">请求数</th><th style=\"padding:6px 4px;border-bottom:1px solid #e5e7eb;font-weight:500;\">额度</th><th style=\"padding:6px 4px;border-bottom:1px solid #e5e7eb;font-weight:500;\">Tokens</th></tr>" +
+					"<tr style=\"border-bottom:1px solid #f3f4f6;\"><td style=\"padding:8px 4px;\">default</td><td style=\"padding:8px 4px;\">128</td><td style=\"padding:8px 4px;\">$1.23</td><td style=\"padding:8px 4px;\">1,204,880</td></tr></table>",
+				"Footer": "统计截止北京时间 22:00，完整数据请前往平台查看。",
 			},
 		},
 	}

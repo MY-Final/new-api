@@ -46,6 +46,7 @@ import { updateUserSettings } from '../../api'
 import { NOTIFICATION_METHODS } from '../../constants'
 import { normalizeUserSettings } from '../../lib/user-settings'
 import type { UserProfile, NotifyType } from '../../types'
+import { DailyUsageReportCard } from '../daily-usage-report-card'
 
 const NOTIFICATION_ICONS: Record<NotifyType, typeof Mail> = {
   email: Mail,
@@ -404,6 +405,10 @@ export function NotificationTab({
           </div>
         </>
       )}
+
+      {/* Daily usage summary is a separate subscription, so it keeps its own
+          state and save action instead of joining the form above. */}
+      <DailyUsageReportCard />
 
       {/* Divider */}
       <div className='border-t' />

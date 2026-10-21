@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -77,6 +78,16 @@ afterEach(() => {
 /** The body a PUT sends over the wire: undefined fields are left out. */
 function sentBody(put: { mock: { calls: unknown[][] } }): unknown {
   return JSON.parse(JSON.stringify(put.mock.calls[0][1]))
+}
+
+/** NotificationTab now owns a query for the daily usage report card. */
+function renderWithQueryClient(ui: React.ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  return render(
+    <QueryClientProvider client={client}>{ui}</QueryClientProvider>
+  )
 }
 
 describe('user settings saves across profile and security', () => {
@@ -193,7 +204,7 @@ describe('user settings saves across profile and security', () => {
     const put = vi
       .spyOn(api, 'put')
       .mockResolvedValue({ data: { success: true } })
-    render(
+    renderWithQueryClient(
       <NotificationTab
         profile={{ ...profile, setting: JSON.stringify(settings) }}
         onUpdate={onUpdate}
@@ -225,7 +236,7 @@ describe('notifications a user receives', () => {
     quotaRemindEnabled = true
   ) {
     const onUpdate = vi.fn()
-    render(
+    renderWithQueryClient(
       <NotificationTab
         profile={{ ...profile, role, setting: JSON.stringify(setting) }}
         onUpdate={onUpdate}

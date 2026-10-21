@@ -167,3 +167,37 @@ func TestRenderEmailTemplateUsesTheStoredBrandForTheBrandVariable(t *testing.T) 
 	assert.Equal(t, "kuncode", subject)
 	assert.Contains(t, body, "kuncode team")
 }
+
+// The usage report passes a server-rendered table as an HTML variable. Only
+// names declared by the template spec may bypass escaping.
+func TestRenderEmailTemplateRendersOnlyDeclaredHTMLVariables(t *testing.T) {
+	stubEmailTemplates(t, "")
+	vars := map[string]string{
+		"Greeting":     "alice，这是你 2026-10-21 的用量日报。",
+		"DateRange":    "统计范围：2026-10-21 00:00–22:00（北京时间）",
+		"RequestCount": "12",
+		"Quota":        "$0.25",
+		"TotalTokens":  "3,456",
+		"QuotaNote":    "余额扣费 $0.25",
+		"GroupTitle":   "分组明细",
+		"Footer":       "统计截止北京时间 22:00",
+	}
+	htmlVars := map[string]string{
+		"GroupTable": `<table><tr><td>vip</td></tr></table>`,
+		"Greeting":   `<script>alert(1)</script>`,
+	}
+	subject, body, err := RenderEmailTemplateHTML("usage", vars, htmlVars)
+	require.NoError(t, err)
+	assert.Contains(t, subject, "用量日报")
+	assert.Contains(t, body, `<table><tr><td>vip</td></tr></table>`, "declared HTML variables are inserted as HTML")
+	assert.NotContains(t, body, "<script>alert(1)</script>", "a variable outside the declared list stays escaped")
+}
+
+func TestPreviewEmailTemplateKeepsTheUsageReportTableAsHTML(t *testing.T) {
+	subject, body, err := PreviewEmailTemplate("usage", "", "", "", "")
+	require.NoError(t, err)
+	assert.Contains(t, subject, "用量日报")
+	assert.Contains(t, body, "<table")
+	assert.NotContains(t, body, "&lt;table")
+	assert.Contains(t, body, "default")
+}

@@ -177,6 +177,43 @@ export interface UpdateUserSettingsRequest {
 }
 
 /**
+ * Daily usage report state. Recipients are the verified addresses that will
+ * actually receive the next report.
+ */
+export interface UsageReportSettings {
+  enabled: boolean
+  account_email: string
+  account_email_verified: boolean
+  verified_emails: string[]
+  recipients: string[]
+  notification_email: string
+  notification_email_verified: boolean
+  delivery_ready: boolean
+  send_hour: number
+  timezone: string
+}
+
+export type EmailReminderAction =
+  | 'snooze_today'
+  | 'snooze_week'
+  | 'off'
+  | 'reset'
+
+export type EmailReminderPolicy = 'normal' | 'snooze' | 'off'
+
+/**
+ * Server-owned binding prompt state. `should_prompt` already accounts for
+ * verified addresses and every persisted reminder choice.
+ */
+export interface EmailReminderState {
+  needs_binding: boolean
+  verified_emails: string[]
+  email_reminder_policy: EmailReminderPolicy
+  email_reminder_until: number
+  should_prompt: boolean
+}
+
+/**
  * Account binding item
  */
 export interface BindingItem {

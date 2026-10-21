@@ -31,6 +31,9 @@ import type {
   CheckinResponse,
   AccountSecurityResult,
   EmailBindingFlow,
+  EmailReminderAction,
+  EmailReminderState,
+  UsageReportSettings,
 } from './types'
 
 // ============================================================================
@@ -95,6 +98,50 @@ export async function updateUserLanguage(
   language: string
 ): Promise<ApiResponse> {
   const res = await api.put('/api/user/self', { language })
+  return res.data
+}
+
+// ============================================================================
+// Daily Usage Report APIs
+// ============================================================================
+
+/**
+ * Read the daily usage report switch and its verified recipients
+ */
+export async function getUsageReportSettings(): Promise<
+  ApiResponse<UsageReportSettings>
+> {
+  const res = await api.get('/api/user/usage_report')
+  return res.data
+}
+
+/**
+ * Toggle the daily usage report; the response returns the stored state
+ */
+export async function updateUsageReportSettings(
+  enabled: boolean
+): Promise<ApiResponse<UsageReportSettings>> {
+  const res = await api.put('/api/user/usage_report', { enabled })
+  return res.data
+}
+
+/**
+ * Read the persisted email binding prompt state
+ */
+export async function getEmailReminder(): Promise<
+  ApiResponse<EmailReminderState>
+> {
+  const res = await api.get('/api/user/email_reminder')
+  return res.data
+}
+
+/**
+ * Persist a binding prompt choice
+ */
+export async function updateEmailReminder(
+  action: EmailReminderAction
+): Promise<ApiResponse<EmailReminderState>> {
+  const res = await api.post('/api/user/email_reminder', { action })
   return res.data
 }
 

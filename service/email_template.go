@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"html"
 	"html/template"
-	"maps"
 	"strings"
 	texttemplate "text/template"
 
@@ -58,11 +57,36 @@ func renderEmailText(source string, values map[string]string) string {
 // with the supplied variables and returns the body wrapped in the shared
 // layout. Variables are HTML-escaped inside the body.
 func RenderEmailTemplate(key string, vars map[string]string) (string, string, error) {
-	effective, _, ok := system_setting.EmailTemplateFor(key)
+	return renderEmailTemplateKey(key, vars, nil)
+}
+
+// RenderEmailTemplateHTML is RenderEmailTemplate with trusted, server-rendered
+// HTML variables. Only variables declared as HTML variables by the template
+// spec are accepted, so a template cannot smuggle untrusted input into HTML.
+func RenderEmailTemplateHTML(key string, vars map[string]string, htmlVars map[string]string) (string, string, error) {
+	return renderEmailTemplateKey(key, vars, htmlVars)
+}
+
+func renderEmailTemplateKey(key string, vars map[string]string, htmlVars map[string]string) (string, string, error) {
+	effective, spec, ok := system_setting.EmailTemplateFor(key)
 	if !ok {
 		return "", "", fmt.Errorf("unknown email template %q", key)
 	}
-	return renderEmailTemplate(effective, vars, system_setting.EmailTemplateLayout())
+	values := map[string]any{"SystemName": common.SystemName}
+	for name, value := range vars {
+		values[name] = value
+	}
+	allowed := make(map[string]struct{}, len(spec.HTMLVariables))
+	for _, name := range spec.HTMLVariables {
+		allowed[name] = struct{}{}
+	}
+	for name, value := range htmlVars {
+		if _, ok := allowed[name]; !ok {
+			continue
+		}
+		values[name] = template.HTML(value) // #nosec G203 -- server-rendered summary table
+	}
+	return renderEmailTemplate(effective, values, system_setting.EmailTemplateLayout())
 }
 
 // PreviewEmailTemplate renders unsaved editor values with the sample data for
@@ -85,13 +109,32 @@ func PreviewEmailTemplate(key string, subject string, body string, brand string,
 	if strings.TrimSpace(effective.Body) == "" {
 		effective.Body = spec.DefaultBody
 	}
-	return renderEmailTemplate(effective, spec.Sample, system_setting.EmailLayout{Brand: brand, Footer: footer})
+	values := make(map[string]any, len(spec.Sample))
+	for name, value := range spec.Sample {
+		values[name] = value
+	}
+	for _, name := range spec.HTMLVariables {
+		if value, ok := values[name]; ok {
+			if text, ok := value.(string); ok {
+				values[name] = template.HTML(text) // #nosec G203 -- sample HTML from the template spec
+			}
+		}
+	}
+	return renderEmailTemplate(effective, values, system_setting.EmailLayout{Brand: brand, Footer: footer})
 }
 
-func renderEmailTemplate(effective system_setting.EmailTemplate, vars map[string]string, layout system_setting.EmailLayout) (string, string, error) {
-	values := map[string]string{"SystemName": common.SystemName}
-	maps.Copy(values, vars)
-	brand := renderEmailText(layout.Brand, values)
+func renderEmailTemplate(effective system_setting.EmailTemplate, vars map[string]any, layout system_setting.EmailLayout) (string, string, error) {
+	values := map[string]any{"SystemName": common.SystemName}
+	for name, value := range vars {
+		values[name] = value
+	}
+	textValues := make(map[string]string, len(values))
+	for name, value := range values {
+		if text, ok := value.(string); ok {
+			textValues[name] = text
+		}
+	}
+	brand := renderEmailText(layout.Brand, textValues)
 	if strings.TrimSpace(brand) == "" {
 		brand = common.SystemName
 	}
@@ -112,11 +155,19 @@ func renderEmailTemplate(effective system_setting.EmailTemplate, vars map[string
 	if err := body.Execute(&renderedBody, values); err != nil {
 		return "", "", errors.New("Invalid email template body")
 	}
-	return renderedSubject.String(), renderEmailLayoutWith(renderedBody.String(), brand, renderEmailText(layout.Footer, values)), nil
+	return renderedSubject.String(), renderEmailLayoutWith(renderedBody.String(), brand, renderEmailText(layout.Footer, textValues)), nil
 }
 
 func SendTemplateEmail(receiver string, key string, vars map[string]string) error {
 	subject, body, err := RenderEmailTemplate(key, vars)
+	if err != nil {
+		return err
+	}
+	return common.SendEmail(subject, receiver, body)
+}
+
+func SendTemplateEmailHTML(receiver string, key string, vars map[string]string, htmlVars map[string]string) error {
+	subject, body, err := RenderEmailTemplateHTML(key, vars, htmlVars)
 	if err != nil {
 		return err
 	}

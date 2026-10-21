@@ -384,8 +384,16 @@ func migrateDB() error {
 		&UserAccessToken{},
 		&DesktopInstallation{},
 		&DesktopToolKey{},
+		&UserNotificationPreference{},
+		&UserVerifiedEmail{},
+		&UsageReport{},
+		&UsageReportRecipient{},
+		&UsageReportRun{},
 	)
 	if err != nil {
+		return err
+	}
+	if err := MigrateLegacyVerifiedEmails(); err != nil {
 		return err
 	}
 	if err := MigrateTickets(DB); err != nil {

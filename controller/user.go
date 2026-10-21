@@ -300,6 +300,12 @@ func Register(c *gin.Context) {
 		common.ApiErrorT(c, "User registration failed or user ID retrieval failed")
 		return
 	}
+	// 注册时邮箱验证码已通过校验，该地址可作为平台已验证邮箱接收日报。
+	if insertedUser.Email != "" {
+		if err := model.MarkEmailVerified(insertedUser.Id, insertedUser.Email, model.VerifiedEmailSourceRegistration); err != nil {
+			common.SysError(common.LogText("failed to record verified registration email for user %d: %s", insertedUser.Id, err.Error()))
+		}
+	}
 	// 生成默认令牌
 	if constant.GenerateDefaultToken {
 		key, err := common.GenerateKey()
