@@ -245,16 +245,20 @@ func TestRecordConsumeLogDashboardTokensIncludeCacheInput(t *testing.T) {
 		RecordConsumeLog(c, userId, params)
 	}
 
-	// Anthropic-style usage: prompt_tokens excludes cache reads/writes, while
-	// InputTokens is the cache-inclusive total shown by the usage views.
+	// Anthropic-style usage: prompt_tokens excludes cache reads/writes, so the
+	// dashboard total is token_used plus the separate cache counters.
+	cacheOther := NewLogOther()
+	cacheOther.SetPublic("cache_tokens", 7500)
+	cacheOther.SetPublic("cache_write_tokens", 500)
 	record(t, 1, "alice", RecordConsumeLogParams{
 		PromptTokens:     1000,
 		InputTokens:      9000,
 		CompletionTokens: 50,
 		ModelName:        "claude-sonnet",
 		Quota:            123,
+		Other:            cacheOther,
 	})
-	// OpenAI-style usage: no separate total, so prompt + completion is kept.
+	// OpenAI-style usage: no cache counters, prompt + completion is kept.
 	record(t, 2, "bob", RecordConsumeLogParams{
 		PromptTokens:     700,
 		CompletionTokens: 30,
@@ -266,8 +270,12 @@ func TestRecordConsumeLogDashboardTokensIncludeCacheInput(t *testing.T) {
 	var rows []QuotaData
 	require.NoError(t, DB.Order("user_id ASC").Find(&rows).Error)
 	require.Len(t, rows, 2)
-	require.Equal(t, 9050, rows[0].TokenUsed)
+	require.Equal(t, 1050, rows[0].TokenUsed)
+	require.EqualValues(t, 7500, rows[0].CacheReadTokens)
+	require.EqualValues(t, 500, rows[0].CacheCreationTokens)
+	require.Equal(t, 9050, rows[0].TokenUsed+int(rows[0].CacheReadTokens)+int(rows[0].CacheCreationTokens))
 	require.Equal(t, 730, rows[1].TokenUsed)
+	require.Zero(t, rows[1].CacheReadTokens)
 
 	var logs []Log
 	require.NoError(t, DB.Order("user_id ASC").Find(&logs).Error)

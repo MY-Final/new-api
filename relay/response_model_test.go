@@ -29,11 +29,12 @@ type nonStreamResponseBilling struct {
 	refunds     int
 }
 
-func (b *nonStreamResponseBilling) Settle(int) error       { b.settlements++; return nil }
-func (b *nonStreamResponseBilling) Refund(*gin.Context)    { b.refunds++ }
-func (b *nonStreamResponseBilling) NeedsRefund() bool      { return b.settlements == 0 && b.refunds == 0 }
-func (*nonStreamResponseBilling) GetPreConsumedQuota() int { return 1 }
-func (*nonStreamResponseBilling) Reserve(int) error        { return nil }
+func (b *nonStreamResponseBilling) Settle(int) error            { b.settlements++; return nil }
+func (b *nonStreamResponseBilling) Refund(*gin.Context)         { b.refunds++ }
+func (b *nonStreamResponseBilling) NeedsRefund() bool           { return b.settlements == 0 && b.refunds == 0 }
+func (*nonStreamResponseBilling) GetPreConsumedQuota() int      { return 1 }
+func (*nonStreamResponseBilling) Reserve(int) error             { return nil }
+func (*nonStreamResponseBilling) ReserveBeforeSubmit(int) error { return nil }
 
 func TestTextHelperRejectsEmptyNonStreamSSEAndRefunds(t *testing.T) {
 	service.InitHttpClient()

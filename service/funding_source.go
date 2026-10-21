@@ -55,6 +55,8 @@ func (w *WalletFunding) PreConsume(amount int) error {
 	w.reserved.Bonus += allocation.Bonus
 	w.reserved.Paid += allocation.Paid
 	w.lastReservation = allocation
+	// 发送前补扣会再次预扣，累加后退款才能退回全部预扣。
+	w.consumed += amount
 	return nil
 }
 

@@ -39,6 +39,10 @@ function Fixture() {
       <SettingsPageProvider actionsContainer={container}>
         <EmailSettingsSection
           defaultValues={{
+            EmailProvider: 'smtp',
+            ResendApiKey: '',
+            ResendKeyConfigured: false,
+            ResendFrom: '',
             SMTPServer: 'smtp.example.com',
             SMTPPort: '587',
             SMTPAccount: 'noreply@example.com',
