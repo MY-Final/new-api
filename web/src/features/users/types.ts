@@ -152,6 +152,18 @@ export interface UserUsage {
   models: UserUsageModel[]
 }
 
+/** Delivery result of an administrator-triggered usage email. */
+export interface SendUsageReportResult {
+  recipients: string[]
+  sent: number
+  failed: number
+  window_start: number
+  window_end: number
+  request_count: number
+  quota: number
+  total_tokens: number
+}
+
 export interface UserUsageRequest {
   created_at: number
   request_id: string

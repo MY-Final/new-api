@@ -88,6 +88,7 @@ const (
 	MsgEmailUsageReportGroup        = "email.usage_report.group"
 	MsgEmailUsageReportNoGroups     = "email.usage_report.no_groups"
 	MsgEmailUsageReportFooter       = "email.usage_report.footer"
+	MsgEmailUsageReportManualFooter = "email.usage_report.manual_footer"
 
 	MsgSecurityEventPasswordUpdated      = "email.security_event.password_updated"
 	MsgSecurityEventEmailChangeRequested = "email.security_event.email_change_requested"

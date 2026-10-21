@@ -186,6 +186,7 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.POST("/topup/refund", controller.RefundTopUp)
 				adminRoute.GET("/search", controller.SearchUsers)
 				adminRoute.GET("/:id/usage", controller.GetUserUsage)
+				adminRoute.POST("/:id/usage_report/send", middleware.CriticalRateLimit(), controller.SendUserUsageReport)
 				adminRoute.GET("/:id/oauth/bindings", controller.GetUserOAuthBindingsByAdmin)
 				adminRoute.DELETE("/:id/oauth/bindings/:provider_id", controller.UnbindCustomOAuthByAdmin)
 				adminRoute.DELETE("/:id/bindings/:binding_type", controller.AdminClearUserBinding)

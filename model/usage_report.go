@@ -48,6 +48,13 @@ const (
 	UsageReportRunMaxTries = 3
 )
 
+// Errors of an administrator-triggered report. Their texts are also keys of the
+// web console locale files.
+var (
+	ErrUsageReportNoUsage     = common.NewMessage("This user has no usage in the selected period")
+	ErrUsageReportNoRecipient = common.NewMessage("This user has no verified email address")
+)
+
 // UsageReportGroup is one group's share of a snapshot. Totals are computed
 // from the same rows, so the group rows always add up to the summary.
 type UsageReportGroup struct {
@@ -126,6 +133,22 @@ func UsageReportWindow(date string) (start int64, end int64, err error) {
 		return 0, 0, err
 	}
 	return day.Unix(), day.Add(UsageReportWindowEndHour * time.Hour).Unix(), nil
+}
+
+// UsageReportTimeLabel formats a Unix second in Beijing time for report copy.
+func UsageReportTimeLabel(timestamp int64) string {
+	return time.Unix(timestamp, 0).In(usageReportLocation).Format("2006-01-02 15:04")
+}
+
+// UsageReportRangeLabel renders [start, end) in Beijing time. The repeated date
+// is omitted when both ends stay on the same day.
+func UsageReportRangeLabel(start int64, end int64) string {
+	startTime := time.Unix(start, 0).In(usageReportLocation)
+	endTime := time.Unix(end, 0).In(usageReportLocation)
+	if startTime.Format("2006-01-02") == endTime.Format("2006-01-02") {
+		return startTime.Format("2006-01-02 15:04") + "–" + endTime.Format("15:04")
+	}
+	return startTime.Format("2006-01-02 15:04") + " – " + endTime.Format("2006-01-02 15:04")
 }
 
 func usageReportNextRetryAt(attempts int, now int64) int64 {

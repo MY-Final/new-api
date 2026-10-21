@@ -17,8 +17,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { Row } from '@tanstack/react-table'
-import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, test, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, describe, expect, test, vi } from 'vitest'
+
+import { api } from '@/lib/api'
 
 import type { User } from '../../types'
 import { DataTableRowActions } from '../data-table-row-actions'
@@ -67,4 +69,51 @@ describe('DataTableRowActions usage details', () => {
 
     expect(screen.getByTestId('user-usage-dialog')).toHaveTextContent('User 7')
   })
+
+  test('sends the usage email for the selected period after confirmation', async () => {
+    const post = vi.spyOn(api, 'post').mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          recipients: ['usage@example.com'],
+          sent: 1,
+          failed: 0,
+          window_start: 0,
+          window_end: 0,
+          request_count: 3,
+          quota: 100,
+          total_tokens: 200,
+        },
+      },
+    })
+    render(
+      <UsersProvider>
+        <DataTableRowActions row={{ original: user } as Row<User>} />
+      </UsersProvider>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Send Usage Email' }))
+    expect(
+      screen.getByText(/Choose the period for the usage email/)
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith('/api/user/7/usage_report/send', {
+        start: expect.any(Number),
+        end: expect.any(Number),
+      })
+    )
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/Choose the period for the usage email/)
+      ).toBeNull()
+    )
+  })
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
 })

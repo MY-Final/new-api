@@ -4,6 +4,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -106,4 +107,40 @@ func UpdateUsageReportSettings(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, settings)
+}
+
+type sendUsageReportRequest struct {
+	Start int64 `json:"start"`
+	End   int64 `json:"end"`
+}
+
+// SendUserUsageReport sends one usage email for the managed user over the
+// requested period. It is the on-demand counterpart of the scheduled 22:00
+// report, so an administrator can help a user who asks for their usage over an
+// arbitrary period and verify mail delivery at the same time.
+func SendUserUsageReport(c *gin.Context) {
+	userID, ok := getManagedUserID(c)
+	if !ok {
+		return
+	}
+	var request sendUsageReportRequest
+	if err := common.DecodeJson(c.Request.Body, &request); err != nil {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	if request.Start <= 0 || request.End <= request.Start {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	user, err := model.GetUserById(userID, false)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	result, err := service.SendUsageReport(user, request.Start, request.End, model.UsageReportNow())
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, result)
 }

@@ -33,6 +33,7 @@ import type {
   ManageUserQuotaPayload,
   ApiResponse,
   UserUsage,
+  SendUsageReportResult,
 } from './types'
 
 // A step-up proof is single-use, so the request carrying it must never be
@@ -117,6 +118,21 @@ export async function getUserUsage(
       start_timestamp: startTimestamp,
       end_timestamp: endTimestamp,
     },
+  })
+  return res.data
+}
+
+/**
+ * Send one usage email for the user over the requested period.
+ */
+export async function sendUserUsageReport(
+  id: number,
+  start: number,
+  end: number
+): Promise<ApiResponse<SendUsageReportResult>> {
+  const res = await api.post(`/api/user/${id}/usage_report/send`, {
+    start,
+    end,
   })
   return res.data
 }

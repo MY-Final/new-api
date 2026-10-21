@@ -220,7 +220,7 @@ func deliverUsageReport(reportId int, now time.Time) {
 		failUsageReport(report, recipients, reason, now)
 		return
 	}
-	subject, body, err := renderUsageReportEmail(report, user.Username, user.GetSetting().Language)
+	subject, body, err := renderUsageReportEmail(report, user.Username, user.GetSetting().Language, usageReportEmailWindow{})
 	if err != nil {
 		failUsageReport(report, recipients, truncateUsageReportError(err.Error()), now)
 		return

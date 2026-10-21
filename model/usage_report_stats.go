@@ -77,17 +77,45 @@ func logGroupColumn() string {
 	return "`group`"
 }
 
+// GroupsJSON encodes the group rows for a snapshot row or an on-demand email.
+func (usage *UsageReportUserUsage) GroupsJSON() string {
+	if usage == nil {
+		return "[]"
+	}
+	return usageReportGroupsJSON(usage.Groups)
+}
+
 // AggregateUsageReports scans one time window of usage logs and returns usage
 // per user and group. The token rules come from usageLogMetrics, the same
 // function the console usage statistics use, so the report and the platform
 // cannot disagree about cache or reasoning tokens.
 func AggregateUsageReports(start int64, end int64) (map[int]*UsageReportUserUsage, error) {
+	return aggregateUsageReports(start, end, 0)
+}
+
+// AggregateUsageReportForUser is the single-user form used by an
+// administrator-triggered email, so it never scans other users' rows.
+func AggregateUsageReportForUser(userId int, start int64, end int64) (*UsageReportUserUsage, error) {
+	if userId <= 0 {
+		return nil, nil
+	}
+	usage, err := aggregateUsageReports(start, end, userId)
+	if err != nil {
+		return nil, err
+	}
+	return usage[userId], nil
+}
+
+func aggregateUsageReports(start int64, end int64, userId int) (map[int]*UsageReportUserUsage, error) {
 	usage := make(map[int]*UsageReportUserUsage)
 	query := LOG_DB.Table("logs").
 		Select("user_id, type, "+logGroupColumn()+" AS log_group, quota, prompt_tokens, completion_tokens, other").
 		Where("type IN ?", []int{LogTypeConsume, LogTypeRefund}).
 		Where("user_id > ?", 0).
 		Where("created_at >= ? AND created_at < ?", start, end)
+	if userId > 0 {
+		query = query.Where("user_id = ?", userId)
+	}
 	rows, err := query.Rows()
 	if err != nil {
 		return nil, err

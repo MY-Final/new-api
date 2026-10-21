@@ -30,6 +30,8 @@ import {
   ShieldAlert,
   Link2,
   CreditCard,
+  Mail,
+  Loader2,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -37,6 +39,7 @@ import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { DataTableRowActionMenu } from '@/components/data-table/core/row-action-menu'
+import { Dialog } from '@/components/dialog'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenuItem,
@@ -50,10 +53,17 @@ import {
 } from '@/components/ui/tooltip'
 import type { AdminUserManageAction } from '@/features/auth/secure-verification'
 import { UserSubscriptionsDialog } from '@/features/subscriptions/components/dialogs/user-subscriptions-dialog'
+import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
 import { handleServerError } from '@/lib/handle-server-error'
 import { AuthOperationError } from '@/lib/secure-verification'
+import { dateToUnixTimestamp, getRollingDateRange } from '@/lib/time'
 
-import { manageUser, resetUserPasskey, resetUserTwoFA } from '../api'
+import {
+  manageUser,
+  resetUserPasskey,
+  resetUserTwoFA,
+  sendUserUsageReport,
+} from '../api'
 import {
   USER_STATUS,
   USER_ROLE,
@@ -92,6 +102,9 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const [bindingDialogOpen, setBindingDialogOpen] = useState(false)
   const [subscriptionsDialogOpen, setSubscriptionsDialogOpen] = useState(false)
   const [usageDialogOpen, setUsageDialogOpen] = useState(false)
+  const [sendReportOpen, setSendReportOpen] = useState(false)
+  const [sendingReport, setSendingReport] = useState(false)
+  const [reportRange, setReportRange] = useState(() => getRollingDateRange(0))
 
   const handleEdit = () => {
     setCurrentRow(user)
@@ -192,6 +205,47 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const isAdmin = user.role >= USER_ROLE.ADMIN
   const isRoot = user.role === USER_ROLE.ROOT
 
+  const handleSendUsageReport = async () => {
+    const start = dateToUnixTimestamp(reportRange.start)
+    const end = dateToUnixTimestamp(reportRange.end)
+    if (end <= start) {
+      toast.error(t('Invalid parameters'))
+      return
+    }
+    setSendingReport(true)
+    try {
+      const result = await sendUserUsageReport(user.id, start, end)
+      if (!result.success || !result.data) {
+        handleServerError(result, t('Failed to send usage email'))
+        return
+      }
+      if (result.data.failed > 0) {
+        toast.warning(
+          t('Usage email sent to {{sent}} recipient(s), {{failed}} failed', {
+            sent: result.data.sent,
+            failed: result.data.failed,
+          })
+        )
+        return
+      }
+      toast.success(
+        t('Usage email sent to {{count}} recipient(s)', {
+          count: result.data.sent,
+        })
+      )
+    } catch (error) {
+      handleServerError(error, t('Failed to send usage email'))
+    } finally {
+      setSendingReport(false)
+      setSendReportOpen(false)
+    }
+  }
+
+  const openSendReport = () => {
+    setReportRange(getRollingDateRange(0))
+    setSendReportOpen(true)
+  }
+
   if (isUserDeleted(user)) {
     return null
   }
@@ -291,6 +345,18 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           </DropdownMenuShortcut>
         </DropdownMenuItem>
 
+        <DropdownMenuItem
+          onSelect={(event) => {
+            event.preventDefault()
+            openSendReport()
+          }}
+        >
+          {t('Send Usage Email')}
+          <DropdownMenuShortcut>
+            <Mail size={16} />
+          </DropdownMenuShortcut>
+        </DropdownMenuItem>
+
         <DropdownMenuSeparator />
 
         <DropdownMenuItem
@@ -377,6 +443,49 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         userId={user.id}
         username={user.username}
       />
+
+      <Dialog
+        open={sendReportOpen}
+        onOpenChange={(open) => {
+          if (!sendingReport) setSendReportOpen(open)
+        }}
+        title={t('Send Usage Email')}
+        description={t(
+          "Choose the period for the usage email to {{username}}'s verified addresses.",
+          { username: user.username }
+        )}
+        footer={
+          <>
+            <Button
+              variant='outline'
+              disabled={sendingReport}
+              onClick={() => setSendReportOpen(false)}
+            >
+              {t('Cancel')}
+            </Button>
+            <Button disabled={sendingReport} onClick={handleSendUsageReport}>
+              {sendingReport && (
+                <Loader2
+                  className='mr-2 size-4 animate-spin'
+                  aria-hidden='true'
+                />
+              )}
+              {t('Send')}
+            </Button>
+          </>
+        }
+      >
+        <CompactDateTimeRangePicker
+          start={reportRange.start}
+          end={reportRange.end}
+          onChange={(next) => {
+            if (next.start && next.end) {
+              setReportRange({ start: next.start, end: next.end })
+            }
+          }}
+          maxRangeDays={31}
+        />
+      </Dialog>
     </div>
   )
 }

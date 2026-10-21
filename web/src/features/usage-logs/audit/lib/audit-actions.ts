@@ -51,6 +51,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'user.create': 'Create User',
   'user.update': 'Edit User',
   'user.delete': 'Delete User',
+  'user.usage_report_send': 'Send Usage Email',
   'option.update': 'System Settings',
   'channel.create': 'Add Channel',
   'channel.update': 'Edit Channel',

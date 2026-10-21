@@ -245,3 +245,118 @@ func TestUsageReportRunDatesAndClaim(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, claimed)
 }
+
+// An administrator-triggered email covers the requested range, reports
+// per-address delivery, and leaves no scheduled snapshot behind.
+func TestSendUsageReportUsesRequestedRangeAndReportsDelivery(t *testing.T) {
+	user, sent := setupUsageReportServiceTest(t)
+	now := time.Date(2026, 10, 22, 15, 30, 0, 0, model.UsageReportNow().Location())
+	start, _, err := model.UsageReportWindow("2026-10-22")
+	require.NoError(t, err)
+	require.NoError(t, model.DB.Create(&model.Log{
+		UserId: user.Id, CreatedAt: start, Type: model.LogTypeConsume, Group: "default",
+		Quota: 100, PromptTokens: 10, CompletionTokens: 5, Other: `{"billing_source":"wallet"}`,
+	}).Error)
+	// Before the window and exactly at the cutoff must both be excluded.
+	require.NoError(t, model.DB.Create(&model.Log{
+		UserId: user.Id, CreatedAt: start - 1, Type: model.LogTypeConsume, Group: "default",
+		Quota: 999, PromptTokens: 1, CompletionTokens: 1,
+	}).Error)
+	require.NoError(t, model.DB.Create(&model.Log{
+		UserId: user.Id, CreatedAt: now.Unix(), Type: model.LogTypeConsume, Group: "default",
+		Quota: 999, PromptTokens: 1, CompletionTokens: 1,
+	}).Error)
+
+	failFirst := true
+	usageReportSendEmail = func(subject string, receiver string, content string) error {
+		*sent = append(*sent, sentUsageReportEmail{to: receiver, subject: subject, body: content})
+		if failFirst {
+			failFirst = false
+			return errors.New("mailbox rejected")
+		}
+		return nil
+	}
+
+	result, err := SendUsageReport(user, start, now.Unix(), now)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, start, result.WindowStart)
+	assert.Equal(t, now.Unix(), result.WindowEnd)
+	assert.EqualValues(t, 1, result.RequestCount)
+	assert.EqualValues(t, 100, result.Quota)
+	assert.EqualValues(t, 15, result.TotalTokens)
+	assert.Equal(t, 1, result.Sent)
+	assert.Equal(t, 1, result.Failed)
+	require.Len(t, *sent, 2)
+	assert.Contains(t, (*sent)[0].body, "2026-10-22 00:00–15:30")
+	assert.Contains(t, (*sent)[0].body, "Statistics cover")
+	assert.Contains(t, (*sent)[0].body, "2026-10-22 15:30")
+
+	var count int64
+	require.NoError(t, model.DB.Model(&model.UsageReport{}).Where("user_id = ?", user.Id).Count(&count).Error)
+	assert.Zero(t, count, "a manual send must not create a scheduled snapshot")
+}
+
+// The admin action needs both usage in the requested window and a verified
+// address.
+func TestSendUsageReportRejectsEmptyUsageAndNoRecipient(t *testing.T) {
+	user, _ := setupUsageReportServiceTest(t)
+	now := time.Date(2026, 10, 22, 15, 0, 0, 0, model.UsageReportNow().Location())
+	start, _, err := model.UsageReportWindow("2026-10-22")
+	require.NoError(t, err)
+
+	_, err = SendUsageReport(user, start, now.Unix(), now)
+	assert.ErrorIs(t, err, model.ErrUsageReportNoUsage)
+
+	require.NoError(t, model.DB.Create(&model.Log{
+		UserId: user.Id, CreatedAt: start + 60, Type: model.LogTypeConsume, Group: "default",
+		Quota: 10, PromptTokens: 1, CompletionTokens: 1,
+	}).Error)
+
+	unverified := &model.User{Username: "usage-report-manual-" + common.GetRandomString(8), Password: "hash", Email: "unverified-" + common.GetRandomString(6) + "@example.com", AffCode: common.GetRandomString(8), Status: common.UserStatusEnabled}
+	require.NoError(t, model.DB.Create(unverified).Error)
+	t.Cleanup(func() {
+		model.DB.Exec("DELETE FROM logs WHERE user_id = ?", unverified.Id)
+		model.DB.Exec("DELETE FROM users WHERE id = ?", unverified.Id)
+	})
+	require.NoError(t, model.DB.Create(&model.Log{
+		UserId: unverified.Id, CreatedAt: start + 60, Type: model.LogTypeConsume, Group: "default",
+		Quota: 10, PromptTokens: 1, CompletionTokens: 1,
+	}).Error)
+	_, err = SendUsageReport(unverified, start, now.Unix(), now)
+	assert.ErrorIs(t, err, model.ErrUsageReportNoRecipient)
+}
+
+// Any range within the cap is supported, with a label that keeps both dates,
+// and a longer range is rejected before any log scan.
+func TestSendUsageReportSupportsMultiDayRangeAndBounds(t *testing.T) {
+	user, sent := setupUsageReportServiceTest(t)
+	start, _, err := model.UsageReportWindow("2026-10-20")
+	require.NoError(t, err)
+	end, _, err := model.UsageReportWindow("2026-10-22")
+	require.NoError(t, err)
+	end += 15 * 60 * 60
+	now := time.Unix(end, 0).Add(time.Hour)
+
+	require.NoError(t, model.DB.Create(&model.Log{
+		UserId: user.Id, CreatedAt: start + 12*60*60, Type: model.LogTypeConsume, Group: "default",
+		Quota: 40, PromptTokens: 2, CompletionTokens: 3, Other: `{"billing_source":"subscription"}`,
+	}).Error)
+	require.NoError(t, model.DB.Create(&model.Log{
+		UserId: user.Id, CreatedAt: end - 60, Type: model.LogTypeConsume, Group: "vip",
+		Quota: 60, PromptTokens: 4, CompletionTokens: 1, Other: `{"billing_source":"wallet"}`,
+	}).Error)
+
+	result, err := SendUsageReport(user, start, end, now)
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, result.RequestCount)
+	assert.EqualValues(t, 100, result.Quota)
+	require.Len(t, *sent, 2)
+	assert.Contains(t, (*sent)[0].body, "2026-10-20 00:00 – 2026-10-22 15:00")
+	assert.Contains(t, (*sent)[0].body, "2026-10-20 00:00")
+	assert.Contains(t, (*sent)[0].body, "2026-10-22 15:00")
+
+	_, err = SendUsageReport(user, start, start+32*24*60*60, now.Add(40*24*time.Hour))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "31")
+}

@@ -63,6 +63,7 @@ var auditRouteActions = map[string]string{
 	"GET /api/redemption/:id":                         "redemption.read",
 	// 用户管理
 	"POST /api/user/topup/complete":                    "user.topup_complete",
+	"POST /api/user/:id/usage_report/send":             "user.usage_report_send",
 	"DELETE /api/user/:id/reset_passkey":               "user.reset_passkey",
 	"DELETE /api/user/:id/oauth/bindings/:provider_id": "user.oauth_unbind",
 

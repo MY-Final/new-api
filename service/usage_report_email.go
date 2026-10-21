@@ -42,10 +42,35 @@ func usageReportEmailDataFrom(report *model.UsageReport) usageReportEmailData {
 	}
 }
 
+// usageReportEmailWindow describes the reporting period in the message. The
+// zero value is the scheduled 22:00 report; a one-off administrator send passes
+// its own range label and start/end labels.
+type usageReportEmailWindow struct {
+	DateRange string
+	Manual    bool
+	Start     string
+	End       string
+}
+
 // renderUsageReportEmail builds the message from the stored snapshot. Nothing
 // here reads live usage data, so a retry always renders identical content.
-func renderUsageReportEmail(report *model.UsageReport, username string, lang string) (string, string, error) {
+func renderUsageReportEmail(report *model.UsageReport, username string, lang string, window usageReportEmailWindow) (string, string, error) {
 	data := usageReportEmailDataFrom(report)
+	if window.DateRange != "" {
+		data.DateRange = window.DateRange
+	}
+	if window.Manual {
+		// A one-off range is not a single day, so the greeting names the whole
+		// period instead of a date.
+		data.Date = data.DateRange
+	}
+	footerKey := i18n.MsgEmailUsageReportFooter
+	var footerArgs map[string]any
+	if window.Manual {
+		footerKey = i18n.MsgEmailUsageReportManualFooter
+		footerArgs = map[string]any{"Start": window.Start, "End": window.End}
+	}
+	footer := usageReportLabel(lang, footerKey, footerArgs)
 	groupTable := usageReportGroupTable(data, lang)
 	quotaNote := fmt.Sprintf("%s · %s · %s",
 		usageReportLabel(lang, i18n.MsgEmailUsageReportWallet, map[string]any{"Amount": formatUsageReportQuota(data.WalletQuota)}),
@@ -61,7 +86,7 @@ func renderUsageReportEmail(report *model.UsageReport, username string, lang str
 			"TotalTokens":  formatUsageReportCount(data.TotalTokens),
 			"QuotaNote":    quotaNote,
 			"GroupTitle":   usageReportLabel(lang, i18n.MsgEmailUsageReportGroupTitle),
-			"Footer":       usageReportLabel(lang, i18n.MsgEmailUsageReportFooter),
+			"Footer":       footer,
 		}
 		return RenderEmailTemplateHTML(usageReportEmailTemplateKey, vars, map[string]string{"GroupTable": groupTable})
 	}
@@ -81,7 +106,7 @@ func renderUsageReportEmail(report *model.UsageReport, username string, lang str
 	content.WriteString(`</p>`)
 	content.WriteString(groupTable)
 	content.WriteString(`<p style="margin:18px 0 0;color:#9ca3af;font-size:12px;">`)
-	content.WriteString(html.EscapeString(usageReportLabel(lang, i18n.MsgEmailUsageReportFooter)))
+	content.WriteString(html.EscapeString(footer))
 	content.WriteString(`</p>`)
 	return subject, RenderEmailLayout(content.String()), nil
 }
