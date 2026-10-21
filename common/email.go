@@ -1,9 +1,11 @@
 package common
 
 import (
+	"bytes"
 	"crypto/tls"
 	"encoding/base64"
 	"fmt"
+	"mime/quotedprintable"
 	"net/smtp"
 	"slices"
 	"strings"
@@ -96,13 +98,25 @@ func SendEmail(subject string, receiver string, content string) error {
 		return fmt.Errorf("email receiver is empty")
 	}
 	encodedSubject := fmt.Sprintf("=?UTF-8?B?%s?=", base64.StdEncoding.EncodeToString([]byte(subject)))
+	// SMTP DATA lines must stay below the RFC 5321 998-octet limit. Rendered
+	// HTML is usually one long line, so encode the body with quoted-printable,
+	// which also keeps non-ASCII text intact.
+	var encodedBody bytes.Buffer
+	writer := quotedprintable.NewWriter(&encodedBody)
+	if _, err := writer.Write([]byte(content)); err != nil {
+		return err
+	}
+	if err := writer.Close(); err != nil {
+		return err
+	}
 	mail := []byte(fmt.Sprintf("To: %s\r\n"+
 		"From: %s <%s>\r\n"+
 		"Subject: %s\r\n"+
 		"Date: %s\r\n"+
 		"Message-ID: %s\r\n"+ // 添加 Message-ID 头
-		"Content-Type: text/html; charset=UTF-8\r\n\r\n%s\r\n",
-		strings.Join(recipients, ", "), SystemName, SMTPFrom, encodedSubject, time.Now().Format(time.RFC1123Z), id, content))
+		"Content-Type: text/html; charset=UTF-8\r\n"+
+		"Content-Transfer-Encoding: quoted-printable\r\n\r\n%s\r\n",
+		strings.Join(recipients, ", "), SystemName, SMTPFrom, encodedSubject, time.Now().Format(time.RFC1123Z), id, encodedBody.String()))
 	auth := getSMTPAuth()
 	addr := fmt.Sprintf("%s:%d", SMTPServer, SMTPPort)
 	var err error

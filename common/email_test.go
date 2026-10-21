@@ -587,3 +587,36 @@ func TestSendEmailExplicitStartTLSRejectsUntrustedCertificateByDefault(t *testin
 	require.Error(t, err)
 	require.Contains(t, fmt.Sprint(err), "certificate")
 }
+
+// Rendered HTML is a single very long line, which SMTP servers reject above
+// 998 octets per DATA line. Sending must fold it without corrupting the HTML.
+func TestSendEmailFoldsLongHTMLLinesForSMTP(t *testing.T) {
+	server := newFakeSMTPServer(t)
+	defer server.close()
+	withSMTPSettings(t)
+
+	SMTPServer = server.host
+	SMTPPort = server.port
+	SMTPSSLEnabled = false
+	SMTPStartTLSEnabled = true
+	SMTPInsecureSkipVerify = true
+	SMTPForceAuthLogin = false
+	SMTPAccount = "sender@example.com"
+	SMTPFrom = "sender@example.com"
+	SMTPToken = "secret"
+	SystemName = "New API"
+
+	longText := strings.Repeat("长", 600)
+	require.NoError(t, SendEmail("Usage report", "receiver@example.com", "<p>"+longText+"</p>"))
+
+	select {
+	case message := <-server.messages:
+		require.Contains(t, message, "Content-Transfer-Encoding: quoted-printable")
+		for _, line := range strings.Split(message, "\r\n") {
+			require.LessOrEqual(t, len([]byte(line)), 998, "SMTP DATA lines must stay within the RFC 5321 limit")
+		}
+		require.NotContains(t, message, longText, "long non-ASCII text must be encoded across lines")
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for SMTP DATA")
+	}
+}

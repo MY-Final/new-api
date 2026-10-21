@@ -11,6 +11,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"io"
+	"mime/quotedprintable"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -308,7 +309,7 @@ func (mailbox *securityMailbox) receive(connection net.Conn) {
 				return
 			}
 			mailbox.mutex.Lock()
-			mailbox.mail[receiver] = append(mailbox.mail[receiver], string(message))
+			mailbox.mail[receiver] = append(mailbox.mail[receiver], decodeSecurityMail(string(message)))
 			mailbox.mutex.Unlock()
 		case line == "QUIT":
 			_ = client.PrintfLine("221 Goodbye")
@@ -318,6 +319,31 @@ func (mailbox *securityMailbox) receive(connection net.Conn) {
 			return
 		}
 	}
+}
+
+// decodeSecurityMail turns a raw SMTP message into what a mail client shows.
+// The transport encodes the body as quoted-printable so DATA lines stay inside
+// the RFC 5321 limit, and the assertions here read the decoded text.
+func decodeSecurityMail(message string) string {
+	separator := "\r\n\r\n"
+	headerEnd := strings.Index(message, separator)
+	if headerEnd < 0 {
+		separator = "\n\n"
+		headerEnd = strings.Index(message, separator)
+	}
+	if headerEnd < 0 {
+		return message
+	}
+	headers := message[:headerEnd]
+	body := message[headerEnd+len(separator):]
+	if !strings.Contains(strings.ToLower(headers), "content-transfer-encoding: quoted-printable") {
+		return message
+	}
+	decoded, err := io.ReadAll(quotedprintable.NewReader(strings.NewReader(body)))
+	if err != nil {
+		return message
+	}
+	return headers + separator + string(decoded)
 }
 
 func (mailbox *securityMailbox) code(t *testing.T, receiver string) string {
