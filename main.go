@@ -356,6 +356,11 @@ func InitResources() error {
 		}
 	}
 
+	// Mail delivery statistics and per-purpose routing need the database and
+	// option map loaded above.
+	common.EmailDeliveryRecorder = model.RecordEmailDelivery
+	common.EmailProviderResolver = service.ResolveEmailProvider
+
 	// 清理旧的磁盘缓存文件
 	common.CleanupOldCacheFiles()
 

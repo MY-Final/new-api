@@ -73,6 +73,9 @@ func InitOptionMap() {
 	common.OptionMap["EmailProvider"] = "smtp"
 	common.OptionMap["ResendApiKey"] = ""
 	common.OptionMap["ResendFrom"] = ""
+	common.OptionMap["ResendMonthlyQuota"] = strconv.Itoa(common.ResendMonthlyQuota)
+	common.OptionMap["ResendDailyQuota"] = strconv.Itoa(common.ResendDailyQuota)
+	common.OptionMap[system_setting.EmailPurposeProvidersOption] = "{}"
 	common.OptionMap["SMTPFrom"] = ""
 	common.OptionMap["SMTPPort"] = strconv.Itoa(common.SMTPPort)
 	common.OptionMap["SMTPAccount"] = ""
@@ -284,6 +287,21 @@ func validateOptionValue(key string, value string) error {
 	}
 	if key == "ResendKeyConfigured" {
 		return common.NewMessage("Resend key configuration status is read-only")
+	}
+	if key == "ResendMonthlyQuota" {
+		quota, err := strconv.Atoi(strings.TrimSpace(value))
+		if err != nil || quota < 0 || quota > 1_000_000 {
+			return common.NewMessage("Monthly email quota must be a number between 0 and 1000000")
+		}
+	}
+	if key == "ResendDailyQuota" {
+		quota, err := strconv.Atoi(strings.TrimSpace(value))
+		if err != nil || quota < 0 || quota > 1_000_000 {
+			return common.NewMessage("Daily email quota must be a number between 0 and 1000000")
+		}
+	}
+	if key == system_setting.EmailPurposeProvidersOption {
+		return system_setting.ValidateEmailPurposeProviders(value)
 	}
 	if key == operation_setting.ToolPriceOptionKey {
 		return operation_setting.ValidateToolPricesJSON(value)
@@ -588,6 +606,10 @@ func updateOptionMap(key string, value string) (err error) {
 		common.SMTPFrom = value
 	case "SMTPToken":
 		common.SMTPToken = value
+	case "ResendMonthlyQuota":
+		common.ResendMonthlyQuota, _ = strconv.Atoi(value)
+	case "ResendDailyQuota":
+		common.ResendDailyQuota, _ = strconv.Atoi(value)
 	case "ServerAddress":
 		system_setting.ServerAddress = value
 	case "TaskPublicAddress":

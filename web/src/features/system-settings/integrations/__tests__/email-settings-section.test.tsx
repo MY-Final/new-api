@@ -25,7 +25,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '@/lib/api'
 
 import { SettingsPageProvider } from '../../components/settings-page-context'
-import { createEmailSchema } from '../email-settings-schema'
+import {
+  createEmailSchema,
+  parseEmailPurposeRouting,
+} from '../email-settings-schema'
 import { EmailSettingsSection } from '../email-settings-section'
 
 type EmailValues = ComponentProps<typeof EmailSettingsSection>['defaultValues']
@@ -36,6 +39,9 @@ const defaults: EmailValues = {
   ResendApiKey: '',
   ResendKeyConfigured: true,
   ResendFrom: 'notify@example.com',
+  ResendMonthlyQuota: '3000',
+  ResendDailyQuota: '100',
+  EmailPurposeProviders: '{}',
   SMTPServer: 'smtp.example.com',
   SMTPPort: '587',
   SMTPAccount: 'sender@example.com',
@@ -176,6 +182,76 @@ describe('email delivery settings', () => {
       key: 'ResendFrom',
       value: 'changed@example.com',
     })
+  })
+
+  it('saves a changed monthly quota and clears it to zero', async () => {
+    const request = vi
+      .spyOn(api, 'put')
+      .mockResolvedValue({ data: { success: true } })
+    const user = renderEmail({ EmailProvider: 'resend' })
+    const quota = screen.getByRole('spinbutton', {
+      name: 'Monthly sending quota',
+    })
+    expect(quota).toHaveValue(3000)
+    await user.clear(quota)
+    await user.type(quota, '5000')
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith('/api/option/', {
+        key: 'ResendMonthlyQuota',
+        value: '5000',
+      })
+    )
+
+    await user.clear(quota)
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+    await waitFor(() =>
+      expect(request).toHaveBeenLastCalledWith('/api/option/', {
+        key: 'ResendMonthlyQuota',
+        value: '0',
+      })
+    )
+  })
+
+  it('saves a changed daily quota', async () => {
+    const request = vi
+      .spyOn(api, 'put')
+      .mockResolvedValue({ data: { success: true } })
+    const user = renderEmail({ EmailProvider: 'resend' })
+    const quota = screen.getByRole('spinbutton', {
+      name: 'Daily sending quota',
+    })
+    expect(quota).toHaveValue(100)
+    await user.clear(quota)
+    await user.type(quota, '250')
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith('/api/option/', {
+        key: 'ResendDailyQuota',
+        value: '250',
+      })
+    )
+  })
+
+  it('routes one purpose to Resend while SMTP stays the default', async () => {
+    const request = vi
+      .spyOn(api, 'put')
+      .mockResolvedValue({ data: { success: true } })
+    const user = renderEmail()
+    expect(screen.queryByLabelText('Resend API key')).not.toBeInTheDocument()
+
+    await user.click(screen.getByLabelText('Ticket notification'))
+    await user.click(await screen.findByRole('option', { name: 'Resend API' }))
+
+    // The Resend transport becomes configurable as soon as a purpose uses it.
+    expect(screen.getByLabelText('Resend API key')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith('/api/option/', {
+        key: 'EmailPurposeProviders',
+        value: '{"ticket":"resend"}',
+      })
+    )
   })
 
   it('retains both Resend sender drafts when switching providers', async () => {
@@ -323,6 +399,7 @@ describe('email delivery settings', () => {
       createEmailSchema((key) => key).safeParse({
         ...defaults,
         ResendSenderName: '',
+        EmailPurposeRouting: parseEmailPurposeRouting('{}'),
         EmailProvider: 'both',
       }).success
     ).toBe(false)
@@ -331,8 +408,9 @@ describe('email delivery settings', () => {
   it('rejects line breaks in a Resend sender name', () => {
     const parsed = createEmailSchema((key) => key).safeParse({
       ...defaults,
-      EmailProvider: 'resend',
       ResendSenderName: 'New API\r\nBcc: other@example.com',
+      EmailPurposeRouting: parseEmailPurposeRouting('{}'),
+      EmailProvider: 'resend',
     })
     expect(parsed.success).toBe(false)
     if (!parsed.success) {

@@ -115,6 +115,14 @@ var SMTPAccount = ""
 var SMTPFrom = ""
 var SMTPToken = ""
 
+// ResendMonthlyQuota and ResendDailyQuota are the plan limits the admin console
+// measures Resend usage against. Zero hides that comparison and disables the
+// pre-flight check; the free plan allows 3,000 emails a month and 100 a day.
+// Once a limit is reached, mail is sent through SMTP when it is configured,
+// because switching before anything is sent cannot duplicate a message.
+var ResendMonthlyQuota = 3000
+var ResendDailyQuota = 100
+
 var GitHubClientId = ""
 var GitHubClientSecret = ""
 var LinuxDOClientId = ""

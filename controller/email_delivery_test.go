@@ -11,6 +11,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -66,7 +67,7 @@ func TestResendDeliversThroughSelectedProvider(t *testing.T) {
 		assert.Equal(t, "<p>123456</p>", body.HTML)
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"id":"email-test-id"}`)), Header: make(http.Header)}, nil
 	})
-	require.NoError(t, common.SendEmail("验证码", "one@example.com; two@example.com", "<p>123456</p>"))
+	require.NoError(t, common.SendEmail(common.EmailPurposeVerify, "验证码", "one@example.com; two@example.com", "<p>123456</p>"))
 	assert.Equal(t, 1, calls, "no SMTP configuration is needed and no duplicate request is made")
 }
 
@@ -79,7 +80,7 @@ func TestResendFailuresDoNotRetryFallbackOrExposeSensitiveContent(t *testing.T) 
 				calls++
 				return &http.Response{StatusCode: status, Header: http.Header{"Location": []string{"https://untrusted.example/emails"}}, Body: io.NopCloser(strings.NewReader(`{"message":"test-key 123456 reset-token"}`))}, nil
 			})
-			err := common.SendEmail("verification", "one@example.com", "123456 reset-token")
+			err := common.SendEmail(common.EmailPurposeVerify, "verification", "one@example.com", "123456 reset-token")
 			require.EqualError(t, err, "Resend email delivery failed (HTTP "+strconv.Itoa(status)+")")
 			assert.Equal(t, 1, calls, "do not retry or follow redirects")
 		})
@@ -103,7 +104,7 @@ func TestResendRejectsIncompleteOrInvalidConfigurationBeforeSending(t *testing.T
 				t.Fatal("invalid settings must not make a request")
 				return nil, errors.New("unexpected request")
 			})
-			err := common.SendEmail("verification", test.receiver, "123456")
+			err := common.SendEmail(common.EmailPurposeVerify, "verification", test.receiver, "123456")
 			require.Error(t, err)
 			assert.NotContains(t, err.Error(), "123456")
 			assert.NotContains(t, err.Error(), "test-key")
@@ -118,12 +119,12 @@ func TestResendRejectsMalformedSuccessAndSanitizesTransportErrors(t *testing.T) 
 			http.DefaultTransport = emailHTTPTransport(func(*http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
 			})
-			require.EqualError(t, common.SendEmail("verification", "one@example.com", "123456"), "Invalid Resend delivery response")
+			require.EqualError(t, common.SendEmail(common.EmailPurposeVerify, "verification", "one@example.com", "123456"), "Invalid Resend delivery response")
 		})
 	}
 	configureEmailDelivery(t, map[string]string{"EmailProvider": "resend", "ResendApiKey": "test-key", "ResendFrom": "sender@example.com"})
 	http.DefaultTransport = emailHTTPTransport(func(*http.Request) (*http.Response, error) { return nil, errors.New("test-key 123456 reset-token") })
-	require.EqualError(t, common.SendEmail("verification", "one@example.com", "123456"), "Resend request failed")
+	require.EqualError(t, common.SendEmail(common.EmailPurposeVerify, "verification", "one@example.com", "123456"), "Resend request failed")
 }
 
 func TestSMTPAndLegacyConfigurationNeverUseResend(t *testing.T) {
@@ -134,7 +135,7 @@ func TestSMTPAndLegacyConfigurationNeverUseResend(t *testing.T) {
 				t.Fatal("SMTP and unknown providers must not invoke Resend")
 				return nil, errors.New("unexpected request")
 			})
-			require.Error(t, common.SendEmail("verification", "one@example.com", "123456"))
+			require.Error(t, common.SendEmail(common.EmailPurposeVerify, "verification", "one@example.com", "123456"))
 		})
 	}
 }
@@ -248,4 +249,108 @@ func TestEmailKeyStatusIsDerivedAndReadOnly(t *testing.T) {
 	UpdateOption(context)
 	assert.Contains(t, response.Body.String(), `"success":false`)
 	assert.Contains(t, response.Body.String(), "read-only")
+}
+
+func setupEmailStatisticsDB(t *testing.T) {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.EmailSendStat{}))
+	previousDB, previousRecorder := model.DB, common.EmailDeliveryRecorder
+	model.DB, common.EmailDeliveryRecorder = db, model.RecordEmailDelivery
+	t.Cleanup(func() {
+		model.DB, common.EmailDeliveryRecorder = previousDB, previousRecorder
+	})
+}
+
+func getEmailStatistics(t *testing.T, query string) EmailStatistics {
+	t.Helper()
+	response := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(response)
+	context.Request = httptest.NewRequest(http.MethodGet, "/api/option/email_statistics"+query, nil)
+	GetEmailStatistics(context)
+	require.Equal(t, http.StatusOK, response.Code)
+	var body struct {
+		Success bool            `json:"success"`
+		Data    EmailStatistics `json:"data"`
+	}
+	require.NoError(t, common.DecodeJson(response.Body, &body))
+	require.True(t, body.Success)
+	return body.Data
+}
+
+func TestEmailStatisticsAggregateByDayPurposeAndProvider(t *testing.T) {
+	configureEmailDelivery(t, map[string]string{"EmailProvider": "resend"})
+	setupEmailStatisticsDB(t)
+
+	model.RecordEmailDelivery(common.EmailPurposeVerify, "resend", true)
+	model.RecordEmailDelivery(common.EmailPurposeVerify, "resend", true)
+	model.RecordEmailDelivery(common.EmailPurposeVerify, "resend", false)
+	model.RecordEmailDelivery(common.EmailPurposeVerify, "smtp", true)
+	model.RecordEmailDelivery(common.EmailPurposeNotification, "resend", true)
+
+	stats := getEmailStatistics(t, "")
+	assert.Equal(t, "resend", stats.Provider)
+	assert.True(t, stats.ResendInUse)
+	assert.Equal(t, EmailStatTotals{Delivered: 4, Failed: 1}, stats.Month)
+	assert.Equal(t, EmailStatTotals{Delivered: 4, Failed: 1}, stats.Today)
+	assert.Equal(t, EmailStatTotals{Delivered: 3, Failed: 1}, stats.ResendMonth)
+	assert.Equal(t, EmailStatTotals{Delivered: 3, Failed: 1}, stats.ResendToday)
+	assert.Equal(t, []EmailStatRow{
+		{Purpose: "verify", Provider: "resend", Delivered: 2, Failed: 1},
+		{Purpose: "notification", Provider: "resend", Delivered: 1},
+		{Purpose: "verify", Provider: "smtp", Delivered: 1},
+	}, stats.Purposes)
+	assert.ElementsMatch(t, []EmailStatRow{
+		{Date: stats.EndDate, Purpose: "verify", Provider: "resend", Delivered: 2, Failed: 1},
+		{Date: stats.EndDate, Purpose: "verify", Provider: "smtp", Delivered: 1},
+		{Date: stats.EndDate, Purpose: "notification", Provider: "resend", Delivered: 1},
+	}, stats.Daily)
+
+	var buckets int64
+	require.NoError(t, model.DB.Model(&model.EmailSendStat{}).Count(&buckets).Error)
+	assert.EqualValues(t, 3, buckets, "a repeated bucket updates its counters instead of adding a row")
+}
+
+func TestEmailStatisticsFollowTheSelectedProvider(t *testing.T) {
+	configureEmailDelivery(t, map[string]string{"EmailProvider": "resend", "ResendApiKey": "test-key", "ResendFrom": "sender@example.com"})
+	setupEmailStatisticsDB(t)
+
+	http.DefaultTransport = emailHTTPTransport(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"id":"email-test-id"}`)), Header: make(http.Header)}, nil
+	})
+	require.NoError(t, common.SendEmail(common.EmailPurposeReset, "reset", "one@example.com", "<p>123456</p>"))
+	http.DefaultTransport = emailHTTPTransport(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 429, Body: io.NopCloser(strings.NewReader(`{"message":"quota"}`)), Header: make(http.Header)}, nil
+	})
+	require.Error(t, common.SendEmail(common.EmailPurposeReset, "reset", "one@example.com", "<p>123456</p>"))
+
+	assert.Equal(t, []EmailStatRow{
+		{Purpose: "reset", Provider: "resend", Delivered: 1, Failed: 1},
+	}, getEmailStatistics(t, "").Purposes)
+}
+
+func TestEmailStatisticsReportResendUseThroughPurposeRoutes(t *testing.T) {
+	configureEmailDelivery(t, map[string]string{
+		"EmailProvider": "smtp",
+		system_setting.EmailPurposeProvidersOption: `{"ticket":"resend"}`,
+	})
+	setupEmailStatisticsDB(t)
+
+	stats := getEmailStatistics(t, "")
+	assert.Equal(t, "smtp", stats.Provider)
+	assert.True(t, stats.ResendInUse, "a routed purpose makes the Resend quota relevant")
+}
+
+func TestEmailStatisticsRejectAnInvalidWindow(t *testing.T) {
+	for _, query := range []string{"?days=0", "?days=-3", "?days=abc"} {
+		t.Run(query, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			context, _ := gin.CreateTestContext(response)
+			context.Request = httptest.NewRequest(http.MethodGet, "/api/option/email_statistics"+query, nil)
+			GetEmailStatistics(context)
+			assert.Contains(t, response.Body.String(), `"success":false`)
+			assert.Contains(t, response.Body.String(), `"message_key":"Invalid parameters"`)
+		})
+	}
 }

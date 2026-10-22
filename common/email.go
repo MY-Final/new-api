@@ -12,6 +12,49 @@ import (
 	"time"
 )
 
+// Email purposes classify outgoing mail for the delivery statistics panel.
+// SendTemplateEmail records the template key, which uses these same names.
+const (
+	EmailPurposeVerify       = "verify"
+	EmailPurposeReset        = "reset"
+	EmailPurposeBinding      = "binding"
+	EmailPurposeSecurity     = "security"
+	EmailPurposeQuota        = "quota"
+	EmailPurposeUsage        = "usage"
+	EmailPurposeTicket       = "ticket"
+	EmailPurposeNotification = "notification"
+	EmailPurposeOther        = "other"
+)
+
+// Email transport names as stored in options and delivery statistics.
+const (
+	EmailProviderSMTP   = "smtp"
+	EmailProviderResend = "resend"
+)
+
+// EmailDeliveryRecorder receives one record per delivery attempt. main wires it
+// to the statistics store once the database is ready, so a nil recorder (tests,
+// tooling) records nothing.
+var EmailDeliveryRecorder func(purpose string, provider string, delivered bool)
+
+// EmailProviderResolver chooses the transport for one message, applying
+// per-purpose overrides and the pre-flight quota check. It returns an error when
+// no transport may send; main wires it to the delivery policy, so a nil resolver
+// keeps the global selector.
+var EmailProviderResolver func(purpose string) (string, error)
+
+// EmailProviderName is the configured sending method. Installations that never
+// saved a selector keep sending through SMTP.
+func EmailProviderName() string {
+	OptionMapRWMutex.RLock()
+	provider := OptionMap["EmailProvider"]
+	OptionMapRWMutex.RUnlock()
+	if provider == "" {
+		return EmailProviderSMTP
+	}
+	return provider
+}
+
 func generateMessageID() (string, error) {
 	split := strings.Split(SMTPFrom, "@")
 	if len(split) < 2 {
@@ -77,18 +120,28 @@ func newSMTPClient(addr string) (*smtp.Client, error) {
 	return client, nil
 }
 
-func SendEmail(subject string, receiver string, content string) error {
+func SendEmail(purpose string, subject string, receiver string, content string) (err error) {
+	provider := EmailProviderName()
 	OptionMapRWMutex.RLock()
-	provider := OptionMap["EmailProvider"]
 	resendKey := OptionMap["ResendApiKey"]
 	resendFrom := OptionMap["ResendFrom"]
 	OptionMapRWMutex.RUnlock()
+	if EmailDeliveryRecorder != nil {
+		defer func() { EmailDeliveryRecorder(purpose, provider, err == nil) }()
+	}
+	if EmailProviderResolver != nil {
+		resolved, resolveErr := EmailProviderResolver(purpose)
+		provider = resolved
+		if resolveErr != nil {
+			return resolveErr
+		}
+	}
 	// One selector controls delivery. Never fall back to a second provider:
 	// a failed response does not prove that the first provider did not send.
 	switch provider {
-	case "resend":
+	case EmailProviderResend:
 		return sendResendEmail(resendKey, resendFrom, subject, receiver, content)
-	case "", "smtp": // Preserve existing installations without a selector.
+	case EmailProviderSMTP:
 	default:
 		return NewMessage("Email sending method must be SMTP or Resend")
 	}
@@ -133,7 +186,6 @@ func SendEmail(subject string, receiver string, content string) error {
 		strings.Join(recipients, ", "), SystemName, SMTPFrom, encodedSubject, time.Now().Format(time.RFC1123Z), id, encodedBody.String()))
 	auth := getSMTPAuth()
 	addr := fmt.Sprintf("%s:%d", SMTPServer, SMTPPort)
-	var err error
 	client, err := newSMTPClient(addr)
 	if err != nil {
 		return err

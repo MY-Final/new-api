@@ -228,7 +228,7 @@ func deliverUsageReport(reportId int, now time.Time) {
 
 	lastError := ""
 	for _, recipient := range pending {
-		sendErr := usageReportSendEmail(subject, recipient.Email, body)
+		sendErr := usageReportSendEmail(common.EmailPurposeUsage, subject, recipient.Email, body)
 		if sendErr == nil {
 			outcome.Sent++
 			outcome.Pending--

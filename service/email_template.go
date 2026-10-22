@@ -163,7 +163,7 @@ func SendTemplateEmail(receiver string, key string, vars map[string]string) erro
 	if err != nil {
 		return err
 	}
-	return common.SendEmail(subject, receiver, body)
+	return common.SendEmail(key, subject, receiver, body)
 }
 
 func SendTemplateEmailHTML(receiver string, key string, vars map[string]string, htmlVars map[string]string) error {
@@ -171,5 +171,5 @@ func SendTemplateEmailHTML(receiver string, key string, vars map[string]string, 
 	if err != nil {
 		return err
 	}
-	return common.SendEmail(subject, receiver, body)
+	return common.SendEmail(key, subject, receiver, body)
 }

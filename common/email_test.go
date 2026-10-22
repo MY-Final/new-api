@@ -283,7 +283,7 @@ func TestSendEmailUsesExplicitStartTLSWithInsecureCertificate(t *testing.T) {
 	SMTPToken = "secret"
 	SystemName = "New API"
 
-	err := SendEmail("Verification", "receiver@example.com", "<p>123456</p>")
+	err := SendEmail(EmailPurposeVerify, "Verification", "receiver@example.com", "<p>123456</p>")
 	require.NoError(t, err)
 
 	select {
@@ -311,7 +311,7 @@ func TestSendEmailExplicitStartTLSRequiresServerSupport(t *testing.T) {
 	SMTPToken = "secret"
 	SystemName = "New API"
 
-	err := SendEmail("Verification", "receiver@example.com", "<p>123456</p>")
+	err := SendEmail(EmailPurposeVerify, "Verification", "receiver@example.com", "<p>123456</p>")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "STARTTLS")
 }
@@ -332,7 +332,7 @@ func TestSendEmailDoesNotAutoUpgradeWhenStartTLSDisabled(t *testing.T) {
 	SMTPToken = "secret"
 	SystemName = "New API"
 
-	err := SendEmail("Verification", "receiver@example.com", "<p>123456</p>")
+	err := SendEmail(EmailPurposeVerify, "Verification", "receiver@example.com", "<p>123456</p>")
 	require.NoError(t, err)
 
 	select {
@@ -435,7 +435,7 @@ func TestSendEmailSkipsAuthWhenCredentialsAreEmpty(t *testing.T) {
 	SMTPToken = ""
 	SystemName = "New API"
 
-	err := SendEmail("Verification", "receiver@example.com", "<p>123456</p>")
+	err := SendEmail(EmailPurposeVerify, "Verification", "receiver@example.com", "<p>123456</p>")
 	require.NoError(t, err)
 
 	select {
@@ -466,7 +466,7 @@ func TestSendEmailDeliversToEverySemicolonSeparatedRecipient(t *testing.T) {
 	SMTPFrom = "sender@example.com"
 	SystemName = "New API"
 
-	err := SendEmail("Verification", "first@example.com; second@example.com", "<p>123456</p>")
+	err := SendEmail(EmailPurposeVerify, "Verification", "first@example.com; second@example.com", "<p>123456</p>")
 	require.NoError(t, err)
 
 	select {
@@ -494,7 +494,7 @@ func TestSendEmailSkipsAuthWhenCredentialsAreIncomplete(t *testing.T) {
 	SMTPToken = ""
 	SystemName = "New API"
 
-	err := SendEmail("Verification", "receiver@example.com", "<p>123456</p>")
+	err := SendEmail(EmailPurposeVerify, "Verification", "receiver@example.com", "<p>123456</p>")
 	require.NoError(t, err)
 
 	select {
@@ -528,7 +528,7 @@ func TestSendEmailUsesNTLMWhenServerOnlySupportsNTLM(t *testing.T) {
 	SMTPToken = "secret"
 	SystemName = "New API"
 
-	err := SendEmail("Verification", "receiver@example.com", "<p>123456</p>")
+	err := SendEmail(EmailPurposeVerify, "Verification", "receiver@example.com", "<p>123456</p>")
 	require.NoError(t, err)
 
 	select {
@@ -556,7 +556,7 @@ func TestSendEmailUsesNTLMForMicrosoftAccountWhenServerOnlySupportsNTLM(t *testi
 	SMTPToken = "secret"
 	SystemName = "New API"
 
-	err := SendEmail("Verification", "receiver@example.com", "<p>123456</p>")
+	err := SendEmail(EmailPurposeVerify, "Verification", "receiver@example.com", "<p>123456</p>")
 	require.NoError(t, err)
 
 	select {
@@ -583,7 +583,7 @@ func TestSendEmailExplicitStartTLSRejectsUntrustedCertificateByDefault(t *testin
 	SMTPToken = "secret"
 	SystemName = "New API"
 
-	err := SendEmail("Verification", "receiver@example.com", "<p>123456</p>")
+	err := SendEmail(EmailPurposeVerify, "Verification", "receiver@example.com", "<p>123456</p>")
 	require.Error(t, err)
 	require.Contains(t, fmt.Sprint(err), "certificate")
 }
@@ -607,7 +607,7 @@ func TestSendEmailFoldsLongHTMLLinesForSMTP(t *testing.T) {
 	SystemName = "New API"
 
 	longText := strings.Repeat("长", 600)
-	require.NoError(t, SendEmail("Usage report", "receiver@example.com", "<p>"+longText+"</p>"))
+	require.NoError(t, SendEmail(EmailPurposeUsage, "Usage report", "receiver@example.com", "<p>"+longText+"</p>"))
 
 	select {
 	case message := <-server.messages:

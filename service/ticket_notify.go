@@ -47,7 +47,7 @@ func notifyTicketEmail(ticket *model.Ticket, username string, content string, ki
 		return
 	}
 	go func() {
-		if err := ticketNotifySender(subject, receiver, body); err != nil {
+		if err := ticketNotifySender(common.EmailPurposeTicket, subject, receiver, body); err != nil {
 			common.SysError(fmt.Sprintf("failed to send ticket notification #%d: %s", ticket.ID, err.Error()))
 		}
 	}()

@@ -13,6 +13,7 @@ import (
 )
 
 type ticketNotification struct {
+	purpose  string
 	subject  string
 	receiver string
 	body     string
@@ -34,8 +35,8 @@ func stubTicketNotifySender(t *testing.T, notifyEmail string) <-chan ticketNotif
 	common.OptionMapRWMutex.Unlock()
 	oldSender := ticketNotifySender
 	sent := make(chan ticketNotification, 1)
-	ticketNotifySender = func(subject string, receiver string, content string) error {
-		sent <- ticketNotification{subject: subject, receiver: receiver, body: content}
+	ticketNotifySender = func(purpose string, subject string, receiver string, content string) error {
+		sent <- ticketNotification{purpose: purpose, subject: subject, receiver: receiver, body: content}
 		return nil
 	}
 	t.Cleanup(func() {
@@ -63,6 +64,7 @@ func TestTicketNotificationEmailsTheConfiguredRecipient(t *testing.T) {
 	ticket := &model.Ticket{ID: 12, Title: "Cannot call <model>", Category: "api", Status: "pending"}
 	NotifyTicketCreated(ticket, "alice", "Failure details <script>alert(1)</script>")
 	message := requireTicketNotification(t, sent)
+	assert.Equal(t, common.EmailPurposeTicket, message.purpose)
 	assert.Equal(t, "owner@example.com", message.receiver)
 	assert.Equal(t, "[New API] New ticket #12: Cannot call <model>", message.subject)
 	assert.Contains(t, message.body, "alice")

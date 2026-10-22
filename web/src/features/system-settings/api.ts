@@ -20,6 +20,7 @@ import { api } from '@/lib/api'
 
 import type {
   ConfirmPaymentComplianceResponse,
+  EmailStatisticsResponse,
   FetchUpstreamRatiosRequest,
   LogCleanupTask,
   PreviewEmailTemplateRequest,
@@ -61,6 +62,14 @@ export async function previewEmailTemplate(
   const res = await api.post<PreviewEmailTemplateResponse>(
     '/api/option/email_templates/preview',
     request
+  )
+  return res.data
+}
+
+export async function getEmailStatistics(days = 14) {
+  const res = await api.get<EmailStatisticsResponse>(
+    '/api/option/email_statistics',
+    { params: { days } }
   )
   return res.data
 }

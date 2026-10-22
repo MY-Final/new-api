@@ -62,6 +62,39 @@ export type PreviewEmailTemplateResponse = UpdateOptionResponse & {
   }
 }
 
+export type EmailStatTotals = {
+  delivered: number
+  failed: number
+}
+
+export type EmailStatRow = {
+  date?: string
+  purpose: string
+  provider: string
+  delivered: number
+  failed: number
+}
+
+export type EmailStatistics = {
+  provider: string
+  resend_in_use: boolean
+  start_date: string
+  end_date: string
+  month: EmailStatTotals
+  today: EmailStatTotals
+  resend_month: EmailStatTotals
+  resend_today: EmailStatTotals
+  purposes: EmailStatRow[]
+  daily: EmailStatRow[]
+}
+
+export type EmailStatisticsResponse = {
+  success: boolean
+  message: string
+  message_key?: string
+  data: EmailStatistics
+}
+
 export interface PasskeyDomainChange {
   rp_id: string
   legacy_rp_ids: string
@@ -399,6 +432,10 @@ export type OperationsSettings = {
   ResendApiKey: string
   ResendKeyConfigured: boolean
   ResendFrom: string
+  ResendMonthlyQuota: number
+  ResendDailyQuota: number
+  // JSON object of purpose -> "smtp" | "resend" overrides.
+  EmailPurposeProviders: string
   SMTPServer: string
   SMTPPort: string
   SMTPAccount: string

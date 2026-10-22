@@ -92,7 +92,7 @@ func SendUsageReport(user *model.User, start int64, end int64, now time.Time) (*
 	}
 	var firstErr error
 	for _, recipient := range recipients {
-		if err := usageReportSendEmail(subject, recipient, body); err != nil {
+		if err := usageReportSendEmail(common.EmailPurposeUsage, subject, recipient, body); err != nil {
 			result.Failed++
 			if firstErr == nil {
 				firstErr = err

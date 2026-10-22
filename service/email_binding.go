@@ -197,7 +197,7 @@ func sendEmailBindingCodes(lang string, state model.EmailBindingState, codes ema
 		i18n.Translate(lang, i18n.MsgEmailBindingNewIntro),
 		i18n.Translate(lang, i18n.MsgEmailBindingCode, map[string]any{"Code": html.EscapeString(codes.New)}),
 		i18n.Translate(lang, i18n.MsgEmailBindingNewValidity, minutes))
-	if err := common.SendEmail(subject, state.Email, content); err != nil {
+	if err := common.SendEmail(common.EmailPurposeBinding, subject, state.Email, content); err != nil {
 		return err
 	}
 	if codes.Old != "" {
@@ -205,7 +205,7 @@ func sendEmailBindingCodes(lang string, state model.EmailBindingState, codes ema
 			i18n.Translate(lang, i18n.MsgEmailBindingOldIntro),
 			i18n.Translate(lang, i18n.MsgEmailBindingCode, map[string]any{"Code": html.EscapeString(codes.Old)}),
 			i18n.Translate(lang, i18n.MsgEmailBindingOldValidity, minutes))
-		return common.SendEmail(subject, state.CurrentEmail, content)
+		return common.SendEmail(common.EmailPurposeBinding, subject, state.CurrentEmail, content)
 	}
 	return nil
 }

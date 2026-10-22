@@ -1009,4 +1009,11 @@ export const STATIC_I18N_KEYS = [
   'Channel priorities changed. Refresh and try again.',
   'Invalid channel priority move',
   'Channel priority is outside the sortable range',
+  // Email delivery statistics labels passed to t() by the purpose map.
+  'Email verification',
+  'Email change',
+  'Balance reminder',
+  'Usage report',
+  'Ticket notification',
+  'Notification',
 ] as const

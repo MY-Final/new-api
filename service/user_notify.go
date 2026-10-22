@@ -125,7 +125,11 @@ func NotifyUser(userId int, userEmail string, userSetting dto.UserSetting, data 
 
 func sendEmailNotify(userEmail string, data dto.Notify) error {
 	subject, body := renderEmailNotify(data)
-	return common.SendEmail(subject, userEmail, body)
+	purpose := common.EmailPurposeNotification
+	if data.Type == dto.NotifyTypeQuotaExceed {
+		purpose = common.EmailPurposeQuota
+	}
+	return common.SendEmail(purpose, subject, userEmail, body)
 }
 
 // renderEmailNotify prefers the configurable template for quota reminders and

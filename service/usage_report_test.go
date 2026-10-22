@@ -54,7 +54,7 @@ func setupUsageReportServiceTest(t *testing.T) (*model.User, *[]sentUsageReportE
 
 	sent := make([]sentUsageReportEmail, 0)
 	previous := usageReportSendEmail
-	usageReportSendEmail = func(subject string, receiver string, content string) error {
+	usageReportSendEmail = func(purpose string, subject string, receiver string, content string) error {
 		sent = append(sent, sentUsageReportEmail{to: receiver, subject: subject, body: content})
 		return nil
 	}
@@ -92,7 +92,7 @@ func savePendingUsageReport(t *testing.T, userId int, date string, now time.Time
 func TestUsageReportDeliveryRetriesOnlyFailedRecipients(t *testing.T) {
 	user, sent := setupUsageReportServiceTest(t)
 	failing := model.NormalizeEmail("notify-" + strings.TrimPrefix(user.Email, "owner-"))
-	usageReportSendEmail = func(subject string, receiver string, content string) error {
+	usageReportSendEmail = func(purpose string, subject string, receiver string, content string) error {
 		*sent = append(*sent, sentUsageReportEmail{to: receiver, subject: subject, body: content})
 		if receiver == failing {
 			return errors.New("mailbox rejected")
@@ -162,7 +162,7 @@ func TestUsageReportRetryReusesGeneratedSnapshot(t *testing.T) {
 		Update("next_attempt_at", now.Add(-time.Minute).Unix()).Error)
 
 	failRound := true
-	usageReportSendEmail = func(subject string, receiver string, content string) error {
+	usageReportSendEmail = func(purpose string, subject string, receiver string, content string) error {
 		*sent = append(*sent, sentUsageReportEmail{to: receiver, subject: subject, body: content})
 		if failRound {
 			return errors.New("temporary smtp failure")
@@ -268,7 +268,7 @@ func TestSendUsageReportUsesRequestedRangeAndReportsDelivery(t *testing.T) {
 	}).Error)
 
 	failFirst := true
-	usageReportSendEmail = func(subject string, receiver string, content string) error {
+	usageReportSendEmail = func(purpose string, subject string, receiver string, content string) error {
 		*sent = append(*sent, sentUsageReportEmail{to: receiver, subject: subject, body: content})
 		if failFirst {
 			failFirst = false

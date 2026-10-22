@@ -34,6 +34,14 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
 import { parseQuotaFromDollars, quotaUnitsToDollars } from '@/lib/format'
@@ -50,14 +58,23 @@ import { SettingsPageFormActions } from '../components/settings-page-context'
 import { SettingsSection } from '../components/settings-section'
 import { useResetForm } from '../hooks/use-reset-form'
 import { useUpdateOption } from '../hooks/use-update-option'
+import { EMAIL_PURPOSES } from './email-purposes'
 import {
   createEmailSchema,
+  parseEmailPurposeRouting,
   parseResendSender,
+  serializeEmailPurposeRouting,
   type EmailFormValues,
 } from './email-settings-schema'
 
 type EmailSettingsSectionProps = {
-  defaultValues: Omit<EmailFormValues, 'ResendSenderName'>
+  defaultValues: Omit<
+    EmailFormValues,
+    'ResendSenderName' | 'EmailPurposeRouting'
+  > & {
+    // The stored JSON option; the form edits it as one field per purpose.
+    EmailPurposeProviders: string
+  }
 }
 
 type SmtpSecurityMode = 'none' | 'ssl_tls' | 'starttls'
@@ -81,6 +98,11 @@ export function EmailSettingsSection({
     () => ({
       ...defaultValues,
       ...parseResendSender(defaultValues.ResendFrom),
+      ResendMonthlyQuota: String(defaultValues.ResendMonthlyQuota),
+      ResendDailyQuota: String(defaultValues.ResendDailyQuota),
+      EmailPurposeRouting: parseEmailPurposeRouting(
+        defaultValues.EmailPurposeProviders
+      ),
       QuotaRemindThreshold: String(
         quotaUnitsToDollars(Number(defaultValues.QuotaRemindThreshold) || 0)
       ),
@@ -93,15 +115,22 @@ export function EmailSettingsSection({
     defaultValues: initialValues,
   })
 
-  const [provider, smtpSSL, smtpStartTLS, quotaRemindEnabled] = useWatch({
-    control: form.control,
-    name: [
-      'EmailProvider',
-      'SMTPSSLEnabled',
-      'SMTPStartTLSEnabled',
-      'QuotaRemindEnabled',
-    ],
-  })
+  const [provider, smtpSSL, smtpStartTLS, quotaRemindEnabled, routing] =
+    useWatch({
+      control: form.control,
+      name: [
+        'EmailProvider',
+        'SMTPSSLEnabled',
+        'SMTPStartTLSEnabled',
+        'QuotaRemindEnabled',
+        'EmailPurposeRouting',
+      ],
+    })
+  const routedProviders = Object.values(routing ?? {})
+  // Both transports stay configurable when purposes are split between them.
+  const showResendFields =
+    provider === 'resend' || routedProviders.includes('resend')
+  const showSMTPFields = provider === 'smtp' || routedProviders.includes('smtp')
   const tokensOnly = getCurrencyDisplay().meta.kind === 'tokens'
   const isSaving = form.formState.isSubmitting || updateOption.isPending
   useResetForm(form, isSaving ? undefined : initialValues)
@@ -133,8 +162,13 @@ export function EmailSettingsSection({
     }
 
     const updates: Array<{ key: string; value: string | boolean }> = []
+    const routedProviders = Object.values(values.EmailPurposeRouting)
+    const usesResend =
+      values.EmailProvider === 'resend' || routedProviders.includes('resend')
+    const usesSMTP =
+      values.EmailProvider === 'smtp' || routedProviders.includes('smtp')
 
-    if (values.EmailProvider === 'resend') {
+    if (usesResend) {
       const from = values.ResendFrom.trim()
       const name = values.ResendSenderName.trim()
       if (
@@ -149,7 +183,19 @@ export function EmailSettingsSection({
       }
       const key = values.ResendApiKey.trim()
       if (key) updates.push({ key: 'ResendApiKey', value: key })
-    } else {
+      // The statistics section divides the month's and the day's volume by
+      // these limits, so an empty field means "hide the comparison".
+      const monthlyQuota = values.ResendMonthlyQuota.trim() || '0'
+      if (monthlyQuota !== initialValues.ResendMonthlyQuota) {
+        updates.push({ key: 'ResendMonthlyQuota', value: monthlyQuota })
+      }
+      const dailyQuota = values.ResendDailyQuota.trim() || '0'
+      if (dailyQuota !== initialValues.ResendDailyQuota) {
+        updates.push({ key: 'ResendDailyQuota', value: dailyQuota })
+      }
+    }
+
+    if (usesSMTP) {
       if (sanitized.SMTPServer !== initial.SMTPServer) {
         updates.push({ key: 'SMTPServer', value: sanitized.SMTPServer })
       }
@@ -212,6 +258,13 @@ export function EmailSettingsSection({
         key: 'QuotaRemindThreshold',
         value: String(parseQuotaFromDollars(Number(threshold || 0))),
       })
+    }
+
+    const routing = serializeEmailPurposeRouting(values.EmailPurposeRouting)
+    if (
+      routing !== serializeEmailPurposeRouting(initialValues.EmailPurposeRouting)
+    ) {
+      updates.push({ key: 'EmailPurposeProviders', value: routing })
     }
 
     // Save credentials first. A failed configuration write must not activate
@@ -282,7 +335,66 @@ export function EmailSettingsSection({
               </FormItem>
             )}
           />
-          {provider === 'resend' ? (
+          <div className='flex flex-col gap-3' data-settings-form-span='full'>
+            <div className='flex flex-col gap-1'>
+              <Label>{t('Route email by purpose')}</Label>
+              <p className='text-muted-foreground text-sm'>
+                {t(
+                  'Choose a sending method for each purpose. Default follows the method above; if a Resend quota runs out, that mail continues through SMTP when it is configured.'
+                )}
+              </p>
+            </div>
+            <div className='divide-y rounded-lg border'>
+              {EMAIL_PURPOSES.map((purpose) => (
+                <FormField
+                  key={purpose.key}
+                  control={form.control}
+                  name={`EmailPurposeRouting.${purpose.key}`}
+                  render={({ field }) => (
+                    <div className='flex items-center justify-between gap-4 p-3'>
+                      <Label
+                        htmlFor={`email-route-${purpose.key}`}
+                        className='font-normal'
+                      >
+                        {t(purpose.labelKey)}
+                      </Label>
+                      <Select
+                        items={[
+                          {
+                            value: '',
+                            label: t('Follow the default method'),
+                          },
+                          { value: 'smtp', label: 'SMTP' },
+                          { value: 'resend', label: 'Resend API' },
+                        ]}
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        disabled={isSaving}
+                      >
+                        <SelectTrigger
+                          id={`email-route-${purpose.key}`}
+                          size='sm'
+                          className='w-48'
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent alignItemWithTrigger={false}>
+                          <SelectGroup>
+                            <SelectItem value=''>
+                              {t('Follow the default method')}
+                            </SelectItem>
+                            <SelectItem value='smtp'>SMTP</SelectItem>
+                            <SelectItem value='resend'>Resend API</SelectItem>
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                />
+              ))}
+            </div>
+          </div>
+          {showResendFields && (
             <>
               <FormField
                 control={form.control}
@@ -350,8 +462,59 @@ export function EmailSettingsSection({
                   </FormItem>
                 )}
               />
+              <FormField
+                control={form.control}
+                name='ResendMonthlyQuota'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Monthly sending quota')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        autoComplete='off'
+                        disabled={isSaving}
+                        min={0}
+                        type='number'
+                        placeholder='3000'
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'Emails your Resend plan allows each month. Set 0 to hide the quota comparison.'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='ResendDailyQuota'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Daily sending quota')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        autoComplete='off'
+                        disabled={isSaving}
+                        min={0}
+                        type='number'
+                        placeholder='100'
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'Emails your Resend plan allows each day. Set 0 to hide the daily comparison.'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </>
-          ) : (
+          )}
+          {showSMTPFields && (
             <>
               <FormField
                 control={form.control}

@@ -281,7 +281,7 @@ func SendEmailVerification(c *gin.Context) {
 			i18n.T(c, i18n.MsgEmailVerificationGreeting, systemName),
 			i18n.T(c, i18n.MsgEmailVerificationCode, map[string]any{"Code": code}),
 			i18n.T(c, i18n.MsgEmailVerificationValidity, map[string]any{"Minutes": common.VerificationValidMinutes}))
-		err = common.SendEmail(subject, email, content)
+		err = common.SendEmail(common.EmailPurposeVerify, subject, email, content)
 	}
 	if err != nil {
 		common.ApiError(c, err)
@@ -326,7 +326,7 @@ func SendPasswordResetEmail(c *gin.Context) {
 				i18n.Translate(lang, i18n.MsgEmailPasswordResetLink, linkParams),
 				i18n.Translate(lang, i18n.MsgEmailPasswordResetLinkFallback, linkParams),
 				i18n.Translate(lang, i18n.MsgEmailPasswordResetValidity, map[string]any{"Minutes": common.VerificationValidMinutes}))
-			err = common.SendEmail(subject, email, content)
+			err = common.SendEmail(common.EmailPurposeReset, subject, email, content)
 		}
 		if err != nil {
 			logger.LogError(c.Request.Context(), common.LogText("failed to send password reset email to %s: %s", email, err.Error()))

@@ -389,6 +389,7 @@ func migrateDB() error {
 		&UsageReport{},
 		&UsageReportRecipient{},
 		&UsageReportRun{},
+		&EmailSendStat{},
 	)
 	if err != nil {
 		return err
