@@ -27,6 +27,7 @@ import { IconBadge } from '@/components/ui/icon-badge'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatPercent, formatQuotaPrecise } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
 import type { UserWalletData } from '../types'
 
@@ -39,6 +40,8 @@ interface AffiliateRewardsCardProps {
   onViewInvitees: () => void
   complianceConfirmed?: boolean
   loading?: boolean
+  /** Narrow sidebar placement (next to the shop): two stat columns per row. */
+  compact?: boolean
 }
 
 export function AffiliateRewardsCard({
@@ -48,6 +51,7 @@ export function AffiliateRewardsCard({
   onViewInvitees,
   complianceConfirmed = true,
   loading,
+  compact = false,
 }: AffiliateRewardsCardProps) {
   const { t } = useTranslation()
   if (loading) {
@@ -65,7 +69,12 @@ export function AffiliateRewardsCard({
               <Skeleton className='mt-2 h-4 w-full max-w-2xl' />
             </div>
           </div>
-          <div className='grid grid-cols-2 gap-3 border-y py-3 sm:grid-cols-4 sm:gap-4'>
+          <div
+            className={cn(
+              'grid grid-cols-2 gap-3 border-y py-3 sm:gap-4',
+              !compact && 'sm:grid-cols-4'
+            )}
+          >
             {['one', 'two', 'three', 'four'].map((key) => (
               <Skeleton key={key} className='h-10 rounded-lg' />
             ))}
@@ -119,7 +128,12 @@ export function AffiliateRewardsCard({
 
         <div
           data-slot='affiliate-rewards-stats'
-          className='grid grid-cols-2 gap-x-4 gap-y-3 border-y py-3 text-left sm:grid-cols-4 sm:gap-4 sm:text-center'
+          className={cn(
+            'grid gap-x-4 gap-y-3 border-y py-3 text-left',
+            compact
+              ? 'grid-cols-2'
+              : 'grid-cols-2 sm:grid-cols-4 sm:gap-4 sm:text-center'
+          )}
         >
           {[
             [t('Transferable'), formatQuotaPrecise(user?.aff_quota ?? 0)],

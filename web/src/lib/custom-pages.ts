@@ -23,12 +23,27 @@ For commercial licensing, please contact support@quantumnous.com
  * derives the console link for each entry, so the sidebar and the embed page
  * always resolve the same slug.
  */
+export const CUSTOM_PAGE_HIGHLIGHT_COLORS = [
+  '',
+  'blue',
+  'green',
+  'purple',
+  'orange',
+  'red',
+] as const
+export type CustomPageHighlightColor =
+  (typeof CUSTOM_PAGE_HIGHLIGHT_COLORS)[number]
+
 export type CustomPage = {
   name: string
   url: string
   adminOnly: boolean
   /** Renders the sidebar entry with the highlighted style (the shop uses it). */
   highlight: boolean
+  /** Sidebar accent used when `highlight` is on; empty keeps the default. */
+  highlightColor?: CustomPageHighlightColor
+  /** Embeds the page beside the wallet instead of adding a sidebar entry. */
+  inWallet: boolean
 }
 
 export type CustomPageLink = CustomPage & {
@@ -62,11 +77,17 @@ export function normalizeCustomPages(value: unknown): CustomPage[] {
     const name = typeof candidate.name === 'string' ? candidate.name.trim() : ''
     const url = typeof candidate.url === 'string' ? candidate.url.trim() : ''
     if (!name || !url) continue
+    const color = candidate.highlightColor
+    const highlightColor = CUSTOM_PAGE_HIGHLIGHT_COLORS.find(
+      (allowed) => allowed !== '' && allowed === color
+    )
     pages.push({
       name,
       url,
       adminOnly: candidate.adminOnly === true,
       highlight: candidate.highlight === true,
+      ...(highlightColor ? { highlightColor } : {}),
+      inWallet: candidate.inWallet === true,
     })
   }
   return pages
@@ -99,8 +120,12 @@ export function parseCustomPagesOption(raw: string): CustomPage[] {
 
 /** Serializes the settings form back into the option value. */
 export function serializeCustomPages(pages: CustomPage[]): string {
-  return JSON.stringify(pages)
+  return JSON.stringify(
+    pages.map((page) => ({
+      ...page,
+      ...(page.highlightColor ? { highlightColor: page.highlightColor } : {}),
+    }))
+  )
 }
 
-export const MAX_CUSTOM_PAGES = 20
 export const MAX_CUSTOM_PAGE_NAME_LENGTH = 30

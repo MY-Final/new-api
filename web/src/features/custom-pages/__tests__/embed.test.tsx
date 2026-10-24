@@ -22,9 +22,9 @@ import { createInstance } from 'i18next'
 import { I18nextProvider } from 'react-i18next'
 import { afterEach, expect, it, vi } from 'vitest'
 
+import en from '@/i18n/locales/en.json'
 import { api } from '@/lib/api'
 import type { CustomPage } from '@/lib/custom-pages'
-import en from '@/i18n/locales/en.json'
 
 import { CustomPageEmbed } from '../index'
 
@@ -60,6 +60,7 @@ it('embeds the configured page in a sandboxed frame with a new-tab escape hatch'
       url: 'https://mon.example.com',
       adminOnly: true,
       highlight: true,
+      inWallet: false,
     },
   ])
 
@@ -83,6 +84,7 @@ it('explains when the page is not available to this user', async () => {
       url: 'https://status.example.com',
       adminOnly: false,
       highlight: false,
+      inWallet: false,
     },
   ])
 

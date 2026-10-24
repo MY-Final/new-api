@@ -19,6 +19,8 @@ For commercial licensing, please contact support@quantumnous.com
 import type { LinkProps } from '@tanstack/react-router'
 import type { TFunction } from 'i18next'
 
+import type { CustomPageHighlightColor } from '@/lib/custom-pages'
+
 /**
  * Base navigation item type
  */
@@ -33,6 +35,8 @@ type BaseNavItem = {
    * regular navigation entries (used for the wallet recharge entry).
    */
   highlight?: boolean
+  /** Accent for `highlight`; empty uses the console default. */
+  highlightColor?: CustomPageHighlightColor
   /**
    * Minimum role required to see this item in the sidebar. When set, the item
    * is hidden for users whose role is below this threshold (see

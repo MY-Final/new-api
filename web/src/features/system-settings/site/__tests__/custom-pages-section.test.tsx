@@ -68,10 +68,9 @@ it('lists the configured pages and appends an empty row', async () => {
     screen.getByDisplayValue('https://status.example.com')
   ).toBeInTheDocument()
   expect(screen.getByText('Embedded pages')).toBeInTheDocument()
-  // The limit hint must interpolate the count, not print the placeholder.
   expect(
     screen.getByText(
-      'Maximum 20 pages. Menu names must be unique; the page URL stays on the server for admin-only entries.'
+      'Menu names must be unique; the page URL stays on the server for admin-only entries.'
     )
   ).toBeInTheDocument()
 

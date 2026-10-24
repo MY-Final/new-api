@@ -66,6 +66,11 @@ export function useSidebarData(): SidebarData {
   const { links: customPageLinks } = useCustomPages()
   const tickets = useTicketUnread()
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
+  // A page embedded beside the wallet already has a permanent entry point;
+  // repeating it in the sidebar only splits where users look for the shop.
+  const sidebarCustomPageLinks = customPageLinks.filter(
+    (page) => !page.inWallet
+  )
 
   return {
     navGroups: [
@@ -179,16 +184,17 @@ export function useSidebarData(): SidebarData {
           },
         ],
       },
-      ...(customPageLinks.length > 0
+      ...(sidebarCustomPageLinks.length > 0
         ? [
             {
               id: 'custom-pages',
               title: t('Custom Pages'),
-              items: customPageLinks.map((page) => ({
+              items: sidebarCustomPageLinks.map((page) => ({
                 title: t(page.name),
                 url: page.href,
                 icon: PanelsTopLeft,
                 highlight: page.highlight,
+                highlightColor: page.highlightColor,
                 // The API already hides admin-only pages from other roles;
                 // requiredRole keeps a stale cache from leaking the entry.
                 ...(page.adminOnly ? { requiredRole: ROLE.ADMIN } : {}),

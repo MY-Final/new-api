@@ -205,12 +205,14 @@ describe('Custom pages sidebar group', () => {
         url: 'https://status.example.com',
         adminOnly: false,
         highlight: false,
+        inWallet: false,
       },
       {
         name: 'Monitoring',
         url: 'https://monitoring.example.com',
         adminOnly: true,
         highlight: true,
+        inWallet: false,
       },
     ])
 

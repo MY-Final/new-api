@@ -34,9 +34,17 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import {
-  MAX_CUSTOM_PAGES,
+  CUSTOM_PAGE_HIGHLIGHT_COLORS,
   MAX_CUSTOM_PAGE_NAME_LENGTH,
   parseCustomPagesOption,
   serializeCustomPages,
@@ -51,30 +59,29 @@ import { useUpdateOption } from '../hooks/use-update-option'
 // FormMessage translates the message key without interpolation, so validation
 // copy carries the literal limits that MAX_* currently enforce.
 const NAME_TOO_LONG_MESSAGE = `Name cannot exceed ${MAX_CUSTOM_PAGE_NAME_LENGTH} characters`
-const TOO_MANY_PAGES_MESSAGE = `At most ${MAX_CUSTOM_PAGES} pages are supported`
 
 const customPagesSchema = z.object({
-  pages: z
-    .array(
-      z.object({
-        name: z
-          .string()
-          .trim()
-          .min(1, 'Name is required')
-          .max(MAX_CUSTOM_PAGE_NAME_LENGTH, NAME_TOO_LONG_MESSAGE),
-        url: z
-          .string()
-          .trim()
-          .min(1, 'URL is required')
-          .refine(
-            (value) => /^https?:\/\/\S+$/i.test(value.trim()),
-            'URL must start with http:// or https://'
-          ),
-        adminOnly: z.boolean(),
-        highlight: z.boolean(),
-      })
-    )
-    .max(MAX_CUSTOM_PAGES, TOO_MANY_PAGES_MESSAGE),
+  pages: z.array(
+    z.object({
+      name: z
+        .string()
+        .trim()
+        .min(1, 'Name is required')
+        .max(MAX_CUSTOM_PAGE_NAME_LENGTH, NAME_TOO_LONG_MESSAGE),
+      url: z
+        .string()
+        .trim()
+        .min(1, 'URL is required')
+        .refine(
+          (value) => /^https?:\/\/\S+$/i.test(value.trim()),
+          'URL must start with http:// or https://'
+        ),
+      adminOnly: z.boolean(),
+      highlight: z.boolean(),
+      highlightColor: z.enum(CUSTOM_PAGE_HIGHLIGHT_COLORS).optional(),
+      inWallet: z.boolean(),
+    })
+  ),
 })
 
 type CustomPagesFormValues = z.infer<typeof customPagesSchema>
@@ -109,7 +116,6 @@ export function CustomPagesSection({
   }, [formDefaults, form])
 
   const pages = useFieldArray({ control: form.control, name: 'pages' })
-  const isFull = pages.fields.length >= MAX_CUSTOM_PAGES
 
   const onSubmit = async (values: CustomPagesFormValues) => {
     const serialized = serializeCustomPages(
@@ -118,12 +124,23 @@ export function CustomPagesSection({
         url: page.url.trim(),
         adminOnly: page.adminOnly,
         highlight: page.highlight,
+        ...(page.highlightColor ? { highlightColor: page.highlightColor } : {}),
+        inWallet: page.inWallet,
       }))
     )
     if (serialized === initialSerialized) return
 
     await updateOption.mutateAsync({ key: 'CustomPages', value: serialized })
   }
+
+  const colorOptions = [
+    { value: '', label: t('Default'), swatch: 'bg-amber-400' },
+    { value: 'blue', label: t('Blue'), swatch: 'bg-blue-500' },
+    { value: 'green', label: t('Green'), swatch: 'bg-green-500' },
+    { value: 'purple', label: t('Purple'), swatch: 'bg-purple-500' },
+    { value: 'orange', label: t('Orange'), swatch: 'bg-orange-500' },
+    { value: 'red', label: t('Red'), swatch: 'bg-red-500' },
+  ]
 
   return (
     <SettingsSection title={t('Custom Pages')}>
@@ -144,6 +161,9 @@ export function CustomPagesSection({
                 {t(
                   'Each entry adds a sidebar menu item that opens the URL inside the console. Pages that refuse to be embedded can be opened in a new tab.'
                 )}
+              </p>
+              <p className='text-muted-foreground text-sm'>
+                {t('Pages shown in the wallet are removed from the sidebar.')}
               </p>
             </div>
 
@@ -193,7 +213,7 @@ export function CustomPagesSection({
                     </FormItem>
                   )}
                 />
-                <div className='flex items-end gap-2'>
+                <div className='flex flex-wrap items-end gap-2'>
                   <FormField
                     control={form.control}
                     name={`pages.${index}.adminOnly`}
@@ -230,6 +250,37 @@ export function CustomPagesSection({
                       </FormItem>
                     )}
                   />
+                  <FormField
+                    control={form.control}
+                    name={`pages.${index}.inWallet`}
+                    render={({ field: walletField }) => (
+                      <FormItem>
+                        <FormLabel>{t('Show in wallet')}</FormLabel>
+                        <div className='flex h-8 items-center'>
+                          <FormControl>
+                            <Switch
+                              checked={walletField.value}
+                              onCheckedChange={(checked) => {
+                                walletField.onChange(checked)
+                                // The wallet has one shop panel; enabling this
+                                // page turns the flag off for the others.
+                                if (checked) {
+                                  pages.fields.forEach((_, otherIndex) => {
+                                    if (otherIndex !== index) {
+                                      form.setValue(
+                                        `pages.${otherIndex}.inWallet`,
+                                        false
+                                      )
+                                    }
+                                  })
+                                }
+                              }}
+                            />
+                          </FormControl>
+                        </div>
+                      </FormItem>
+                    )}
+                  />
                   <Button
                     type='button'
                     variant='ghost'
@@ -240,6 +291,69 @@ export function CustomPagesSection({
                     <Trash2 className='size-4' aria-hidden='true' />
                   </Button>
                 </div>
+                <FormField
+                  control={form.control}
+                  name={`pages.${index}.highlightColor`}
+                  render={({ field: colorField }) => (
+                    <FormItem className='lg:col-span-3'>
+                      <FormLabel>{t('Highlight color')}</FormLabel>
+                      <Select
+                        items={colorOptions}
+                        name={colorField.name}
+                        value={colorField.value ?? ''}
+                        onValueChange={colorField.onChange}
+                        disabled={
+                          !form.watch(`pages.${index}.highlight`) ||
+                          updateOption.isPending
+                        }
+                      >
+                        <FormControl>
+                          <SelectTrigger
+                            ref={colorField.ref}
+                            onBlur={colorField.onBlur}
+                            className='w-full sm:w-48'
+                          >
+                            <SelectValue>
+                              {(value) => {
+                                const selected =
+                                  colorOptions.find(
+                                    (option) => option.value === value
+                                  ) ?? colorOptions[0]
+                                return (
+                                  <span className='flex items-center gap-2'>
+                                    <span
+                                      aria-hidden='true'
+                                      className={`size-3 shrink-0 rounded-full ${selected.swatch}`}
+                                    />
+                                    {selected.label}
+                                  </span>
+                                )
+                              }}
+                            </SelectValue>
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent alignItemWithTrigger={false}>
+                          <SelectGroup>
+                            {colorOptions.map((option) => (
+                              <SelectItem
+                                key={option.value}
+                                value={option.value}
+                              >
+                                <span className='flex items-center gap-2'>
+                                  <span
+                                    aria-hidden='true'
+                                    className={`size-3 shrink-0 rounded-full ${option.swatch}`}
+                                  />
+                                  {option.label}
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )}
+                />
               </div>
             ))}
 
@@ -247,13 +361,13 @@ export function CustomPagesSection({
               type='button'
               variant='outline'
               size='sm'
-              disabled={isFull}
               onClick={() =>
                 pages.append({
                   name: '',
                   url: '',
                   adminOnly: false,
                   highlight: false,
+                  inWallet: false,
                 })
               }
             >
@@ -262,8 +376,7 @@ export function CustomPagesSection({
             </Button>
             <FormDescription>
               {t(
-                'Maximum {{count}} pages. Menu names must be unique; the page URL stays on the server for admin-only entries.',
-                { count: MAX_CUSTOM_PAGES }
+                'Menu names must be unique; the page URL stays on the server for admin-only entries.'
               )}
             </FormDescription>
           </div>

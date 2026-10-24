@@ -39,12 +39,14 @@ describe('custom page links', () => {
         url: 'https://a.example.com',
         adminOnly: false,
         highlight: false,
+        inWallet: false,
       },
       {
         name: 'status',
         url: 'https://b.example.com',
         adminOnly: true,
         highlight: true,
+        inWallet: false,
       },
     ])
 
@@ -67,6 +69,7 @@ describe('custom page payload handling', () => {
           url: ' https://a.example.com ',
           adminOnly: true,
           highlight: true,
+          inWallet: false,
         },
         { name: '', url: 'https://missing-name.example.com' },
         { name: 'missing url' },
@@ -79,6 +82,7 @@ describe('custom page payload handling', () => {
         url: 'https://a.example.com',
         adminOnly: true,
         highlight: true,
+        inWallet: false,
       },
     ])
 
@@ -92,6 +96,7 @@ describe('custom page payload handling', () => {
         url: 'https://mon.example.com',
         adminOnly: true,
         highlight: true,
+        inWallet: false,
       },
     ]
     expect(parseCustomPagesOption(serializeCustomPages(pages))).toEqual(pages)

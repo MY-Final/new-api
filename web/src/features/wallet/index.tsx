@@ -20,9 +20,11 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SectionPageLayout } from '@/components/layout'
+import { useCustomPages } from '@/features/custom-pages/hooks/use-custom-pages'
 import { useStatus } from '@/hooks/use-status'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { getSelf } from '@/lib/api'
+import { cn } from '@/lib/utils'
 
 import { AffiliateRewardsCard } from './components/affiliate-rewards-card'
 import { AffiliateInviteesDialog } from './components/dialogs/affiliate-invitees-dialog'
@@ -32,8 +34,10 @@ import { PaymentConfirmDialog } from './components/dialogs/payment-confirm-dialo
 import { TransferDialog } from './components/dialogs/transfer-dialog'
 import { PaymentRecoveryNotice } from './components/payment-recovery-notice'
 import { RechargeFormCard } from './components/recharge-form-card'
+import { RedemptionCard } from './components/redemption-card'
 import { SubscriptionPlansCard } from './components/subscription-plans-card'
 import { WalletFundingGuide } from './components/wallet-funding-guide'
+import { WalletShopPanel } from './components/wallet-shop-panel'
 import { WalletStatsCard } from './components/wallet-stats-card'
 import { DEFAULT_DISCOUNT_RATE, PAYMENT_TYPES } from './constants'
 import {
@@ -88,6 +92,14 @@ export function Wallet(props: WalletProps) {
   const { status } = useStatus()
   const { currency } = useSystemConfig()
   const { topupInfo, presetAmounts, loading: topupLoading } = useTopupInfo()
+  const { links: customPages } = useCustomPages()
+
+  // The page explicitly marked for the wallet is the shop; highlight is only a
+  // sidebar style and may be used by several entries.
+  const shopPage = useMemo(
+    () => customPages.find((page) => page.inWallet) ?? null,
+    [customPages]
+  )
 
   // Calculate effective exchange rate - when display type is USD, use rate of 1
   const effectiveUsdExchangeRate = useMemo(() => {
@@ -289,96 +301,144 @@ export function Wallet(props: WalletProps) {
     []
   )
 
+  // Beside the shop the cards stack; otherwise recharge and subscription keep
+  // the side-by-side layout.
+  let rechargeLayoutClassName = 'grid gap-4'
+  if (showSubscriptionPanel) {
+    rechargeLayoutClassName =
+      'grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)] xl:items-start'
+  }
+  if (shopPage) {
+    rechargeLayoutClassName = 'flex flex-col gap-4 sm:gap-5'
+  }
+
   return (
     <>
       <SectionPageLayout>
         <SectionPageLayout.Title>{t('Wallet')}</SectionPageLayout.Title>
         <SectionPageLayout.Content>
-          <div className='mx-auto flex w-full max-w-7xl flex-col gap-4 sm:gap-5'>
-            <WalletStatsCard user={user} loading={userLoading} />
-
-            <WalletFundingGuide
-              quota={user?.quota}
-              topupInfo={topupInfo}
-              onStartTopup={() => {
-                walletFundingGuideRef.current?.scrollIntoView({
-                  behavior: 'smooth',
-                  block: 'start',
-                })
-              }}
-            />
-
-            <PaymentRecoveryNotice
-              onViewHistory={() => setBillingDialogOpen(true)}
-              onStartTopup={() => {
-                walletFundingGuideRef.current?.scrollIntoView({
-                  behavior: 'smooth',
-                  block: 'start',
-                })
-              }}
-            />
-
+          <div
+            className={cn(
+              'mx-auto flex w-full flex-col gap-4 sm:gap-5',
+              // The split shop layout uses the whole content area; the single
+              // column wallet keeps the narrower, centered reading width.
+              shopPage ? 'max-w-none' : 'max-w-7xl'
+            )}
+          >
             <div
-              ref={walletFundingGuideRef}
-              className={
-                showSubscriptionPanel
-                  ? 'grid scroll-mt-4 gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)] xl:items-start'
-                  : 'grid scroll-mt-4 gap-4'
-              }
+              className={cn(
+                shopPage
+                  ? 'grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(380px,520px)] xl:items-start'
+                  : 'flex flex-col gap-4 sm:gap-5'
+              )}
             >
-              <div>
-                <RechargeFormCard
+              {shopPage && (
+                <div className='order-2 min-w-0 xl:sticky xl:top-2 xl:order-1'>
+                  <WalletShopPanel page={shopPage} />
+                </div>
+              )}
+
+              <div
+                className={cn(
+                  'flex min-w-0 flex-col gap-4 sm:gap-5',
+                  shopPage && 'order-1 xl:order-2'
+                )}
+              >
+                <WalletStatsCard user={user} loading={userLoading} />
+
+                <WalletFundingGuide
+                  quota={user?.quota}
                   topupInfo={topupInfo}
-                  highlighted
-                  presetAmounts={presetAmounts}
-                  selectedPreset={selectedPreset}
-                  onSelectPreset={handleSelectPreset}
-                  topupAmount={topupAmount}
-                  onTopupAmountChange={handleTopupAmountChange}
-                  paymentAmount={paymentAmount}
-                  calculating={calculating}
-                  onPaymentMethodSelect={handlePaymentMethodSelect}
-                  paymentLoading={paymentLoading}
-                  redemptionCode={redemptionCode}
-                  onRedemptionCodeChange={setRedemptionCode}
-                  onRedeem={handleRedeem}
-                  redeeming={redeeming}
-                  topupLink={topupInfo?.topup_link}
-                  loading={topupLoading}
-                  priceRatio={(status?.price as number) || 1}
-                  usdExchangeRate={effectiveUsdExchangeRate}
-                  onOpenBilling={() => setBillingDialogOpen(true)}
-                  creemProducts={topupInfo?.creem_products}
-                  enableCreemTopup={topupInfo?.enable_creem_topup}
-                  onCreemProductSelect={handleCreemProductSelect}
-                  enableWaffoTopup={topupInfo?.enable_waffo_topup}
-                  waffoPayMethods={topupInfo?.waffo_pay_methods}
-                  waffoMinTopup={topupInfo?.waffo_min_topup}
-                  onWaffoMethodSelect={handleWaffoMethodSelect}
-                  enableWaffoPancakeTopup={
-                    topupInfo?.enable_waffo_pancake_topup
+                  onStartTopup={() => {
+                    walletFundingGuideRef.current?.scrollIntoView({
+                      behavior: 'smooth',
+                      block: 'start',
+                    })
+                  }}
+                />
+
+                <PaymentRecoveryNotice
+                  onViewHistory={() => setBillingDialogOpen(true)}
+                  onStartTopup={() => {
+                    walletFundingGuideRef.current?.scrollIntoView({
+                      behavior: 'smooth',
+                      block: 'start',
+                    })
+                  }}
+                />
+
+                {shopPage && (
+                  <RedemptionCard
+                    enabled={topupInfo?.enable_redemption !== false}
+                    redemptionCode={redemptionCode}
+                    onRedemptionCodeChange={setRedemptionCode}
+                    onRedeem={handleRedeem}
+                    redeeming={redeeming}
+                    topupLink={topupInfo?.topup_link}
+                  />
+                )}
+
+                <div
+                  ref={walletFundingGuideRef}
+                  className={cn('scroll-mt-4', rechargeLayoutClassName)}
+                >
+                  <div>
+                    <RechargeFormCard
+                      topupInfo={topupInfo}
+                      highlighted
+                      hideRedemption={Boolean(shopPage)}
+                      presetAmounts={presetAmounts}
+                      selectedPreset={selectedPreset}
+                      onSelectPreset={handleSelectPreset}
+                      topupAmount={topupAmount}
+                      onTopupAmountChange={handleTopupAmountChange}
+                      paymentAmount={paymentAmount}
+                      calculating={calculating}
+                      onPaymentMethodSelect={handlePaymentMethodSelect}
+                      paymentLoading={paymentLoading}
+                      redemptionCode={redemptionCode}
+                      onRedemptionCodeChange={setRedemptionCode}
+                      onRedeem={handleRedeem}
+                      redeeming={redeeming}
+                      topupLink={topupInfo?.topup_link}
+                      loading={topupLoading}
+                      priceRatio={(status?.price as number) || 1}
+                      usdExchangeRate={effectiveUsdExchangeRate}
+                      onOpenBilling={() => setBillingDialogOpen(true)}
+                      creemProducts={topupInfo?.creem_products}
+                      enableCreemTopup={topupInfo?.enable_creem_topup}
+                      onCreemProductSelect={handleCreemProductSelect}
+                      enableWaffoTopup={topupInfo?.enable_waffo_topup}
+                      waffoPayMethods={topupInfo?.waffo_pay_methods}
+                      waffoMinTopup={topupInfo?.waffo_min_topup}
+                      onWaffoMethodSelect={handleWaffoMethodSelect}
+                      enableWaffoPancakeTopup={
+                        topupInfo?.enable_waffo_pancake_topup
+                      }
+                    />
+                  </div>
+
+                  <SubscriptionPlansCard
+                    topupInfo={topupInfo}
+                    onAvailabilityChange={handleSubscriptionAvailabilityChange}
+                    userQuota={user?.quota}
+                    onPurchaseSuccess={fetchUser}
+                  />
+                </div>
+
+                <AffiliateRewardsCard
+                  user={user}
+                  affiliateLink={affiliateLink}
+                  onTransfer={() => setTransferDialogOpen(true)}
+                  onViewInvitees={() => setInviteesDialogOpen(true)}
+                  complianceConfirmed={
+                    topupInfo?.payment_compliance_confirmed !== false
                   }
+                  loading={affiliateLoading}
+                  compact={Boolean(shopPage)}
                 />
               </div>
-
-              <SubscriptionPlansCard
-                topupInfo={topupInfo}
-                onAvailabilityChange={handleSubscriptionAvailabilityChange}
-                userQuota={user?.quota}
-                onPurchaseSuccess={fetchUser}
-              />
             </div>
-
-            <AffiliateRewardsCard
-              user={user}
-              affiliateLink={affiliateLink}
-              onTransfer={() => setTransferDialogOpen(true)}
-              onViewInvitees={() => setInviteesDialogOpen(true)}
-              complianceConfirmed={
-                topupInfo?.payment_compliance_confirmed !== false
-              }
-              loading={affiliateLoading}
-            />
           </div>
         </SectionPageLayout.Content>
       </SectionPageLayout>

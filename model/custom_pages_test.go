@@ -1,8 +1,6 @@
 package model
 
 import (
-	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -27,11 +25,6 @@ func TestParseCustomPagesNormalizesEntries(t *testing.T) {
 }
 
 func TestParseCustomPagesRejectsInvalidEntries(t *testing.T) {
-	tooMany := make([]string, 0, maxCustomPages+1)
-	for i := 0; i <= maxCustomPages; i++ {
-		tooMany = append(tooMany, fmt.Sprintf(`{"name":"page-%d","url":"https://example.com/%d"}`, i, i))
-	}
-
 	cases := []struct {
 		name  string
 		value string
@@ -48,7 +41,7 @@ func TestParseCustomPagesRejectsInvalidEntries(t *testing.T) {
 			"duplicate name",
 			`[{"name":"status","url":"https://a.example.com"},{"name":" status ","url":"https://b.example.com"}]`,
 		},
-		{"too many entries", "[" + strings.Join(tooMany, ",") + "]"},
+		{"unsupported highlight color", `[{"name":"status","url":"https://status.example.com","highlightColor":"url(https://evil.example)"}]`},
 	}
 
 	for _, tc := range cases {
