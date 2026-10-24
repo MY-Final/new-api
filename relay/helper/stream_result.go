@@ -16,6 +16,7 @@ type StreamResult struct {
 	DataReceivedAt time.Time
 	status         *relaycommon.StreamStatus
 	stopped        bool
+	done           bool
 }
 
 func newStreamResult(status *relaycommon.StreamStatus) *StreamResult {
@@ -47,6 +48,7 @@ func (r *StreamResult) Stop(err error) {
 func (r *StreamResult) Done() {
 	r.status.SetEndReason(relaycommon.StreamEndReasonDone, nil)
 	r.stopped = true
+	r.done = true
 }
 
 // IsStopped returns whether Stop() or Done() was called during this chunk.

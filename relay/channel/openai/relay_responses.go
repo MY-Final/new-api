@@ -91,9 +91,15 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			data = string(rewriteSGLangResponsesCreatedAt(info, []byte(data), "response.created_at", streamResponse.Response.CreatedAt))
 		}
 		accumulator.Observe(&streamResponse, common.StringToByteSlice(data))
-		if lifetime == nil || !lifetime.Disconnected() {
-			if err := helper.ResponseChunkData(c, streamResponse, data); err != nil && lifetime != nil {
+		delivered := lifetime == nil || !lifetime.Disconnected()
+		if delivered {
+			if err := helper.ResponseChunkData(c, streamResponse, data); err != nil {
+				if lifetime == nil {
+					sr.Stop(err)
+					return
+				}
 				lifetime.Disconnect(err)
+				delivered = false
 			}
 		}
 		if lifetime != nil && lifetime.Disconnected() {
@@ -102,7 +108,13 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		// Responses ends with a protocol terminal event; [DONE] and EOF are
 		// not required. Observe usage before closing the upstream body.
 		if info.StreamStatus.ResponseOutcome() != "" {
-			sr.Done()
+			if delivered {
+				sr.Done()
+			} else {
+				// The terminal event arrived only during disconnect grace, so the
+				// client never received it; stop without claiming delivery.
+				sr.Stop(nil)
+			}
 		}
 	})
 

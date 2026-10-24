@@ -21,6 +21,8 @@ import { render, screen, within } from '@testing-library/react'
 import i18next from 'i18next'
 import { afterEach, beforeAll, describe, expect, test } from 'vitest'
 
+import { useSystemConfigStore } from '@/stores/system-config-store'
+
 import type { UsageLog } from '../../data/schema'
 import type { LogOtherData } from '../../types'
 import { DetailsDialog } from '../dialogs/details-dialog'
@@ -68,6 +70,16 @@ function makeLog(other: LogOtherData): UsageLog {
 }
 
 function renderDetails(other: LogOtherData, promptTokens = 0): QueryClient {
+  useSystemConfigStore.getState().setConfig({
+    currency: {
+      displayInCurrency: true,
+      quotaDisplayType: 'USD',
+      quotaPerUnit: 500000,
+      usdExchangeRate: 1,
+      customCurrencySymbol: '¤',
+      customCurrencyExchangeRate: 1,
+    },
+  })
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
@@ -109,6 +121,49 @@ test('shows the recorded request and response models in log details', () => {
   expect(rowValue('Request Model')).toBe('requested-model')
   expect(rowValue('Upstream Model')).toBe('mapped-model')
   expect(screen.getByText('unexpected-model')).toBeVisible()
+  queryClient.clear()
+})
+
+test('splits OpenAI cache writes into 30-minute and 12-hour rows with their prices', () => {
+  const queryClient = renderDetails(
+    {
+      model_ratio: 5,
+      completion_ratio: 4,
+      group_ratio: 1,
+      cache_tokens: 2000,
+      cache_ratio: 0.1,
+      cache_creation_tokens: 1500,
+      cache_creation_ratio: 1.25,
+      cache_creation_tokens_12h: 1000,
+      cache_creation_ratio_12h: 2.5,
+    },
+    4000
+  )
+  expect(rowValue('Cache Write (30m)')).toBe('500')
+  expect(rowValue('Cache Write (12h)')).toBe('1,000')
+  expect(screen.queryByText('Cache Write')).toBeNull()
+  expect(rowValue('Cache Creation (30m)')).toBe('$12.5/M')
+  expect(rowValue('Cache Creation (12h)')).toBe('$25/M')
+  queryClient.clear()
+})
+
+test('keeps one cache write row and no cache prices for OpenAI logs without 12-hour writes', () => {
+  const queryClient = renderDetails(
+    {
+      model_ratio: 5,
+      completion_ratio: 4,
+      group_ratio: 1,
+      cache_tokens: 2000,
+      cache_ratio: 0.1,
+      cache_creation_tokens: 1500,
+      cache_creation_ratio: 1.25,
+    },
+    4000
+  )
+  expect(rowValue('Cache Write')).toBe('1,500')
+  expect(screen.queryByText('Cache Write (30m)')).toBeNull()
+  expect(screen.queryByText('Cache Creation (30m)')).toBeNull()
+  expect(screen.queryByText('Cache Creation')).toBeNull()
   queryClient.clear()
 })
 
