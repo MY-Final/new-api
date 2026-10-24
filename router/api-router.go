@@ -400,6 +400,11 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute.GET("/export", middleware.AdminAuth(), controller.ExportAllLogs)
 		logRoute.GET("/self/export", middleware.UserAuth(), controller.ExportUserLogs)
 		logRoute.GET("/self/search", middleware.UserAuth(), middleware.SearchRateLimit(), controller.SearchUserLogs)
+		logRoute.GET("/error", middleware.AdminAuth(), controller.GetRequestErrorLogs)
+		logRoute.GET("/error/:id", middleware.AdminAuth(), controller.GetRequestErrorLog)
+		logRoute.DELETE("/error/:id", middleware.AdminAuth(), controller.DeleteRequestErrorLog)
+		logRoute.POST("/error/batch-delete", middleware.AdminAuth(), controller.BatchDeleteRequestErrorLogs)
+		logRoute.POST("/error/clear", middleware.AdminAuth(), controller.ClearRequestErrorLogs)
 
 		statisticsRoute := apiRouter.Group("/statistics")
 		{

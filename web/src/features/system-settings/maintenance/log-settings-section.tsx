@@ -54,6 +54,12 @@ const logSettingsSchema = z.object({
     user_export_enabled: z.boolean(),
     max_range_days: z.number().int().min(1),
   }),
+  request_error_log_setting: z.object({
+    enabled: z.boolean(),
+    status_codes: z.string().max(255),
+    max_body_kb: z.number().int().min(1).max(1024),
+    retention_days: z.number().int().min(0).max(3650),
+  }),
 })
 
 type LogSettingsFormValues = z.infer<typeof logSettingsSchema>
@@ -63,6 +69,10 @@ type LogSettingsSectionProps = {
     LogConsumeEnabled: boolean
     'log_setting.user_export_enabled': boolean
     'log_setting.max_range_days': number
+    'request_error_log_setting.enabled': boolean
+    'request_error_log_setting.status_codes': string
+    'request_error_log_setting.max_body_kb': number
+    'request_error_log_setting.retention_days': number
   }
 }
 
@@ -71,6 +81,7 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
   const updateOption = useUpdateOption()
   const recordingTitleId = useId()
   const searchTitleId = useId()
+  const captureTitleId = useId()
   const formDefaults = useMemo<LogSettingsFormValues>(
     () => ({
       LogConsumeEnabled: props.defaultValues.LogConsumeEnabled,
@@ -78,6 +89,15 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
         user_export_enabled:
           props.defaultValues['log_setting.user_export_enabled'],
         max_range_days: props.defaultValues['log_setting.max_range_days'],
+      },
+      request_error_log_setting: {
+        enabled: props.defaultValues['request_error_log_setting.enabled'],
+        status_codes:
+          props.defaultValues['request_error_log_setting.status_codes'],
+        max_body_kb:
+          props.defaultValues['request_error_log_setting.max_body_kb'],
+        retention_days:
+          props.defaultValues['request_error_log_setting.retention_days'],
       },
     }),
     [props.defaultValues]
@@ -99,6 +119,22 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
         values.log_setting.user_export_enabled,
       ],
       ['log_setting.max_range_days', values.log_setting.max_range_days],
+      [
+        'request_error_log_setting.enabled',
+        values.request_error_log_setting.enabled,
+      ],
+      [
+        'request_error_log_setting.status_codes',
+        values.request_error_log_setting.status_codes,
+      ],
+      [
+        'request_error_log_setting.max_body_kb',
+        values.request_error_log_setting.max_body_kb,
+      ],
+      [
+        'request_error_log_setting.retention_days',
+        values.request_error_log_setting.retention_days,
+      ],
     ] as const
     for (const [key, value] of changes) {
       if (value === props.defaultValues[key]) continue
@@ -199,6 +235,114 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
                     <FormDescription>
                       {t(
                         'The longest time range a user can view at once in the logs and on the dashboard, and the longest range any export can cover.'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </SettingsFormGrid>
+          </div>
+
+          <Separator />
+
+          <div
+            role='group'
+            aria-labelledby={captureTitleId}
+            className='flex min-w-0 flex-col gap-4'
+          >
+            <h4 id={captureTitleId} className='font-medium'>
+              {t('Error request capture')}
+            </h4>
+            <FormField
+              control={form.control}
+              name='request_error_log_setting.enabled'
+              render={({ field }) => (
+                <SettingsSwitchItem>
+                  <SettingsSwitchContent>
+                    <FormLabel>{t('Capture failed requests')}</FormLabel>
+                    <FormDescription>
+                      {t(
+                        'Store the client request body when a relay request fails with a selected status code. Captured requests appear under Error Requests.'
+                      )}
+                    </FormDescription>
+                  </SettingsSwitchContent>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </SettingsSwitchItem>
+              )}
+            />
+            <SettingsFormGrid>
+              <FormField
+                control={form.control}
+                name='request_error_log_setting.status_codes'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Status codes to capture')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder='400,403,451,500,502,503'
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'Comma separated HTTP status codes. Leave empty to capture every 4xx and 5xx response.'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='request_error_log_setting.max_body_kb'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Maximum body size (KB)')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        min={1}
+                        max={1024}
+                        step={1}
+                        {...safeNumberFieldProps(field)}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'Larger request bodies are truncated before they are stored.'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='request_error_log_setting.retention_days'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Retention days')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        min={0}
+                        max={3650}
+                        step={1}
+                        {...safeNumberFieldProps(field)}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'Captured requests older than this are deleted automatically. Use 0 to keep them until deleted manually.'
                       )}
                     </FormDescription>
                     <FormMessage />

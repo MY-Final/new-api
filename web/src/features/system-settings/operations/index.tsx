@@ -57,6 +57,11 @@ const defaultOperationsSettings: OperationsSettings = {
   LogConsumeEnabled: false,
   'log_setting.user_export_enabled': true,
   'log_setting.max_range_days': 365,
+  'request_error_log_setting.enabled': false,
+  'request_error_log_setting.status_codes':
+    '400,401,403,413,422,429,451,500,502,503,504',
+  'request_error_log_setting.max_body_kb': 64,
+  'request_error_log_setting.retention_days': 7,
   'performance_setting.disk_cache_enabled': false,
   'performance_setting.disk_cache_threshold_mb': 10,
   'performance_setting.disk_cache_max_size_mb': 1024,

@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import {
   Activity,
+  AlertTriangle,
   BarChart3,
   BookOpen,
   Box,
@@ -133,6 +134,12 @@ export function useSidebarData(): SidebarData {
             title: t('Audit Logs'),
             url: '/usage-logs/audit',
             icon: ClipboardList,
+          },
+          {
+            title: t('Error Requests'),
+            url: '/error-requests',
+            icon: AlertTriangle,
+            requiredRole: ROLE.ADMIN,
           },
           {
             title: t('Task Logs'),

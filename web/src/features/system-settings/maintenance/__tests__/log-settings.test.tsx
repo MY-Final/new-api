@@ -44,6 +44,10 @@ function Fixture() {
             LogConsumeEnabled: true,
             'log_setting.user_export_enabled': true,
             'log_setting.max_range_days': 30,
+            'request_error_log_setting.enabled': false,
+            'request_error_log_setting.status_codes': '400,403,500',
+            'request_error_log_setting.max_body_kb': 64,
+            'request_error_log_setting.retention_days': 7,
           }}
         />
       </SettingsPageProvider>
@@ -86,6 +90,7 @@ test('the page shows the four log modules in order, each with its own controls',
   ).toEqual([
     'Log recording',
     'Log search and export',
+    'Error request capture',
     'Clean history logs',
     'Server Log Management',
   ])
@@ -103,6 +108,19 @@ test('the page shows the four log modules in order, each with its own controls',
       name: 'Longest log time range (days)',
     })
   ).toBeVisible()
+  const capture = screen.getByRole('group', { name: 'Error request capture' })
+  expect(
+    within(capture).getByRole('switch', { name: 'Capture failed requests' })
+  ).toBeVisible()
+  expect(
+    within(capture).getByRole('textbox', { name: 'Status codes to capture' })
+  ).toHaveValue('400,403,500')
+  expect(
+    within(capture).getByRole('spinbutton', { name: 'Maximum body size (KB)' })
+  ).toHaveValue(64)
+  expect(
+    within(capture).getByRole('spinbutton', { name: 'Retention days' })
+  ).toHaveValue(7)
   const cleanup = screen.getByRole('group', { name: 'Clean history logs' })
   expect(
     within(cleanup).getByRole('button', { name: 'Clean logs' })
@@ -169,6 +187,39 @@ test('saving sends only the log export settings that changed', async () => {
   expect(api.put).toHaveBeenCalledWith('/api/option/', {
     key: 'log_setting.max_range_days',
     value: 90,
+  })
+})
+
+test('enabling error request capture saves the capture settings', async () => {
+  const user = userEvent.setup()
+  await renderSettings()
+  const capture = screen.getByRole('group', { name: 'Error request capture' })
+
+  await user.click(
+    within(capture).getByRole('switch', { name: 'Capture failed requests' })
+  )
+  fireEvent.change(
+    within(capture).getByRole('textbox', { name: 'Status codes to capture' }),
+    { target: { value: '403,451' } }
+  )
+  fireEvent.change(
+    within(capture).getByRole('spinbutton', { name: 'Retention days' }),
+    { target: { value: '30' } }
+  )
+  await user.click(screen.getByRole('button', { name: 'Save log settings' }))
+
+  await waitFor(() => expect(api.put).toHaveBeenCalledTimes(3))
+  expect(api.put).toHaveBeenCalledWith('/api/option/', {
+    key: 'request_error_log_setting.enabled',
+    value: true,
+  })
+  expect(api.put).toHaveBeenCalledWith('/api/option/', {
+    key: 'request_error_log_setting.status_codes',
+    value: '403,451',
+  })
+  expect(api.put).toHaveBeenCalledWith('/api/option/', {
+    key: 'request_error_log_setting.retention_days',
+    value: 30,
   })
 })
 
