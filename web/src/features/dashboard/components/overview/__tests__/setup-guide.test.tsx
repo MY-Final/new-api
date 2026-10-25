@@ -149,6 +149,39 @@ beforeEach(() => {
             ],
           },
         }
+      case '/api/ledger/summary':
+        return {
+          data: {
+            success: true,
+            data: {
+              range_paid_quota: 250000,
+              debt_users: 3,
+              debt_quota: -600000,
+            },
+          },
+        }
+      case '/api/statistics/users/':
+        return {
+          data: {
+            success: true,
+            data: {
+              summary: { user_cost: 1000 },
+              activity: { dau: 1, wau: 1, mau: 1 },
+              items: [
+                {
+                  user_id: 7,
+                  username: 'big-spender',
+                  user_cost: 600,
+                  request_count: 30,
+                  total_tokens: 1000,
+                },
+              ],
+              total: 1,
+              page: 1,
+              page_size: 5,
+            },
+          },
+        }
       default:
         throw new Error(`Unexpected dashboard request: ${url}`)
     }
@@ -190,9 +223,12 @@ describe('overview usage and content', () => {
         .mocked(api.get)
         .mock.calls.some(([url]) => url === '/api/perf-metrics/summary')
     ).toBe(false)
+    expect(
+      screen.queryByRole('region', { name: 'Operations Overview' })
+    ).not.toBeInTheDocument()
   })
 
-  it('loads site-wide usage and model health for an administrator instead of their personal totals', async () => {
+  it('loads site-wide usage and top spenders for an administrator instead of their personal totals', async () => {
     usageData = [
       {
         created_at: Math.floor(Date.now() / 1000),
@@ -212,11 +248,13 @@ describe('overview usage and content', () => {
     const requests = await screen.findByRole('region', { name: 'Requests' })
     expect(await within(requests).findByText('123')).toBeVisible()
     expect(screen.getByText('All users')).toBeVisible()
+    const spenders = await screen.findByRole('region', {
+      name: 'Top spenders',
+    })
+    expect(await within(spenders).findByText('big-spender')).toBeVisible()
     expect(
-      await screen.findByRole('link', {
-        name: 'View failed requests for needs-attention',
-      })
-    ).toBeVisible()
+      screen.queryByRole('region', { name: 'Models to watch' })
+    ).not.toBeInTheDocument()
     expect(
       screen.queryByRole('region', { name: 'Current Balance' })
     ).not.toBeInTheDocument()
@@ -226,6 +264,25 @@ describe('overview usage and content', () => {
     expect(
       vi.mocked(api.get).mock.calls.some(([url]) => url === '/api/data/self')
     ).toBe(false)
+    const operations = await screen.findByRole('region', {
+      name: 'Operations Overview',
+    })
+    expect(within(operations).getByText('Top-up')).toBeVisible()
+    expect(within(operations).getByText('Active users')).toBeVisible()
+    expect(within(operations).getByText('Debt users')).toBeVisible()
+    expect(
+      vi
+        .mocked(api.get)
+        .mock.calls.some(([url]) => url === '/api/ledger/summary')
+    ).toBe(true)
+  })
+
+  it('defaults the overview usage range to today', async () => {
+    await renderOverview()
+    const quick = await screen.findByRole('group', { name: 'Quick Range' })
+    expect(
+      within(quick).getByRole('button', { name: 'Today' })
+    ).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('changes all usage modules to a quick range without changing the balance', async () => {

@@ -40,17 +40,16 @@ import { DateRangePresets } from '../date-range-presets'
 import { ConsumptionDistributionChart } from '../models/consumption-distribution-chart'
 import { LogStatCards } from '../models/log-stat-cards'
 import { ModelCharts } from '../models/model-charts'
-import {
-  PerformanceOverview,
-  PerformanceSuccessCard,
-} from '../models/performance-overview'
+import { PerformanceSuccessCard } from '../models/performance-overview'
 import { PersonalBalanceCard } from '../models/personal-balance-card'
+import { OperationsStrip } from './operations-strip'
+import { TopSpendersPanel } from './top-spenders-panel'
 
 export function SummaryCards() {
   const { t } = useTranslation()
   const user = useAuthStore((state) => state.auth.user)
   const isAdmin = Number(user?.role) >= ROLE.ADMIN
-  const [range, setRange] = useState(() => getRollingDateRange(7))
+  const [range, setRange] = useState(() => getRollingDateRange(0))
   const granularity =
     range.end.getTime() - range.start.getTime() > 2 * 86400000 ? 'day' : 'hour'
   const start = dateToUnixTimestamp(range.start)
@@ -128,6 +127,7 @@ export function SummaryCards() {
         </span>
         {t('Usage totals are aggregated by hour')}
       </p>
+      {isAdmin && <OperationsStrip range={range} />}
       <div className='grid min-w-0 items-stretch gap-4 xl:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)]'>
         {query.isError ? (
           <ErrorState
@@ -144,7 +144,7 @@ export function SummaryCards() {
           />
         )}
         {isAdmin ? (
-          <PerformanceOverview />
+          <TopSpendersPanel range={range} />
         ) : (
           !query.isError && (
             <ModelCharts

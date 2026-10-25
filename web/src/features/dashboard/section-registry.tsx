@@ -41,7 +41,7 @@ const DASHBOARD_SECTIONS = [
   },
   {
     id: 'users',
-    titleKey: 'User Analytics',
+    titleKey: 'Users & Revenue',
     adminOnly: true,
     build: () => null,
   },

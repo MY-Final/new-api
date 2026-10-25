@@ -248,6 +248,7 @@ export function AdminUsageAnalytics(props: AdminUsageAnalyticsProps) {
       className='min-w-0 gap-4'
     >
       <TabsList
+        variant='line'
         className='grid w-full max-w-full grid-cols-2 gap-1 group-data-horizontal/tabs:h-auto sm:flex sm:w-fit sm:flex-wrap'
         aria-label={t('User analytics views')}
       >
@@ -278,30 +279,58 @@ export function AdminUsageAnalytics(props: AdminUsageAnalyticsProps) {
       </TabsList>
       {isPeriodView && (
         <>
-          <div className='flex flex-wrap items-center justify-between gap-2'>
-            <div className='flex min-w-0 flex-wrap items-center gap-2'>
-              <Badge variant='outline' className='max-w-full break-all'>
-                {username || t('All users')}
-              </Badge>
-              <DateRangePresets range={range} onChange={handleRangeChange} />
-            </div>
+          <div className='bg-card flex min-w-0 flex-wrap items-center gap-2 rounded-xl border px-2.5 py-2'>
+            <Badge variant='outline' className='max-w-full break-all'>
+              {username || t('All users')}
+            </Badge>
+            <DateRangePresets range={range} onChange={handleRangeChange} />
             <CompactDateTimeRangePicker
               start={range.start}
               end={range.end}
               onChange={handleRangeChange}
               maxRangeDays={31}
-              className='sm:w-auto'
+              className='w-full sm:w-auto'
             />
+            <div
+              className='bg-border hidden h-5 w-px sm:block'
+              aria-hidden='true'
+            />
+            <div className='flex min-w-0 flex-1 flex-wrap gap-1.5 sm:flex-nowrap'>
+              <Input
+                className='bg-muted/40 focus-visible:ring-ring/40 h-8 min-w-36 flex-1 rounded-lg border-0 px-2.5 focus-visible:ring-2'
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                placeholder={t('Filter users')}
+                aria-label={t('Filter users')}
+              />
+              <Input
+                className='bg-muted/40 focus-visible:ring-ring/40 h-8 min-w-36 flex-1 rounded-lg border-0 px-2.5 focus-visible:ring-2'
+                value={modelName}
+                onChange={(event) => setModelName(event.target.value)}
+                placeholder={t('Filter models')}
+                aria-label={t('Filter models')}
+              />
+              <Input
+                className='bg-muted/40 focus-visible:ring-ring/40 h-8 min-w-36 flex-1 rounded-lg border-0 px-2.5 focus-visible:ring-2'
+                value={channel}
+                onChange={(event) =>
+                  setChannel(event.target.value.replaceAll(/\D/g, ''))
+                }
+                placeholder={t('Channel ID')}
+                aria-label={t('Channel ID')}
+                inputMode='numeric'
+              />
+            </div>
           </div>
-          <div
-            className='grid grid-cols-2 gap-3 xl:grid-cols-4'
+          <section
+            className='bg-card divide-border grid min-w-0 grid-cols-1 divide-y overflow-hidden rounded-xl border sm:grid-cols-2 xl:grid-cols-4 xl:divide-x xl:divide-y-0'
             aria-label={t('Period Summary')}
           >
             {metrics.map((metric) => (
               <section
                 key={metric.title}
                 aria-label={metric.title}
-                className='bg-card min-w-0 rounded-xl border p-3 sm:p-4'
+                className='min-w-0 p-3 sm:p-4'
               >
                 <StatCard
                   title={metric.title}
@@ -359,30 +388,7 @@ export function AdminUsageAnalytics(props: AdminUsageAnalyticsProps) {
                 />
               </section>
             ))}
-          </div>
-          <div className='grid min-w-0 gap-2 sm:grid-cols-3'>
-            <Input
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              placeholder={t('Filter users')}
-              aria-label={t('Filter users')}
-            />
-            <Input
-              value={modelName}
-              onChange={(event) => setModelName(event.target.value)}
-              placeholder={t('Filter models')}
-              aria-label={t('Filter models')}
-            />
-            <Input
-              value={channel}
-              onChange={(event) =>
-                setChannel(event.target.value.replaceAll(/\D/g, ''))
-              }
-              placeholder={t('Channel ID')}
-              aria-label={t('Channel ID')}
-              inputMode='numeric'
-            />
-          </div>
+          </section>
         </>
       )}
       <TabsContent value='ranking'>

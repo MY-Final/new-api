@@ -27,14 +27,16 @@ interface StatDeltaProps {
 }
 
 /**
- * Period-over-period change for a stat card. Renders nothing when the previous
- * period has no data, so "new" metrics are not misreported as infinite growth.
+ * Period-over-period change for a stat card. Renders nothing when either period
+ * has no data: a "new" metric is not infinite growth, and an empty period does
+ * not need a −100% chip next to a zero value.
  */
 export function StatDelta(props: StatDeltaProps) {
   const { t } = useTranslation()
   if (
     !Number.isFinite(props.current) ||
     !Number.isFinite(props.previous) ||
+    props.current <= 0 ||
     props.previous <= 0
   ) {
     return null

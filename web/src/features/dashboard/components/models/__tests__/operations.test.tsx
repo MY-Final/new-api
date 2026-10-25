@@ -289,19 +289,19 @@ describe('operations dashboard', () => {
     ).toBeVisible()
   })
 
-  test('keeps scope while changing the range and compares nonoverlapping hour buckets', async () => {
+  test('compares the same clock window of the previous day and keeps the selected scope', async () => {
     const user = userEvent.setup()
     renderDashboard()
     await screen.findByText('Model Ranking')
+    const currentStart = Math.floor(start.getTime() / 1000)
+    const currentEnd = Math.floor(end.getTime() / 1000)
     const requests = vi
       .mocked(getUserQuotaDates)
       .mock.calls.map(([params]) => params)
     const previous = requests.find(
-      (params) => params.end_timestamp < Math.floor(start.getTime() / 1000)
+      (params) => params.start_timestamp === currentStart - 86400
     )
-    expect(previous?.end_timestamp).toBe(
-      Math.floor(start.getTime() / 3600000) * 3600 - 1
-    )
+    expect(previous?.end_timestamp).toBe(currentEnd - 86400)
     await user.click(screen.getByRole('button', { name: '7 Days' }))
     expect(screen.getByRole('button', { name: '7 Days' })).toHaveAttribute(
       'aria-pressed',
@@ -340,7 +340,7 @@ describe('operations dashboard', () => {
         30 * 86400
       )
     }
-    expect(Math.floor(ranges[1].end_timestamp / 3600)).toBeLessThan(
+    expect(Math.floor(ranges[1].end_timestamp / 3600)).toBeLessThanOrEqual(
       Math.floor(ranges[0].start_timestamp / 3600)
     )
   })

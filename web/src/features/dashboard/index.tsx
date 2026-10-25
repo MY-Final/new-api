@@ -37,12 +37,13 @@ import {
   useAutoRefreshInterval,
 } from '@/hooks'
 import { ROLE } from '@/lib/roles'
+import { getRollingDateRange } from '@/lib/time'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { ModelsChartPreferences } from './components/models/models-chart-preferences'
 import { ModelsFilter } from './components/models/models-filter-dialog'
+import { OperationsStrip } from './components/overview/operations-strip'
 import { OverviewDashboard } from './components/overview/overview-dashboard'
-import { UsersFilter } from './components/users/users-filter-dialog'
 import {
   buildDefaultDashboardFilters,
   buildDefaultUserChartsFilters,
@@ -105,7 +106,7 @@ const SECTION_META: Record<DashboardSectionId, { titleKey: string }> = {
     titleKey: 'Flow',
   },
   users: {
-    titleKey: 'User Analytics',
+    titleKey: 'Users & Revenue',
   },
 }
 
@@ -122,9 +123,15 @@ export function Dashboard() {
   const [modelFilters, setModelFilters] = useState<DashboardFilters>(() =>
     buildDefaultDashboardFilters(getSavedChartPreferences())
   )
-  const [userChartsFilters, setUserChartsFilters] = useState<UserChartsFilters>(
-    buildDefaultUserChartsFilters
-  )
+  // The user analytics view shares the model/flow period: one range selects the
+  // same window for every dashboard tab instead of each tab remembering its own.
+  const [userChartOptions, setUserChartOptions] = useState(() => {
+    const defaults = buildDefaultUserChartsFilters()
+    return {
+      timeGranularity: defaults.timeGranularity,
+      topUserLimit: defaults.topUserLimit,
+    }
+  })
   const [flowSensitiveVisible, setFlowSensitiveVisible] = useState(true)
   const { autoRefreshInterval, setAutoRefreshInterval } =
     useAutoRefreshInterval(DASHBOARD_AUTO_REFRESH_STORAGE_KEY)
@@ -140,11 +147,15 @@ export function Dashboard() {
   }, [chartPreferences])
 
   const handleUserFiltersChange = useCallback((filters: UserChartsFilters) => {
-    setUserChartsFilters(filters)
-  }, [])
-
-  const handleResetUserFilters = useCallback(() => {
-    setUserChartsFilters(buildDefaultUserChartsFilters())
+    setUserChartOptions({
+      timeGranularity: filters.timeGranularity,
+      topUserLimit: filters.topUserLimit,
+    })
+    setModelFilters((previous) => ({
+      ...previous,
+      start_timestamp: filters.range.start,
+      end_timestamp: filters.range.end,
+    }))
   }, [])
 
   const handleChartPreferencesChange = useCallback(
@@ -154,6 +165,22 @@ export function Dashboard() {
       saveChartPreferences(preferences)
     },
     []
+  )
+
+  const sharedRange = useMemo(() => {
+    const fallback = getRollingDateRange(chartPreferences.defaultTimeRangeDays)
+    return {
+      start: modelFilters.start_timestamp ?? fallback.start,
+      end: modelFilters.end_timestamp ?? fallback.end,
+    }
+  }, [
+    chartPreferences.defaultTimeRangeDays,
+    modelFilters.end_timestamp,
+    modelFilters.start_timestamp,
+  ])
+  const userChartsFilters = useMemo<UserChartsFilters>(
+    () => ({ ...userChartOptions, range: sharedRange }),
+    [sharedRange, userChartOptions]
   )
 
   const meta = SECTION_META[activeSection] ?? SECTION_META.overview
@@ -198,17 +225,10 @@ export function Dashboard() {
     ) : null
   const userActions =
     activeSection === 'users' ? (
-      <>
-        <UsersFilter
-          filters={userChartsFilters}
-          onFiltersChange={handleUserFiltersChange}
-          onReset={handleResetUserFilters}
-        />
-        <AutoRefreshControl
-          autoRefreshInterval={autoRefreshInterval}
-          onAutoRefreshIntervalChange={setAutoRefreshInterval}
-        />
-      </>
+      <AutoRefreshControl
+        autoRefreshInterval={autoRefreshInterval}
+        onAutoRefreshIntervalChange={setAutoRefreshInterval}
+      />
     ) : null
   const flowActions =
     activeSection === 'flow' ? (
@@ -303,15 +323,18 @@ export function Dashboard() {
             </FadeIn>
           )}
           {activeSection === 'users' && (
-            <FadeIn>
-              <Suspense fallback={<ModelChartsFallback />}>
-                <LazyUserCharts
-                  filters={userChartsFilters}
-                  onFiltersChange={setUserChartsFilters}
-                  refetchInterval={refetchInterval}
-                />
-              </Suspense>
-            </FadeIn>
+            <div className='flex min-w-0 flex-col gap-4'>
+              <OperationsStrip range={sharedRange} />
+              <FadeIn>
+                <Suspense fallback={<ModelChartsFallback />}>
+                  <LazyUserCharts
+                    filters={userChartsFilters}
+                    onFiltersChange={handleUserFiltersChange}
+                    refetchInterval={refetchInterval}
+                  />
+                </Suspense>
+              </FadeIn>
+            </div>
           )}
           {activeSection === 'flow' && (
             <FadeIn>

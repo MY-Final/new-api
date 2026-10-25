@@ -82,16 +82,14 @@ export function ModelDashboard(props: ModelDashboardProps) {
     start_timestamp: Math.floor(range.start.getTime() / 1000),
     end_timestamp: Math.floor(range.end.getTime() / 1000),
   }
-  // The source floors the start to a complete hour bucket. Query from the
-  // end of the previous first bucket so 30-day comparisons stay within the
-  // self API limit while covering equal, nonoverlapping bucket counts.
-  const firstBucket =
-    currentRange.start_timestamp - (currentRange.start_timestamp % 3600)
-  const lastBucket =
-    currentRange.end_timestamp - (currentRange.end_timestamp % 3600)
+  // Compare against the same clock window of the previous day/period: a partial
+  // "today" must be measured against yesterday's same hours, not a different
+  // slice of yesterday that happens to have the same length.
+  const rangeSeconds = currentRange.end_timestamp - currentRange.start_timestamp
+  const shiftSeconds = Math.max(86400, Math.ceil(rangeSeconds / 86400) * 86400)
   const previousRange = {
-    start_timestamp: firstBucket - (lastBucket - firstBucket) - 1,
-    end_timestamp: firstBucket - 1,
+    start_timestamp: currentRange.start_timestamp - shiftSeconds,
+    end_timestamp: currentRange.end_timestamp - shiftSeconds,
   }
   const query = useQuery({
     queryKey: [
@@ -255,34 +253,31 @@ export function ModelDashboard(props: ModelDashboardProps) {
           onRetry={() => void query.refetch()}
         />
       ) : (
-        <>
-          <div
-            className={
-              props.isAdmin
-                ? 'grid min-w-0 gap-4 lg:grid-cols-2'
-                : 'grid min-w-0 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]'
-            }
-          >
-            {props.isAdmin ? (
-              <PerformanceOverview refetchInterval={props.refetchInterval} />
-            ) : (
-              consumptionTrend
-            )}
-            <ModelCharts
-              key={props.preferences.modelRankingMetric}
-              data={analytics.models}
-              loading={query.isLoading}
-              defaultMetric={props.preferences.modelRankingMetric}
-              filters={{
-                ...usageFilters,
-                start_timestamp: range.start,
-                end_timestamp: range.end,
-              }}
-              title={props.isAdmin ? undefined : t('My model usage')}
-            />
-          </div>
-          {props.isAdmin && consumptionTrend}
-        </>
+        <div
+          className={
+            props.isAdmin
+              ? 'grid min-w-0 gap-4 lg:grid-cols-2'
+              : 'grid min-w-0 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]'
+          }
+        >
+          {props.isAdmin ? (
+            <PerformanceOverview refetchInterval={props.refetchInterval} />
+          ) : (
+            consumptionTrend
+          )}
+          <ModelCharts
+            key={props.preferences.modelRankingMetric}
+            data={analytics.models}
+            loading={query.isLoading}
+            defaultMetric={props.preferences.modelRankingMetric}
+            filters={{
+              ...usageFilters,
+              start_timestamp: range.start,
+              end_timestamp: range.end,
+            }}
+            title={props.isAdmin ? undefined : t('My model usage')}
+          />
+        </div>
       )}
     </div>
   )
