@@ -137,7 +137,7 @@ it('marks the displayed version read and leaves older message pages unread', asy
   const get = vi.spyOn(api, 'get').mockImplementation(async (_url, config) => ({
     data: {
       success: true,
-      data: config?.params?.before
+      data: (config?.params as { before?: number } | undefined)?.before
         ? {
             ...detail,
             messages: [

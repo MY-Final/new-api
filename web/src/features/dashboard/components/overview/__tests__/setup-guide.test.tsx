@@ -298,9 +298,12 @@ describe('overview usage and content', () => {
     await waitFor(() =>
       expect(
         vi.mocked(api.get).mock.calls.some(([url, config]) => {
-          const params = config?.params
+          const params = config?.params as
+            | { end_timestamp: number; start_timestamp: number }
+            | undefined
           return (
             url === '/api/data/self' &&
+            params !== undefined &&
             params.end_timestamp - params.start_timestamp === 86400
           )
         })

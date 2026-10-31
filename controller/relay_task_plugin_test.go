@@ -91,6 +91,36 @@ export function buildSubmitRequest(){return {}} export function parseSubmitRespo
 	assert.JSONEq(t, `{"seconds":5}`, recorder.Header().Get("X-New-Api-Other-Ratios"))
 }
 
+// The submit presenter may answer with the vendor's status; a native route that
+// already relayed the vendor's event stream gets nothing more.
+func TestPresentTaskSubmissionHonorsReplyWrapperAndRelayedStreams(t *testing.T) {
+	plugin, err := pluginruntime.CompilePlugin(`
+export const meta = {apiVersion:1,key:"accepted-test",name:"Accepted",version:"1.0.0",author:{name:"Test"},models:["model"],fetchMode:"per_task",routes:[{method:"POST",path:"/vendor/jobs",type:"submit",decode:"decode",render:"created"}]};
+export const native = {decode:function(ctx){return {kind:"submit",model:"model",requestBody:ctx.body.value};},created:function(ctx,task){return {__status:202,__body:{id:task.task_id}};}};
+export function buildSubmitRequest(){return {}} export function parseSubmitResponse(){return {taskId:"upstream"}} export function buildQueryRequest(){return {}} export function parseTaskResult(){return {status:"SUCCESS"}}
+`, pluginruntime.Options{})
+	require.NoError(t, err)
+	present := func(recorder *httptest.ResponseRecorder, written bool) {
+		c, _ := gin.CreateTestContext(recorder)
+		c.Request = httptest.NewRequest(http.MethodPost, "/vendor/jobs", strings.NewReader(`{"model":"model"}`))
+		c.Set(pluginruntime.ContextKeyPinnedRoute, pluginruntime.PinnedRoute{Plugin: plugin, Route: plugin.Meta.Routes[0]})
+		c.Set(pluginruntime.ContextKeyRouteRequest, pluginruntime.RouteRequestContext{Path: "/vendor/jobs", Method: http.MethodPost, Body: map[string]any{"kind": "json", "value": map[string]any{"model": "model"}}})
+		if written {
+			_, _ = c.Writer.WriteString("data: {}\n\n")
+		}
+		presentTaskSubmission(c, &taskSubmissionOutcome{Result: &relay.TaskSubmitResult{}, Task: &model.Task{TaskID: "task_public"}, RelayInfo: &relaycommon.RelayInfo{}})
+	}
+
+	accepted := httptest.NewRecorder()
+	present(accepted, false)
+	assert.Equal(t, http.StatusAccepted, accepted.Code)
+	assert.JSONEq(t, `{"id":"task_public"}`, accepted.Body.String())
+
+	streamed := httptest.NewRecorder()
+	present(streamed, true)
+	assert.Equal(t, "data: {}\n\n", streamed.Body.String())
+}
+
 func TestPresentTaskSubmissionFallbackUsesPersistedPublicID(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -472,7 +502,8 @@ func taskSubmissionRelayInfo(billing relaycommon.BillingSettler) *relaycommon.Re
 // Uses the real submit adaptor, expression evaluator, BillingSession, task row
 // and consume log. Set TEST_TASK_DB_DIALECT plus TEST_MYSQL_DSN or
 // TEST_POSTGRES_DSN to exercise the same contract on an external test database.
-// Unique table prefixes keep the fixture isolated from all existing tables.
+// Most tables use unique prefixes; the fixed-name daily usage table requires
+// an isolated test database.
 // openTaskDialectDatabase opens the engine selected by TEST_TASK_DB_DIALECT
 // (default SQLite in memory; MySQL and PostgreSQL through TEST_MYSQL_DSN and
 // TEST_POSTGRES_DSN) with a unique table prefix, migrates the given models and
@@ -501,6 +532,12 @@ func openTaskDialectDatabase(t *testing.T, models ...any) (*gorm.DB, common.Data
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
 	t.Cleanup(func() { _ = sqlDB.Close() })
+	for _, value := range models {
+		if _, ok := value.(*model.QuotaUsageDaily); ok {
+			// QuotaUsageDaily has a fixed table name and cannot use the prefix.
+			require.False(t, db.Migrator().HasTable(&model.QuotaUsageDaily{}), "quota_usage_daily already exists; use an isolated test database")
+		}
+	}
 	require.NoError(t, db.AutoMigrate(models...))
 	t.Cleanup(func() { require.NoError(t, db.Migrator().DropTable(models...)) })
 	var version string

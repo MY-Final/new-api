@@ -49,7 +49,7 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import type { SidebarData } from '@/components/layout/types'
+import type { SidebarBadges, SidebarData } from '@/components/layout/types'
 import { useCustomPages } from '@/features/custom-pages/hooks/use-custom-pages'
 import { useTicketUnread } from '@/features/tickets/hooks/use-ticket-unread'
 import { toIntlLocale } from '@/i18n/languages'
@@ -62,7 +62,7 @@ import { ROLE } from '@/lib/roles'
  * These are shown when the URL does not match any nested sidebar view
  * registered in `layout/lib/sidebar-view-registry.ts`.
  */
-export function useSidebarData(): SidebarData {
+export function useSidebarData(badges: SidebarBadges = {}): SidebarData {
   const { t, i18n } = useTranslation()
   const { links: customPageLinks } = useCustomPages()
   const tickets = useTicketUnread()
@@ -274,6 +274,8 @@ export function useSidebarData(): SidebarData {
             activeUrls: ['/system-settings'],
             icon: Settings,
             requiredRole: ROLE.SUPER_ADMIN,
+            // Model pricing lives in System Settings.
+            badge: badges.modelPricing,
           },
         ],
       },

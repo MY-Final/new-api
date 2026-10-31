@@ -69,6 +69,28 @@ func SetupLogger() {
 	}
 }
 
+// CloseLogger releases the active log file and returns logging to the console.
+func CloseLogger() error {
+	setupLogLock.Lock()
+	defer setupLogLock.Unlock()
+
+	currentLogPathMu.Lock()
+	oldFile := currentLogFile
+	currentLogFile = nil
+	currentLogPath = ""
+	currentLogPathMu.Unlock()
+	if oldFile == nil {
+		return nil
+	}
+
+	common.LogWriterMu.Lock()
+	gin.DefaultWriter = os.Stdout
+	gin.DefaultErrorWriter = os.Stderr
+	err := oldFile.Close()
+	common.LogWriterMu.Unlock()
+	return err
+}
+
 func LogInfo(ctx context.Context, msg string) {
 	logHelper(ctx, loggerINFO, msg)
 }

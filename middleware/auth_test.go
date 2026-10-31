@@ -392,6 +392,88 @@ func TestUserAuthAppliesAccessTokenRouteRules(t *testing.T) {
 	assert.Equal(t, http.StatusOK, middlewareBearerRequest(router, "/api/user/self", profile).Code, "the deadline only retires legacy tokens")
 }
 
+func TestRequestErrorLogsRequireAdminSession(t *testing.T) {
+	setupDashboardAuthMiddlewareTest(t)
+	gin.SetMode(gin.TestMode)
+	legacy := "error-log-legacy-token"
+	admin := createMiddlewarePATUser(t, "error-log-admin", legacy)
+	require.NoError(t, model.DB.Model(admin).Update("role", common.RoleAdminUser).Error)
+	user := createMiddlewarePATUser(t, "error-log-user", "other-legacy-token")
+	pat, _ := createMiddlewareScopedToken(t, admin.Id, 0, "log:read")
+	expired, _ := createMiddlewareScopedToken(t, admin.Id, time.Now().Unix()-1, "log:read")
+
+	issueSession := func(user *model.User, sid string) string {
+		now := time.Now().Unix()
+		session := &model.UserSession{
+			SID: sid, UserID: user.Id, Version: 1, UserAuthVersion: user.AuthVersion,
+			Status: model.UserSessionStatusActive, RefreshHash: "refresh-" + sid,
+			LoginMethod: "password", LastActiveAt: now, ExpiresAt: now + 3600,
+		}
+		require.NoError(t, model.CreateUserSession(session))
+		token, _, err := service.IssueAccessToken(service.AuthIdentity{
+			UserID: user.Id, SessionID: sid, UserAuthVersion: user.AuthVersion, SessionVersion: session.Version,
+		})
+		require.NoError(t, err)
+		return token
+	}
+	adminSession := issueSession(admin, "error-log-admin-session")
+	userSession := issueSession(user, "error-log-user-session")
+
+	router := gin.New()
+	ok := func(c *gin.Context) { c.Status(http.StatusNoContent) }
+	router.GET("/api/log/error", AdminAuth(), ok)
+	router.GET("/api/log/error/:id", AdminAuth(), ok)
+	router.DELETE("/api/log/error/:id", AdminAuth(), ok)
+	router.POST("/api/log/error/batch-delete", AdminAuth(), ok)
+	router.POST("/api/log/error/clear", AdminAuth(), ok)
+	for _, route := range []struct{ method, path string }{
+		{http.MethodGet, "/api/log/error"},
+		{http.MethodGet, "/api/log/error/1"},
+		{http.MethodDelete, "/api/log/error/1"},
+		{http.MethodPost, "/api/log/error/batch-delete"},
+		{http.MethodPost, "/api/log/error/clear"},
+	} {
+		for _, credential := range []struct {
+			name, token, code string
+			status            int
+		}{
+			{"anonymous", "", "", http.StatusUnauthorized},
+			{"non-admin session", userSession, "", http.StatusForbidden},
+			{"scoped token", pat, "AUTH_SESSION_REQUIRED", http.StatusForbidden},
+			{"legacy token", legacy, "AUTH_SESSION_REQUIRED", http.StatusForbidden},
+			{"expired token", expired, "ACCESS_TOKEN_EXPIRED", http.StatusUnauthorized},
+			{"admin session", adminSession, "", http.StatusNoContent},
+		} {
+			t.Run(route.method+" "+route.path+"/"+credential.name, func(t *testing.T) {
+				request := httptest.NewRequest(route.method, route.path, nil)
+				if credential.token != "" {
+					request.Header.Set("Authorization", "Bearer "+credential.token)
+				}
+				response := httptest.NewRecorder()
+				router.ServeHTTP(response, request)
+				assert.Equal(t, credential.status, response.Code, response.Body.String())
+				if credential.code != "" {
+					assert.Contains(t, response.Body.String(), credential.code)
+				}
+			})
+		}
+	}
+
+	var auditEntries []model.AuditLog
+	require.NoError(t, model.LOG_DB.Find(&auditEntries).Error)
+	encodedAudit, err := common.Marshal(auditEntries)
+	require.NoError(t, err)
+	assert.NotContains(t, string(encodedAudit), pat)
+	assert.NotContains(t, string(encodedAudit), legacy)
+	assert.NotContains(t, string(encodedAudit), adminSession)
+
+	revoked, err := model.RevokeUserSession(admin.Id, "error-log-admin-session", "test logout")
+	require.NoError(t, err)
+	require.True(t, revoked)
+	response := middlewareBearerRequest(router, "/api/log/error", adminSession)
+	assert.Equal(t, http.StatusUnauthorized, response.Code)
+}
+
 func TestAccessTokenIdentityAndSingleLookup(t *testing.T) {
 	setupDashboardAuthMiddlewareTest(t)
 	gin.SetMode(gin.TestMode)

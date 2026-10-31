@@ -29,6 +29,7 @@ import { useNotificationStream } from '@/hooks/use-notification-stream'
 import { useStatus } from '@/hooks/use-status'
 import { getCookie } from '@/lib/cookies'
 import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/stores/auth-store'
 
 import { AppHeader } from './app-header'
 import { AppSidebar } from './app-sidebar'
@@ -39,6 +40,13 @@ type AuthenticatedLayoutProps = {
 }
 
 export function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
+  const signedIn = useAuthStore((s) => !!s.auth.user)
+  if (!signedIn) return null
+
+  return <AuthenticatedLayoutContent {...props} />
+}
+
+function AuthenticatedLayoutContent(props: AuthenticatedLayoutProps) {
   const defaultOpen = getCookie('sidebar_state') !== 'false'
   useNotificationStream()
   const { status } = useStatus()
