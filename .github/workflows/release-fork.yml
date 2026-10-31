@@ -1,0 +1,124 @@
+name: Release (fork)
+
+# One-click release for this fork: resolve or create the version tag, then run
+# the artifact release and the multi-arch Docker publish as reusable workflows.
+# Keeping both builds in one run keeps a version from shipping half-built when
+# only one of the two old workflows was dispatched.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag, e.g. v1.0.0-cicd-test.45. Leave empty to auto-increment the latest v1.0.0-cicd-test.N tag.'
+        required: false
+        type: string
+      ref:
+        description: 'Branch or commit to build and tag'
+        required: false
+        default: main
+        type: string
+      notes:
+        description: 'Release notes stored on the tag (optional)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-fork
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Resolve version tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.ref }}
+
+      - name: Resolve version
+        id: version
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          VERSION="$REQUESTED_VERSION"
+          if [ -z "$VERSION" ]; then
+            LATEST="$(git tag --list 'v1.0.0-cicd-test.*' --sort=-v:refname | head -n 1)"
+            if [ -z "$LATEST" ]; then
+              echo "::error::No v1.0.0-cicd-test.* tag to increment. Pass a version explicitly."
+              exit 1
+            fi
+            PREFIX="${LATEST%.*}"
+            SUFFIX="${LATEST##*.}"
+            if ! [[ "$SUFFIX" =~ ^[0-9]+$ ]]; then
+              echo "::error::Latest tag '$LATEST' does not end in a number. Pass a version explicitly."
+              exit 1
+            fi
+            VERSION="${PREFIX}.$((SUFFIX + 1))"
+          fi
+
+          if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]([0-9A-Za-z.-]*[0-9A-Za-z])?)?$ ]]; then
+            printf '::error::%s\n' "'$VERSION' is not a valid version tag (expected e.g. v1.0.0-cicd-test.45)"
+            exit 1
+          fi
+
+          if git rev-parse "refs/tags/$VERSION" >/dev/null 2>&1; then
+            EXISTING_SHA="$(git rev-list -n 1 "refs/tags/$VERSION")"
+            if [ "$EXISTING_SHA" != "$(git rev-parse HEAD)" ]; then
+              echo "::error::Tag '$VERSION' already exists at $EXISTING_SHA, not at the selected commit. Pass another version."
+              exit 1
+            fi
+            echo "::notice::Tag '$VERSION' already exists at this commit; reusing it."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $VERSION"
+
+      - name: Create and push tag
+        if: steps.version.outputs.exists != 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          set -euo pipefail
+
+          MESSAGE="$VERSION"
+          if [ -n "$NOTES" ]; then
+            MESSAGE="$(printf '%s\n\n%s' "$VERSION" "$NOTES")"
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a "$VERSION" -m "$MESSAGE"
+          git push origin "refs/tags/$VERSION"
+
+  release:
+    name: Build release artifacts
+    needs: prepare
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      version: ${{ needs.prepare.outputs.version }}
+
+  docker:
+    name: Build Docker image
+    needs: prepare
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+    uses: ./.github/workflows/docker-build.yml
+    with:
+      tag: ${{ needs.prepare.outputs.version }}
+    secrets: inherit
