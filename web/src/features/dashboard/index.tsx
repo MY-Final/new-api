@@ -203,6 +203,11 @@ export function Dashboard() {
   )
   const showSectionTabs =
     activeSection !== 'overview' && visibleSections.length > 1
+  // The tab strip already names the active section, so the page heading
+  // stays at the dashboard level instead of repeating the tab label.
+  let pageTitle = t(meta.titleKey)
+  if (activeSection === 'models' && !isAdmin) pageTitle = t('Usage Analytics')
+  if (showSectionTabs) pageTitle = t('Dashboard')
   const modelActions =
     activeSection === 'models' ? (
       <>
@@ -280,19 +285,22 @@ export function Dashboard() {
 
   return (
     <SectionPageLayout>
-      <SectionPageLayout.Title>
-        {activeSection === 'models' && !isAdmin
-          ? t('Usage Analytics')
-          : t(meta.titleKey)}
-      </SectionPageLayout.Title>
+      <SectionPageLayout.Title>{pageTitle}</SectionPageLayout.Title>
       <SectionPageLayout.Content>
-        <div className='space-y-3 sm:space-y-4'>
+        <div className='w-full min-w-0 space-y-3 sm:space-y-4'>
           <div className='flex flex-wrap items-center justify-between gap-1.5 sm:gap-2'>
             {showSectionTabs ? (
               <Tabs value={activeSection} onValueChange={handleSectionChange}>
-                <TabsList className='max-w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto'>
+                <TabsList
+                  variant='line'
+                  className='max-w-full flex-wrap justify-start gap-x-3 group-data-horizontal/tabs:h-auto'
+                >
                   {visibleSections.map((section) => (
-                    <TabsTrigger key={section} value={section}>
+                    <TabsTrigger
+                      key={section}
+                      value={section}
+                      className='flex-none px-0.5 text-[0.95rem]'
+                    >
                       {section === 'models' && !isAdmin
                         ? t('Usage Analytics')
                         : t(SECTION_META[section].titleKey)}
@@ -304,7 +312,7 @@ export function Dashboard() {
               <div />
             )}
             {sectionActions != null && (
-              <div className='flex shrink-0 flex-wrap items-center gap-1.5 sm:gap-2'>
+              <div className='flex max-w-full min-w-0 flex-wrap items-center gap-1.5 sm:gap-2'>
                 {sectionActions}
               </div>
             )}

@@ -28,7 +28,7 @@ import { useSystemConfigStore } from '@/stores/system-config-store'
 
 import { StatCard } from '../ui/stat-card'
 
-export function PersonalBalanceCard() {
+export function PersonalBalanceCard(props: { compact?: boolean }) {
   const { t } = useTranslation()
   const quota = useAuthStore((state) => state.auth.user?.quota)
   useSystemConfigStore((state) => state.config.currency)
@@ -40,13 +40,21 @@ export function PersonalBalanceCard() {
     <section
       aria-label={title}
       className={cn(
-        'bg-primary/5 border-primary/20 min-w-0 rounded-xl border p-3 sm:p-4',
+        'bg-primary/5 flex min-w-0 flex-col',
+        props.compact
+          ? 'p-4 sm:p-5'
+          : 'border-primary/20 rounded-xl border p-3 sm:p-4',
         hasDebt && 'border-destructive/30 bg-destructive/5'
       )}
     >
       <StatCard
         title={title}
         value={formatQuotaPrecise(Math.abs(balance))}
+        valueClassName={
+          props.compact
+            ? 'text-[2rem] leading-none sm:text-[2.5rem]'
+            : undefined
+        }
         description={
           hasDebt
             ? t('Recharge to settle debt')
@@ -55,14 +63,22 @@ export function PersonalBalanceCard() {
         descriptionClassName='line-clamp-none'
         icon={WalletCards}
         iconTone={hasDebt ? 'destructive' : 'success'}
+        compact={props.compact}
+        className={props.compact ? 'h-full' : undefined}
         error={!Number.isFinite(balance)}
         action={
           <Link
             to='/wallet'
             aria-label={t('Go to Wallet')}
             title={t('Go to Wallet')}
-            className={buttonVariants({ variant: 'ghost', size: 'icon-xs' })}
+            className={buttonVariants({
+              variant: 'ghost',
+              size: props.compact ? 'sm' : 'icon-xs',
+            })}
           >
+            {props.compact && (
+              <span className='hidden sm:inline'>{t('Top-up')}</span>
+            )}
             <ArrowUpRight aria-hidden='true' />
           </Link>
         }

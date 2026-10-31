@@ -21,6 +21,7 @@ import { useTranslation } from 'react-i18next'
 
 import { toIntlLocale } from '@/i18n/languages'
 import { formatCompactNumber, formatNumber, formatQuota } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import { useSystemConfigStore } from '@/stores/system-config-store'
 
 import type { DashboardAnalytics, DashboardMetricStats } from '../../types'
@@ -33,6 +34,7 @@ interface LogStatCardsProps {
   loading: boolean
   error: boolean
   personal?: boolean
+  compact?: boolean
 }
 
 export function LogStatCards(props: LogStatCardsProps) {
@@ -49,18 +51,24 @@ export function LogStatCards(props: LogStatCardsProps) {
         ? t('Your charges in the selected period')
         : t('User-side charges in the selected period'),
       icon: Coins,
+      tone: 'accent-1' as const,
+      iconTone: 'chart-1' as const,
     },
     {
       key: 'count' as const,
       title: t('Requests'),
       description: t('Calls in the selected period'),
       icon: Hash,
+      tone: 'accent-2' as const,
+      iconTone: 'chart-2' as const,
     },
     {
       key: 'tokens' as const,
       title: t('Total Tokens'),
       description: t('Input and output tokens'),
       icon: Layers,
+      tone: 'accent-3' as const,
+      iconTone: 'chart-3' as const,
     },
   ]
 
@@ -69,25 +77,39 @@ export function LogStatCards(props: LogStatCardsProps) {
     let display = formatNumber(value, locale)
     if (display.length > 9) display = formatCompactNumber(value, locale)
     if (item.key === 'quota') display = formatQuota(value)
+    // The site-wide view leads with spend: it is the number an operator is
+    // actually watching, so it gets more width and a trend line of its own.
+    const featured = props.compact && !props.personal && item.key === 'quota'
     return (
       <section
         key={item.key}
         aria-label={item.title}
-        className='bg-card min-w-0 rounded-xl border p-3 sm:p-4'
+        className={cn(
+          'bg-card flex min-w-0 flex-col',
+          props.compact ? 'p-4 sm:p-5' : 'rounded-xl border p-3 sm:p-4',
+          featured && 'col-span-2 lg:col-span-1'
+        )}
       >
         <StatCard
           title={item.title}
           value={display}
           description={item.description}
           icon={item.icon}
-          iconTone='info'
-          tone='accent-1'
+          iconTone={item.iconTone}
+          compact={props.compact}
+          className={props.compact ? 'h-full' : undefined}
+          valueClassName={
+            featured ? 'text-[2rem] leading-none sm:text-[2.5rem]' : undefined
+          }
+          tone={item.tone}
           sparklineVariant='line'
+          sparklineClassName={featured ? 'h-12' : undefined}
           sparkline={
             props.error || props.loading
               ? []
               : props.data.timeline.map((bucket) => bucket[item.key])
           }
+          showVisualizationInCompact={featured && props.data.summary.quota > 0}
           loading={props.loading}
           error={props.error}
           action={

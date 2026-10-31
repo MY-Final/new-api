@@ -55,6 +55,11 @@ interface StatCardProps {
   visualization?: ReactNode
   iconTone?: IconBadgeTone
   compactMobile?: boolean
+  compact?: boolean
+  valueClassName?: string
+  sparklineClassName?: string
+  showVisualizationInCompact?: boolean
+  className?: string
 }
 
 const TONE_CLASSES: Record<StatCardTone, string> = {
@@ -147,18 +152,25 @@ function buildLineSparkline(values?: number[]) {
   }
 }
 
-function LineSparkline(props: { values?: number[]; tone: StatCardTone }) {
+function LineSparkline(props: {
+  values?: number[]
+  tone: StatCardTone
+  className?: string
+}) {
   const rawGradientId = useId()
   const gradientId = `stat-card-line-${rawGradientId.replaceAll(':', '')}`
   const paths = buildLineSparkline(props.values)
 
-  if (!paths) return <div className='h-8' aria-hidden='true' />
+  if (!paths) {
+    return <div className={cn('h-8', props.className)} aria-hidden='true' />
+  }
 
   return (
     <div
       className={cn(
         'relative h-8 overflow-hidden rounded-lg',
-        LINE_TONE_CLASSES[props.tone]
+        LINE_TONE_CLASSES[props.tone],
+        props.className
       )}
       aria-hidden='true'
     >
@@ -260,7 +272,13 @@ export function StatCard(props: StatCardProps) {
   } else if (props.error) {
     valueContent = (
       <div className='flex flex-col gap-1'>
-        <div className='text-muted-foreground mt-0.5 font-mono text-base font-bold tracking-tight break-all tabular-nums sm:text-2xl'>
+        <div
+          className={cn(
+            'text-muted-foreground mt-0.5 font-mono text-base font-bold tracking-tight break-all tabular-nums sm:text-2xl',
+            props.compact && 'text-xl sm:text-2xl',
+            props.valueClassName
+          )}
+        >
           --
         </div>
         <p
@@ -268,6 +286,7 @@ export function StatCard(props: StatCardProps) {
           className={cn(
             'text-muted-foreground/60 line-clamp-1 text-[11px] sm:text-xs',
             props.compactMobile && 'hidden sm:block',
+            props.compact && 'text-muted-foreground text-xs',
             props.descriptionClassName
           )}
         >
@@ -278,7 +297,13 @@ export function StatCard(props: StatCardProps) {
   } else {
     valueContent = (
       <div className='flex flex-col gap-1'>
-        <div className='text-foreground font-mono text-base font-semibold tracking-tight break-all tabular-nums sm:text-2xl'>
+        <div
+          className={cn(
+            'text-foreground font-mono text-base font-semibold tracking-tight break-all tabular-nums sm:text-2xl',
+            props.compact && 'text-xl sm:text-2xl',
+            props.valueClassName
+          )}
+        >
           {props.value}
         </div>
         <p
@@ -286,6 +311,7 @@ export function StatCard(props: StatCardProps) {
           className={cn(
             'text-muted-foreground/60 line-clamp-1 text-[11px] leading-relaxed sm:text-xs',
             props.compactMobile && 'hidden sm:block',
+            props.compact && 'text-muted-foreground text-xs',
             props.descriptionClassName
           )}
         >
@@ -301,7 +327,13 @@ export function StatCard(props: StatCardProps) {
   } else if (props.details?.length) {
     visualization = <StatCardDetails details={props.details} />
   } else if (sparklineVariant === 'line') {
-    visualization = <LineSparkline values={props.sparkline} tone={tone} />
+    visualization = (
+      <LineSparkline
+        values={props.sparkline}
+        tone={tone}
+        className={props.sparklineClassName}
+      />
+    )
   } else {
     visualization = <BarSparkline values={props.sparkline} tone={tone} />
   }
@@ -310,7 +342,9 @@ export function StatCard(props: StatCardProps) {
     <div
       className={cn(
         'group flex flex-col justify-between sm:min-h-32 sm:gap-3',
-        props.compactMobile ? 'gap-1' : 'gap-1.5'
+        props.compactMobile ? 'gap-1' : 'gap-1.5',
+        props.compact && 'sm:min-h-0 sm:gap-2',
+        props.className
       )}
     >
       <div
@@ -322,6 +356,7 @@ export function StatCard(props: StatCardProps) {
         <div
           className={cn(
             'text-muted-foreground flex min-w-0 items-center gap-1 text-[11px] font-medium sm:gap-2 sm:text-xs',
+            props.compact && 'text-xs',
             props.titleAction && 'w-full sm:w-auto'
           )}
         >
@@ -350,7 +385,11 @@ export function StatCard(props: StatCardProps) {
 
       {valueContent}
 
-      <div className='hidden sm:block'>{visualization}</div>
+      {(!props.compact || props.showVisualizationInCompact) && (
+        <div className={props.compact ? undefined : 'hidden sm:block'}>
+          {visualization}
+        </div>
+      )}
     </div>
   )
 }

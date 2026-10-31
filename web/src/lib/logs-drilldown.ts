@@ -23,6 +23,7 @@ export interface LogsDrilldownTarget {
   channel?: number
   username?: string
   token?: string
+  requestId?: string
   errorOnly?: boolean
 }
 
@@ -38,6 +39,7 @@ export function buildLogsDrilldownSearch(target: LogsDrilldownTarget) {
     channel: target.channel != null ? String(target.channel) : undefined,
     username: target.username,
     token: target.token,
+    requestId: target.requestId,
     type: target.errorOnly ? (['5'] as const) : undefined,
     page: 1,
   }

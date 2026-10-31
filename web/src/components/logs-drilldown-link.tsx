@@ -30,6 +30,7 @@ interface LogsDrilldownLinkProps {
   channel?: number
   username?: string
   token?: string
+  requestId?: string
   errorOnly?: boolean
   showLabel?: boolean
 }
@@ -61,6 +62,7 @@ export function LogsDrilldownLink(props: LogsDrilldownLinkProps) {
             channel: props.channel,
             username: props.username,
             token: props.token,
+            requestId: props.requestId,
             errorOnly: props.errorOnly,
           })}
         />

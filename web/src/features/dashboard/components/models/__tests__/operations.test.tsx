@@ -30,6 +30,9 @@ import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { getPerfMetricsSummary } from '@/features/performance-metrics/api'
+import { getUserLogs } from '@/features/usage-logs/api'
+import { usageLogSchema } from '@/features/usage-logs/data/schema'
+import type { GetLogsParams } from '@/features/usage-logs/types'
 import { useAuthStore } from '@/stores/auth-store'
 import {
   DEFAULT_CURRENCY_CONFIG,
@@ -44,6 +47,9 @@ import { ModelDashboard } from '../model-dashboard'
 vi.mock('../../../api', () => ({ getUserQuotaDates: vi.fn() }))
 vi.mock('@/features/performance-metrics/api', () => ({
   getPerfMetricsSummary: vi.fn(),
+}))
+vi.mock('@/features/usage-logs/api', () => ({
+  getUserLogs: vi.fn(),
 }))
 
 const start = new Date('2026-10-10T10:30:00Z')
@@ -71,7 +77,7 @@ beforeEach(() => {
         token_used: 200,
       },
       {
-        created_at: 1791626400,
+        created_at: 1791630000,
         model_name: 'expensive-rare',
         quota: 1500000,
         count: 1,
@@ -101,6 +107,16 @@ beforeEach(() => {
       ],
     },
   })
+  const fetchLogs = async (params: GetLogsParams = {}) => ({
+    success: true,
+    data: {
+      items: params.type === 5 ? [errorLog] : [streamLog, consumeLog],
+      total: params.type === 5 ? 1 : 2,
+      page: 1,
+      page_size: params.page_size ?? 5,
+    },
+  })
+  vi.mocked(getUserLogs).mockImplementation(fetchLogs)
 })
 afterEach(() => {
   client.clear()
@@ -150,7 +166,151 @@ function renderDashboard(isAdmin = true) {
   )
 }
 
+const consumeLog = usageLogSchema.parse({
+  id: 1,
+  user_id: 1,
+  created_at: 1791626400,
+  type: 2,
+  content: '',
+  model_name: 'healthy-model',
+  quota: 500000,
+  other: '',
+  request_id: 'healthy-request',
+})
+const streamLog = {
+  ...consumeLog,
+  id: 2,
+  created_at: 1791626500,
+  model_name: 'stream-model',
+  channel: 143,
+  channel_name: 'backup',
+  request_id: 'stream-request',
+  is_stream: true,
+  other: JSON.stringify({
+    stream_status: { status: 'error', end_reason: 'eof' },
+  }),
+}
+const errorLog = {
+  ...consumeLog,
+  id: 3,
+  created_at: 1791626600,
+  type: 5,
+  model_name: 'error-model',
+  request_id: 'error-request',
+  content: 'upstream error',
+}
+
 describe('operations dashboard', () => {
+  test('keeps the period metrics and site performance in one summary register', async () => {
+    renderDashboard()
+    const summary = await screen.findByRole('region', {
+      name: 'Period Summary',
+    })
+    expect(
+      within(summary).getByRole('region', { name: 'User quota consumption' })
+    ).toBeVisible()
+    expect(
+      within(summary).getByRole('region', { name: 'Requests' })
+    ).toBeVisible()
+    expect(
+      within(summary).getByRole('region', { name: 'Total Tokens' })
+    ).toBeVisible()
+    expect(
+      within(summary).getByRole('region', { name: 'Success rate' })
+    ).toBeVisible()
+    expect(
+      within(summary).queryByRole('region', { name: 'Current Balance' })
+    ).not.toBeInTheDocument()
+  })
+
+  test('keeps the personal balance beside the period metrics in the summary register', async () => {
+    renderDashboard(false)
+    const summary = await screen.findByRole('region', {
+      name: 'Period Summary',
+    })
+    expect(
+      within(summary).getByRole('region', { name: 'Current Balance' })
+    ).toBeVisible()
+    expect(
+      within(summary).getByRole('region', { name: 'Period consumption' })
+    ).toBeVisible()
+    expect(
+      within(summary).queryByRole('region', { name: 'Success rate' })
+    ).not.toBeInTheDocument()
+  })
+
+  test('keeps administrator dashboard focused on aggregate metrics', async () => {
+    renderDashboard()
+    await screen.findByRole('region', { name: 'Consumption Trend' })
+    expect(
+      screen.queryByRole('region', { name: 'Recent issues' })
+    ).not.toBeInTheDocument()
+    expect(getUserLogs).not.toHaveBeenCalled()
+  })
+
+  test('replaces an empty administrator analysis with a compact logs shortcut', async () => {
+    vi.mocked(getUserQuotaDates).mockResolvedValue({ success: true, data: [] })
+    renderDashboard()
+    expect(await screen.findByText('No usage data')).toBeVisible()
+    expect(
+      screen.queryByRole('region', { name: 'Consumption Trend' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Model Ranking' })
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Usage Logs' })).toBeVisible()
+  })
+
+  test('uses only self logs for a personal recent-usage panel', async () => {
+    renderDashboard(false)
+    const panel = await screen.findByRole('region', { name: 'Recent usage' })
+    expect(await within(panel).findByText('healthy-model')).toBeVisible()
+    expect(within(panel).getByText('stream-model')).toBeVisible()
+    expect(within(panel).getByText('eof')).toBeVisible()
+    expect(getUserLogs).toHaveBeenCalledWith(
+      expect.not.objectContaining({ username: expect.anything() })
+    )
+  })
+
+  test('offers an API key entry when the selected personal period has no logs', async () => {
+    vi.mocked(getUserLogs).mockResolvedValue({
+      success: true,
+      data: { items: [], total: 0, page: 1, page_size: 5 },
+    })
+    renderDashboard(false)
+    const panel = await screen.findByRole('region', { name: 'Recent usage' })
+    expect(
+      await within(panel).findByText('No recent usage in this period')
+    ).toBeVisible()
+    expect(
+      within(panel).getByRole('link', { name: 'API Keys' })
+    ).toHaveAttribute('href', '/keys')
+  })
+
+  test('retries recent usage after a failed log request', async () => {
+    vi.mocked(getUserLogs).mockResolvedValueOnce({ success: false })
+    const user = userEvent.setup()
+    renderDashboard(false)
+    const panel = await screen.findByRole('region', { name: 'Recent usage' })
+    await user.click(
+      await within(panel).findByRole('button', { name: 'Retry' })
+    )
+    expect(await within(panel).findByText('stream-model')).toBeVisible()
+  })
+
+  test('does not draw a trend when usage appears in only one time bucket', async () => {
+    vi.mocked(getUserQuotaDates).mockResolvedValue({
+      success: true,
+      data: [{ created_at: 1791626400, model_name: 'single', count: 1 }],
+    })
+    renderDashboard(false)
+    const trend = await screen.findByRole('region', {
+      name: 'Consumption Trend',
+    })
+    expect(
+      await within(trend).findByText('Not enough data to show a trend')
+    ).toBeVisible()
+  })
   test('shows live personal balance independently of the selected usage range', async () => {
     const user = userEvent.setup()
     renderDashboard(false)
@@ -171,11 +331,17 @@ describe('operations dashboard', () => {
   })
 
   test('puts personal trend before model usage and preserves the range in the logs shortcut', async () => {
+    const user = userEvent.setup()
     renderDashboard(false)
+    await user.click(
+      await screen.findByRole('button', { name: 'My model usage' })
+    )
     const ranking = await screen.findByRole('region', {
       name: 'My model usage',
     })
-    const trend = screen.getByRole('region', { name: 'Consumption Trend' })
+    const trend = await screen.findByRole('region', {
+      name: 'Consumption Trend',
+    })
     expect(
       trend.compareDocumentPosition(ranking) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
@@ -202,7 +368,7 @@ describe('operations dashboard', () => {
     const debt = await screen.findByRole('region', { name: 'Debt' })
     expect(within(debt).getByText('$1')).toBeVisible()
     expect(within(debt).getByText('Recharge to settle debt')).toBeVisible()
-    expect(await screen.findAllByText('No usage data')).toHaveLength(2)
+    expect(await screen.findByText('No usage data')).toBeVisible()
     expect(getPerfMetricsSummary).not.toHaveBeenCalled()
   })
 
@@ -217,6 +383,7 @@ describe('operations dashboard', () => {
   })
 
   test('shows the new account usage after switching users instead of reusing the previous cache', async () => {
+    const user = userEvent.setup()
     renderDashboard(false)
     const requests = await screen.findByRole('region', { name: 'Requests' })
     expect(await within(requests).findByText('101')).toBeVisible()
@@ -238,6 +405,7 @@ describe('operations dashboard', () => {
     })
     expect(await within(requests).findByText('4')).toBeVisible()
     expect(within(requests).queryByText('101')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'My model usage' }))
     expect(
       await screen.findByRole('link', { name: 'second-account' })
     ).toBeVisible()
@@ -246,6 +414,9 @@ describe('operations dashboard', () => {
   test('ranks by cost first, switches requests and preserves the user in log drilldowns', async () => {
     const user = userEvent.setup()
     renderDashboard()
+    await user.click(
+      await screen.findByRole('button', { name: 'Model Ranking' })
+    )
     await screen.findByRole('link', { name: 'expensive-rare' })
     const panel = screen.getByRole('region', { name: 'Model Ranking' })
     const links = within(panel).getAllByRole('link')
@@ -268,40 +439,19 @@ describe('operations dashboard', () => {
     expect(requestTab).toHaveAttribute('aria-selected', 'true')
   })
 
-  test('shows low success rates first and drills into the actual performance window', async () => {
+  test('labels site performance independently from the selected user and period', async () => {
     renderDashboard()
-    const first = await screen.findByRole('link', {
-      name: 'View failed requests for needs-attention',
-    })
-    const links = screen.getAllByRole('link', {
-      name: /View failed requests for/,
-    })
-    expect(links[0]).toBe(first)
-    const search = new URL(first.getAttribute('href') ?? '', 'http://localhost')
-      .searchParams
-    expect(search.get('model')).toBe('needs-attention')
-    expect(search.get('startTime')).toBe(String(start.getTime()))
-    expect(search.get('endTime')).toBe(String(end.getTime()))
-    expect(search.get('username')).toBeNull()
-    expect(search.get('type')).toContain('5')
     expect(
-      screen.getByText('All-site performance · last 24 hours')
+      await screen.findByText('All-site performance · last 24 hours')
     ).toBeVisible()
+    expect(getPerfMetricsSummary).toHaveBeenCalledWith(24)
+    expect(screen.getByText('alice')).toBeVisible()
   })
 
-  test('compares the same clock window of the previous day and keeps the selected scope', async () => {
+  test('updates the selected range and keeps the selected user', async () => {
     const user = userEvent.setup()
     renderDashboard()
-    await screen.findByText('Model Ranking')
-    const currentStart = Math.floor(start.getTime() / 1000)
-    const currentEnd = Math.floor(end.getTime() / 1000)
-    const requests = vi
-      .mocked(getUserQuotaDates)
-      .mock.calls.map(([params]) => params)
-    const previous = requests.find(
-      (params) => params.start_timestamp === currentStart - 86400
-    )
-    expect(previous?.end_timestamp).toBe(currentEnd - 86400)
+    await screen.findByRole('region', { name: 'Consumption Trend' })
     await user.click(screen.getByRole('button', { name: '7 Days' }))
     expect(screen.getByRole('button', { name: '7 Days' })).toHaveAttribute(
       'aria-pressed',
@@ -311,45 +461,41 @@ describe('operations dashboard', () => {
       expect.objectContaining({ username: 'alice', default_time: 'day' }),
       true
     )
+    expect(getUserLogs).not.toHaveBeenCalled()
   })
 
   test('uses self statistics and hides site performance for ordinary users', async () => {
     renderDashboard(false)
-    await screen.findByRole('region', { name: 'My model usage' })
+    await screen.findByRole('region', { name: 'Recent usage' })
     expect(getUserQuotaDates).toHaveBeenCalledWith(expect.anything(), false)
     expect(getPerfMetricsSummary).not.toHaveBeenCalled()
     expect(screen.queryByText('Models to watch')).not.toBeInTheDocument()
   })
 
-  test('marks the 30-day range selected and keeps both self queries within the API limit', async () => {
+  test('marks the 30-day range selected and keeps the self query within the API limit', async () => {
     const user = userEvent.setup()
     renderDashboard(false)
-    await screen.findByRole('region', { name: 'My model usage' })
+    await screen.findByRole('region', { name: 'Recent usage' })
     await user.click(screen.getByRole('button', { name: '30 Days' }))
     expect(screen.getByRole('button', { name: '30 Days' })).toHaveAttribute(
       'aria-pressed',
       'true'
     )
-    const ranges = vi
-      .mocked(getUserQuotaDates)
-      .mock.calls.slice(-2)
-      .map(([params]) => params)
-    expect(ranges).toHaveLength(2)
-    for (const range of ranges) {
-      expect(range.end_timestamp - range.start_timestamp).toBeLessThanOrEqual(
-        30 * 86400
-      )
-    }
-    expect(Math.floor(ranges[1].end_timestamp / 3600)).toBeLessThanOrEqual(
-      Math.floor(ranges[0].start_timestamp / 3600)
+    const range = vi.mocked(getUserQuotaDates).mock.calls.at(-1)?.[0]
+    expect(range).toBeDefined()
+    if (!range) throw new Error('Expected a usage request')
+    expect(range.end_timestamp - range.start_timestamp).toBeLessThanOrEqual(
+      30 * 86400
     )
   })
 
   test('switches the trend metric with keyboard controls and updates its total', async () => {
     const user = userEvent.setup()
     renderDashboard(false)
-    await screen.findByRole('link', { name: 'expensive-rare' })
-    const trend = screen.getByRole('region', { name: 'Consumption Trend' })
+    const trend = await screen.findByRole('region', {
+      name: 'Consumption Trend',
+    })
+    await within(trend).findByText('Total: $4 · Hour')
     const tabs = within(trend).getByRole('tablist', { name: 'Trend metric' })
     const cost = within(tabs).getByRole('tab', { name: 'Cost' })
     cost.focus()
@@ -385,6 +531,9 @@ describe('operations dashboard', () => {
       ],
     })
     renderDashboard(false)
+    await user.click(
+      await screen.findByRole('button', { name: 'My model usage' })
+    )
     await screen.findByRole('link', { name: longName })
     const panel = screen.getByRole('region', { name: 'My model usage' })
     expect(within(panel).getAllByRole('link')).toHaveLength(5)
@@ -404,9 +553,8 @@ describe('operations dashboard', () => {
       data: { models: [], summary: null },
     })
     renderDashboard()
-    await screen.findByText('No performance data available')
-    const card = screen.getByRole('region', { name: 'Success rate' })
-    expect(within(card).getByText('—')).toBeVisible()
+    const card = await screen.findByRole('region', { name: 'Success rate' })
+    expect(await within(card).findByText('—')).toBeVisible()
     expect(within(card).queryByText('0.00%')).not.toBeInTheDocument()
   })
 
@@ -417,17 +565,11 @@ describe('operations dashboard', () => {
     })
     const user = userEvent.setup()
     renderDashboard()
-    const panel = await screen.findByRole('region', { name: 'Models to watch' })
+    const panel = await screen.findByRole('region', { name: 'Success rate' })
     await user.click(
       await within(panel).findByRole('button', { name: 'Retry' })
     )
-    await waitFor(() =>
-      expect(
-        within(panel).getByRole('link', {
-          name: 'View failed requests for needs-attention',
-        })
-      ).toBeVisible()
-    )
+    await waitFor(() => expect(within(panel).getByText('92.00%')).toBeVisible())
   })
 
   test('shows retry instead of an empty chart on a failed statistics response', async () => {

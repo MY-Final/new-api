@@ -18,12 +18,12 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { Gauge, HeartPulse, Timer } from 'lucide-react'
+import { Gauge, HeartPulse, RefreshCw, Timer } from 'lucide-react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { ErrorState } from '@/components/error-state'
-import { buttonVariants } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { getPerfMetricsSummary } from '@/features/performance-metrics/api'
 import {
@@ -42,6 +42,7 @@ import { StatCard } from '../ui/stat-card'
 
 interface PerformanceOverviewProps {
   refetchInterval?: number | false
+  compact?: boolean
 }
 
 function usePerformanceSummary(refetchInterval?: number | false) {
@@ -61,23 +62,50 @@ export function PerformanceSuccessCard(props: PerformanceOverviewProps) {
   return (
     <section
       aria-label={t('Success rate')}
-      className='bg-card min-w-0 rounded-xl border p-3 sm:p-4'
+      className={
+        props.compact
+          ? 'bg-card col-span-2 flex min-w-0 flex-col p-4 sm:p-5 lg:col-span-1'
+          : 'bg-card min-w-0 rounded-xl border p-3 sm:p-4'
+      }
     >
       <StatCard
         title={t('Success rate')}
         value={formatUptimePct(rate)}
+        valueClassName={
+          props.compact
+            ? cn(
+                'text-xl sm:text-2xl',
+                Number.isFinite(rate) && getSuccessRateTextClass(rate)
+              )
+            : undefined
+        }
         description={t('All-site performance · last 24 hours')}
         descriptionClassName='line-clamp-none'
         icon={HeartPulse}
         iconTone='success'
+        compact={props.compact}
+        className={props.compact ? 'h-full' : undefined}
         loading={query.isLoading}
         error={query.isError}
+        action={
+          props.compact && query.isError ? (
+            <Button
+              variant='ghost'
+              size='icon-xs'
+              aria-label={t('Retry')}
+              onClick={() => void query.refetch()}
+            >
+              <RefreshCw aria-hidden='true' />
+            </Button>
+          ) : undefined
+        }
+        showVisualizationInCompact={props.compact}
         visualization={
           Number.isFinite(rate) && !query.isError ? (
             <Progress
               value={Math.min(100, Math.max(0, rate))}
               aria-label={t('Success rate')}
-              className='gap-0'
+              className='gap-0 [&_[data-slot=progress-track]]:h-1.5'
             />
           ) : undefined
         }

@@ -18,17 +18,27 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { KeyRound, ScrollText } from 'lucide-react'
-import { useMemo } from 'react'
+import {
+  ChartNoAxesColumnIncreasing,
+  ChevronDown,
+  KeyRound,
+  ScrollText,
+  Users,
+} from 'lucide-react'
+import { useMemo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import { EmptyState } from '@/components/empty-state'
 import { ErrorState } from '@/components/error-state'
 import { Badge } from '@/components/ui/badge'
-import { buttonVariants } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
-import { toIntlLocale } from '@/i18n/languages'
-import { formatNumber } from '@/lib/format'
 import { buildLogsDrilldownSearch } from '@/lib/logs-drilldown'
 import { requireServerSuccess } from '@/lib/server-error-message'
 import { getRollingDateRange } from '@/lib/time'
@@ -42,11 +52,9 @@ import { DateRangePresets } from '../date-range-presets'
 import { ConsumptionDistributionChart } from './consumption-distribution-chart'
 import { LogStatCards } from './log-stat-cards'
 import { ModelCharts } from './model-charts'
-import {
-  PerformanceOverview,
-  PerformanceSuccessCard,
-} from './performance-overview'
+import { PerformanceSuccessCard } from './performance-overview'
 import { PersonalBalanceCard } from './personal-balance-card'
+import { RecentUsage } from './recent-usage'
 
 interface ModelDashboardProps {
   isAdmin: boolean
@@ -57,12 +65,11 @@ interface ModelDashboardProps {
 }
 
 export function ModelDashboard(props: ModelDashboardProps) {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const userId = useAuthStore((state) => state.auth.user?.id)
   const usageFilters = props.isAdmin
     ? props.filters
     : { ...props.filters, username: undefined }
-  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const range = useMemo(
     () => ({
       start:
@@ -81,15 +88,6 @@ export function ModelDashboard(props: ModelDashboardProps) {
   const currentRange = {
     start_timestamp: Math.floor(range.start.getTime() / 1000),
     end_timestamp: Math.floor(range.end.getTime() / 1000),
-  }
-  // Compare against the same clock window of the previous day/period: a partial
-  // "today" must be measured against yesterday's same hours, not a different
-  // slice of yesterday that happens to have the same length.
-  const rangeSeconds = currentRange.end_timestamp - currentRange.start_timestamp
-  const shiftSeconds = Math.max(86400, Math.ceil(rangeSeconds / 86400) * 86400)
-  const previousRange = {
-    start_timestamp: currentRange.start_timestamp - shiftSeconds,
-    end_timestamp: currentRange.end_timestamp - shiftSeconds,
   }
   const query = useQuery({
     queryKey: [
@@ -111,46 +109,14 @@ export function ModelDashboard(props: ModelDashboardProps) {
     staleTime: 30_000,
     retry: false,
   })
-  const previousQuery = useQuery({
-    queryKey: [
-      'dashboard-quota-dates-previous',
-      previousRange.start_timestamp,
-      previousRange.end_timestamp,
-      usageFilters.username ?? '',
-      props.isAdmin,
-      props.isAdmin ? undefined : userId,
-    ],
-    queryFn: async () =>
-      requireServerSuccess(
-        await getUserQuotaDates(
-          buildQueryParams(previousRange, usageFilters),
-          props.isAdmin
-        )
-      ).data ?? [],
-    refetchInterval: props.refetchInterval,
-    staleTime: 60_000,
-    retry: false,
-  })
   const analytics = useMemo(
     () => buildDashboardAnalytics(query.data ?? [], granularity, range),
     [query.data, granularity, range]
   )
-  const previous = useMemo(
-    () =>
-      previousQuery.data && !previousQuery.isError
-        ? buildDashboardAnalytics(previousQuery.data, granularity, {
-            start: new Date(previousRange.start_timestamp * 1000),
-            end: new Date(previousRange.end_timestamp * 1000),
-          }).summary
-        : undefined,
-    [
-      previousQuery.data,
-      previousQuery.isError,
-      granularity,
-      previousRange.start_timestamp,
-      previousRange.end_timestamp,
-    ]
-  )
+  const hasUsage =
+    analytics.summary.count > 0 ||
+    analytics.summary.quota > 0 ||
+    analytics.summary.tokens > 0
   const handleRangeChange = (next: { start?: Date; end?: Date }) => {
     if (!next.start || !next.end) return
     const seconds = (next.end.getTime() - next.start.getTime()) / 1000
@@ -169,116 +135,204 @@ export function ModelDashboard(props: ModelDashboardProps) {
       time_granularity: seconds <= 86400 ? 'hour' : 'day',
     })
   }
-  const consumptionTrend = (
-    <ConsumptionDistributionChart
-      data={analytics}
-      loading={query.isLoading}
-      defaultChartType={props.preferences.consumptionDistributionChart}
-      timeGranularity={granularity}
-    />
-  )
-
+  let analysisContent: ReactNode
+  if (query.isError) {
+    analysisContent = (
+      <ErrorState
+        title={t('Failed to load statistics')}
+        onRetry={() => void query.refetch()}
+      />
+    )
+  } else if (query.isPending || hasUsage) {
+    analysisContent = (
+      <div className='flex min-w-0 flex-col gap-4'>
+        <ConsumptionDistributionChart
+          data={analytics}
+          loading={query.isPending}
+          defaultChartType={props.preferences.consumptionDistributionChart}
+          timeGranularity={granularity}
+          requireMultipleBuckets
+        />
+        <Collapsible>
+          <CollapsibleTrigger
+            render={
+              <Button
+                type='button'
+                variant='outline'
+                className='group w-full justify-between'
+              />
+            }
+          >
+            {props.isAdmin ? t('Model Ranking') : t('My model usage')}
+            <ChevronDown
+              aria-hidden='true'
+              className='transition-transform group-aria-expanded:rotate-180'
+            />
+          </CollapsibleTrigger>
+          <CollapsibleContent className='pt-3'>
+            <ModelCharts
+              key={props.preferences.modelRankingMetric}
+              data={analytics.models}
+              loading={query.isPending}
+              defaultMetric={props.preferences.modelRankingMetric}
+              filters={{
+                ...usageFilters,
+                start_timestamp: range.start,
+                end_timestamp: range.end,
+              }}
+              title={props.isAdmin ? undefined : t('My model usage')}
+            />
+          </CollapsibleContent>
+        </Collapsible>
+      </div>
+    )
+  } else {
+    analysisContent = (
+      <div className='bg-card overflow-hidden rounded-2xl border'>
+        <div className='grid sm:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]'>
+          <EmptyState
+            icon={ChartNoAxesColumnIncreasing}
+            title={t('No usage data')}
+            description={t(
+              'No usage logs available. Logs will appear here once API calls are made.'
+            )}
+            className='min-h-40 items-start rounded-none px-5 py-6 text-left [&_[data-slot=empty-content]]:items-start [&_[data-slot=empty-header]]:items-start'
+            action={
+              props.isAdmin ? (
+                <Link
+                  to='/usage-logs/$section'
+                  params={{ section: 'common' }}
+                  search={buildLogsDrilldownSearch({
+                    ...range,
+                    username: usageFilters.username,
+                  })}
+                  className={buttonVariants({
+                    variant: 'outline',
+                    size: 'sm',
+                  })}
+                >
+                  <ScrollText aria-hidden='true' />
+                  {t('Usage Logs')}
+                </Link>
+              ) : undefined
+            }
+          />
+          <div
+            aria-hidden='true'
+            className='bg-muted/30 relative hidden border-l sm:block'
+          >
+            <svg
+              viewBox='0 0 400 160'
+              preserveAspectRatio='none'
+              className='text-muted-foreground/30 size-full'
+            >
+              <line
+                x1='40'
+                x2='40'
+                y1='32'
+                y2='128'
+                stroke='currentColor'
+                vectorEffect='non-scaling-stroke'
+              />
+              <line
+                x1='40'
+                x2='376'
+                y1='128'
+                y2='128'
+                stroke='currentColor'
+                vectorEffect='non-scaling-stroke'
+              />
+              {[32, 64, 96].map((y) => (
+                <line
+                  key={y}
+                  x1='40'
+                  x2='48'
+                  y1={y}
+                  y2={y}
+                  stroke='currentColor'
+                  vectorEffect='non-scaling-stroke'
+                />
+              ))}
+              {[88, 136, 184, 232, 280, 328, 376].map((x) => (
+                <line
+                  key={x}
+                  x1={x}
+                  x2={x}
+                  y1='128'
+                  y2='136'
+                  stroke='currentColor'
+                  vectorEffect='non-scaling-stroke'
+                />
+              ))}
+            </svg>
+          </div>
+        </div>
+      </div>
+    )
+  }
   return (
     <div className='flex min-w-0 flex-col gap-4'>
-      <div className='flex flex-wrap items-center justify-between gap-3'>
-        <div className='flex min-w-0 flex-wrap items-center gap-2'>
-          <Badge variant='outline' className='max-w-full break-all'>
-            {props.isAdmin
-              ? props.filters.username || t('All users')
-              : t('My usage')}
-          </Badge>
-          <DateRangePresets range={range} onChange={handleRangeChange} />
-        </div>
-        <CompactDateTimeRangePicker
-          start={range.start}
-          end={range.end}
-          onChange={handleRangeChange}
-          maxRangeDays={30}
-          className='sm:w-auto'
-        />
-      </div>
-      <div
-        className='grid grid-cols-2 gap-3 xl:grid-cols-4'
+      <section
         aria-label={t('Period Summary')}
+        className='bg-card overflow-hidden rounded-2xl border'
       >
-        {!props.isAdmin && <PersonalBalanceCard />}
-        <LogStatCards
-          data={analytics}
-          previous={previous}
-          loading={query.isLoading}
-          error={query.isError}
-          personal={!props.isAdmin}
-        />
-        {props.isAdmin && (
-          <PerformanceSuccessCard refetchInterval={props.refetchInterval} />
-        )}
-      </div>
-      <div className='flex flex-wrap items-center justify-between gap-3'>
-        <div className='text-muted-foreground flex flex-wrap items-center gap-x-5 gap-y-2 text-xs'>
-          <span>
-            {t('Models')}:{' '}
-            {query.isLoading || query.isError
-              ? '—'
-              : formatNumber(analytics.models.length, locale)}
-          </span>
-          <span>{t('Usage totals are aggregated by hour')}</span>
-        </div>
-        {!props.isAdmin && (
-          <div className='flex flex-wrap gap-2'>
-            <Link
-              to='/keys'
-              className={buttonVariants({ variant: 'outline', size: 'sm' })}
+        <div className='flex min-w-0 flex-wrap items-center justify-between gap-2 border-b px-3 py-2 sm:px-4'>
+          <div className='flex min-w-0 flex-wrap items-center gap-2'>
+            <Badge
+              variant='outline'
+              className='border-border/70 bg-muted/50 h-7 max-w-full gap-1.5 rounded-md px-2 font-normal [overflow-wrap:anywhere] whitespace-normal'
             >
-              <KeyRound aria-hidden='true' />
-              {t('API Keys')}
-            </Link>
-            <Link
-              to='/usage-logs/$section'
-              params={{ section: 'common' }}
-              search={buildLogsDrilldownSearch({
-                start: range.start,
-                end: range.end,
-              })}
-              className={buttonVariants({ variant: 'outline', size: 'sm' })}
-            >
-              <ScrollText aria-hidden='true' />
-              {t('Usage Logs')}
-            </Link>
+              <Users data-icon='inline-start' aria-hidden='true' />
+              {props.isAdmin
+                ? props.filters.username || t('All users')
+                : t('My usage')}
+            </Badge>
+            <DateRangePresets
+              range={range}
+              onChange={handleRangeChange}
+              variant='segmented'
+            />
           </div>
-        )}
-      </div>
-      {query.isError ? (
-        <ErrorState
-          title={t('Failed to load statistics')}
-          onRetry={() => void query.refetch()}
-        />
-      ) : (
-        <div
-          className={
-            props.isAdmin
-              ? 'grid min-w-0 gap-4 lg:grid-cols-2'
-              : 'grid min-w-0 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]'
-          }
-        >
-          {props.isAdmin ? (
-            <PerformanceOverview refetchInterval={props.refetchInterval} />
-          ) : (
-            consumptionTrend
-          )}
-          <ModelCharts
-            key={props.preferences.modelRankingMetric}
-            data={analytics.models}
-            loading={query.isLoading}
-            defaultMetric={props.preferences.modelRankingMetric}
-            filters={{
-              ...usageFilters,
-              start_timestamp: range.start,
-              end_timestamp: range.end,
-            }}
-            title={props.isAdmin ? undefined : t('My model usage')}
+          <CompactDateTimeRangePicker
+            start={range.start}
+            end={range.end}
+            onChange={handleRangeChange}
+            maxRangeDays={30}
+            className='h-7 max-w-full min-w-0 text-xs sm:w-auto'
           />
         </div>
+        <div className='bg-border grid min-w-0 grid-cols-2 gap-px lg:grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,1fr))]'>
+          {!props.isAdmin && <PersonalBalanceCard compact />}
+          <LogStatCards
+            data={analytics}
+            loading={query.isLoading}
+            error={query.isError}
+            personal={!props.isAdmin}
+            compact
+          />
+          {props.isAdmin && (
+            <PerformanceSuccessCard
+              refetchInterval={props.refetchInterval}
+              compact
+            />
+          )}
+        </div>
+      </section>
+      {!props.isAdmin && (
+        <div className='flex flex-wrap gap-2'>
+          <Link
+            to='/keys'
+            className={buttonVariants({ variant: 'outline', size: 'sm' })}
+          >
+            <KeyRound aria-hidden='true' />
+            {t('API Keys')}
+          </Link>
+        </div>
       )}
+      {!props.isAdmin && (
+        <RecentUsage range={range} refetchInterval={props.refetchInterval} />
+      )}
+      {analysisContent}
     </div>
   )
 }

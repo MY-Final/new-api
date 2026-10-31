@@ -52,6 +52,7 @@ interface ConsumptionDistributionChartProps {
   loading: boolean
   defaultChartType: ConsumptionDistributionChartType
   timeGranularity: TimeGranularity
+  requireMultipleBuckets?: boolean
 }
 
 export function ConsumptionDistributionChart(
@@ -73,14 +74,24 @@ export function ConsumptionDistributionChart(
   const bucketLabel = t(
     { hour: 'Hour', day: 'Day', week: 'Week' }[props.timeGranularity]
   )
+  const hasTrend =
+    !props.requireMultipleBuckets ||
+    props.data.timeline.filter(
+      (bucket) =>
+        bucket.count !== 0 || bucket.quota !== 0 || bucket.tokens !== 0
+    ).length >= 2
 
   return (
     <PanelWrapper
       title={t('Consumption Trend')}
       description={`${t('Total')}: ${total} · ${bucketLabel}`}
       loading={props.loading}
-      empty={props.data.models.length === 0}
-      emptyMessage={t('No usage data')}
+      empty={props.data.models.length === 0 || !hasTrend}
+      emptyMessage={
+        props.data.models.length === 0
+          ? t('No usage data')
+          : t('Not enough data to show a trend')
+      }
       height='h-64'
       className='h-full rounded-xl shadow-none'
       headerActions={
