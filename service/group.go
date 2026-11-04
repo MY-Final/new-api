@@ -11,6 +11,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const subscriptionRouteGroupDescription = "Subscription route group"
+
 func GetUserUsableGroups(userGroup string) map[string]string {
 	groupsCopy := setting.GetUserUsableGroupsCopy()
 	if userGroup != "" {
@@ -41,8 +43,34 @@ func GetUserUsableGroups(userGroup string) map[string]string {
 	return groupsCopy
 }
 
+// GetUserUsableGroupsForUser adds route groups snapshot on the user's active
+// subscription. These groups can be selected even when they are not part of the
+// normal UserUsableGroups configuration.
+func GetUserUsableGroupsForUser(userGroup string, userId int) map[string]string {
+	groups := GetUserUsableGroups(userGroup)
+	if userId <= 0 {
+		return groups
+	}
+	routeGroups, err := model.GetActiveSubscriptionRouteGroups(userId)
+	if err != nil {
+		common.SysError(common.LogText("failed to load active subscription route groups for user %d: %s", userId, err.Error()))
+		return groups
+	}
+	for _, group := range routeGroups {
+		if _, exists := groups[group]; !exists {
+			groups[group] = subscriptionRouteGroupDescription
+		}
+	}
+	return groups
+}
+
 func GroupInUserUsableGroups(userGroup, groupName string) bool {
 	_, ok := GetUserUsableGroups(userGroup)[groupName]
+	return ok
+}
+
+func GroupInUserUsableGroupsForUser(userGroup string, userId int, groupName string) bool {
+	_, ok := GetUserUsableGroupsForUser(userGroup, userId)[groupName]
 	return ok
 }
 
@@ -53,12 +81,30 @@ func IsUserSelectableGroup(userGroup, groupName string) bool {
 	return GroupInUserUsableGroups(userGroup, groupName) && ratio_setting.ContainsGroupRatio(groupName)
 }
 
+func IsUserSelectableGroupForUser(userGroup string, userId int, groupName string) bool {
+	if groupName == "" || groupName == "auto" {
+		return false
+	}
+	return GroupInUserUsableGroupsForUser(userGroup, userId, groupName) &&
+		ratio_setting.ContainsGroupRatio(groupName)
+}
+
 // GetUserAutoGroup 根据用户分组获取自动分组设置
 func GetUserAutoGroup(userGroup string) []string {
+	return getUserAutoGroup(userGroup, 0)
+}
+
+func GetUserAutoGroupForUser(userGroup string, userId int) []string {
+	return getUserAutoGroup(userGroup, userId)
+}
+
+func getUserAutoGroup(userGroup string, userId int) []string {
 	autoGroups := make([]string, 0)
 	seen := make(map[string]struct{})
+	usableGroups := GetUserUsableGroupsForUser(userGroup, userId)
 	for _, group := range setting.GetAutoGroups() {
-		if !IsUserSelectableGroup(userGroup, group) {
+		_, usable := usableGroups[group]
+		if group == "" || group == "auto" || !usable || !ratio_setting.ContainsGroupRatio(group) {
 			continue
 		}
 		if _, ok := seen[group]; ok {
@@ -73,11 +119,21 @@ func GetUserAutoGroup(userGroup string) []string {
 // FilterUserTokenAutoGroups applies current permissions before the current
 // per-token limit. It intentionally does not fall back to the global Auto list.
 func FilterUserTokenAutoGroups(userGroup string, groups []string) []string {
+	return filterUserTokenAutoGroups(userGroup, 0, groups)
+}
+
+func FilterUserTokenAutoGroupsForUser(userGroup string, userId int, groups []string) []string {
+	return filterUserTokenAutoGroups(userGroup, userId, groups)
+}
+
+func filterUserTokenAutoGroups(userGroup string, userId int, groups []string) []string {
 	maxCount := setting.GetMaxTokenAutoGroups()
 	filtered := make([]string, 0, min(len(groups), maxCount))
 	seen := make(map[string]struct{})
+	usableGroups := GetUserUsableGroupsForUser(userGroup, userId)
 	for _, group := range groups {
-		if !IsUserSelectableGroup(userGroup, group) {
+		_, usable := usableGroups[group]
+		if group == "" || group == "auto" || !usable || !ratio_setting.ContainsGroupRatio(group) {
 			continue
 		}
 		if _, ok := seen[group]; ok {
@@ -96,15 +152,20 @@ func FilterUserTokenAutoGroups(userGroup string, groups []string) []string {
 // The absence of the context value means that the token inherits the complete
 // global Auto list; a present (even empty) value is an explicit token snapshot.
 func GetRequestAutoGroups(c *gin.Context, userGroup string) []string {
+	userId := c.GetInt("id")
+	return GetRequestAutoGroupsForUser(c, userGroup, userId)
+}
+
+func GetRequestAutoGroupsForUser(c *gin.Context, userGroup string, userId int) []string {
 	value, ok := common.GetContextKey(c, constant.ContextKeyTokenAutoGroups)
 	if !ok {
-		return GetUserAutoGroup(userGroup)
+		return GetUserAutoGroupForUser(userGroup, userId)
 	}
 	groups, ok := value.([]string)
 	if !ok {
 		return []string{}
 	}
-	return FilterUserTokenAutoGroups(userGroup, groups)
+	return FilterUserTokenAutoGroupsForUser(userGroup, userId, groups)
 }
 
 // GetGroupsEnabledModels 按 groups 顺序获取各分组启用的模型并去重

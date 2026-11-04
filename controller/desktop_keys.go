@@ -39,12 +39,12 @@ func desktopRequestContext(c *gin.Context) (*model.DesktopInstallation, *model.U
 // resolveDesktopGroup validates the requested group against the user's
 // selectable groups and returns the group to persist plus the models it allows.
 // An empty group falls back to the user's own group.
-func resolveDesktopGroup(userGroup, requested string) (string, []string, bool) {
+func resolveDesktopGroup(userId int, userGroup, requested string) (string, []string, bool) {
 	group := strings.TrimSpace(requested)
 	if group == "" {
 		group = userGroup
 	}
-	if !service.IsUserSelectableGroup(userGroup, group) {
+	if !service.IsUserSelectableGroupForUser(userGroup, userId, group) {
 		return "", nil, false
 	}
 	var models []string
@@ -141,7 +141,7 @@ func DesktopCreateKey(c *gin.Context) {
 		writeAccessTokenError(c, 400, "DESKTOP_KEY_INVALID", "Invalid key request.")
 		return
 	}
-	group, allowed, ok := resolveDesktopGroup(user.Group, input.Group)
+	group, allowed, ok := resolveDesktopGroup(user.Id, user.Group, input.Group)
 	if !ok {
 		writeAccessTokenError(c, 400, "DESKTOP_KEY_GROUP_INVALID", "This group is not available for your account.")
 		return
@@ -192,7 +192,7 @@ func DesktopUpdateKey(c *gin.Context) {
 		writeAccessTokenError(c, 400, "DESKTOP_KEY_INVALID", "Invalid key request.")
 		return
 	}
-	group, allowed, ok := resolveDesktopGroup(user.Group, input.Group)
+	group, allowed, ok := resolveDesktopGroup(user.Id, user.Group, input.Group)
 	if !ok {
 		writeAccessTokenError(c, 400, "DESKTOP_KEY_GROUP_INVALID", "This group is not available for your account.")
 		return

@@ -31,6 +31,7 @@ import {
   sideDrawerFormClassName,
   sideDrawerHeaderClassName,
 } from '@/components/drawer-layout'
+import { GroupBadge } from '@/components/group-badge'
 import { StatusBadge } from '@/components/status-badge'
 import { TableId } from '@/components/table-id'
 import { Button } from '@/components/ui/button'
@@ -324,6 +325,13 @@ export function UserSubscriptionsDialog(props: Props) {
                         <div className='text-muted-foreground text-sm'>
                           {t('Source')}: {sub.source || '-'}
                         </div>
+                        {(sub.route_groups || []).length > 0 && (
+                          <div className='mt-1 flex flex-wrap gap-1'>
+                            {(sub.route_groups || []).map((group) => (
+                              <GroupBadge key={group} group={group} />
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )
                   },

@@ -98,6 +98,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
   const hasAnyPayment = hasStripe || hasCreem || hasWaffoPancake || hasEpay
   const totalAmount = Number(plan.total_amount || 0)
   const quotaWindows = plan.quota_windows || []
+  const routeGroups = plan.route_groups || []
   const hasQuotaWindows = quotaWindows.length > 0
   const price = formatPlanPrice(
     Number(plan.price_amount || 0),
@@ -348,6 +349,18 @@ export function SubscriptionPurchaseDialog(props: Props) {
               <GroupBadge group={plan.upgrade_group} />
             </div>
           )}
+          {routeGroups.length > 0 && (
+            <div className='space-y-1.5'>
+              <span className='text-muted-foreground text-sm'>
+                {t('Allowed Route Groups')}
+              </span>
+              <div className='flex flex-wrap justify-end gap-1.5'>
+                {routeGroups.map((group) => (
+                  <GroupBadge key={group} group={group} />
+                ))}
+              </div>
+            </div>
+          )}
           <Separator />
           <div className='flex items-center justify-between'>
             <span className='text-sm font-medium'>{t('Amount Due')}</span>
@@ -355,12 +368,12 @@ export function SubscriptionPurchaseDialog(props: Props) {
           </div>
         </div>
 
-        {plan.upgrade_group && (
+        {routeGroups.length > 0 && (
           <Alert>
             <AlertDescription className='space-y-2'>
               <p>
                 {t(
-                  'Only API keys with an empty or Auto group follow your purchased subscription group. Keys explicitly bound to another group stay unchanged.'
+                  'Use an API key set to one of these route groups, or use Auto with one of them included. The qualification group only controls your account group and multiplier; it does not route requests by itself.'
                 )}
               </p>
               <Button

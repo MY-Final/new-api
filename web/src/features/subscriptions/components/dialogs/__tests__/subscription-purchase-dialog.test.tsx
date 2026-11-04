@@ -110,7 +110,11 @@ describe('SubscriptionPurchaseDialog', () => {
           currency: 'CNY',
           quota_windows: [
             { window_seconds: 5 * 60 * 60, quota_limit: 300, sort_order: 0 },
-            { window_seconds: 7 * 24 * 60 * 60, quota_limit: 700, sort_order: 1 },
+            {
+              window_seconds: 7 * 24 * 60 * 60,
+              quota_limit: 700,
+              sort_order: 1,
+            },
           ],
           max_concurrency: 3,
         },
@@ -125,20 +129,24 @@ describe('SubscriptionPurchaseDialog', () => {
     expect(screen.queryByText('$6.00')).not.toBeInTheDocument()
   })
 
-  test('warns about explicit key groups and opens the key creation page', async () => {
+  test('shows allowed route groups and opens the key creation page', async () => {
     const onOpenChange = vi.fn()
     const user = userEvent.setup()
     renderDialog({
       onOpenChange,
       plan: {
-        plan: { ...planRecord.plan, upgrade_group: 'deepseek-day' },
+        plan: {
+          ...planRecord.plan,
+          upgrade_group: 'deepseek-day',
+          route_groups: ['deepseek-a', 'deepseek-b'],
+        },
       },
     })
 
+    expect(screen.getByText('deepseek-a')).toBeVisible()
+    expect(screen.getByText('deepseek-b')).toBeVisible()
     expect(
-      screen.getByText(
-        /Only API keys with an empty or Auto group follow your purchased subscription group/
-      )
+      screen.getByText(/Use an API key set to one of these route groups/)
     ).toBeVisible()
     await user.click(
       screen.getByRole('button', { name: 'Create an Auto group API Key' })

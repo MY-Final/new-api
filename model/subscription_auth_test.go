@@ -48,9 +48,11 @@ func TestSubscriptionGroupTransitionsPreserveAuthVersionAndSessions(t *testing.T
 		DurationValue: 1,
 		TotalAmount:   100,
 		UpgradeGroup:  "pro",
+		RouteGroups:   []string{"pro"},
 		Enabled:       true,
 	}
 	require.NoError(t, DB.Create(plan).Error)
+	require.NoError(t, ReplaceSubscriptionPlanRouteGroupsTx(DB, plan.Id, plan.RouteGroups))
 
 	subscription, err := CreateUserSubscriptionFromPlanTx(DB, user.Id, plan, "test")
 	require.NoError(t, err)
@@ -99,6 +101,8 @@ func TestSubscriptionGroupCacheRefreshFailureDoesNotChangeCommittedResult(t *tes
 		&UserSubscription{},
 		&SubscriptionPlanQuotaWindow{},
 		&UserSubscriptionQuotaWindow{},
+		&SubscriptionPlanRouteGroup{},
+		&UserSubscriptionRouteGroup{},
 		&SubscriptionPreConsumeRecord{},
 	))
 	sqlDB, err := db.DB()
@@ -125,9 +129,11 @@ func TestSubscriptionGroupCacheRefreshFailureDoesNotChangeCommittedResult(t *tes
 		DurationValue: 1,
 		TotalAmount:   100,
 		UpgradeGroup:  "pro",
+		RouteGroups:   []string{"pro"},
 		Enabled:       true,
 	}
 	require.NoError(t, DB.Create(plan).Error)
+	require.NoError(t, ReplaceSubscriptionPlanRouteGroupsTx(DB, plan.Id, plan.RouteGroups))
 	InvalidateSubscriptionPlanCache(plan.Id)
 
 	oldRedisEnabled, oldRDB := common.RedisEnabled, common.RDB

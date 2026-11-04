@@ -93,14 +93,16 @@ func TestNewBillingSessionUsesResolvedAutoGroupForSubscription(t *testing.T) {
 	require.NoError(t, model.DB.Create(&plan).Error)
 	require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", userID).Update("group", "vip").Error)
 	now := time.Now().Unix()
-	require.NoError(t, model.DB.Create(&model.UserSubscription{
+	subscription := model.UserSubscription{
 		UserId:       userID,
 		PlanId:       plan.Id,
 		Status:       "active",
 		StartTime:    now,
 		EndTime:      now + 3600,
 		UpgradeGroup: "vip",
-	}).Error)
+	}
+	require.NoError(t, model.DB.Create(&subscription).Error)
+	require.NoError(t, model.SnapshotPlanRouteGroupsTx(model.DB, subscription.Id, []string{"vip"}))
 
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
@@ -143,7 +145,7 @@ func TestNewBillingSessionForcesSubscriptionForPackageGroup(t *testing.T) {
 		Enabled:       true,
 	}
 	require.NoError(t, model.DB.Create(&plan).Error)
-	require.NoError(t, model.DB.Create(&model.UserSubscription{
+	subscription := model.UserSubscription{
 		UserId:              userID,
 		PlanId:              plan.Id,
 		Status:              "active",
@@ -151,7 +153,9 @@ func TestNewBillingSessionForcesSubscriptionForPackageGroup(t *testing.T) {
 		EndTime:             now + 3600,
 		UpgradeGroup:        "deepseek-day",
 		AllowWalletOverflow: false,
-	}).Error)
+	}
+	require.NoError(t, model.DB.Create(&subscription).Error)
+	require.NoError(t, model.SnapshotPlanRouteGroupsTx(model.DB, subscription.Id, []string{"deepseek-a"}))
 
 	gin.SetMode(gin.TestMode)
 	for _, preference := range []string{"wallet_only", "wallet_first"} {
@@ -162,7 +166,7 @@ func TestNewBillingSessionForcesSubscriptionForPackageGroup(t *testing.T) {
 				UserId:       userID,
 				RequestId:    "package-group-" + preference,
 				IsPlayground: true,
-				UsingGroup:   "deepseek-day",
+				UsingGroup:   "deepseek-a",
 				UserSetting: dto.UserSetting{
 					BillingPreference: preference,
 				},
@@ -182,6 +186,22 @@ func TestNewBillingSessionForcesSubscriptionForPackageGroup(t *testing.T) {
 			assert.EqualValues(t, 70, record.UsageQuota)
 		})
 	}
+	t.Run("subscription first uses wallet outside the allowed route groups", func(t *testing.T) {
+		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+		ctx.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
+		relayInfo := &relaycommon.RelayInfo{
+			UserId: userID, RequestId: "outside-package-route", IsPlayground: true,
+			UsingGroup:  "paid-gpt",
+			UserSetting: dto.UserSetting{BillingPreference: "subscription_first"},
+		}
+
+		session, apiErr := NewBillingSession(ctx, relayInfo, 50)
+		require.Nil(t, apiErr)
+		require.NotNil(t, session)
+		assert.Equal(t, "wallet", session.funding.Source())
+		require.NoError(t, session.Settle(70))
+		assert.Equal(t, 930, getUserQuota(t, userID))
+	})
 }
 
 func TestNewBillingSessionDoesNotFallbackToWalletForExhaustedPackageWindow(t *testing.T) {
@@ -213,6 +233,7 @@ func TestNewBillingSessionDoesNotFallbackToWalletForExhaustedPackageWindow(t *te
 	require.NoError(t, model.SnapshotPlanQuotaWindowsTx(model.DB, subscription.Id, []model.SubscriptionQuotaWindow{
 		{WindowSeconds: 5 * 60 * 60, QuotaLimit: 40},
 	}))
+	require.NoError(t, model.SnapshotPlanRouteGroupsTx(model.DB, subscription.Id, []string{"deepseek-a"}))
 
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
@@ -222,7 +243,7 @@ func TestNewBillingSessionDoesNotFallbackToWalletForExhaustedPackageWindow(t *te
 		UserId:       userID,
 		RequestId:    "exhausted-package-window",
 		IsPlayground: true,
-		UsingGroup:   "deepseek-day",
+		UsingGroup:   "deepseek-a",
 		UserSetting: dto.UserSetting{
 			BillingPreference: "wallet_first",
 		},
@@ -268,6 +289,7 @@ func TestPostConsumeQuotaSubscriptionFallbackUpdatesRollingUsage(t *testing.T) {
 	require.NoError(t, model.SnapshotPlanQuotaWindowsTx(model.DB, subscriptionID, []model.SubscriptionQuotaWindow{
 		{WindowSeconds: 300, QuotaLimit: 1000},
 	}))
+	require.NoError(t, model.SnapshotPlanRouteGroupsTx(model.DB, subscriptionID, []string{"vip"}))
 
 	const requestID = "subscription-fallback-request"
 	_, err := model.PreConsumeUserSubscription(requestID, userID, "deepseek-chat", 0, "vip", 50)

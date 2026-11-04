@@ -230,6 +230,29 @@ export function useSubscriptionsColumns(): ColumnDef<PlanRecord>[] {
         size: 120,
       },
       {
+        id: 'route_groups',
+        header: t('Route Groups'),
+        meta: { mobileHidden: true },
+        cell: ({ row }) => {
+          const groups = row.original.plan.route_groups || []
+          if (groups.length === 0) {
+            return (
+              <span className='text-muted-foreground'>
+                {t('Not configured')}
+              </span>
+            )
+          }
+          return (
+            <BadgeCell>
+              {groups.map((group) => (
+                <GroupBadge key={group} group={group} />
+              ))}
+            </BadgeCell>
+          )
+        },
+        size: 220,
+      },
+      {
         id: 'actions',
         header: () => t('Actions'),
         cell: ({ row }) => <DataTableRowActions row={row} />,

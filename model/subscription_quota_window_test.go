@@ -26,6 +26,14 @@ func seedQuotaWindowSubscription(t *testing.T, plan *SubscriptionPlan) (*User, *
 	require.NoError(t, DB.Create(user).Error)
 	require.NoError(t, DB.Create(plan).Error)
 	require.NoError(t, ReplaceSubscriptionPlanQuotaWindowsTx(DB, plan.Id, plan.QuotaWindows))
+	if len(plan.RouteGroups) == 0 {
+		routeGroup := plan.UpgradeGroup
+		if routeGroup == "" {
+			routeGroup = "default"
+		}
+		plan.RouteGroups = []string{routeGroup}
+	}
+	require.NoError(t, ReplaceSubscriptionPlanRouteGroupsTx(DB, plan.Id, plan.RouteGroups))
 	InvalidateSubscriptionPlanCache(plan.Id)
 
 	mutation, err := UpsertUserSubscriptionFromPlanTx(DB, user.Id, plan, "test")
@@ -112,9 +120,78 @@ func TestSubscriptionQuotaWindowsShareUsageAndSettlement(t *testing.T) {
 	require.NoError(t, ReplaceSubscriptionPlanQuotaWindowsTx(DB, plan.Id, []SubscriptionQuotaWindow{
 		{WindowSeconds: 60, QuotaLimit: 1},
 	}))
+	require.NoError(t, ReplaceSubscriptionPlanRouteGroupsTx(DB, plan.Id, []string{"other-route"}))
 	snapshot, err = LoadUserSubscriptionQuotaWindowsTx(DB, subscription.Id)
 	require.NoError(t, err)
 	assert.Len(t, snapshot, 3)
+	routeGroups, err := LoadUserSubscriptionRouteGroupsTx(DB, subscription.Id)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"vip"}, routeGroups)
+}
+
+func TestSubscriptionConsumesOnlyThroughSnapshottedRouteGroups(t *testing.T) {
+	plan := &SubscriptionPlan{
+		Id:             11011,
+		Title:          "DeepSeek day pass",
+		Currency:       "CNY",
+		DurationUnit:   SubscriptionDurationDay,
+		DurationValue:  1,
+		UpgradeGroup:   "deepseek-day",
+		RouteGroups:    []string{"deepseek-a", "deepseek-b"},
+		MaxConcurrency: 2,
+		Enabled:        true,
+	}
+	_, subscription := seedQuotaWindowSubscription(t, plan)
+
+	_, err := PreConsumeUserSubscription("qualification-only", subscription.UserId, "deepseek-chat", 0, "deepseek-day", 1)
+	require.Error(t, err)
+
+	for index, group := range []string{"deepseek-a", "deepseek-b"} {
+		requestId := fmt.Sprintf("allowed-route-%d", index)
+		result, err := PreConsumeUserSubscription(requestId, subscription.UserId, "deepseek-chat", 0, group, 1)
+		require.NoError(t, err)
+		assert.Equal(t, subscription.Id, result.UserSubscriptionId)
+	}
+
+	_, err = PreConsumeUserSubscription("unlisted-route", subscription.UserId, "deepseek-chat", 0, "default", 1)
+	require.Error(t, err)
+}
+
+func TestNormalizeSubscriptionRouteGroupsTrimsDeduplicatesAndRejectsAuto(t *testing.T) {
+	groups, err := NormalizeSubscriptionRouteGroups([]string{" deepseek-a ", "deepseek-b", "deepseek-a"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"deepseek-a", "deepseek-b"}, groups)
+
+	_, err = NormalizeSubscriptionRouteGroups([]string{"auto"})
+	require.Error(t, err)
+}
+
+func TestSubscriptionPurchaseRejectsPlanWithoutRouteGroups(t *testing.T) {
+	truncateTables(t)
+	user := User{
+		Username: "missing-route-group-user",
+		Password: "unused-password-hash",
+		Role:     common.RoleCommonUser,
+		Status:   common.UserStatusEnabled,
+		Group:    "default",
+	}
+	require.NoError(t, DB.Create(&user).Error)
+	plan := &SubscriptionPlan{
+		Title:         "Missing route groups",
+		Currency:      "CNY",
+		DurationUnit:  SubscriptionDurationDay,
+		DurationValue: 1,
+		Enabled:       true,
+	}
+	require.NoError(t, DB.Create(plan).Error)
+
+	_, err := UpsertUserSubscriptionFromPlanTx(DB, user.Id, plan, "test")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "At least one subscription route group is required")
+
+	var count int64
+	require.NoError(t, DB.Model(&UserSubscription{}).Where("user_id = ?", user.Id).Count(&count).Error)
+	assert.Zero(t, count)
 }
 
 func TestSubscriptionQuotaWindowRejectsAndExpiresOldUsage(t *testing.T) {
@@ -207,7 +284,7 @@ func TestSubscriptionWindowRetryUsesFastestRecoverableWindow(t *testing.T) {
 		require.NoError(t, DB.Model(&SubscriptionPreConsumeRecord{}).Where("id = ?", rows[1].Id).
 			Update("created_at", now-(7*24*60*60)+60*60).Error)
 
-		_, err := PreConsumeUserSubscription("fastest-window-request", subscription.UserId, "deepseek-chat", 0, "", 1)
+		_, err := PreConsumeUserSubscription("fastest-window-request", subscription.UserId, "deepseek-chat", 0, "default", 1)
 		require.Error(t, err)
 		var windowErr *SubscriptionWindowLimitError
 		require.ErrorAs(t, err, &windowErr)
@@ -252,7 +329,7 @@ func TestSubscriptionWindowRetryUsesFastestRecoverableWindow(t *testing.T) {
 		require.NoError(t, DB.Model(&SubscriptionPreConsumeRecord{}).Where("id = ?", rows[1].Id).
 			Update("created_at", now-1000).Error)
 
-		_, err := PreConsumeUserSubscription("partial-release-request", subscription.UserId, "deepseek-chat", 0, "", 20)
+		_, err := PreConsumeUserSubscription("partial-release-request", subscription.UserId, "deepseek-chat", 0, "default", 20)
 		require.Error(t, err)
 		var windowErr *SubscriptionWindowLimitError
 		require.ErrorAs(t, err, &windowErr)
@@ -301,6 +378,7 @@ func TestSubscriptionRenewalAndDifferentPlanConflict(t *testing.T) {
 
 	changedPlan := *plan
 	changedPlan.MaxConcurrency = 9
+	changedPlan.RouteGroups = []string{"replacement-route"}
 	require.NoError(t, DB.Model(&SubscriptionPlan{}).Where("id = ?", plan.Id).
 		Update("max_concurrency", changedPlan.MaxConcurrency).Error)
 	InvalidateSubscriptionPlanCache(plan.Id)
@@ -310,6 +388,7 @@ func TestSubscriptionRenewalAndDifferentPlanConflict(t *testing.T) {
 	assert.True(t, renewed.Renewed)
 	assert.EqualValues(t, firstEnd+2*60*60, renewed.Subscription.EndTime)
 	assert.Equal(t, 2, renewed.Subscription.MaxConcurrency)
+	assert.Equal(t, []string{"vip"}, renewed.Subscription.RouteGroups)
 
 	otherPlan := &SubscriptionPlan{
 		Id:            11005,
@@ -323,7 +402,7 @@ func TestSubscriptionRenewalAndDifferentPlanConflict(t *testing.T) {
 	require.ErrorIs(t, err, ErrActiveSubscriptionConflict)
 }
 
-func TestSubscriptionConcurrencyRequiresItsUpgradeGroup(t *testing.T) {
+func TestSubscriptionConcurrencyRequiresAnAllowedRouteGroup(t *testing.T) {
 	truncateTables(t)
 	user := User{
 		Username: "group-scoped-concurrency-user",
@@ -344,6 +423,7 @@ func TestSubscriptionConcurrencyRequiresItsUpgradeGroup(t *testing.T) {
 		MaxConcurrency: 2,
 	}
 	require.NoError(t, DB.Create(&subscription).Error)
+	require.NoError(t, SnapshotPlanRouteGroupsTx(DB, subscription.Id, []string{"vip", "deepseek-a"}))
 
 	subscriptionID, limit, err := GetActiveSubscriptionConcurrency(user.Id, "vip")
 	require.NoError(t, err)
@@ -355,11 +435,10 @@ func TestSubscriptionConcurrencyRequiresItsUpgradeGroup(t *testing.T) {
 	assert.Zero(t, subscriptionID)
 	assert.Zero(t, limit)
 
-	require.NoError(t, DB.Model(&subscription).Update("upgrade_group", "").Error)
-	subscriptionID, limit, err = GetActiveSubscriptionConcurrency(user.Id, "default")
+	subscriptionID, limit, err = GetActiveSubscriptionConcurrency(user.Id, "deepseek-a")
 	require.NoError(t, err)
-	assert.Zero(t, subscriptionID)
-	assert.Zero(t, limit)
+	assert.Equal(t, subscription.Id, subscriptionID)
+	assert.Equal(t, 2, limit)
 }
 
 func TestConcurrentDifferentPlanPurchaseHasOneWinner(t *testing.T) {
@@ -373,10 +452,13 @@ func TestConcurrentDifferentPlanPurchaseHasOneWinner(t *testing.T) {
 	}
 	require.NoError(t, DB.Create(&user).Error)
 	plans := []*SubscriptionPlan{
-		{Id: 11006, Title: "A", DurationUnit: SubscriptionDurationDay, DurationValue: 1, Enabled: true},
-		{Id: 11007, Title: "B", DurationUnit: SubscriptionDurationDay, DurationValue: 1, Enabled: true},
+		{Id: 11006, Title: "A", DurationUnit: SubscriptionDurationDay, DurationValue: 1, RouteGroups: []string{"default"}, Enabled: true},
+		{Id: 11007, Title: "B", DurationUnit: SubscriptionDurationDay, DurationValue: 1, RouteGroups: []string{"default"}, Enabled: true},
 	}
 	require.NoError(t, DB.Create(&plans).Error)
+	for _, plan := range plans {
+		require.NoError(t, ReplaceSubscriptionPlanRouteGroupsTx(DB, plan.Id, plan.RouteGroups))
+	}
 
 	errs := make([]error, len(plans))
 	var wait sync.WaitGroup

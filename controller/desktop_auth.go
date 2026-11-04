@@ -221,7 +221,7 @@ func DesktopConfigureTool(c *gin.Context) {
 		if group == "" {
 			group = user.Group
 		}
-		if !service.IsUserSelectableGroup(user.Group, group) {
+		if !service.IsUserSelectableGroupForUser(user.Group, user.Id, group) {
 			writeAccessTokenError(c, 400, "DESKTOP_GROUP_INVALID", "This group is not available for your account.")
 			return
 		}

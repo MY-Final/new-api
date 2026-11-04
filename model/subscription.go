@@ -180,6 +180,10 @@ func DeleteSubscriptionPlan(planId int) error {
 			Delete(&SubscriptionPlanQuotaWindow{}).Error; err != nil {
 			return err
 		}
+		if err := tx.Where("plan_id = ?", planId).
+			Delete(&SubscriptionPlanRouteGroup{}).Error; err != nil {
+			return err
+		}
 		result := tx.Where("id = ?", planId).Delete(&SubscriptionPlan{})
 		if result.Error != nil {
 			return result.Error
@@ -246,6 +250,10 @@ type SubscriptionPlan struct {
 	// Rolling quota windows. An empty list keeps the legacy TotalAmount and
 	// QuotaResetPeriod behavior. Non-empty lists are authoritative.
 	QuotaWindows []SubscriptionQuotaWindow `json:"quota_windows" gorm:"-:all"`
+
+	// Route groups whose channels can consume this subscription. The upgrade
+	// group is only the account qualification group and may have no channels.
+	RouteGroups []string `json:"route_groups" gorm:"-:all"`
 
 	CreatedAt int64 `json:"created_at" gorm:"bigint"`
 	UpdatedAt int64 `json:"updated_at" gorm:"bigint"`
@@ -340,6 +348,9 @@ type UserSubscription struct {
 
 	// Plan-level concurrency is snapshotted at purchase time.
 	MaxConcurrency int `json:"max_concurrency" gorm:"type:int;not null;default:0"`
+
+	// Allowed routing groups are snapshotted at purchase time.
+	RouteGroups []string `json:"route_groups" gorm:"-:all"`
 
 	// Computed rolling quota state returned by subscription APIs.
 	QuotaWindows []SubscriptionQuotaWindowUsage `json:"quota_windows" gorm:"-:all"`
@@ -476,6 +487,9 @@ func getSubscriptionPlanByIdTx(tx *gorm.DB, id int) (*SubscriptionPlan, error) {
 	if err := LoadSubscriptionPlanQuotaWindowsTx(query, &plan); err != nil {
 		return nil, err
 	}
+	if err := LoadSubscriptionPlanRouteGroupsTx(query, &plan); err != nil {
+		return nil, err
+	}
 	plan.NormalizeDefaults()
 	_ = getSubscriptionPlanCache().SetWithTTL(key, plan, subscriptionPlanCacheTTL())
 	return &plan, nil
@@ -606,7 +620,19 @@ func UpsertUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *Subscriptio
 		if err := tx.Save(current).Error; err != nil {
 			return nil, err
 		}
+		routeGroups, err := LoadUserSubscriptionRouteGroupsTx(tx, current.Id)
+		if err != nil {
+			return nil, err
+		}
+		current.RouteGroups = routeGroups
 		return &UserSubscriptionMutation{Subscription: current, Renewed: true}, nil
+	}
+
+	if err := LoadSubscriptionPlanRouteGroupsTx(tx, plan); err != nil {
+		return nil, err
+	}
+	if len(plan.RouteGroups) == 0 {
+		return nil, common.NewMessage("At least one subscription route group is required")
 	}
 
 	if plan.MaxPurchasePerUser > 0 {
@@ -674,6 +700,14 @@ func UpsertUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *Subscriptio
 	if err := SnapshotPlanQuotaWindowsTx(tx, sub.Id, plan.QuotaWindows); err != nil {
 		return nil, err
 	}
+	if err := SnapshotPlanRouteGroupsTx(tx, sub.Id, plan.RouteGroups); err != nil {
+		return nil, err
+	}
+	routeGroups, err := LoadUserSubscriptionRouteGroupsTx(tx, sub.Id)
+	if err != nil {
+		return nil, err
+	}
+	sub.RouteGroups = routeGroups
 	return &UserSubscriptionMutation{Subscription: sub}, nil
 }
 
@@ -1054,14 +1088,12 @@ func HasActiveSubscriptionForGroup(userId int, usingGroup string) (bool, error) 
 	}
 	now := common.GetTimestamp()
 	var count int64
+	routeSubscriptionIDs := DB.Model(&UserSubscriptionRouteGroup{}).
+		Select("user_subscription_id").
+		Where("group_name = ?", usingGroup)
 	if err := DB.Model(&UserSubscription{}).
-		Where(
-			"user_id = ? AND status = ? AND end_time > ? AND upgrade_group = ?",
-			userId,
-			"active",
-			now,
-			usingGroup,
-		).
+		Where("user_id = ? AND status = ? AND end_time > ? AND id IN (?)",
+			userId, "active", now, routeSubscriptionIDs).
 		Count(&count).Error; err != nil {
 		return false, err
 	}
@@ -1075,15 +1107,18 @@ func GetActiveSubscriptionConcurrency(userId int, usingGroup string) (int, int, 
 		return 0, 0, errors.New("invalid user id")
 	}
 	now := common.GetTimestamp()
-	query := DB.Where(
-		"user_id = ? AND status = ? AND end_time > ? AND upgrade_group <> '' AND upgrade_group = ?",
-		userId,
-		"active",
-		now,
-		usingGroup,
-	)
+	usingGroup = strings.TrimSpace(usingGroup)
+	if usingGroup == "" {
+		return 0, 0, nil
+	}
+	routeSubscriptionIDs := DB.Model(&UserSubscriptionRouteGroup{}).
+		Select("user_subscription_id").
+		Where("group_name = ?", usingGroup)
 	var subscriptions []UserSubscription
-	if err := query.Order("end_time desc, id desc").Find(&subscriptions).Error; err != nil {
+	if err := DB.Where("user_id = ? AND status = ? AND end_time > ? AND id IN (?)",
+		userId, "active", now, routeSubscriptionIDs).
+		Order("end_time desc, id desc").
+		Find(&subscriptions).Error; err != nil {
 		return 0, 0, err
 	}
 	for _, subscription := range subscriptions {
@@ -1140,6 +1175,9 @@ func buildSubscriptionSummaries(subs []UserSubscription) []SubscriptionSummary {
 		subCopy := sub
 		if err := PopulateSubscriptionQuotaWindowUsage(&subCopy, now); err != nil {
 			common.SysError(common.LogText("failed to load subscription quota windows for %d: %s", subCopy.Id, err.Error()))
+		}
+		if err := HydrateUserSubscriptionRouteGroups(&subCopy); err != nil {
+			common.SysError(common.LogText("failed to load subscription route groups for %d: %s", subCopy.Id, err.Error()))
 		}
 		result = append(result, SubscriptionSummary{
 			Subscription: &subCopy,
@@ -1234,6 +1272,14 @@ func AdminDeleteUserSubscription(userSubscriptionId int) (*common.Message, error
 			downgradeGroup = target
 		}
 		if err := tx.Where("id = ?", userSubscriptionId).Delete(&UserSubscription{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("user_subscription_id = ?", userSubscriptionId).
+			Delete(&UserSubscriptionRouteGroup{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("user_subscription_id = ?", userSubscriptionId).
+			Delete(&UserSubscriptionQuotaWindow{}).Error; err != nil {
 			return err
 		}
 		return nil
@@ -1694,8 +1740,11 @@ func PreConsumeUserSubscription(requestId string, userId int, modelName string, 
 		}
 		for _, candidate := range subs {
 			sub := candidate
-			upgradeGroup := strings.TrimSpace(sub.UpgradeGroup)
-			if usingGroup != "" && upgradeGroup != "" && upgradeGroup != usingGroup {
+			hasRouteGroup, err := UserSubscriptionHasRouteGroupTx(tx, sub.Id, usingGroup)
+			if err != nil {
+				return err
+			}
+			if !hasRouteGroup {
 				continue
 			}
 			plan, err := getSubscriptionPlanByIdTx(tx, sub.PlanId)

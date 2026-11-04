@@ -64,6 +64,8 @@ func TestMain(m *testing.M) {
 		&UserSubscription{},
 		&SubscriptionPlanQuotaWindow{},
 		&UserSubscriptionQuotaWindow{},
+		&SubscriptionPlanRouteGroup{},
+		&UserSubscriptionRouteGroup{},
 		&SubscriptionPreConsumeRecord{},
 		&UserOAuthBinding{},
 		&PerfMetric{},
@@ -114,6 +116,8 @@ func truncateTables(t *testing.T) {
 		DB.Exec("DELETE FROM user_subscriptions")
 		DB.Exec("DELETE FROM subscription_plan_quota_windows")
 		DB.Exec("DELETE FROM user_subscription_quota_windows")
+		DB.Exec("DELETE FROM subscription_plan_route_groups")
+		DB.Exec("DELETE FROM user_subscription_route_groups")
 		DB.Exec("DELETE FROM subscription_pre_consume_records")
 		DB.Exec("DELETE FROM perf_metrics")
 		DB.Exec("DELETE FROM system_instances")

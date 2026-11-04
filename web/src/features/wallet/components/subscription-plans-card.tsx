@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { EmptyState } from '@/components/empty-state'
+import { GroupBadge } from '@/components/group-badge'
 import {
   StatusBadge,
   dotColorMap,
@@ -505,6 +506,16 @@ export function SubscriptionPlansCard({
                           {subscription?.max_concurrency}
                         </div>
                       )}
+                      {(subscription?.route_groups || []).length > 0 && (
+                        <div className='mt-1 flex flex-wrap items-center gap-1.5'>
+                          <span className='text-muted-foreground'>
+                            {t('Allowed Route Groups')}:
+                          </span>
+                          {(subscription?.route_groups || []).map((group) => (
+                            <GroupBadge key={group} group={group} />
+                          ))}
+                        </div>
+                      )}
                       {hasQuotaWindows ? (
                         <div className='mt-2 space-y-2'>
                           {quotaWindows.map((window) => {
@@ -637,6 +648,9 @@ export function SubscriptionPlansCard({
                 limit > 0 ? `${t('Purchase Limit')}: ${limit}` : null,
                 plan.upgrade_group
                   ? `${t('Upgrade Group')}: ${plan.upgrade_group}`
+                  : null,
+                (plan.route_groups || []).length > 0
+                  ? `${t('Route Groups')}: ${(plan.route_groups || []).join(' · ')}`
                   : null,
               ].filter(Boolean) as string[]
 

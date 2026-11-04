@@ -63,6 +63,10 @@ export function getPlanFormSchema(t: TFunction) {
         )
         .max(8),
       upgrade_group: z.string().optional(),
+      route_groups: z
+        .array(z.string().trim().min(1))
+        .min(1, t('Select at least one allowed route group'))
+        .max(32),
       downgrade_group: z.string().optional(),
       stripe_price_id: z.string().optional(),
       creem_product_id: z.string().optional(),
@@ -104,6 +108,7 @@ export const PLAN_FORM_DEFAULTS: PlanFormValues = {
   total_amount: 0,
   quota_windows: [],
   upgrade_group: '',
+  route_groups: [],
   downgrade_group: '',
   stripe_price_id: '',
   creem_product_id: '',
@@ -134,6 +139,7 @@ export function planToFormValues(plan: SubscriptionPlan): PlanFormValues {
       quota_amount: quotaUnitsToDollars(Number(window.quota_limit || 0)),
     })),
     upgrade_group: plan.upgrade_group || '',
+    route_groups: [...new Set(plan.route_groups || [])],
     downgrade_group: plan.downgrade_group || '',
     stripe_price_id: plan.stripe_price_id || '',
     creem_product_id: plan.creem_product_id || '',
@@ -166,6 +172,11 @@ export function formValuesToPlanPayload(values: PlanFormValues): PlanPayload {
       allow_wallet_overflow:
         values.quota_windows.length > 0 ? false : values.allow_wallet_overflow,
       upgrade_group: values.upgrade_group || '',
+      route_groups: [
+        ...new Set(
+          values.route_groups.map((group) => group.trim()).filter(Boolean)
+        ),
+      ],
       downgrade_group: values.downgrade_group || '',
     },
   }

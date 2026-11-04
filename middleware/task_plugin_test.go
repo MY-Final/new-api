@@ -2083,14 +2083,32 @@ func TestRouteTaskPluginEndpointUsesSelectedChannel(t *testing.T) {
 			// Every table belongs to this run, including when a developer points
 			// a test DSN at a database shared with another test suite.
 			database.Config.NamingStrategy = schema.NamingStrategy{TablePrefix: "endpoint_route_" + common.GetUUID() + "_"}
-			require.NoError(t, database.AutoMigrate(&model.Channel{}, &model.Ability{}, &model.Task{}, &model.UserSubscription{}))
+			require.NoError(t, database.AutoMigrate(
+				&model.Channel{},
+				&model.Ability{},
+				&model.Task{},
+				&model.UserSubscription{},
+				&model.UserSubscriptionRouteGroup{},
+			))
 			t.Cleanup(func() {
-				for _, table := range []any{&model.Ability{}, &model.Channel{}, &model.Task{}, &model.UserSubscription{}} {
+				for _, table := range []any{
+					&model.Ability{},
+					&model.Channel{},
+					&model.Task{},
+					&model.UserSubscription{},
+					&model.UserSubscriptionRouteGroup{},
+				} {
 					require.NoError(t, database.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(table).Error)
 				}
 				common.MemoryCacheEnabled = true
 				model.InitChannelCache()
-				require.NoError(t, database.Migrator().DropTable(&model.Ability{}, &model.Channel{}, &model.Task{}, &model.UserSubscription{}))
+				require.NoError(t, database.Migrator().DropTable(
+					&model.Ability{},
+					&model.Channel{},
+					&model.Task{},
+					&model.UserSubscription{},
+					&model.UserSubscriptionRouteGroup{},
+				))
 				model.DB = previousDB
 				common.SetDatabaseTypes(previousMain, previousLog)
 				common.SQLitePath, common.IsMasterNode = previousPath, previousMaster

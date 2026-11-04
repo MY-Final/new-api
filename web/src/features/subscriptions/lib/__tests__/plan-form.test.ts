@@ -32,6 +32,7 @@ function validPlanValues() {
     ...PLAN_FORM_DEFAULTS,
     title: 'DeepSeek Day Pass',
     price_amount: 6,
+    route_groups: ['deepseek-a'],
     quota_windows: [{ window_seconds: 5 * 60 * 60, quota_amount: 1 }],
   }
 }
@@ -41,11 +42,22 @@ describe('subscription plan form', () => {
     const parsed = schema.parse({
       ...PLAN_FORM_DEFAULTS,
       title: 'New plan',
+      route_groups: ['deepseek-a'],
     })
 
     expect(parsed.currency).toBe('CNY')
     expect(parsed.max_concurrency).toBe(0)
     expect(parsed.quota_windows).toEqual([])
+    expect(parsed.route_groups).toEqual(['deepseek-a'])
+  })
+
+  test('requires at least one subscription route group', () => {
+    const result = schema.safeParse({
+      ...PLAN_FORM_DEFAULTS,
+      title: 'New plan',
+    })
+
+    expect(result.success).toBe(false)
   })
 
   test('rejects duplicate window durations and non-positive quotas', () => {
@@ -73,6 +85,7 @@ describe('subscription plan form', () => {
     })
 
     expect(payload.plan.max_concurrency).toBe(2)
+    expect(payload.plan.route_groups).toEqual(['deepseek-a'])
     expect(payload.plan.allow_wallet_overflow).toBe(false)
     expect(payload.plan.quota_windows).toEqual([
       {

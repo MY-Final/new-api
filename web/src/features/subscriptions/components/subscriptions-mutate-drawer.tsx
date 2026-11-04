@@ -38,6 +38,7 @@ import {
   sideDrawerHeaderClassName,
   sideDrawerSwitchItemClassName,
 } from '@/components/drawer-layout'
+import { MultiSelect } from '@/components/multi-select'
 import { Button } from '@/components/ui/button'
 import { Combobox } from '@/components/ui/combobox'
 import {
@@ -549,7 +550,41 @@ export function SubscriptionsMutateDrawer({
                     </FormItem>
                   )}
                 />
+              </div>
 
+              <FormField
+                control={form.control}
+                name='route_groups'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Allowed Route Groups')}</FormLabel>
+                    <FormControl>
+                      <MultiSelect
+                        options={groupOptions
+                          .filter((group) => group !== 'auto')
+                          .map((group) => ({
+                            value: group,
+                            label: group,
+                          }))}
+                        selected={field.value || []}
+                        onChange={(groups) => field.onChange(groups)}
+                        placeholder={t(
+                          'Select groups whose channels can consume this subscription'
+                        )}
+                        emptyText={t('No matching route groups')}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'These groups provide the actual channels. The qualification group controls the account and multiplier; it does not need to contain channels.'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
                 <FormField
                   control={form.control}
                   name='max_purchase_per_user'

@@ -45,9 +45,16 @@ func GetSubscriptionPlans(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	if err := model.HydrateSubscriptionPlansRouteGroups(plans); err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	result := make([]SubscriptionPlanDTO, 0, len(plans))
 	for _, p := range plans {
 		p.NormalizeDefaults()
+		if len(p.RouteGroups) == 0 {
+			continue
+		}
 		result = append(result, SubscriptionPlanDTO{
 			Plan: p,
 		})
@@ -132,6 +139,7 @@ func SubscriptionRequestBalancePay(c *gin.Context) {
 		"renewed":         mutation.Renewed,
 		"end_time":        subscription.EndTime,
 		"upgrade_group":   subscription.UpgradeGroup,
+		"route_groups":    subscription.RouteGroups,
 		"max_concurrency": subscription.MaxConcurrency,
 		"quota_windows":   subscription.QuotaWindows,
 		"subscription":    subscription,
@@ -147,6 +155,10 @@ func AdminListSubscriptionPlans(c *gin.Context) {
 		return
 	}
 	if err := model.HydrateSubscriptionPlansQuotaWindows(plans); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if err := model.HydrateSubscriptionPlansRouteGroups(plans); err != nil {
 		common.ApiError(c, err)
 		return
 	}
@@ -234,6 +246,23 @@ func normalizeSubscriptionPlanInput(c *gin.Context, plan *model.SubscriptionPlan
 			return false
 		}
 	}
+	routeGroups, err := model.NormalizeSubscriptionRouteGroups(plan.RouteGroups)
+	if err != nil {
+		common.ApiErrorT(c, err.Error())
+		return false
+	}
+	if len(routeGroups) == 0 {
+		common.ApiErrorT(c, "At least one subscription route group is required")
+		return false
+	}
+	ratioGroups := ratio_setting.GetGroupRatioCopy()
+	for _, routeGroup := range routeGroups {
+		if _, ok := ratioGroups[routeGroup]; !ok {
+			common.ApiErrorT(c, "Subscription route group {{group}} does not exist", map[string]any{"group": routeGroup})
+			return false
+		}
+	}
+	plan.RouteGroups = routeGroups
 	windows, err := model.NormalizeSubscriptionQuotaWindows(plan.QuotaWindows)
 	if err != nil {
 		common.ApiErrorT(c, err.Error())
@@ -273,7 +302,10 @@ func AdminCreateSubscriptionPlan(c *gin.Context) {
 		if err := tx.Create(&req.Plan).Error; err != nil {
 			return err
 		}
-		return model.ReplaceSubscriptionPlanQuotaWindowsTx(tx, req.Plan.Id, req.Plan.QuotaWindows)
+		if err := model.ReplaceSubscriptionPlanQuotaWindowsTx(tx, req.Plan.Id, req.Plan.QuotaWindows); err != nil {
+			return err
+		}
+		return model.ReplaceSubscriptionPlanRouteGroupsTx(tx, req.Plan.Id, req.Plan.RouteGroups)
 	})
 	if err != nil {
 		common.ApiError(c, err)
@@ -336,7 +368,10 @@ func AdminUpdateSubscriptionPlan(c *gin.Context) {
 		if err := tx.Model(&model.SubscriptionPlan{}).Where("id = ?", id).Updates(updateMap).Error; err != nil {
 			return err
 		}
-		return model.ReplaceSubscriptionPlanQuotaWindowsTx(tx, id, req.Plan.QuotaWindows)
+		if err := model.ReplaceSubscriptionPlanQuotaWindowsTx(tx, id, req.Plan.QuotaWindows); err != nil {
+			return err
+		}
+		return model.ReplaceSubscriptionPlanRouteGroupsTx(tx, id, req.Plan.RouteGroups)
 	})
 	if err != nil {
 		common.ApiError(c, err)

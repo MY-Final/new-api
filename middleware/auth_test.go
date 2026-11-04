@@ -16,6 +16,8 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
+	"github.com/QuantumNous/new-api/setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
@@ -42,6 +44,7 @@ func setupDashboardAuthMiddlewareTest(t *testing.T) {
 		&model.AuditLog{},
 		&model.UserAccessToken{},
 		&model.UserSubscription{},
+		&model.UserSubscriptionRouteGroup{},
 		&model.Token{},
 		&model.Option{},
 	))
@@ -126,6 +129,51 @@ func TestTokenAuthReadOnlyTranslatesErrors(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, recorder.Code, tc.acceptLanguage)
 		assert.JSONEq(t, `{"success":false,"message":"`+tc.want+`"}`, recorder.Body.String(), tc.acceptLanguage)
 	}
+}
+
+func TestTokenAuthAllowsSubscriptionRouteOnlyWhileGranted(t *testing.T) {
+	setupDashboardAuthMiddlewareTest(t)
+	previousGroups := setting.UserUsableGroups2JSONString()
+	previousRatios := ratio_setting.GroupRatio2JSONString()
+	previousMemory := common.MemoryCacheEnabled
+	common.MemoryCacheEnabled = false
+	require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(`{"default":"Default"}`))
+	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1,"deepseek-day":1,"deepseek-private":1}`))
+	t.Cleanup(func() {
+		common.MemoryCacheEnabled = previousMemory
+		require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(previousGroups))
+		require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(previousRatios))
+	})
+	user := createMiddlewarePATUser(t, "subscription-route-user", "subscription-route-pat")
+	token := model.Token{
+		UserId: user.Id, Key: "subscriptionroutetoken", Group: "deepseek-private",
+		Status: common.TokenStatusEnabled, ExpiredTime: -1, UnlimitedQuota: true,
+	}
+	require.NoError(t, model.DB.Create(&token).Error)
+	router := gin.New()
+	router.GET("/relay", TokenAuth(), func(c *gin.Context) { c.Status(http.StatusNoContent) })
+
+	response := middlewareBearerRequest(router, "/relay", token.Key)
+	assert.Equal(t, http.StatusForbidden, response.Code)
+
+	now := time.Now().Unix()
+	subscription := model.UserSubscription{
+		UserId: user.Id, Status: "active", StartTime: now, EndTime: now + 3600,
+		UpgradeGroup: "deepseek-day", PrevUserGroup: "default",
+	}
+	require.NoError(t, model.DB.Create(&subscription).Error)
+	require.NoError(t, model.SnapshotPlanRouteGroupsTx(model.DB, subscription.Id, []string{"deepseek-private"}))
+	require.NoError(t, model.DB.Model(user).Update("group", "deepseek-day").Error)
+
+	response = middlewareBearerRequest(router, "/relay", token.Key)
+	assert.Equal(t, http.StatusNoContent, response.Code, response.Body.String())
+
+	require.NoError(t, model.DB.Model(&subscription).Update("end_time", now-1).Error)
+	response = middlewareBearerRequest(router, "/relay", token.Key)
+	assert.Equal(t, http.StatusForbidden, response.Code)
+	var updated model.User
+	require.NoError(t, model.DB.First(&updated, user.Id).Error)
+	assert.Equal(t, "default", updated.Group)
 }
 
 func TestUserAuthAllowsOpaqueDottedPAT(t *testing.T) {

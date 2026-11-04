@@ -23,6 +23,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { GroupBadge } from '@/components/group-badge'
 import { Dialog } from '@/components/dialog'
 import { Button } from '@/components/ui/button'
 import { Combobox } from '@/components/ui/combobox'
@@ -290,6 +291,18 @@ export function GrantSubscriptionDialog() {
               {plan ? formatDuration(plan, t) : '-'}
             </span>
           </div>
+          {(plan?.route_groups || []).length > 0 && (
+            <div className='flex items-start justify-between gap-3'>
+              <span className='text-muted-foreground'>
+                {t('Allowed Route Groups')}
+              </span>
+              <span className='flex flex-wrap justify-end gap-1'>
+                {(plan?.route_groups || []).map((group) => (
+                  <GroupBadge key={group} group={group} />
+                ))}
+              </span>
+            </div>
+          )}
         </div>
       </ConfirmDialog>
     </>

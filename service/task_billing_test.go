@@ -61,6 +61,8 @@ func TestMain(m *testing.M) {
 		&model.UserSubscription{},
 		&model.SubscriptionPlanQuotaWindow{},
 		&model.UserSubscriptionQuotaWindow{},
+		&model.SubscriptionPlanRouteGroup{},
+		&model.UserSubscriptionRouteGroup{},
 		&model.SubscriptionPreConsumeRecord{},
 		&model.SystemTask{},
 		&model.SystemTaskLock{},
@@ -91,6 +93,8 @@ func truncate(t *testing.T) {
 		model.DB.Exec("DELETE FROM user_subscriptions")
 		model.DB.Exec("DELETE FROM subscription_plan_quota_windows")
 		model.DB.Exec("DELETE FROM user_subscription_quota_windows")
+		model.DB.Exec("DELETE FROM subscription_plan_route_groups")
+		model.DB.Exec("DELETE FROM user_subscription_route_groups")
 		model.DB.Exec("DELETE FROM subscription_pre_consume_records")
 		model.DB.Exec("DELETE FROM system_task_locks")
 		model.DB.Exec("DELETE FROM system_tasks")

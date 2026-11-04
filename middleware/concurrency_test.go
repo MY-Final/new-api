@@ -55,7 +55,11 @@ func setupConcurrencyAdmissionDB(t *testing.T) {
 	)
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSubscription{}))
+	require.NoError(t, db.AutoMigrate(
+		&model.User{},
+		&model.UserSubscription{},
+		&model.UserSubscriptionRouteGroup{},
+	))
 	model.DB, model.LOG_DB = db, db
 	t.Cleanup(func() {
 		model.DB, model.LOG_DB = previousDB, previousLogDB
@@ -92,7 +96,7 @@ func TestConcurrencyAdmissionEnforcesAccountTokenAndSubscriptionScopes(t *testin
 		Group:    "vip",
 	}
 	require.NoError(t, model.DB.Create(&user).Error)
-	require.NoError(t, model.DB.Create(&model.UserSubscription{
+	subscription := model.UserSubscription{
 		UserId:         user.Id,
 		PlanId:         1,
 		Status:         "active",
@@ -100,11 +104,13 @@ func TestConcurrencyAdmissionEnforcesAccountTokenAndSubscriptionScopes(t *testin
 		EndTime:        time.Now().Add(time.Hour).Unix(),
 		UpgradeGroup:   "vip",
 		MaxConcurrency: 1,
-	}).Error)
+	}
+	require.NoError(t, model.DB.Create(&subscription).Error)
+	require.NoError(t, model.SnapshotPlanRouteGroupsTx(model.DB, subscription.Id, []string{"deepseek-a", "deepseek-b"}))
 
-	t.Run("different API keys cannot bypass subscription concurrency", func(t *testing.T) {
-		first := concurrencyAdmissionContext(user.Id, 11, 0, 0, "vip")
-		second := concurrencyAdmissionContext(user.Id, 12, 0, 0, "vip")
+	t.Run("different API keys and route groups share subscription concurrency", func(t *testing.T) {
+		first := concurrencyAdmissionContext(user.Id, 11, 0, 0, "deepseek-a")
+		second := concurrencyAdmissionContext(user.Id, 12, 0, 0, "deepseek-b")
 		release, apiErr := AcquireRequestConcurrency(first)
 		require.Nil(t, apiErr)
 		t.Cleanup(release)
