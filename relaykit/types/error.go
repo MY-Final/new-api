@@ -84,6 +84,7 @@ const (
 
 	// quota error
 	ErrorCodeInsufficientUserQuota      ErrorCode = "insufficient_user_quota"
+	ErrorCodeRateLimitExceeded          ErrorCode = "rate_limit_exceeded"
 	ErrorCodePreConsumeTokenQuotaFailed ErrorCode = "pre_consume_token_quota_failed"
 )
 

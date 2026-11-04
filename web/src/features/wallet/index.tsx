@@ -16,10 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useNavigate } from '@tanstack/react-router'
+import { Crown } from 'lucide-react'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SectionPageLayout } from '@/components/layout'
+import { Button } from '@/components/ui/button'
 import { useCustomPages } from '@/features/custom-pages/hooks/use-custom-pages'
 import { useStatus } from '@/hooks/use-status'
 import { useSystemConfig } from '@/hooks/use-system-config'
@@ -35,7 +38,6 @@ import { TransferDialog } from './components/dialogs/transfer-dialog'
 import { PaymentRecoveryNotice } from './components/payment-recovery-notice'
 import { RechargeFormCard } from './components/recharge-form-card'
 import { RedemptionCard } from './components/redemption-card'
-import { SubscriptionPlansCard } from './components/subscription-plans-card'
 import { WalletFundingGuide } from './components/wallet-funding-guide'
 import { WalletShopPanel } from './components/wallet-shop-panel'
 import { WalletStatsCard } from './components/wallet-stats-card'
@@ -68,6 +70,7 @@ interface WalletProps {
 
 export function Wallet(props: WalletProps) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const [user, setUser] = useState<UserWalletData | null>(null)
   const [userLoading, setUserLoading] = useState(true)
   const [topupAmount, setTopupAmount] = useState(0)
@@ -86,7 +89,6 @@ export function Wallet(props: WalletProps) {
   const [creemDialogOpen, setCreemDialogOpen] = useState(false)
   const [selectedCreemProduct, setSelectedCreemProduct] =
     useState<CreemProduct | null>(null)
-  const [showSubscriptionPanel, setShowSubscriptionPanel] = useState(true)
   const walletFundingGuideRef = useRef<HTMLDivElement>(null)
 
   const { status } = useStatus()
@@ -294,24 +296,6 @@ export function Wallet(props: WalletProps) {
     return topupInfo?.discount?.[topupAmount] || DEFAULT_DISCOUNT_RATE
   }, [topupInfo, topupAmount])
 
-  const handleSubscriptionAvailabilityChange = useCallback(
-    (available: boolean) => {
-      setShowSubscriptionPanel(available)
-    },
-    []
-  )
-
-  // Beside the shop the cards stack; otherwise recharge and subscription keep
-  // the side-by-side layout.
-  let rechargeLayoutClassName = 'grid gap-4'
-  if (showSubscriptionPanel) {
-    rechargeLayoutClassName =
-      'grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)] xl:items-start'
-  }
-  if (shopPage) {
-    rechargeLayoutClassName = 'flex flex-col gap-4 sm:gap-5'
-  }
-
   return (
     <>
       <SectionPageLayout>
@@ -346,6 +330,28 @@ export function Wallet(props: WalletProps) {
               >
                 <WalletStatsCard user={user} loading={userLoading} />
 
+                <div className='bg-card flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between'>
+                  <div className='flex min-w-0 items-start gap-3'>
+                    <span className='bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg'>
+                      <Crown className='size-4' aria-hidden='true' />
+                    </span>
+                    <div className='min-w-0'>
+                      <p className='font-medium'>{t('Subscription Plans')}</p>
+                      <p className='text-muted-foreground mt-0.5 text-xs'>
+                        {t('Subscribe to a plan for model access')}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    className='shrink-0'
+                    onClick={() => void navigate({ to: '/subscription-plans' })}
+                  >
+                    {t('Subscription Plans')}
+                  </Button>
+                </div>
+
                 <WalletFundingGuide
                   quota={user?.quota}
                   topupInfo={topupInfo}
@@ -378,51 +384,39 @@ export function Wallet(props: WalletProps) {
                   />
                 )}
 
-                <div
-                  ref={walletFundingGuideRef}
-                  className={cn('scroll-mt-4', rechargeLayoutClassName)}
-                >
-                  <div>
-                    <RechargeFormCard
-                      topupInfo={topupInfo}
-                      highlighted
-                      hideRedemption={Boolean(shopPage)}
-                      presetAmounts={presetAmounts}
-                      selectedPreset={selectedPreset}
-                      onSelectPreset={handleSelectPreset}
-                      topupAmount={topupAmount}
-                      onTopupAmountChange={handleTopupAmountChange}
-                      paymentAmount={paymentAmount}
-                      calculating={calculating}
-                      onPaymentMethodSelect={handlePaymentMethodSelect}
-                      paymentLoading={paymentLoading}
-                      redemptionCode={redemptionCode}
-                      onRedemptionCodeChange={setRedemptionCode}
-                      onRedeem={handleRedeem}
-                      redeeming={redeeming}
-                      topupLink={topupInfo?.topup_link}
-                      loading={topupLoading}
-                      priceRatio={(status?.price as number) || 1}
-                      usdExchangeRate={effectiveUsdExchangeRate}
-                      onOpenBilling={() => setBillingDialogOpen(true)}
-                      creemProducts={topupInfo?.creem_products}
-                      enableCreemTopup={topupInfo?.enable_creem_topup}
-                      onCreemProductSelect={handleCreemProductSelect}
-                      enableWaffoTopup={topupInfo?.enable_waffo_topup}
-                      waffoPayMethods={topupInfo?.waffo_pay_methods}
-                      waffoMinTopup={topupInfo?.waffo_min_topup}
-                      onWaffoMethodSelect={handleWaffoMethodSelect}
-                      enableWaffoPancakeTopup={
-                        topupInfo?.enable_waffo_pancake_topup
-                      }
-                    />
-                  </div>
-
-                  <SubscriptionPlansCard
+                <div ref={walletFundingGuideRef} className='scroll-mt-4'>
+                  <RechargeFormCard
                     topupInfo={topupInfo}
-                    onAvailabilityChange={handleSubscriptionAvailabilityChange}
-                    userQuota={user?.quota}
-                    onPurchaseSuccess={fetchUser}
+                    highlighted
+                    hideRedemption={Boolean(shopPage)}
+                    presetAmounts={presetAmounts}
+                    selectedPreset={selectedPreset}
+                    onSelectPreset={handleSelectPreset}
+                    topupAmount={topupAmount}
+                    onTopupAmountChange={handleTopupAmountChange}
+                    paymentAmount={paymentAmount}
+                    calculating={calculating}
+                    onPaymentMethodSelect={handlePaymentMethodSelect}
+                    paymentLoading={paymentLoading}
+                    redemptionCode={redemptionCode}
+                    onRedemptionCodeChange={setRedemptionCode}
+                    onRedeem={handleRedeem}
+                    redeeming={redeeming}
+                    topupLink={topupInfo?.topup_link}
+                    loading={topupLoading}
+                    priceRatio={(status?.price as number) || 1}
+                    usdExchangeRate={effectiveUsdExchangeRate}
+                    onOpenBilling={() => setBillingDialogOpen(true)}
+                    creemProducts={topupInfo?.creem_products}
+                    enableCreemTopup={topupInfo?.enable_creem_topup}
+                    onCreemProductSelect={handleCreemProductSelect}
+                    enableWaffoTopup={topupInfo?.enable_waffo_topup}
+                    waffoPayMethods={topupInfo?.waffo_pay_methods}
+                    waffoMinTopup={topupInfo?.waffo_min_topup}
+                    onWaffoMethodSelect={handleWaffoMethodSelect}
+                    enableWaffoPancakeTopup={
+                      topupInfo?.enable_waffo_pancake_topup
+                    }
                   />
                 </div>
 

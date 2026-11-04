@@ -1,3 +1,9 @@
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRouter,
+  RouterProvider,
+} from '@tanstack/react-router'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -120,9 +126,6 @@ vi.mock('../components/recharge-form-card', () => ({
     </div>
   ),
 }))
-vi.mock('../components/subscription-plans-card', () => ({
-  SubscriptionPlansCard: () => <div>subscription-card</div>,
-}))
 vi.mock('../components/affiliate-rewards-card', () => ({
   AffiliateRewardsCard: () => <div>affiliate-card</div>,
 }))
@@ -163,10 +166,15 @@ beforeEach(async () => {
   })
 })
 
-function renderWallet() {
+async function renderWallet() {
+  const router = createRouter({
+    routeTree: createRootRoute({ component: () => <Wallet /> }),
+    history: createMemoryHistory({ initialEntries: ['/wallet'] }),
+  })
+  await router.load()
   render(
     <I18nextProvider i18n={i18n}>
-      <Wallet />
+      <RouterProvider router={router} />
     </I18nextProvider>
   )
 }
@@ -181,22 +189,29 @@ const shopLink = {
   href: '/embed/shop',
 }
 
-it('embeds the page marked for the wallet and moves redemption beside it', () => {
+it('embeds the page marked for the wallet and moves redemption beside it', async () => {
   state.links = [shopLink]
-  renderWallet()
+  await renderWallet()
 
   expect(screen.getByText('shop-panel:Shop')).toBeVisible()
   expect(screen.getByText('redemption-card')).toBeVisible()
   expect(screen.getByText('recharge-without-redeem')).toBeVisible()
+  expect(
+    screen.getByRole('button', { name: 'Subscription Plans' })
+  ).toBeVisible()
+  expect(screen.queryByText('subscription-card')).not.toBeInTheDocument()
 })
 
-it('keeps the original wallet when no custom page targets it', () => {
+it('keeps the original wallet when no custom page targets it', async () => {
   state.links = [
     { ...shopLink, name: 'Docs', highlight: false, inWallet: false },
   ]
-  renderWallet()
+  await renderWallet()
 
   expect(screen.queryByText(/^shop-panel:/)).not.toBeInTheDocument()
   expect(screen.queryByText('redemption-card')).not.toBeInTheDocument()
   expect(screen.getByText('recharge-with-redeem')).toBeVisible()
+  expect(
+    screen.getByRole('button', { name: 'Subscription Plans' })
+  ).toBeVisible()
 })

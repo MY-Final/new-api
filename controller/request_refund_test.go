@@ -24,7 +24,7 @@ import (
 
 func TestRequestRefundQueueFilters(t *testing.T) {
 	db := setupManageUserTestDB(t)
-	require.NoError(t, db.AutoMigrate(&model.RequestBilling{}, &model.UserSubscription{}, &model.FinancialOperation{}))
+	require.NoError(t, db.AutoMigrate(&model.RequestBilling{}, &model.UserSubscription{}, &model.SubscriptionPreConsumeRecord{}, &model.FinancialOperation{}))
 	rows := []model.RequestBilling{
 		{Id: "queue-a", RequestId: "incident-a", UserId: 1, ModelName: "model-a", ChannelId: 17, FundingSource: "wallet", Quota: 20, PaidQuota: 20, Settled: true, CreatedAt: 100},
 		{Id: "queue-b", RequestId: "incident-b", UserId: 2, ModelName: "model-a", ChannelId: 17, FundingSource: "wallet", Quota: 30, PaidQuota: 30, Settled: true, CreatedAt: 200},
@@ -63,7 +63,7 @@ func TestRequestRefundQueueFilters(t *testing.T) {
 
 func TestRequestRefundBatchPersistsResultsAndRetriesOnlyFailures(t *testing.T) {
 	db := setupManageUserTestDB(t)
-	require.NoError(t, db.AutoMigrate(&model.RequestBilling{}, &model.FinancialOperation{}, &model.SystemTask{}, &model.SystemTaskLock{}, &model.Channel{}, &model.QuotaUsageDaily{}))
+	require.NoError(t, db.AutoMigrate(&model.RequestBilling{}, &model.FinancialOperation{}, &model.SystemTask{}, &model.SystemTaskLock{}, &model.Channel{}, &model.QuotaUsageDaily{}, &model.SubscriptionPreConsumeRecord{}))
 	operator := model.User{Username: "batch-operator", AffCode: "batch-operator", Role: common.RoleRootUser, Status: common.UserStatusEnabled}
 	target := model.User{Username: "batch-target", AffCode: "batch-target", Role: common.RoleCommonUser, Quota: 100, BonusQuota: 40, PaidQuota: 60, UsedQuota: 30}
 	require.NoError(t, db.Create(&operator).Error)
@@ -252,7 +252,7 @@ func TestRequestRefundAccounting(t *testing.T) {
 	t.Cleanup(func() { common.LogConsumeEnabled = oldLogConsume })
 	common.BatchUpdateEnabled = false
 	t.Cleanup(func() { common.BatchUpdateEnabled = oldBatch })
-	tables := []any{&model.RequestBilling{}, &model.FinancialOperation{}, &model.Token{}, &model.Channel{}, &model.Task{}, &model.QuotaUsageDaily{}, &model.UserSubscription{}}
+	tables := []any{&model.RequestBilling{}, &model.FinancialOperation{}, &model.Token{}, &model.Channel{}, &model.Task{}, &model.QuotaUsageDaily{}, &model.UserSubscription{}, &model.SubscriptionPreConsumeRecord{}}
 	require.NoError(t, db.AutoMigrate(tables...))
 	require.NoError(t, db.AutoMigrate(tables...))
 

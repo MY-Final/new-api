@@ -17,7 +17,6 @@ import (
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
 	"github.com/gin-gonic/gin"
-	"github.com/glebarez/sqlite"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,24 +27,39 @@ func setupDashboardAuthMiddlewareTest(t *testing.T) {
 	t.Helper()
 	previousDB := model.DB
 	previousLogDB := model.LOG_DB
-	previousType := common.MainDatabaseType()
+	previousType, previousLogType := common.MainDatabaseType(), common.LogDatabaseType()
 	previousRedis := common.RedisEnabled
 	previousSecret := common.SessionSecret
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.AuditLog{}, &model.UserAccessToken{}, &model.Option{}))
-	model.DB = db
+	previousSQLitePath, previousMaster := common.SQLitePath, common.IsMasterNode
+	common.SQLitePath, common.IsMasterNode = t.TempDir()+"/middleware-auth.db", false
+	t.Setenv("SQL_DSN", "")
+	t.Setenv("LOG_SQL_DSN", "")
+	require.NoError(t, model.InitDB())
+	db := model.DB
+	require.NoError(t, db.AutoMigrate(
+		&model.User{},
+		&model.UserSession{},
+		&model.AuditLog{},
+		&model.UserAccessToken{},
+		&model.UserSubscription{},
+		&model.Token{},
+		&model.Option{},
+	))
 	model.LOG_DB = db
-	common.SetMainDatabaseType(common.DatabaseTypeSQLite)
 	common.RedisEnabled = false
 	common.SessionSecret = "middleware-auth-test-secret"
 	require.NoError(t, model.EnsureLegacyAccessTokenRetireAt(time.Now().Unix()))
 	t.Cleanup(func() {
+		sqlDB, err := db.DB()
+		if err == nil {
+			require.NoError(t, sqlDB.Close())
+		}
 		model.DB = previousDB
 		model.LOG_DB = previousLogDB
-		common.SetMainDatabaseType(previousType)
+		common.SetDatabaseTypes(previousType, previousLogType)
 		common.RedisEnabled = previousRedis
 		common.SessionSecret = previousSecret
+		common.SQLitePath, common.IsMasterNode = previousSQLitePath, previousMaster
 	})
 }
 
@@ -154,6 +168,66 @@ func TestUserAuthNeverFallsBackForRecognizedInvalidInternalJWT(t *testing.T) {
 
 	assert.Equal(t, http.StatusUnauthorized, response.Code)
 	assert.Contains(t, response.Body.String(), "AUTH_UNAUTHORIZED")
+}
+
+func TestAuthenticationFailsClosedWhenSubscriptionExpiryCheckFails(t *testing.T) {
+	setupDashboardAuthMiddlewareTest(t)
+	user := createMiddlewarePATUser(t, "subscription-expiry-user", "subscription-expiry-pat")
+	relayToken := &model.Token{
+		UserId:         user.Id,
+		Key:            "subscriptionexpiryrelay",
+		Status:         common.TokenStatusEnabled,
+		ExpiredTime:    -1,
+		UnlimitedQuota: true,
+		Group:          "default",
+	}
+	require.NoError(t, model.DB.Create(relayToken).Error)
+
+	const callbackName = "test:subscription-expiry-auth-failure"
+	require.NoError(t, model.DB.Callback().Query().Before("gorm:query").Register(callbackName, func(tx *gorm.DB) {
+		if tx.Statement.Table == "user_subscriptions" {
+			tx.AddError(errors.New("forced subscription expiry failure"))
+		}
+	}))
+	t.Cleanup(func() { model.DB.Callback().Query().Remove(callbackName) })
+
+	router := gin.New()
+	handlerCalled := false
+	router.GET("/required", UserAuth(), func(c *gin.Context) {
+		handlerCalled = true
+		c.Status(http.StatusNoContent)
+	})
+	router.GET("/optional", TryUserAuth(), func(c *gin.Context) {
+		handlerCalled = true
+		c.Status(http.StatusNoContent)
+	})
+	router.GET("/relay", TokenAuth(), func(c *gin.Context) {
+		handlerCalled = true
+		c.Status(http.StatusNoContent)
+	})
+
+	for _, test := range []struct {
+		name, path, token, responseCode string
+	}{
+		{name: "required dashboard authentication", path: "/required", token: "subscription-expiry-pat", responseCode: "AUTH_INTERNAL_ERROR"},
+		{name: "optional dashboard authentication", path: "/optional", token: "subscription-expiry-pat", responseCode: "AUTH_INTERNAL_ERROR"},
+		{name: "API token authentication", path: "/relay", token: "subscriptionexpiryrelay"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			handlerCalled = false
+			request := httptest.NewRequest(http.MethodGet, test.path, nil)
+			request.Header.Set("Authorization", "Bearer "+test.token)
+			response := httptest.NewRecorder()
+
+			router.ServeHTTP(response, request)
+
+			assert.Equal(t, http.StatusInternalServerError, response.Code, response.Body.String())
+			assert.False(t, handlerCalled)
+			if test.responseCode != "" {
+				assert.Contains(t, response.Body.String(), test.responseCode)
+			}
+		})
+	}
 }
 
 func TestTryUserAuthCredentialClassification(t *testing.T) {
@@ -529,11 +603,12 @@ func TestAccessTokenIdentityAndSingleLookup(t *testing.T) {
 			if test.stepUp {
 				assert.Equal(t, service.AuthIdentity{UserID: user.Id, SessionID: model.AccessTokenSessionID(token.Id), UserAuthVersion: user.AuthVersion, SessionVersion: model.AccessTokenSessionVersion}, body.Identity)
 			}
-			// The access audit and authentication share one lookup: the
-			// credential query plus the owner's user row.
-			assert.Len(t, queries, 2)
+			// The access audit and authentication share one lookup. Each request
+			// then checks expired subscriptions and loads the owner's user row.
+			assert.Len(t, queries, 3)
 			assert.Equal(t, test.tokenTable, countQueries("user_access_tokens", "token_hash"))
 			assert.Equal(t, test.legacyQuery, countQueries("users", "access_token = "))
+			assert.Equal(t, 1, countQueries("user_subscriptions", "user_id"))
 		})
 	}
 }

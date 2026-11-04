@@ -705,6 +705,34 @@ export function ApiKeysMutateDrawer({
                   <div className='flex flex-col gap-4 pt-2'>
                     <FormField
                       control={form.control}
+                      name='max_concurrency'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t('Concurrency Limit')}</FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              type='number'
+                              min={0}
+                              onChange={(e) =>
+                                field.onChange(
+                                  Number.parseInt(e.target.value, 10) || 0
+                                )
+                              }
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            {t(
+                              'Maximum concurrent requests for this API key. 0 means no extra limit.'
+                            )}
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
                       name='model_limits'
                       render={({ field }) => (
                         <FormItem>

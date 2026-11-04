@@ -444,7 +444,15 @@ func postConsumeQuotaWithResult(relayInfo *relaycommon.RelayInfo, quota int, pre
 		}
 		delta := int64(quota)
 		if delta != 0 {
-			if err := model.PostConsumeUserSubscriptionDelta(relayInfo.SubscriptionId, delta); err != nil {
+			var err error
+			if relayInfo.RequestId != "" {
+				err = model.AdjustSubscriptionUsage(relayInfo.RequestId, delta)
+			} else {
+				// Historical callers without a request id cannot identify the
+				// rolling usage row and retain the legacy subscription debit.
+				err = model.PostConsumeUserSubscriptionDelta(relayInfo.SubscriptionId, delta)
+			}
+			if err != nil {
 				return result, err
 			}
 			relayInfo.SubscriptionPostDelta += delta

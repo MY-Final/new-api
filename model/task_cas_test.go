@@ -62,6 +62,9 @@ func TestMain(m *testing.M) {
 		&SubscriptionPlan{},
 		&SubscriptionOrder{},
 		&UserSubscription{},
+		&SubscriptionPlanQuotaWindow{},
+		&UserSubscriptionQuotaWindow{},
+		&SubscriptionPreConsumeRecord{},
 		&UserOAuthBinding{},
 		&PerfMetric{},
 		&SystemInstance{},
@@ -109,6 +112,9 @@ func truncateTables(t *testing.T) {
 		DB.Exec("DELETE FROM subscription_orders")
 		DB.Exec("DELETE FROM subscription_plans")
 		DB.Exec("DELETE FROM user_subscriptions")
+		DB.Exec("DELETE FROM subscription_plan_quota_windows")
+		DB.Exec("DELETE FROM user_subscription_quota_windows")
+		DB.Exec("DELETE FROM subscription_pre_consume_records")
 		DB.Exec("DELETE FROM perf_metrics")
 		DB.Exec("DELETE FROM system_instances")
 		DB.Exec("DELETE FROM system_task_locks")
@@ -251,6 +257,21 @@ func TestSnapshot_Roundtrip(t *testing.T) {
 	assert.JSONEq(t, string(task.Data), string(snap.Data))
 	assert.Equal(t, task.PrivateData.PluginState, snap.PluginState)
 	assert.Equal(t, task.PrivateData.PollFailures, snap.PollFailures)
+}
+
+func TestTaskPrivateDataPersistsConcurrencyLease(t *testing.T) {
+	privateData := TaskPrivateData{
+		ConcurrencyLeaseOwner: "request-owner",
+		ConcurrencyScopes:     []string{"user:7", "token:9"},
+	}
+	value, err := privateData.Value()
+	require.NoError(t, err)
+	require.NotNil(t, value)
+
+	var restored TaskPrivateData
+	require.NoError(t, restored.Scan(value))
+	assert.Equal(t, privateData.ConcurrencyLeaseOwner, restored.ConcurrencyLeaseOwner)
+	assert.Equal(t, privateData.ConcurrencyScopes, restored.ConcurrencyScopes)
 }
 
 // ---------------------------------------------------------------------------

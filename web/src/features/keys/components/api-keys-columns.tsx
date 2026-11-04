@@ -191,6 +191,20 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
         meta: { mobileHidden: true },
       },
       {
+        accessorKey: 'max_concurrency',
+        header: t('Concurrency'),
+        cell: ({ row }) => {
+          const limit = Number(row.original.max_concurrency || 0)
+          return (
+            <span className='text-muted-foreground text-sm tabular-nums'>
+              {limit > 0 ? limit : t('No extra limit')}
+            </span>
+          )
+        },
+        size: 120,
+        meta: { mobileHidden: true },
+      },
+      {
         id: 'allow_ips',
         accessorKey: 'allow_ips',
         header: t('IP Restriction'),

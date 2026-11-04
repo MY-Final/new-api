@@ -66,3 +66,36 @@ export function formatTimestamp(ts: number): string {
   if (!ts) return '-'
   return dayjs(ts * 1000).format('YYYY-MM-DD HH:mm:ss')
 }
+
+export function formatPlanPrice(
+  amount: number,
+  currency: string,
+  locale?: Intl.LocalesArgument
+): string {
+  const currencyCode = currency?.trim().toUpperCase() || 'CNY'
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: currencyCode,
+      maximumFractionDigits: 2,
+    }).format(Number(amount || 0))
+  } catch {
+    return `${currencyCode} ${Number(amount || 0).toFixed(2)}`
+  }
+}
+
+export function formatWindowDuration(
+  seconds: number,
+  t: TFunction
+): string {
+  if (seconds >= 86400 && seconds % 86400 === 0) {
+    return `${seconds / 86400} ${t('days')}`
+  }
+  if (seconds >= 3600 && seconds % 3600 === 0) {
+    return `${seconds / 3600} ${t('hours')}`
+  }
+  if (seconds >= 60 && seconds % 60 === 0) {
+    return `${seconds / 60} ${t('minutes')}`
+  }
+  return `${seconds} ${t('seconds')}`
+}

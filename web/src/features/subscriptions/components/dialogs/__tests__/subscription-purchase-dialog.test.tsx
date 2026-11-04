@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import i18next from 'i18next'
 import type { ComponentProps } from 'react'
@@ -29,10 +29,25 @@ import { SubscriptionPurchaseDialog } from '../subscription-purchase-dialog'
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
+  paySubscriptionBalance: vi.fn(),
+  toast: {
+    error: vi.fn(),
+    success: vi.fn(),
+  },
 }))
 
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => mocks.navigate,
+}))
+
+vi.mock('sonner', () => ({ toast: mocks.toast }))
+
+vi.mock('@/features/subscriptions/api', () => ({
+  paySubscriptionBalance: mocks.paySubscriptionBalance,
+  paySubscriptionCreem: vi.fn(),
+  paySubscriptionEpay: vi.fn(),
+  paySubscriptionStripe: vi.fn(),
+  paySubscriptionWaffoPancake: vi.fn(),
 }))
 
 const planRecord: PlanRecord = {
@@ -40,7 +55,7 @@ const planRecord: PlanRecord = {
     id: 1,
     title: 'Starter',
     price_amount: 10,
-    currency: 'USD',
+    currency: 'CNY',
     duration_unit: 'month',
     duration_value: 1,
     quota_reset_period: 'monthly',
@@ -61,6 +76,9 @@ beforeEach(() => {
     defaultOptions: { queries: { retry: false } },
   })
   mocks.navigate.mockReset()
+  mocks.paySubscriptionBalance.mockReset()
+  mocks.toast.error.mockReset()
+  mocks.toast.success.mockReset()
 })
 
 function renderDialog(
@@ -83,6 +101,91 @@ function renderDialog(
 }
 
 describe('SubscriptionPurchaseDialog', () => {
+  test('renders plan currency, rolling windows, and concurrency from the snapshot', () => {
+    renderDialog({
+      plan: {
+        plan: {
+          ...planRecord.plan,
+          price_amount: 6,
+          currency: 'CNY',
+          quota_windows: [
+            { window_seconds: 5 * 60 * 60, quota_limit: 300, sort_order: 0 },
+            { window_seconds: 7 * 24 * 60 * 60, quota_limit: 700, sort_order: 1 },
+          ],
+          max_concurrency: 3,
+        },
+      },
+    })
+
+    expect(screen.getByText(/6\.00/)).toBeVisible()
+    expect(screen.getByText('5 hours')).toBeVisible()
+    expect(screen.getByText('7 days')).toBeVisible()
+    expect(screen.getByText('Account Concurrency')).toBeVisible()
+    expect(screen.getByText('3')).toBeVisible()
+    expect(screen.queryByText('$6.00')).not.toBeInTheDocument()
+  })
+
+  test('warns about explicit key groups and opens the key creation page', async () => {
+    const onOpenChange = vi.fn()
+    const user = userEvent.setup()
+    renderDialog({
+      onOpenChange,
+      plan: {
+        plan: { ...planRecord.plan, upgrade_group: 'deepseek-day' },
+      },
+    })
+
+    expect(
+      screen.getByText(
+        /Only API keys with an empty or Auto group follow your purchased subscription group/
+      )
+    ).toBeVisible()
+    await user.click(
+      screen.getByRole('button', { name: 'Create an Auto group API Key' })
+    )
+
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: '/keys' })
+  })
+
+  test('reports renewal when the balance purchase extends the same plan', async () => {
+    const onPurchaseSuccess = vi.fn()
+    const user = userEvent.setup()
+    mocks.paySubscriptionBalance.mockResolvedValue({
+      success: true,
+      data: { renewed: true },
+    })
+    renderDialog({
+      userQuota: 100_000_000,
+      onPurchaseSuccess,
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Pay with Balance' }))
+
+    await waitFor(() => {
+      expect(mocks.toast.success).toHaveBeenCalledWith(
+        'Subscription renewed successfully'
+      )
+    })
+    expect(onPurchaseSuccess).toHaveBeenCalledOnce()
+  })
+
+  test('shows the different-plan conflict returned by the balance purchase', async () => {
+    const user = userEvent.setup()
+    mocks.paySubscriptionBalance.mockRejectedValue({
+      response: { status: 409 },
+    })
+    renderDialog({ userQuota: 100_000_000 })
+
+    await user.click(screen.getByRole('button', { name: 'Pay with Balance' }))
+
+    await waitFor(() => {
+      expect(mocks.toast.error).toHaveBeenCalledWith(
+        'You already have an active subscription for another plan. Wait until it expires or ask an administrator to cancel it before purchasing this plan.'
+      )
+    })
+  })
+
   test('offers Add Funds for an insufficient balance, closes, and navigates to the wallet', async () => {
     const calls: string[] = []
     const onOpenChange = vi.fn(() => calls.push('close'))
@@ -121,5 +224,20 @@ describe('SubscriptionPurchaseDialog', () => {
     expect(
       screen.getByText('This plan does not allow balance redemption')
     ).toBeVisible()
+  })
+
+  test('disables balance payment for plans denominated in another currency', () => {
+    renderDialog({
+      plan: {
+        plan: { ...planRecord.plan, currency: 'USD' },
+      },
+    })
+
+    expect(
+      screen.getByText('Balance payment is available only for CNY plans')
+    ).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Pay with Balance' })
+    ).toBeDisabled()
   })
 })

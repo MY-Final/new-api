@@ -123,7 +123,11 @@ func taskAdjustFunding(task *model.Task, delta int) error {
 		return model.AdjustTaskRequestBillingFunding(task, delta)
 	}
 	if taskIsSubscription(task) {
-		return model.PostConsumeUserSubscriptionDelta(task.PrivateData.SubscriptionId, int64(delta))
+		requestID := task.TaskID
+		if task.PrivateData.Execution != nil && task.PrivateData.Execution.RequestID != "" {
+			requestID = task.PrivateData.Execution.RequestID
+		}
+		return model.AdjustSubscriptionUsage(requestID, int64(delta))
 	}
 	if delta > 0 {
 		return model.DecreaseUserQuota(task.UserId, delta, false)

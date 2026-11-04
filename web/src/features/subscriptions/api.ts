@@ -30,6 +30,7 @@ import type {
   SubscriptionPayResponse,
   SubscriptionPayRequest,
   SelfSubscriptionData,
+  SubscriptionBalancePayData,
 } from './types'
 
 // ============================================================================
@@ -63,6 +64,11 @@ export async function patchPlanStatus(
   const res = await api.patch(`/api/subscription/admin/plans/${id}`, {
     enabled,
   })
+  return res.data
+}
+
+export async function deletePlan(id: number): Promise<ApiResponse> {
+  const res = await api.delete(`/api/subscription/admin/plans/${id}`)
   return res.data
 }
 
@@ -157,7 +163,7 @@ export async function paySubscriptionWaffoPancake(
 
 export async function paySubscriptionBalance(
   data: SubscriptionPayRequest
-): Promise<SubscriptionPayResponse> {
+): Promise<ApiResponse<SubscriptionBalancePayData>> {
   const res = await api.post('/api/subscription/balance/pay', data)
   return res.data
 }

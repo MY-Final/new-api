@@ -29,8 +29,10 @@ import { Button } from '@/components/ui/button'
 import { Combobox } from '@/components/ui/combobox'
 import { Separator } from '@/components/ui/separator'
 import { useSystemConfig } from '@/hooks/use-system-config'
+import { toIntlLocale } from '@/i18n/languages'
 import { formatQuota } from '@/lib/format'
 import { handleServerError } from '@/lib/handle-server-error'
+import { getServerErrorStatus } from '@/lib/server-error-message'
 import { DEFAULT_CURRENCY_CONFIG } from '@/stores/system-config-store'
 
 import {
@@ -40,7 +42,12 @@ import {
   paySubscriptionWaffoPancake,
   paySubscriptionBalance,
 } from '../../api'
-import { formatDuration, formatResetPeriod } from '../../lib'
+import {
+  formatDuration,
+  formatPlanPrice,
+  formatResetPeriod,
+  formatWindowDuration,
+} from '../../lib'
 import type { PlanRecord } from '../../types'
 
 interface PaymentMethod {
@@ -64,8 +71,9 @@ interface Props {
 }
 
 export function SubscriptionPurchaseDialog(props: Props) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
+  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const { currency } = useSystemConfig()
   const [paying, setPaying] = useState(false)
   const [selectedEpayMethod, setSelectedEpayMethod] = useState('')
@@ -89,7 +97,13 @@ export function SubscriptionPurchaseDialog(props: Props) {
     props.enableOnlineTopUp && (props.epayMethods || []).length > 0
   const hasAnyPayment = hasStripe || hasCreem || hasWaffoPancake || hasEpay
   const totalAmount = Number(plan.total_amount || 0)
-  const price = Number(plan.price_amount || 0).toFixed(2)
+  const quotaWindows = plan.quota_windows || []
+  const hasQuotaWindows = quotaWindows.length > 0
+  const price = formatPlanPrice(
+    Number(plan.price_amount || 0),
+    plan.currency,
+    locale
+  )
   const quotaPerUnit =
     currency?.quotaPerUnit && currency.quotaPerUnit > 0
       ? currency.quotaPerUnit
@@ -99,7 +113,11 @@ export function SubscriptionPurchaseDialog(props: Props) {
     Math.ceil(Number(plan.price_amount || 0) * quotaPerUnit)
   )
   const userQuota = Math.max(0, Number(props.userQuota || 0))
-  const allowBalancePay = plan.allow_balance_pay !== false
+  const planCurrency = (plan.currency || 'CNY').trim().toUpperCase()
+  const balanceCurrencyUnavailable =
+    plan.allow_balance_pay !== false && planCurrency !== 'CNY'
+  const allowBalancePay =
+    plan.allow_balance_pay !== false && planCurrency === 'CNY'
   const insufficientBalance = userQuota < balanceCost
   const limitReached =
     (props.purchaseLimit || 0) > 0 &&
@@ -218,14 +236,26 @@ export function SubscriptionPurchaseDialog(props: Props) {
     try {
       const res = await paySubscriptionBalance({ plan_id: plan.id })
       if (res.success) {
-        toast.success(t('Subscription purchased successfully'))
+        toast.success(
+          res.data?.renewed
+            ? t('Subscription renewed successfully')
+            : t('Subscription purchased successfully')
+        )
         void props.onPurchaseSuccess?.()
         props.onOpenChange(false)
       } else {
         handleServerError(res, t('Payment request failed'))
       }
     } catch (error) {
-      handleServerError(error, t('Payment request failed'))
+      if (getServerErrorStatus(error) === 409) {
+        toast.error(
+          t(
+            'You already have an active subscription for another plan. Wait until it expires or ask an administrator to cancel it before purchasing this plan.'
+          )
+        )
+      } else {
+        handleServerError(error, t('Payment request failed'))
+      }
     } finally {
       setPaying(false)
     }
@@ -273,15 +303,43 @@ export function SubscriptionPurchaseDialog(props: Props) {
               <span className='text-sm'>{formatResetPeriod(plan, t)}</span>
             </div>
           )}
-          <div className='flex items-center justify-between'>
-            <span className='text-muted-foreground text-sm'>
-              {t('Plan Quota')}
-            </span>
-            <span className='flex items-center gap-1 text-sm'>
-              <Package className='h-3.5 w-3.5' />
-              {totalAmount > 0 ? formatQuota(totalAmount) : t('Unlimited')}
-            </span>
-          </div>
+          {hasQuotaWindows ? (
+            <div className='space-y-1.5'>
+              <span className='text-muted-foreground text-sm'>
+                {t('Rolling Quota Windows')}
+              </span>
+              {quotaWindows.map((window) => (
+                <div
+                  key={window.window_seconds}
+                  className='flex items-center justify-between text-sm'
+                >
+                  <span>{formatWindowDuration(window.window_seconds, t)}</span>
+                  <span className='flex items-center gap-1 tabular-nums'>
+                    <Package className='h-3.5 w-3.5' />
+                    {formatQuota(window.quota_limit)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className='flex items-center justify-between'>
+              <span className='text-muted-foreground text-sm'>
+                {t('Plan Quota')}
+              </span>
+              <span className='flex items-center gap-1 text-sm'>
+                <Package className='h-3.5 w-3.5' />
+                {totalAmount > 0 ? formatQuota(totalAmount) : t('Unlimited')}
+              </span>
+            </div>
+          )}
+          {(plan.max_concurrency || 0) > 0 && (
+            <div className='flex items-center justify-between'>
+              <span className='text-muted-foreground text-sm'>
+                {t('Account Concurrency')}
+              </span>
+              <span className='text-sm'>{plan.max_concurrency}</span>
+            </div>
+          )}
           {plan.upgrade_group && (
             <div className='flex items-center justify-between'>
               <span className='text-muted-foreground text-sm'>
@@ -293,9 +351,38 @@ export function SubscriptionPurchaseDialog(props: Props) {
           <Separator />
           <div className='flex items-center justify-between'>
             <span className='text-sm font-medium'>{t('Amount Due')}</span>
-            <span className='text-primary text-lg font-bold'>${price}</span>
+            <span className='text-primary text-lg font-bold'>{price}</span>
           </div>
         </div>
+
+        {plan.upgrade_group && (
+          <Alert>
+            <AlertDescription className='space-y-2'>
+              <p>
+                {t(
+                  'Only API keys with an empty or Auto group follow your purchased subscription group. Keys explicitly bound to another group stay unchanged.'
+                )}
+              </p>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                onClick={() => {
+                  props.onOpenChange(false)
+                  void navigate({ to: '/keys' })
+                }}
+              >
+                {t('Create an Auto group API Key')}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <p className='text-muted-foreground text-xs'>
+          {t(
+            'Renewing the same plan extends the current expiry. Purchasing a different plan is available after the current plan expires or is cancelled by an administrator.'
+          )}
+        </p>
 
         {limitReached && (
           <Alert variant='destructive'>
@@ -315,13 +402,22 @@ export function SubscriptionPurchaseDialog(props: Props) {
             <span className='text-muted-foreground'>{t('Available')}</span>
             <span>{formatQuota(userQuota)}</span>
           </div>
-          {!allowBalancePay ? (
+          {balanceCurrencyUnavailable && (
+            <Alert variant='destructive'>
+              <AlertDescription>
+                {t('Balance payment is available only for CNY plans')}
+              </AlertDescription>
+            </Alert>
+          )}
+          {!balanceCurrencyUnavailable && !allowBalancePay && (
             <Alert variant='destructive'>
               <AlertDescription>
                 {t('This plan does not allow balance redemption')}
               </AlertDescription>
             </Alert>
-          ) : (
+          )}
+          {!balanceCurrencyUnavailable &&
+            allowBalancePay &&
             insufficientBalance && (
               <Alert variant='destructive'>
                 <AlertDescription className='flex flex-wrap items-center justify-between gap-2'>
@@ -331,8 +427,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
                   </Button>
                 </AlertDescription>
               </Alert>
-            )
-          )}
+            )}
           <Button
             variant='outline'
             onClick={handlePayBalance}

@@ -52,7 +52,7 @@ func performHeaderNavRequest(t *testing.T, handler gin.HandlerFunc, authenticate
 		previousDB, previousRedis := model.DB, common.RedisEnabled
 		db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 		require.NoError(t, err)
-		require.NoError(t, db.AutoMigrate(&model.User{}, &model.Option{}))
+		require.NoError(t, db.AutoMigrate(&model.User{}, &model.Option{}, &model.UserSubscription{}))
 		model.DB = db
 		common.RedisEnabled = false
 		require.NoError(t, model.EnsureLegacyAccessTokenRetireAt(time.Now().Unix()))

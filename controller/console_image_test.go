@@ -67,7 +67,7 @@ func TestConsoleImagesUploadServeAndCleanup(t *testing.T) {
 			db := ticketDatabase(t, dialect)
 			fixture := ticketObjectStorage(t)
 			require.NoError(t, i18n.Init())
-			require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.UserAccessToken{}, &model.Option{}, &model.CasbinRule{}, &model.AuthzRole{}, &model.Log{}, &model.AuditLog{}))
+			require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.UserAccessToken{}, &model.Option{}, &model.CasbinRule{}, &model.AuthzRole{}, &model.Log{}, &model.AuditLog{}, &model.UserSubscription{}))
 			legacyOption := model.Option{Key: "console_setting.announcements", Value: "existing announcement configuration"}
 			require.NoError(t, db.Create(&legacyOption).Error)
 			require.NoError(t, model.MigrateConsoleImages(db))

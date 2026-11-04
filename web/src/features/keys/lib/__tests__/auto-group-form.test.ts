@@ -209,3 +209,18 @@ describe('API key user quota query form mapping', () => {
     }
   )
 })
+
+describe('API key concurrency form mapping', () => {
+  test('defaults to no key limit and preserves an existing limit', () => {
+    const defaults = getApiKeyFormDefaultValues(false)
+    expect(defaults.max_concurrency).toBe(0)
+    expect(transformFormDataToPayload(defaults).max_concurrency).toBe(0)
+
+    const limited = transformApiKeyToFormDefaults({
+      ...baseApiKey,
+      max_concurrency: 4,
+    })
+    expect(limited.max_concurrency).toBe(4)
+    expect(transformFormDataToPayload(limited).max_concurrency).toBe(4)
+  })
+})

@@ -338,6 +338,10 @@ func AddToken(c *gin.Context) {
 		common.ApiErrorT(c, "Token name is too long")
 		return
 	}
+	if token.MaxConcurrency < 0 {
+		common.ApiErrorT(c, "Concurrency limit cannot be negative")
+		return
+	}
 	params := tokenAuditParams(c)
 	params["name"] = token.Name
 	// 非无限额度时，检查额度值是否超出有效范围
@@ -390,6 +394,7 @@ func AddToken(c *gin.Context) {
 		ModelLimits:        token.ModelLimits,
 		AllowIps:           token.AllowIps,
 		Group:              token.Group,
+		MaxConcurrency:     token.MaxConcurrency,
 		CrossGroupRetry:    token.CrossGroupRetry,
 		AutoGroups:         token.AutoGroups,
 	}
@@ -455,6 +460,10 @@ func UpdateToken(c *gin.Context) {
 		common.ApiErrorT(c, "Token name is too long")
 		return
 	}
+	if token.MaxConcurrency < 0 {
+		common.ApiErrorT(c, "Concurrency limit cannot be negative")
+		return
+	}
 	if !token.UnlimitedQuota {
 		if token.RemainQuota < 0 {
 			common.ApiErrorT(c, "Quota value cannot be negative")
@@ -502,6 +511,7 @@ func UpdateToken(c *gin.Context) {
 			cleanToken.AllowUserQuotaQuery = *request.AllowUserQuotaQuery
 		}
 		cleanToken.Group = token.Group
+		cleanToken.MaxConcurrency = token.MaxConcurrency
 		cleanToken.CrossGroupRetry = token.CrossGroupRetry
 		if token.Group != "auto" {
 			cleanToken.CrossGroupRetry = false
@@ -536,6 +546,7 @@ func UpdateToken(c *gin.Context) {
 				(previous.AllowIps != nil && cleanToken.AllowIps != nil && *previous.AllowIps != *cleanToken.AllowIps)},
 			{"allow_user_quota_query", previous.AllowUserQuotaQuery != cleanToken.AllowUserQuotaQuery},
 			{"group", previous.Group != cleanToken.Group},
+			{"max_concurrency", previous.MaxConcurrency != cleanToken.MaxConcurrency},
 			{"cross_group_retry", previous.CrossGroupRetry != cleanToken.CrossGroupRetry},
 			{"auto_groups", previous.AutoGroups != cleanToken.AutoGroups},
 		} {

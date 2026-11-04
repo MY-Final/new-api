@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -43,6 +44,11 @@ func queueAuditLog(entry AuditLog) error {
 	}
 	if err := os.Rename(file.Name(), filepath.Join(dir, AccessTokenFingerprint(entry.EventId)+".json")); err != nil {
 		return err
+	}
+	// Windows does not expose directory fsync. The event file itself has already
+	// been synced before the atomic rename.
+	if runtime.GOOS == "windows" {
+		return nil
 	}
 	directory, err := os.Open(dir)
 	if err != nil {

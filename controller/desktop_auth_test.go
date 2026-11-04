@@ -49,7 +49,7 @@ func setupDesktopAuth(t *testing.T, kind, dsn string, upgrade, fullStartup bool)
 		model.LOG_DB = db
 	}
 	require.NoError(t, i18n.Init())
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.UserAccessToken{}, &model.AuthFlow{}, &model.Token{}, &model.Ability{}, &model.Log{}, &model.AuditLog{}, &model.Option{}, &model.TwoFA{}, &model.TwoFABackupCode{}, &model.PasskeyCredential{}, &model.UserOAuthBinding{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.UserAccessToken{}, &model.AuthFlow{}, &model.Token{}, &model.Ability{}, &model.Log{}, &model.AuditLog{}, &model.Option{}, &model.TwoFA{}, &model.TwoFABackupCode{}, &model.PasskeyCredential{}, &model.UserOAuthBinding{}, &model.UserSubscription{}))
 	user := &model.User{Username: "desktop-owner", Password: "placeholder", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AffCode: "desktop-owner", AuthVersion: 1}
 	require.NoError(t, db.Create(user).Error)
 	require.NoError(t, db.Create(&model.Ability{Group: "default", Model: "coding-model", ChannelId: 1, Enabled: true}).Error)

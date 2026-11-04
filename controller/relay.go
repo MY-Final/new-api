@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/common/concurrency"
 	"github.com/QuantumNous/new-api/constant"
 	taskdto "github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/i18n"
@@ -738,6 +740,14 @@ func executeTaskSubmissionWith(
 			insertOmits = append(insertOmits, "data")
 		}
 	}
+	if task.Status != model.TaskStatusSuccess && task.Status != model.TaskStatusFailure {
+		if leaseValue, exists := c.Get(concurrency.ContextKeyLease); exists {
+			if lease, ok := leaseValue.(concurrency.Lease); ok && lease.Owner != "" && len(lease.Scopes) > 0 {
+				task.PrivateData.ConcurrencyLeaseOwner = lease.Owner
+				task.PrivateData.ConcurrencyScopes = concurrency.ScopeFromLease(lease)
+			}
+		}
+	}
 	diagnostics.insertStart(task)
 	if insertErr := task.InsertWithContext(c.Request.Context(), insertOmits...); insertErr != nil {
 		common.SysError(common.LogText("insert task error: %s", insertErr.Error()))
@@ -755,6 +765,12 @@ func executeTaskSubmissionWith(
 		return nil, taskErr
 	}
 	durable = true
+	if task.PrivateData.ConcurrencyLeaseOwner != "" && len(task.PrivateData.ConcurrencyScopes) > 0 {
+		c.Set(concurrency.ContextKeyTaskHold, concurrency.Snapshot{
+			Owner:      task.PrivateData.ConcurrencyLeaseOwner,
+			ScopeNames: task.PrivateData.ConcurrencyScopes,
+		})
+	}
 	stage = "settle"
 	diagnostics.durable(task)
 	diagnostics.settleStart(task, result.Quota)
@@ -773,6 +789,10 @@ func executeTaskSubmissionWith(
 		policy.AddEvent(service.PolicyEvent{Decision: service.PolicyDecision{Action: "stop", Reason: "task_failed", Source: "upstream"}})
 	}
 	service.LogTaskConsumption(c, relayInfo, task)
+	if task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusFailure {
+		service.FinalizeTaskSubscriptionUsage(task)
+		service.ReleaseTaskConcurrencyLease(context.Background(), task)
+	}
 	diagnostics.complete(task, result.Quota)
 
 	return &taskSubmissionOutcome{Result: result, Task: task, RelayInfo: relayInfo}, nil

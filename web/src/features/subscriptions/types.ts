@@ -22,12 +22,34 @@ import { z } from 'zod'
 // Subscription Plan Schema & Types
 // ============================================================================
 
+export const subscriptionQuotaWindowSchema = z.object({
+  id: z.number().optional(),
+  window_seconds: z.number(),
+  quota_limit: z.number(),
+  sort_order: z.number().optional().default(0),
+})
+
+export type SubscriptionQuotaWindow = z.infer<
+  typeof subscriptionQuotaWindowSchema
+>
+
+export const subscriptionQuotaWindowUsageSchema =
+  subscriptionQuotaWindowSchema.extend({
+    used: z.number(),
+    remaining: z.number(),
+    next_release_at: z.number(),
+  })
+
+export type SubscriptionQuotaWindowUsage = z.infer<
+  typeof subscriptionQuotaWindowUsageSchema
+>
+
 export const subscriptionPlanSchema = z.object({
   id: z.number(),
   title: z.string(),
   subtitle: z.string().optional(),
   price_amount: z.number(),
-  currency: z.string().default('USD'),
+  currency: z.string().default('CNY'),
   duration_unit: z.enum(['year', 'month', 'day', 'hour', 'custom']),
   duration_value: z.number(),
   custom_seconds: z.number().optional(),
@@ -38,7 +60,9 @@ export const subscriptionPlanSchema = z.object({
   allow_balance_pay: z.boolean().optional().default(true),
   allow_wallet_overflow: z.boolean().optional().default(true),
   max_purchase_per_user: z.number(),
+  max_concurrency: z.number().optional(),
   total_amount: z.number(),
+  quota_windows: z.array(subscriptionQuotaWindowSchema).optional(),
   upgrade_group: z.string().optional(),
   downgrade_group: z.string().optional(),
   stripe_price_id: z.string().optional(),
@@ -67,6 +91,11 @@ export const userSubscriptionSchema = z.object({
   amount_total: z.number(),
   amount_used: z.number(),
   next_reset_time: z.number().optional(),
+  upgrade_group: z.string().optional(),
+  downgrade_group: z.string().optional(),
+  allow_wallet_overflow: z.boolean().optional(),
+  max_concurrency: z.number().optional(),
+  quota_windows: z.array(subscriptionQuotaWindowUsageSchema).optional(),
 })
 
 export type UserSubscription = z.infer<typeof userSubscriptionSchema>
@@ -113,6 +142,15 @@ export interface SubscriptionPayResponse {
   url?: string
 }
 
+export interface SubscriptionBalancePayData {
+  renewed: boolean
+  end_time: number
+  upgrade_group: string
+  max_concurrency: number
+  quota_windows: SubscriptionQuotaWindowUsage[]
+  subscription: UserSubscription
+}
+
 export interface CreateUserSubscriptionRequest {
   plan_id: number
 }
@@ -151,5 +189,7 @@ export interface SelfSubscriptionData {
 export type SubscriptionsDialogType =
   | 'create'
   | 'update'
+  | 'grant-subscription'
   | 'toggle-status'
   | 'reset-subscriptions'
+  | 'delete-plan'

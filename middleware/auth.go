@@ -58,6 +58,17 @@ func authHelper(c *gin.Context, minRole int) {
 		writeDashboardAuthError(c, err)
 		return
 	}
+	if expired, expireErr := model.ExpireDueSubscriptionsForUser(user.Id); expireErr != nil {
+		common.SysError(common.LogText("failed to expire subscriptions for user %d during authentication: %s", user.Id, expireErr.Error()))
+		writeDashboardAuthError(c, expireErr)
+		return
+	} else if expired > 0 {
+		user, err = model.GetUserCache(user.Id)
+		if err != nil {
+			writeDashboardAuthError(c, err)
+			return
+		}
+	}
 	c.Set("audit_actor_id", user.Id)
 	c.Set("audit_actor_role", user.Role)
 	c.Set("audit_actor_username", user.Username)
@@ -112,6 +123,19 @@ func TryUserAuth() func(c *gin.Context) {
 		if err != nil {
 			writeDashboardAuthError(c, err)
 			return
+		}
+		if credentialKind != dashboardCredentialUnmatched {
+			if expired, expireErr := model.ExpireDueSubscriptionsForUser(user.Id); expireErr != nil {
+				common.SysError(common.LogText("failed to expire subscriptions for user %d during optional authentication: %s", user.Id, expireErr.Error()))
+				writeDashboardAuthError(c, expireErr)
+				return
+			} else if expired > 0 {
+				user, err = model.GetUserCache(user.Id)
+				if err != nil {
+					writeDashboardAuthError(c, err)
+					return
+				}
+			}
 		}
 		// Optional authentication never elevates a token beyond its grant: a
 		// token the route would reject leaves the request anonymous.
@@ -625,6 +649,14 @@ func TokenAuth() func(c *gin.Context) {
 			}
 			return
 		}
+		if expired, expireErr := model.ExpireDueSubscriptionsForUser(token.UserId); expireErr != nil {
+			common.SysError(common.LogText("failed to expire subscriptions for user %d during token authentication: %s", token.UserId, expireErr.Error()))
+			abortWithOpenAiMessage(c, http.StatusInternalServerError,
+				common.TranslateMessage(c, i18n.MsgDatabaseError))
+			return
+		} else if expired > 0 {
+			c.Set("subscription_expired", true)
+		}
 
 		allowIps := token.GetIpLimits()
 		if len(allowIps) > 0 {
@@ -716,6 +748,7 @@ func SetupContextForToken(c *gin.Context, token *model.Token, parts ...string) e
 	c.Set("token_id", token.Id)
 	c.Set("token_key", token.Key)
 	c.Set("token_name", token.Name)
+	c.Set("token_max_concurrency", token.MaxConcurrency)
 	c.Set("token_unlimited_quota", token.UnlimitedQuota)
 	if !token.UnlimitedQuota {
 		c.Set("token_quota", token.RemainQuota)

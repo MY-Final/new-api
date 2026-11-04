@@ -57,7 +57,11 @@ func TestMain(m *testing.M) {
 		&model.Channel{},
 		&model.Midjourney{},
 		&model.TopUp{},
+		&model.SubscriptionPlan{},
 		&model.UserSubscription{},
+		&model.SubscriptionPlanQuotaWindow{},
+		&model.UserSubscriptionQuotaWindow{},
+		&model.SubscriptionPreConsumeRecord{},
 		&model.SystemTask{},
 		&model.SystemTaskLock{},
 		&model.QuotaUsageDaily{},
@@ -83,7 +87,11 @@ func truncate(t *testing.T) {
 		model.DB.Exec("DELETE FROM channels")
 		model.DB.Exec("DELETE FROM midjourneys")
 		model.DB.Exec("DELETE FROM top_ups")
+		model.DB.Exec("DELETE FROM subscription_plans")
 		model.DB.Exec("DELETE FROM user_subscriptions")
+		model.DB.Exec("DELETE FROM subscription_plan_quota_windows")
+		model.DB.Exec("DELETE FROM user_subscription_quota_windows")
+		model.DB.Exec("DELETE FROM subscription_pre_consume_records")
 		model.DB.Exec("DELETE FROM system_task_locks")
 		model.DB.Exec("DELETE FROM system_tasks")
 		model.DB.Exec("DELETE FROM request_billings")
@@ -143,6 +151,19 @@ func seedChargedAccounting(t *testing.T, userID, channelID, tokenID, quota, requ
 		require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", tokenID).
 			Update("used_quota", quota).Error)
 	}
+}
+
+func seedSubscriptionUsageRecord(t *testing.T, task *model.Task, subscriptionID, quota int) {
+	t.Helper()
+	record := &model.SubscriptionPreConsumeRecord{
+		RequestId:          task.TaskID,
+		UserId:             task.UserId,
+		UserSubscriptionId: subscriptionID,
+		PreConsumed:        int64(quota),
+		UsageQuota:         int64(quota),
+		Status:             "consumed",
+	}
+	require.NoError(t, model.DB.Create(record).Error)
 }
 
 func makeTask(userId, channelId, quota, tokenId int, billingSource string, subscriptionId int) *model.Task {
@@ -938,6 +959,7 @@ func TestRefundTaskQuota_Subscription(t *testing.T) {
 	seedChargedAccounting(t, userID, channelID, tokenID, preConsumed, 1)
 
 	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceSubscription, subID)
+	seedSubscriptionUsageRecord(t, task, subID, preConsumed)
 	require.NoError(t, model.DB.Create(task).Error)
 
 	assert.True(t, RefundTaskQuota(ctx, task, "subscription task failed"))
@@ -1187,6 +1209,7 @@ func TestRecalculate_Subscription_NegativeDelta(t *testing.T) {
 	seedChargedAccounting(t, userID, channelID, tokenID, preConsumed, 1)
 
 	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceSubscription, subID)
+	seedSubscriptionUsageRecord(t, task, subID, preConsumed)
 
 	RecalculateTaskQuota(ctx, task, actualQuota, common.NewMessage("subscription over-charge"))
 

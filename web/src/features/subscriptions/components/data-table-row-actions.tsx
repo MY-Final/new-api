@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { Row } from '@tanstack/react-table'
-import { Pencil, Power, PowerOff, RotateCcw } from 'lucide-react'
+import { Gift, Pencil, Power, PowerOff, RotateCcw, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
@@ -45,6 +45,11 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
     setOpen('update')
   }
 
+  const handleGrantSubscription = () => {
+    setCurrentRow(row.original)
+    setOpen('grant-subscription')
+  }
+
   const handleToggleStatus = () => {
     setCurrentRow(row.original)
     setOpen('toggle-status')
@@ -55,8 +60,30 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
     setOpen('reset-subscriptions')
   }
 
+  const handleDelete = () => {
+    setCurrentRow(row.original)
+    setOpen('delete-plan')
+  }
+
   return (
     <div className='-ml-1.5 flex items-center gap-1'>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant='ghost'
+              size='icon-sm'
+              disabled={!complianceConfirmed}
+              onClick={handleGrantSubscription}
+              aria-label={t('Gift subscription')}
+            />
+          }
+        >
+          <Gift />
+        </TooltipTrigger>
+        <TooltipContent>{t('Gift subscription')}</TooltipContent>
+      </Tooltip>
+
       <Tooltip>
         <TooltipTrigger
           render={
@@ -111,6 +138,24 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           {isEnabled ? <PowerOff /> : <Power />}
         </TooltipTrigger>
         <TooltipContent>{toggleLabel}</TooltipContent>
+      </Tooltip>
+
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant='ghost'
+              size='icon-sm'
+              disabled={!complianceConfirmed}
+              onClick={handleDelete}
+              aria-label={t('Delete subscription plan')}
+              className='text-destructive hover:text-destructive'
+            />
+          }
+        >
+          <Trash2 />
+        </TooltipTrigger>
+        <TooltipContent>{t('Delete subscription plan')}</TooltipContent>
       </Tooltip>
     </div>
   )

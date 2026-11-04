@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"errors"
+	"net/http"
 	"strconv"
 	"strings"
 
@@ -36,6 +38,10 @@ func GetSubscriptionPlans(c *gin.Context) {
 
 	var plans []model.SubscriptionPlan
 	if err := model.DB.Where("enabled = ?", true).Order("sort_order desc, id desc").Find(&plans).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if err := model.HydrateSubscriptionPlansQuotaWindows(plans); err != nil {
 		common.ApiError(c, err)
 		return
 	}
@@ -108,11 +114,28 @@ func SubscriptionRequestBalancePay(c *gin.Context) {
 		return
 	}
 
-	if err := model.PurchaseSubscriptionWithBalance(userId, req.PlanId); err != nil {
+	mutation, err := model.PurchaseSubscriptionWithBalance(userId, req.PlanId)
+	if err != nil {
+		if errors.Is(err, model.ErrActiveSubscriptionConflict) {
+			common.ApiErrorStatus(c, http.StatusConflict, err)
+			return
+		}
 		common.ApiError(c, err)
 		return
 	}
-	common.ApiSuccess(c, nil)
+	if mutation == nil || mutation.Subscription == nil {
+		common.ApiErrorT(c, "Failed to load purchased subscription")
+		return
+	}
+	subscription := mutation.Subscription
+	common.ApiSuccess(c, gin.H{
+		"renewed":         mutation.Renewed,
+		"end_time":        subscription.EndTime,
+		"upgrade_group":   subscription.UpgradeGroup,
+		"max_concurrency": subscription.MaxConcurrency,
+		"quota_windows":   subscription.QuotaWindows,
+		"subscription":    subscription,
+	})
 }
 
 // ---- Admin APIs ----
@@ -120,6 +143,10 @@ func SubscriptionRequestBalancePay(c *gin.Context) {
 func AdminListSubscriptionPlans(c *gin.Context) {
 	var plans []model.SubscriptionPlan
 	if err := model.DB.Order("sort_order desc, id desc").Find(&plans).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if err := model.HydrateSubscriptionPlansQuotaWindows(plans); err != nil {
 		common.ApiError(c, err)
 		return
 	}
@@ -137,6 +164,97 @@ type AdminUpsertSubscriptionPlanRequest struct {
 	Plan model.SubscriptionPlan `json:"plan"`
 }
 
+func normalizeSubscriptionPlanInput(c *gin.Context, plan *model.SubscriptionPlan) bool {
+	if plan == nil {
+		common.ApiErrorT(c, "Invalid parameters")
+		return false
+	}
+	plan.Title = strings.TrimSpace(plan.Title)
+	if plan.Title == "" {
+		common.ApiErrorT(c, "Subscription plan title cannot be empty")
+		return false
+	}
+	if plan.PriceAmount < 0 {
+		common.ApiErrorT(c, "Price cannot be negative")
+		return false
+	}
+	if plan.PriceAmount > 9999 {
+		common.ApiErrorT(c, "Price cannot exceed 9999")
+		return false
+	}
+	plan.Currency = strings.ToUpper(strings.TrimSpace(plan.Currency))
+	if plan.Currency == "" {
+		plan.Currency = "CNY"
+	}
+	switch plan.Currency {
+	case "CNY", "USD", "EUR":
+	default:
+		common.ApiErrorT(c, "Unsupported currency")
+		return false
+	}
+	if plan.MaxConcurrency < 0 {
+		common.ApiErrorT(c, "Concurrency limit cannot be negative")
+		return false
+	}
+	if plan.AllowBalancePay == nil {
+		plan.AllowBalancePay = common.GetPointer(true)
+	}
+	if plan.AllowWalletOverflow == nil {
+		plan.AllowWalletOverflow = common.GetPointer(true)
+	}
+	if plan.DurationUnit == "" {
+		plan.DurationUnit = model.SubscriptionDurationMonth
+	}
+	if plan.DurationValue <= 0 && plan.DurationUnit != model.SubscriptionDurationCustom {
+		plan.DurationValue = 1
+	}
+	if plan.DurationUnit == model.SubscriptionDurationCustom && plan.CustomSeconds <= 0 {
+		common.ApiErrorT(c, "Custom duration must be greater than 0 seconds")
+		return false
+	}
+	if plan.MaxPurchasePerUser < 0 {
+		common.ApiErrorT(c, "Purchase limit cannot be negative")
+		return false
+	}
+	if plan.TotalAmount < 0 {
+		common.ApiErrorT(c, "Total quota cannot be negative")
+		return false
+	}
+	plan.UpgradeGroup = strings.TrimSpace(plan.UpgradeGroup)
+	if plan.UpgradeGroup != "" {
+		if _, ok := ratio_setting.GetGroupRatioCopy()[plan.UpgradeGroup]; !ok {
+			common.ApiErrorT(c, "Upgrade group does not exist")
+			return false
+		}
+	}
+	plan.DowngradeGroup = strings.TrimSpace(plan.DowngradeGroup)
+	if plan.DowngradeGroup != "" {
+		if _, ok := ratio_setting.GetGroupRatioCopy()[plan.DowngradeGroup]; !ok {
+			common.ApiErrorT(c, "Downgrade group does not exist")
+			return false
+		}
+	}
+	windows, err := model.NormalizeSubscriptionQuotaWindows(plan.QuotaWindows)
+	if err != nil {
+		common.ApiErrorT(c, err.Error())
+		return false
+	}
+	plan.QuotaWindows = windows
+	if len(windows) > 0 {
+		plan.TotalAmount = 0
+		plan.QuotaResetPeriod = model.SubscriptionResetNever
+		plan.QuotaResetCustomSeconds = 0
+		plan.AllowWalletOverflow = common.GetPointer(false)
+	} else {
+		plan.QuotaResetPeriod = model.NormalizeResetPeriod(plan.QuotaResetPeriod)
+		if plan.QuotaResetPeriod == model.SubscriptionResetCustom && plan.QuotaResetCustomSeconds <= 0 {
+			common.ApiErrorT(c, "Custom reset cycle must be greater than 0 seconds")
+			return false
+		}
+	}
+	return true
+}
+
 func AdminCreateSubscriptionPlan(c *gin.Context) {
 	if !requirePaymentCompliance(c) {
 		return
@@ -148,62 +266,15 @@ func AdminCreateSubscriptionPlan(c *gin.Context) {
 		return
 	}
 	req.Plan.Id = 0
-	if strings.TrimSpace(req.Plan.Title) == "" {
-		common.ApiErrorT(c, "Subscription plan title cannot be empty")
+	if !normalizeSubscriptionPlanInput(c, &req.Plan) {
 		return
 	}
-	if req.Plan.PriceAmount < 0 {
-		common.ApiErrorT(c, "Price cannot be negative")
-		return
-	}
-	if req.Plan.PriceAmount > 9999 {
-		common.ApiErrorT(c, "Price cannot exceed 9999")
-		return
-	}
-	if req.Plan.Currency == "" {
-		req.Plan.Currency = "USD"
-	}
-	req.Plan.Currency = "USD"
-	if req.Plan.AllowBalancePay == nil {
-		req.Plan.AllowBalancePay = common.GetPointer(true)
-	}
-	if req.Plan.AllowWalletOverflow == nil {
-		req.Plan.AllowWalletOverflow = common.GetPointer(true)
-	}
-	if req.Plan.DurationUnit == "" {
-		req.Plan.DurationUnit = model.SubscriptionDurationMonth
-	}
-	if req.Plan.DurationValue <= 0 && req.Plan.DurationUnit != model.SubscriptionDurationCustom {
-		req.Plan.DurationValue = 1
-	}
-	if req.Plan.MaxPurchasePerUser < 0 {
-		common.ApiErrorT(c, "Purchase limit cannot be negative")
-		return
-	}
-	if req.Plan.TotalAmount < 0 {
-		common.ApiErrorT(c, "Total quota cannot be negative")
-		return
-	}
-	req.Plan.UpgradeGroup = strings.TrimSpace(req.Plan.UpgradeGroup)
-	if req.Plan.UpgradeGroup != "" {
-		if _, ok := ratio_setting.GetGroupRatioCopy()[req.Plan.UpgradeGroup]; !ok {
-			common.ApiErrorT(c, "Upgrade group does not exist")
-			return
+	err := model.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&req.Plan).Error; err != nil {
+			return err
 		}
-	}
-	req.Plan.DowngradeGroup = strings.TrimSpace(req.Plan.DowngradeGroup)
-	if req.Plan.DowngradeGroup != "" {
-		if _, ok := ratio_setting.GetGroupRatioCopy()[req.Plan.DowngradeGroup]; !ok {
-			common.ApiErrorT(c, "Downgrade group does not exist")
-			return
-		}
-	}
-	req.Plan.QuotaResetPeriod = model.NormalizeResetPeriod(req.Plan.QuotaResetPeriod)
-	if req.Plan.QuotaResetPeriod == model.SubscriptionResetCustom && req.Plan.QuotaResetCustomSeconds <= 0 {
-		common.ApiErrorT(c, "Custom reset cycle must be greater than 0 seconds")
-		return
-	}
-	err := model.DB.Create(&req.Plan).Error
+		return model.ReplaceSubscriptionPlanQuotaWindowsTx(tx, req.Plan.Id, req.Plan.QuotaWindows)
+	})
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -227,54 +298,8 @@ func AdminUpdateSubscriptionPlan(c *gin.Context) {
 		common.ApiErrorT(c, "Invalid parameters")
 		return
 	}
-	if strings.TrimSpace(req.Plan.Title) == "" {
-		common.ApiErrorT(c, "Subscription plan title cannot be empty")
-		return
-	}
-	if req.Plan.PriceAmount < 0 {
-		common.ApiErrorT(c, "Price cannot be negative")
-		return
-	}
-	if req.Plan.PriceAmount > 9999 {
-		common.ApiErrorT(c, "Price cannot exceed 9999")
-		return
-	}
 	req.Plan.Id = id
-	if req.Plan.Currency == "" {
-		req.Plan.Currency = "USD"
-	}
-	req.Plan.Currency = "USD"
-	if req.Plan.DurationUnit == "" {
-		req.Plan.DurationUnit = model.SubscriptionDurationMonth
-	}
-	if req.Plan.DurationValue <= 0 && req.Plan.DurationUnit != model.SubscriptionDurationCustom {
-		req.Plan.DurationValue = 1
-	}
-	if req.Plan.MaxPurchasePerUser < 0 {
-		common.ApiErrorT(c, "Purchase limit cannot be negative")
-		return
-	}
-	if req.Plan.TotalAmount < 0 {
-		common.ApiErrorT(c, "Total quota cannot be negative")
-		return
-	}
-	req.Plan.UpgradeGroup = strings.TrimSpace(req.Plan.UpgradeGroup)
-	if req.Plan.UpgradeGroup != "" {
-		if _, ok := ratio_setting.GetGroupRatioCopy()[req.Plan.UpgradeGroup]; !ok {
-			common.ApiErrorT(c, "Upgrade group does not exist")
-			return
-		}
-	}
-	req.Plan.DowngradeGroup = strings.TrimSpace(req.Plan.DowngradeGroup)
-	if req.Plan.DowngradeGroup != "" {
-		if _, ok := ratio_setting.GetGroupRatioCopy()[req.Plan.DowngradeGroup]; !ok {
-			common.ApiErrorT(c, "Downgrade group does not exist")
-			return
-		}
-	}
-	req.Plan.QuotaResetPeriod = model.NormalizeResetPeriod(req.Plan.QuotaResetPeriod)
-	if req.Plan.QuotaResetPeriod == model.SubscriptionResetCustom && req.Plan.QuotaResetCustomSeconds <= 0 {
-		common.ApiErrorT(c, "Custom reset cycle must be greater than 0 seconds")
+	if !normalizeSubscriptionPlanInput(c, &req.Plan) {
 		return
 	}
 
@@ -294,6 +319,7 @@ func AdminUpdateSubscriptionPlan(c *gin.Context) {
 			"creem_product_id":           req.Plan.CreemProductId,
 			"waffo_pancake_product_id":   req.Plan.WaffoPancakeProductId,
 			"max_purchase_per_user":      req.Plan.MaxPurchasePerUser,
+			"max_concurrency":            req.Plan.MaxConcurrency,
 			"total_amount":               req.Plan.TotalAmount,
 			"upgrade_group":              req.Plan.UpgradeGroup,
 			"downgrade_group":            req.Plan.DowngradeGroup,
@@ -310,7 +336,7 @@ func AdminUpdateSubscriptionPlan(c *gin.Context) {
 		if err := tx.Model(&model.SubscriptionPlan{}).Where("id = ?", id).Updates(updateMap).Error; err != nil {
 			return err
 		}
-		return nil
+		return model.ReplaceSubscriptionPlanQuotaWindowsTx(tx, id, req.Plan.QuotaWindows)
 	})
 	if err != nil {
 		common.ApiError(c, err)
@@ -347,6 +373,29 @@ func AdminUpdateSubscriptionPlanStatus(c *gin.Context) {
 	common.ApiSuccess(c, nil)
 }
 
+func AdminDeleteSubscriptionPlan(c *gin.Context) {
+	if !requirePaymentCompliance(c) {
+		return
+	}
+
+	id, _ := strconv.Atoi(c.Param("id"))
+	if id <= 0 {
+		common.ApiErrorT(c, "Invalid ID")
+		return
+	}
+	err := model.DeleteSubscriptionPlan(id)
+	switch {
+	case err == nil:
+		common.ApiSuccess(c, nil)
+	case errors.Is(err, model.ErrSubscriptionPlanInUse):
+		common.ApiErrorStatus(c, http.StatusConflict, err)
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		common.ApiErrorStatus(c, http.StatusNotFound, common.NewMessage("Subscription plan not found"))
+	default:
+		common.ApiError(c, err)
+	}
+}
+
 type AdminBindSubscriptionRequest struct {
 	UserId int `json:"user_id"`
 	PlanId int `json:"plan_id"`
@@ -364,6 +413,10 @@ func AdminBindSubscription(c *gin.Context) {
 	}
 	msg, err := model.AdminBindSubscription(req.UserId, req.PlanId, "")
 	if err != nil {
+		if errors.Is(err, model.ErrActiveSubscriptionConflict) {
+			common.ApiErrorStatus(c, http.StatusConflict, err)
+			return
+		}
 		common.ApiError(c, err)
 		return
 	}
@@ -445,6 +498,10 @@ func AdminCreateUserSubscription(c *gin.Context) {
 	}
 	msg, err := model.AdminBindSubscription(userId, req.PlanId, "")
 	if err != nil {
+		if errors.Is(err, model.ErrActiveSubscriptionConflict) {
+			common.ApiErrorStatus(c, http.StatusConflict, err)
+			return
+		}
 		common.ApiError(c, err)
 		return
 	}

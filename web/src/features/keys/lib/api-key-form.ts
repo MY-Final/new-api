@@ -44,6 +44,7 @@ export function getApiKeyFormSchema(t: TFunction, maxAutoGroups = 5) {
       group: z.string().optional(),
       auto_groups_mode: z.enum(['inherit', 'custom']),
       auto_groups: z.array(z.string()),
+      max_concurrency: z.number().int().min(0),
       cross_group_retry: z.boolean().optional(),
       tokenCount: z.number().min(1).optional(),
     })
@@ -115,6 +116,7 @@ export const API_KEY_FORM_DEFAULT_VALUES: ApiKeyFormValues = {
   group: DEFAULT_GROUP,
   auto_groups_mode: 'inherit',
   auto_groups: [],
+  max_concurrency: 0,
   cross_group_retry: true,
   tokenCount: 1,
 }
@@ -159,6 +161,7 @@ export function transformFormDataToPayload(
       data.group === 'auto' && data.auto_groups_mode === 'custom'
         ? data.auto_groups
         : [],
+    max_concurrency: data.max_concurrency,
     cross_group_retry: data.group === 'auto' ? !!data.cross_group_retry : false,
   }
 }
@@ -194,6 +197,7 @@ export function transformApiKeyToFormDefaults(
     group: apiKey.group || DEFAULT_GROUP,
     auto_groups_mode: autoGroupsMode,
     auto_groups: autoGroups,
+    max_concurrency: Number(apiKey.max_concurrency || 0),
     cross_group_retry: !!apiKey.cross_group_retry,
     tokenCount: 1,
   }

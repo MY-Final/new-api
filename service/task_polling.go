@@ -115,6 +115,7 @@ func sweepTimedOutTasks(ctx context.Context) {
 		if !isLegacy && task.Quota != 0 {
 			RefundTaskQuota(ctx, task, reason)
 		}
+		finishTaskConcurrencyAndUsage(ctx, task)
 	}
 
 	if timedOutCount > 0 {
@@ -173,11 +174,13 @@ func RunTaskPollingOnce(ctx context.Context, report func(processed, total int)) 
 		taskChannelM := make(map[int][]string)
 		taskM := make(map[string]*model.Task)
 		nullTaskIds := make([]int64, 0)
+		nullTasks := make([]*model.Task, 0)
 		for _, task := range tasks {
 			upstreamID := task.GetUpstreamTaskID()
 			if upstreamID == "" {
 				// 统计失败的未完成任务
 				nullTaskIds = append(nullTaskIds, task.ID)
+				nullTasks = append(nullTasks, task)
 				continue
 			}
 			taskM[upstreamID] = task
@@ -193,6 +196,9 @@ func RunTaskPollingOnce(ctx context.Context, report func(processed, total int)) 
 				logger.LogError(ctx, common.LogText("Fix null task_id task error: %v", err))
 			} else {
 				logger.LogInfo(ctx, common.LogText("Fix null task_id task success: %v", nullTaskIds))
+				for _, task := range nullTasks {
+					finishTaskConcurrencyAndUsage(ctx, task)
+				}
 			}
 		}
 		if len(taskChannelM) == 0 {
@@ -262,9 +268,11 @@ func updateBatchTasks(ctx context.Context, adaptor BatchTaskPollingAdaptor, chan
 		common.SysLog(common.LogText("CacheGetChannel: %v", err))
 		// Collect DB primary key IDs for bulk update (taskIds are upstream IDs, not task_id column values)
 		var failedIDs []int64
+		var failedTasks []*model.Task
 		for _, upstreamID := range taskIds {
 			if t, ok := taskM[upstreamID]; ok {
 				failedIDs = append(failedIDs, t.ID)
+				failedTasks = append(failedTasks, t)
 			}
 		}
 		err = model.TaskBulkUpdateByID(failedIDs, map[string]any{
@@ -274,6 +282,10 @@ func updateBatchTasks(ctx context.Context, adaptor BatchTaskPollingAdaptor, chan
 		})
 		if err != nil {
 			common.SysLog(common.LogText("UpdateSunoTask error: %v", err))
+		} else {
+			for _, task := range failedTasks {
+				finishTaskConcurrencyAndUsage(ctx, task)
+			}
 		}
 		return err
 	}
@@ -286,6 +298,7 @@ func updateBatchTasks(ctx context.Context, adaptor BatchTaskPollingAdaptor, chan
 	for _, upstreamID := range taskIds {
 		if task := taskM[upstreamID]; task != nil {
 			tasks = append(tasks, task)
+			refreshTaskConcurrencyLease(ctx, task)
 		}
 	}
 	// The channel type tells plugin adaptors whether the upstream is another
@@ -448,9 +461,11 @@ func updateVideoTasks(ctx context.Context, platform constant.TaskPlatform, chann
 	if err != nil {
 		// Collect DB primary key IDs for bulk update (taskIds are upstream IDs, not task_id column values)
 		var failedIDs []int64
+		var failedTasks []*model.Task
 		for _, upstreamID := range taskIds {
 			if t, ok := taskM[upstreamID]; ok {
 				failedIDs = append(failedIDs, t.ID)
+				failedTasks = append(failedTasks, t)
 			}
 		}
 		errUpdate := model.TaskBulkUpdateByID(failedIDs, map[string]any{
@@ -460,6 +475,10 @@ func updateVideoTasks(ctx context.Context, platform constant.TaskPlatform, chann
 		})
 		if errUpdate != nil {
 			common.SysLog(common.LogText("UpdateVideoTask error: %v", errUpdate))
+		} else {
+			for _, task := range failedTasks {
+				finishTaskConcurrencyAndUsage(ctx, task)
+			}
 		}
 		return fmt.Errorf("CacheGetChannel failed: %w", err)
 	}
@@ -517,6 +536,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	if !model.IsTaskBillingReady(task) {
 		return nil
 	}
+	refreshTaskConcurrencyLease(ctx, task)
 	key := ch.Key
 
 	privateData := task.PrivateData
@@ -660,6 +680,7 @@ func finalizeTerminalTask(ctx context.Context, adaptor TaskPollingAdaptor, task 
 	if task.Status == model.TaskStatusFailure && !billingSettled && task.Quota != 0 {
 		RefundTaskQuota(ctx, task, task.FailReason)
 	}
+	finishTaskConcurrencyAndUsage(ctx, task)
 }
 
 func redactVideoResponseBody(body []byte) []byte {

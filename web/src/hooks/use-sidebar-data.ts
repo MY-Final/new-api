@@ -26,6 +26,7 @@ import {
   ClipboardList,
   CreditCard,
   CircleDollarSign,
+  Crown,
   FileText,
   FlaskConical,
   HeartPulse,
@@ -162,6 +163,11 @@ export function useSidebarData(badges: SidebarBadges = {}): SidebarData {
               tickets.personal > 0
                 ? formatNumber(Math.min(tickets.personal, 99), locale)
                 : undefined,
+          },
+          {
+            title: t('Subscription Plans'),
+            url: '/subscription-plans',
+            icon: Crown,
           },
           {
             title: t('Wallet'),

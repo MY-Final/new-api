@@ -7,6 +7,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/gin-gonic/gin"
@@ -92,6 +93,11 @@ func SettleBilling(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, actualQuo
 		if session, ok := relayInfo.Billing.(*BillingSession); ok {
 			if err := session.recordRequestBilling(ctx, actualQuota); err != nil {
 				return fmt.Errorf("persist request billing: %w", err)
+			}
+		}
+		if relayInfo.BillingSource == BillingSourceSubscription && ctx.GetString(model.RequestBillingTaskContextKey) == "" {
+			if err := model.FinalizeSubscriptionUsage(relayInfo.RequestId); err != nil {
+				common.SysError(common.LogText("failed to finalize subscription usage for request %s: %s", relayInfo.RequestId, err.Error()))
 			}
 		}
 

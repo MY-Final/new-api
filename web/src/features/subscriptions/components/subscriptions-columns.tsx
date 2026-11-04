@@ -24,14 +24,21 @@ import { BadgeCell } from '@/components/data-table'
 import { GroupBadge } from '@/components/group-badge'
 import { StatusBadge } from '@/components/status-badge'
 import { TableId } from '@/components/table-id'
+import { toIntlLocale } from '@/i18n/languages'
 import { formatQuota } from '@/lib/format'
 
-import { formatDuration, formatResetPeriod } from '../lib'
+import {
+  formatDuration,
+  formatPlanPrice,
+  formatResetPeriod,
+  formatWindowDuration,
+} from '../lib'
 import type { PlanRecord } from '../types'
 import { DataTableRowActions } from './data-table-row-actions'
 
 export function useSubscriptionsColumns(): ColumnDef<PlanRecord>[] {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
 
   return useMemo(
     (): ColumnDef<PlanRecord>[] => [
@@ -69,7 +76,11 @@ export function useSubscriptionsColumns(): ColumnDef<PlanRecord>[] {
         header: t('Price'),
         cell: ({ row }) => (
           <span className='font-semibold text-emerald-600'>
-            ${Number(row.original.plan.price_amount || 0).toFixed(2)}
+            {formatPlanPrice(
+              Number(row.original.plan.price_amount || 0),
+              row.original.plan.currency,
+              locale
+            )}
           </span>
         ),
         size: 100,
@@ -86,14 +97,24 @@ export function useSubscriptionsColumns(): ColumnDef<PlanRecord>[] {
       },
       {
         id: 'reset',
-        header: t('Quota Reset'),
+        header: t('Quota Windows'),
         meta: { mobileHidden: true },
-        cell: ({ row }) => (
-          <span className='text-muted-foreground'>
-            {formatResetPeriod(row.original.plan, t)}
-          </span>
-        ),
-        size: 100,
+        cell: ({ row }) => {
+          const windows = row.original.plan.quota_windows || []
+          return (
+            <span className='text-muted-foreground'>
+              {windows.length > 0
+                ? windows
+                    .map(
+                      (window) =>
+                        `${formatWindowDuration(window.window_seconds, t)}: ${formatQuota(window.quota_limit)}`
+                    )
+                    .join(' · ')
+                : formatResetPeriod(row.original.plan, t)}
+            </span>
+          )
+        },
+        size: 220,
       },
       {
         accessorFn: (row) => row.plan.sort_order,
@@ -175,6 +196,21 @@ export function useSubscriptionsColumns(): ColumnDef<PlanRecord>[] {
         size: 150,
       },
       {
+        accessorKey: 'max_concurrency',
+        id: 'max_concurrency',
+        header: t('Concurrency'),
+        meta: { mobileHidden: true },
+        cell: ({ row }) => {
+          const limit = Number(row.original.plan.max_concurrency || 0)
+          return (
+            <span className='text-muted-foreground tabular-nums'>
+              {limit > 0 ? limit : t('No extra limit')}
+            </span>
+          )
+        },
+        size: 100,
+      },
+      {
         id: 'upgrade_group',
         header: t('Upgrade Group'),
         meta: { mobileHidden: true },
@@ -200,6 +236,6 @@ export function useSubscriptionsColumns(): ColumnDef<PlanRecord>[] {
         meta: { pinned: 'right' as const },
       },
     ],
-    [t]
+    [t, locale]
   )
 }

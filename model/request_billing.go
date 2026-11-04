@@ -260,6 +260,12 @@ func AdjustTaskRequestBillingFunding(task *Task, delta int) error {
 			if err := tx.Model(&sub).Update("amount_used", next).Error; err != nil {
 				return err
 			}
+			usageDelta := int64(delta)
+			if err := tx.Model(&SubscriptionPreConsumeRecord{}).
+				Where("request_id = ? AND user_subscription_id = ? AND status <> ?", record.RequestId, record.SubscriptionId, SubscriptionUsageStatusRefunded).
+				Update("usage_quota", gorm.Expr("usage_quota + ?", usageDelta)).Error; err != nil {
+				return err
+			}
 		} else {
 			if record.FundingSource != "wallet" || record.BonusQuota < 0 || record.PaidQuota < 0 || record.BonusQuota+record.PaidQuota != record.Quota {
 				return ErrRequestBillingInvalid
@@ -420,6 +426,15 @@ func RefundRequestBilling(billingId, reason string, operatorId, operatorRole int
 		} else {
 			if err := tx.Model(&UserSubscription{}).Where("id = ?", record.SubscriptionId).
 				Update("amount_used", gorm.Expr("amount_used - ?", record.Quota)).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&SubscriptionPreConsumeRecord{}).
+				Where("request_id = ? AND user_subscription_id = ?", record.RequestId, record.SubscriptionId).
+				Updates(map[string]any{
+					"status":       SubscriptionUsageStatusRefunded,
+					"usage_quota":  0,
+					"finalized_at": common.GetTimestamp(),
+				}).Error; err != nil {
 				return err
 			}
 		}

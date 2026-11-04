@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -43,7 +44,8 @@ func setupAccessTokenAudit(t *testing.T) (*model.User, string) {
 	require.NoError(t, err)
 	require.NoError(t, i18n.Init())
 	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.Log{}, &model.AuditLog{}, &model.CasbinRule{}, &model.AuthzRole{}, &model.UserAccessToken{}, &model.Option{},
-		&model.AuthFlow{}, &model.TwoFA{}, &model.TwoFABackupCode{}, &model.PasskeyCredential{}, &model.UserOAuthBinding{}, &model.UserVerifiedEmail{}, &model.UserNotificationPreference{}))
+		&model.AuthFlow{}, &model.TwoFA{}, &model.TwoFABackupCode{}, &model.PasskeyCredential{}, &model.UserOAuthBinding{}, &model.UserVerifiedEmail{}, &model.UserNotificationPreference{},
+		&model.UserSubscription{}))
 	model.DB, model.LOG_DB = db, db
 	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
 	require.NoError(t, model.EnsureLegacyAccessTokenRetireAt(time.Now().Unix()))
@@ -1410,7 +1412,9 @@ func verifyAuditRecoveryAndFilters(t *testing.T) {
 	queued := filepath.Join(pending, model.AccessTokenFingerprint(eventID)+".json")
 	info, err := os.Stat(queued)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
+	if runtime.GOOS != "windows" {
+		assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
+	}
 	require.NoError(t, os.WriteFile(filepath.Join(pending, "corrupt.json"), []byte("{bad"), 0600))
 	assert.Error(t, model.FlushPendingAuditLogs(100), "a damaged record must be reported and retained")
 	require.FileExists(t, filepath.Join(pending, "quarantine", "corrupt.json"))

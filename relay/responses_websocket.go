@@ -100,13 +100,16 @@ type responsesWSSession struct {
 	workers        sync.WaitGroup
 	closeOnce      sync.Once
 
-	clientWriteMu sync.Mutex
-	targetWriteMu sync.Mutex
-	connectionMu  sync.Mutex
-	target        *websocket.Conn
-	unregister    func()
-	stateMu       sync.Mutex
-	current       *responsesWSCallState
+	clientWriteMu      sync.Mutex
+	targetWriteMu      sync.Mutex
+	connectionMu       sync.Mutex
+	target             *websocket.Conn
+	unregister         func()
+	stateMu            sync.Mutex
+	current            *responsesWSCallState
+	concurrencyMu      sync.Mutex
+	concurrencyRelease func()
+	concurrencyGroup   string
 
 	// clientWriteBudget is guarded by clientWriteMu.
 	clientWriteBudget helper.StreamWriteBudget
@@ -277,6 +280,9 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 		if apiErr = s.restoreConnectionContext(c, modelName); apiErr != nil {
 			return apiErr
 		}
+		if apiErr = s.acquireConnectionConcurrency(c); apiErr != nil {
+			return apiErr
+		}
 		info = relaycommon.GenRelayInfoResponses(c, &create.Request)
 		info.IsStream = true
 		common.SetContextKey(c, appconstant.ContextKeyIsStream, true)
@@ -299,6 +305,9 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 			var channel *appmodel.Channel
 			channel, apiErr = selectResponsesWSChannel(c, modelName, retry)
 			if apiErr != nil {
+				return apiErr
+			}
+			if apiErr = s.acquireConnectionConcurrency(c); apiErr != nil {
 				return apiErr
 			}
 			service.AppendUsedChannel(c, channel.Id)
@@ -744,6 +753,7 @@ func (s *responsesWSSession) sendError(eventID, streamID string, apiErr *types.N
 func (s *responsesWSSession) shutdown(code int, reason string) {
 	s.closeOnce.Do(func() {
 		s.cancel()
+		s.releaseConnectionConcurrency()
 		s.connectionMu.Lock()
 		target, unregister := s.target, s.unregister
 		s.target, s.unregister = nil, nil
@@ -759,6 +769,60 @@ func (s *responsesWSSession) shutdown(code int, reason string) {
 		}
 		_ = s.client.Close()
 	})
+}
+
+func (s *responsesWSSession) acquireConnectionConcurrency(c *gin.Context) *types.NewAPIError {
+	group := common.GetContextKeyString(c, appconstant.ContextKeyUsingGroup)
+	if group == "auto" {
+		group = common.GetContextKeyString(c, appconstant.ContextKeyAutoGroup)
+	}
+	s.concurrencyMu.Lock()
+	if s.concurrencyRelease != nil {
+		if s.concurrencyGroup != group {
+			s.concurrencyMu.Unlock()
+			return types.NewErrorWithStatusCode(
+				errors.New("responses websocket connection group changed; reconnect required"),
+				types.ErrorCodeAccessDenied,
+				http.StatusForbidden,
+				types.ErrOptionWithSkipRetry(),
+			)
+		}
+		s.concurrencyMu.Unlock()
+		return nil
+	}
+	s.concurrencyMu.Unlock()
+
+	release, apiErr := middleware.AcquireRequestConcurrency(c)
+	if apiErr != nil {
+		return apiErr
+	}
+
+	s.concurrencyMu.Lock()
+	if s.ctx.Err() != nil {
+		s.concurrencyMu.Unlock()
+		release()
+		return types.NewError(context.Canceled, types.ErrorCodeBadResponse, types.ErrOptionWithSkipRetry())
+	}
+	if s.concurrencyRelease != nil {
+		s.concurrencyMu.Unlock()
+		release()
+		return nil
+	}
+	s.concurrencyRelease = release
+	s.concurrencyGroup = group
+	s.concurrencyMu.Unlock()
+	return nil
+}
+
+func (s *responsesWSSession) releaseConnectionConcurrency() {
+	s.concurrencyMu.Lock()
+	release := s.concurrencyRelease
+	s.concurrencyRelease = nil
+	s.concurrencyGroup = ""
+	s.concurrencyMu.Unlock()
+	if release != nil {
+		release()
+	}
 }
 
 func (s *responsesWSSession) registerChannelClose(channelID int) {

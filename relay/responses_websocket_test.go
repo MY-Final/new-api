@@ -679,6 +679,44 @@ func TestResponsesWSShutdownInterruptsBusyWriter(t *testing.T) {
 	assert.True(t, websocket.IsCloseError(err, websocket.CloseNormalClosure), "want a 1000 close frame, got %v", err)
 }
 
+func TestResponsesWSConnectionConcurrencyReleasesOnceOnShutdown(t *testing.T) {
+	client, server, cleanup := newTestWebSocketPair(t)
+	defer cleanup()
+	ctx, cancel := context.WithCancel(context.Background())
+	var releases atomic.Int32
+	s := &responsesWSSession{
+		ctx:                ctx,
+		cancel:             cancel,
+		client:             server,
+		concurrencyRelease: func() { releases.Add(1) },
+	}
+
+	s.shutdown(websocket.CloseNormalClosure, "")
+	s.shutdown(websocket.CloseInternalServerErr, "already closed")
+
+	assert.EqualValues(t, 1, releases.Load())
+	require.NoError(t, client.SetReadDeadline(time.Now().Add(time.Second)))
+	_, _, err := client.ReadMessage()
+	assert.True(t, websocket.IsCloseError(err, websocket.CloseNormalClosure))
+}
+
+func TestResponsesWSConnectionRejectsConcurrencyGroupChange(t *testing.T) {
+	var releases atomic.Int32
+	s := &responsesWSSession{
+		concurrencyRelease: func() { releases.Add(1) },
+		concurrencyGroup:   "subscription-group",
+	}
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	common.SetContextKey(c, constant.ContextKeyUsingGroup, "other-group")
+
+	apiErr := s.acquireConnectionConcurrency(c)
+	require.NotNil(t, apiErr)
+	assert.Equal(t, http.StatusForbidden, apiErr.StatusCode)
+	assert.Contains(t, apiErr.Error(), "connection group changed")
+	assert.Zero(t, releases.Load())
+}
+
 func TestResponsesWSPassthroughPreservesRawPricingParameters(t *testing.T) {
 	create, _, err := normalizeResponsesWSTestMessage([]byte(`{"type":"response.create","generate":false,"response":{"model":"gpt-5.1","input":"hi","vendor":{"tier":"premium"},"stream":true}}`))
 	require.NoError(t, err)

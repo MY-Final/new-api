@@ -21,6 +21,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import { EmptyState } from '@/components/empty-state'
 import {
   StatusBadge,
   dotColorMap,
@@ -51,11 +52,17 @@ import {
   updateBillingPreference,
 } from '@/features/subscriptions/api'
 import { SubscriptionPurchaseDialog } from '@/features/subscriptions/components/dialogs/subscription-purchase-dialog'
-import { formatDuration, formatResetPeriod } from '@/features/subscriptions/lib'
+import {
+  formatDuration,
+  formatPlanPrice,
+  formatResetPeriod,
+  formatWindowDuration,
+} from '@/features/subscriptions/lib'
 import type {
   PlanRecord,
   UserSubscriptionRecord,
 } from '@/features/subscriptions/types'
+import { toIntlLocale } from '@/i18n/languages'
 import { formatQuota } from '@/lib/format'
 import { handleServerError } from '@/lib/handle-server-error'
 import { requireServerSuccess } from '@/lib/server-error-message'
@@ -65,7 +72,6 @@ import type { PaymentMethod, TopupInfo } from '../types'
 
 interface SubscriptionPlansCardProps {
   topupInfo: TopupInfo | null
-  onAvailabilityChange?: (available: boolean) => void
   userQuota?: number
   onPurchaseSuccess?: () => void | Promise<void>
 }
@@ -96,11 +102,11 @@ function getBillingPreferenceLabel(
 
 export function SubscriptionPlansCard({
   topupInfo,
-  onAvailabilityChange,
   userQuota,
   onPurchaseSuccess,
 }: SubscriptionPlansCardProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
 
   const [plans, setPlans] = useState<PlanRecord[]>([])
   const [activeSubscriptions, setActiveSubscriptions] = useState<
@@ -192,7 +198,6 @@ export function SubscriptionPlansCard({
 
   const hasActive = activeSubscriptions.length > 0
   const hasAny = allSubscriptions.length > 0
-  const isAvailable = loading || plans.length > 0 || hasAny
   const disablePref = !hasActive
   const isSubPref =
     billingPreference === 'subscription_first' ||
@@ -207,10 +212,6 @@ export function SubscriptionPlansCard({
     }
     return map
   }, [allSubscriptions])
-
-  useEffect(() => {
-    onAvailabilityChange?.(isAvailable)
-  }, [isAvailable, onAvailabilityChange])
 
   const planTitleMap = useMemo(() => {
     const map = new Map<number, string>()
@@ -255,7 +256,21 @@ export function SubscriptionPlansCard({
   }
 
   if (plans.length === 0 && !hasAny) {
-    return null
+    return (
+      <TitledCard
+        title={t('Subscription Plans')}
+        description={t('Subscribe to a plan for model access')}
+        icon={<Crown className='h-4 w-4' />}
+        iconTone='warning'
+        disableHoverEffect
+      >
+        <EmptyState
+          icon={Crown}
+          title={t('No plans available')}
+          className='min-h-64'
+        />
+      </TitledCard>
+    )
   }
 
   return (
@@ -404,6 +419,8 @@ export function SubscriptionPlansCard({
                   const usedAmount = Number(subscription?.amount_used || 0)
                   const remainAmount =
                     totalAmount > 0 ? Math.max(0, totalAmount - usedAmount) : 0
+                  const quotaWindows = subscription?.quota_windows || []
+                  const hasQuotaWindows = quotaWindows.length > 0
                   const planTitle =
                     planTitleMap.get(subscription?.plan_id) || ''
                   const remainDays = getRemainingDays(sub)
@@ -472,41 +489,103 @@ export function SubscriptionPlansCard({
                         {endTimeLabel}{' '}
                         {new Date(
                           (subscription?.end_time || 0) * 1000
-                        ).toLocaleString()}
+                        ).toLocaleString(locale)}
                       </div>
-                      {isActive && nextResetTime > 0 && (
+                      {isActive && !hasQuotaWindows && nextResetTime > 0 && (
                         <div className='text-muted-foreground mt-1'>
                           {t('Next reset')}:{' '}
-                          {new Date(nextResetTime * 1000).toLocaleString()}
+                          {new Date(nextResetTime * 1000).toLocaleString(
+                            locale
+                          )}
                         </div>
                       )}
-                      <div className='text-muted-foreground mt-1'>
-                        {t('Total Quota')}:{' '}
-                        {totalAmount > 0 ? (
-                          <Tooltip>
-                            <TooltipTrigger
-                              render={<span className='cursor-help' />}
-                            >
-                              {formatQuota(usedAmount)}/
-                              {formatQuota(totalAmount)} · {t('Remaining')}{' '}
-                              {formatQuota(remainAmount)}
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              {t('Raw Quota')}: {usedAmount}/{totalAmount} ·{' '}
-                              {t('Remaining')} {remainAmount}
-                            </TooltipContent>
-                          </Tooltip>
-                        ) : (
-                          t('Unlimited')
-                        )}
-                        {totalAmount > 0 && (
-                          <span className='ml-2'>
-                            {t('Used')} {usagePercent}%
-                          </span>
-                        )}
-                      </div>
-                      {totalAmount > 0 && isActive && (
-                        <Progress value={usagePercent} className='mt-2 h-1.5' />
+                      {(subscription?.max_concurrency || 0) > 0 && (
+                        <div className='text-muted-foreground mt-1'>
+                          {t('Account Concurrency')}:{' '}
+                          {subscription?.max_concurrency}
+                        </div>
+                      )}
+                      {hasQuotaWindows ? (
+                        <div className='mt-2 space-y-2'>
+                          {quotaWindows.map((window) => {
+                            const windowPercent =
+                              window.quota_limit > 0
+                                ? Math.min(
+                                    100,
+                                    Math.round(
+                                      (window.used / window.quota_limit) * 100
+                                    )
+                                  )
+                                : 0
+                            return (
+                              <div
+                                key={`${window.window_seconds}-${window.sort_order}`}
+                                className='bg-muted/40 rounded-md p-2'
+                              >
+                                <div className='flex flex-wrap items-center justify-between gap-1'>
+                                  <span className='font-medium'>
+                                    {formatWindowDuration(
+                                      window.window_seconds,
+                                      t
+                                    )}
+                                  </span>
+                                  <span className='text-muted-foreground tabular-nums'>
+                                    {formatQuota(window.used)}/
+                                    {formatQuota(window.quota_limit)} ·{' '}
+                                    {t('Remaining')}{' '}
+                                    {formatQuota(window.remaining)}
+                                  </span>
+                                </div>
+                                <Progress
+                                  value={windowPercent}
+                                  className='mt-1.5 h-1'
+                                />
+                                {isActive && window.next_release_at > 0 && (
+                                  <div className='text-muted-foreground mt-1'>
+                                    {t('Next release')}:{' '}
+                                    {new Date(
+                                      window.next_release_at * 1000
+                                    ).toLocaleString(locale)}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <>
+                          <div className='text-muted-foreground mt-1'>
+                            {t('Total Quota')}:{' '}
+                            {totalAmount > 0 ? (
+                              <Tooltip>
+                                <TooltipTrigger
+                                  render={<span className='cursor-help' />}
+                                >
+                                  {formatQuota(usedAmount)}/
+                                  {formatQuota(totalAmount)} · {t('Remaining')}{' '}
+                                  {formatQuota(remainAmount)}
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  {t('Raw Quota')}: {usedAmount}/{totalAmount} ·{' '}
+                                  {t('Remaining')} {remainAmount}
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              t('Unlimited')
+                            )}
+                            {totalAmount > 0 && (
+                              <span className='ml-2'>
+                                {t('Used')} {usagePercent}%
+                              </span>
+                            )}
+                          </div>
+                          {totalAmount > 0 && isActive && (
+                            <Progress
+                              value={usagePercent}
+                              className='mt-2 h-1.5'
+                            />
+                          )}
+                        </>
                       )}
                     </div>
                   )
@@ -524,12 +603,17 @@ export function SubscriptionPlansCard({
 
         {/* Available plans grid */}
         {plans.length > 0 ? (
-          <div className='grid grid-cols-1 gap-3 2xl:grid-cols-2 2xl:gap-4'>
+          <div className='grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3'>
             {plans.map((p, index) => {
               const plan = p?.plan
               if (!plan) return null
               const totalAmount = Number(plan.total_amount || 0)
-              const price = Number(plan.price_amount || 0).toFixed(2)
+              const quotaWindows = plan.quota_windows || []
+              const price = formatPlanPrice(
+                Number(plan.price_amount || 0),
+                plan.currency,
+                locale
+              )
               const isPopular = index === 0 && plans.length > 1
               const limit = Number(plan.max_purchase_per_user || 0)
               const count = planPurchaseCountMap.get(plan.id) || 0
@@ -543,6 +627,13 @@ export function SubscriptionPlansCard({
                 totalAmount > 0
                   ? `${t('Total Quota')}: ${formatQuota(totalAmount)}`
                   : `${t('Total Quota')}: ${t('Unlimited')}`,
+                ...quotaWindows.map(
+                  (window) =>
+                    `${formatWindowDuration(window.window_seconds, t)}: ${formatQuota(window.quota_limit)}`
+                ),
+                (plan.max_concurrency || 0) > 0
+                  ? `${t('Account Concurrency')}: ${plan.max_concurrency}`
+                  : null,
                 limit > 0 ? `${t('Purchase Limit')}: ${limit}` : null,
                 plan.upgrade_group
                   ? `${t('Upgrade Group')}: ${plan.upgrade_group}`
@@ -581,7 +672,7 @@ export function SubscriptionPlansCard({
 
                     <div className='py-2'>
                       <span className='text-primary text-2xl font-bold'>
-                        ${price}
+                        {price}
                       </span>
                     </div>
 

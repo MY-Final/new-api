@@ -107,8 +107,8 @@ func openTokenControllerTestDB(t *testing.T) *gorm.DB {
 func migrateTokenControllerTestDB(t *testing.T, db *gorm.DB) {
 	t.Helper()
 
-	if err := db.AutoMigrate(&model.Token{}); err != nil {
-		t.Fatalf("failed to migrate token table: %v", err)
+	if err := db.AutoMigrate(&model.Token{}, &model.UserSubscription{}); err != nil {
+		t.Fatalf("failed to migrate token tables: %v", err)
 	}
 }
 
@@ -767,7 +767,7 @@ func TestAPITokenAuditDatabaseMatrix(t *testing.T) {
 				db, _ := newAuditTestDatabase(t, database.name, dsn)
 				model.DB = db
 				common.SetDatabaseTypes(database.typ, database.typ)
-				require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.Token{}, &model.Option{}))
+				require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.Token{}, &model.Option{}, &model.UserSubscription{}))
 				// The PAT case authenticates with a legacy opaque token, so the
 				// deployment-wide retire deadline must be initialized here
 				// instead of relying on another test having set it.

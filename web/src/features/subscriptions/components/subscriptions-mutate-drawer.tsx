@@ -17,7 +17,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
-import { CalendarClock, CreditCard, RefreshCw, Settings2 } from 'lucide-react'
+import {
+  CalendarClock,
+  CreditCard,
+  Plus,
+  RefreshCw,
+  Settings2,
+  X,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useForm, type Resolver } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
@@ -75,6 +82,7 @@ import {
 } from '../api'
 import { getDurationUnitOptions, getResetPeriodOptions } from '../constants'
 import {
+  formatWindowDuration,
   getPlanFormSchema,
   PLAN_FORM_DEFAULTS,
   planToFormValues,
@@ -152,6 +160,9 @@ export function SubscriptionsMutateDrawer({
 
   const durationUnit = form.watch('duration_unit')
   const resetPeriod = form.watch('quota_reset_period')
+  const planCurrency = form.watch('currency')
+  const quotaWindows = form.watch('quota_windows')
+  const hasQuotaWindows = quotaWindows.length > 0
   // Gate "+ Create on Pancake" on the same checks the mint handler runs.
   const watchedTitle = form.watch('title')
   const watchedPrice = form.watch('price_amount')
@@ -159,6 +170,35 @@ export function SubscriptionsMutateDrawer({
     typeof watchedTitle === 'string' &&
     watchedTitle.trim().length > 0 &&
     Number(watchedPrice ?? 0) > 0
+
+  const addQuotaWindow = (windowSeconds: number) => {
+    const current = form.getValues('quota_windows')
+    if (current.some((window) => window.window_seconds === windowSeconds)) {
+      toast.error(t('Window durations must be unique'))
+      return
+    }
+    form.setValue(
+      'quota_windows',
+      [
+        ...current,
+        {
+          _key: crypto.randomUUID(),
+          window_seconds: windowSeconds,
+          quota_amount: 1,
+        },
+      ],
+      { shouldDirty: true, shouldValidate: true }
+    )
+  }
+
+  const removeQuotaWindow = (index: number) => {
+    const current = form.getValues('quota_windows')
+    form.setValue(
+      'quota_windows',
+      current.filter((_, itemIndex) => itemIndex !== index),
+      { shouldDirty: true, shouldValidate: true }
+    )
+  }
 
   const onSubmit = async (values: PlanFormValues) => {
     setIsSubmitting(true)
@@ -272,7 +312,7 @@ export function SubscriptionsMutateDrawer({
         }
       }}
     >
-      <SheetContent className={sideDrawerContentClassName('sm:max-w-[600px]')}>
+      <SheetContent className={sideDrawerContentClassName('sm:max-w-[900px]')}>
         <SheetHeader className={sideDrawerHeaderClassName()}>
           <SheetTitle>
             {isEdit ? t('Update plan info') : t('Create new subscription plan')}
@@ -289,10 +329,12 @@ export function SubscriptionsMutateDrawer({
           <form
             id='subscription-form'
             onSubmit={form.handleSubmit(onSubmit)}
-            className={sideDrawerFormClassName()}
+            className={sideDrawerFormClassName(
+              'grid content-start gap-4 sm:grid-cols-2 sm:gap-5'
+            )}
           >
             {/* Basic Info */}
-            <SideDrawerSection>
+            <SideDrawerSection className='bg-card rounded-xl border p-4 shadow-sm sm:col-span-2 sm:p-5'>
               <h3 className='flex items-center gap-2 text-sm font-medium'>
                 <IconBadge tone='info' size='xs'>
                   <Settings2 />
@@ -300,36 +342,38 @@ export function SubscriptionsMutateDrawer({
                 {t('Basic Info')}
               </h3>
 
-              <FormField
-                control={form.control}
-                name='title'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('Plan Title')}</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder={t('e.g. Basic Plan')} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
+                <FormField
+                  control={form.control}
+                  name='title'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Plan Title')}</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder={t('e.g. Basic Plan')} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              <FormField
-                control={form.control}
-                name='subtitle'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('Plan Subtitle')}</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        placeholder={t('e.g. Suitable for light usage')}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                <FormField
+                  control={form.control}
+                  name='subtitle'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Plan Subtitle')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          placeholder={t('e.g. Suitable for light usage')}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
               <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
                 <FormField
@@ -338,22 +382,52 @@ export function SubscriptionsMutateDrawer({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>{t('Plan Price')}</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          type='number'
-                          step='0.01'
-                          min={0}
-                          onChange={(e) =>
-                            field.onChange(
-                              Number.parseFloat(e.target.value) || 0
-                            )
+                      <div className='flex items-center gap-2'>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            type='number'
+                            step='0.01'
+                            min={0}
+                            onChange={(e) =>
+                              field.onChange(
+                                Number.parseFloat(e.target.value) || 0
+                              )
+                            }
+                          />
+                        </FormControl>
+                        <Select
+                          items={[
+                            { value: 'CNY', label: 'CNY' },
+                            { value: 'USD', label: 'USD' },
+                            { value: 'EUR', label: 'EUR' },
+                          ]}
+                          onValueChange={(value) =>
+                            form.setValue('currency', value, {
+                              shouldDirty: true,
+                              shouldValidate: true,
+                            })
                           }
-                        />
-                      </FormControl>
+                          value={planCurrency}
+                        >
+                          <SelectTrigger
+                            className='w-28 shrink-0'
+                            aria-label={t('Currency')}
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent alignItemWithTrigger={false}>
+                            <SelectGroup>
+                              <SelectItem value='CNY'>CNY</SelectItem>
+                              <SelectItem value='USD'>USD</SelectItem>
+                              <SelectItem value='EUR'>EUR</SelectItem>
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      </div>
                       <FormDescription>
                         {t(
-                          'Amount the user pays to purchase this plan; the actual currency depends on the payment gateway.'
+                          'Amount charged in the selected plan currency. Online payment support depends on the payment gateway.'
                         )}
                       </FormDescription>
                       <FormMessage />
@@ -374,6 +448,7 @@ export function SubscriptionsMutateDrawer({
                           {...field}
                           type='number'
                           min={0}
+                          disabled={hasQuotaWindows}
                           step={tokensOnly ? 1 : 0.01}
                           placeholder={
                             tokensOnly
@@ -390,15 +465,25 @@ export function SubscriptionsMutateDrawer({
                         />
                       </FormControl>
                       <FormDescription>
-                        {t(
-                          'Total quota included in the plan, usable per billing period. 0 means unlimited.'
-                        )}
+                        {hasQuotaWindows
+                          ? t(
+                              'Legacy total quota is ignored while rolling windows are configured.'
+                            )
+                          : t(
+                              'Total quota included in the plan, usable per billing period. 0 means unlimited.'
+                            )}
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
+
+              <p className='text-muted-foreground rounded-lg border border-dashed px-3 py-2 text-xs leading-5'>
+                {t(
+                  "Plan price and usage quota are separate. Price is charged in the selected payment currency. Quota is the internal usage limit and follows the site's display currency; changing a custom currency symbol or display rate does not change the amount charged."
+                )}
+              </p>
 
               <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
                 <FormField
@@ -490,6 +575,34 @@ export function SubscriptionsMutateDrawer({
                     </FormItem>
                   )}
                 />
+
+                <FormField
+                  control={form.control}
+                  name='max_concurrency'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Account Concurrency')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type='number'
+                          min={0}
+                          onChange={(e) =>
+                            field.onChange(
+                              Number.parseInt(e.target.value, 10) || 0
+                            )
+                          }
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        {t(
+                          'Maximum concurrent requests across all API keys for this account. 0 means no plan-level limit.'
+                        )}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
 
               <FormField
@@ -514,21 +627,25 @@ export function SubscriptionsMutateDrawer({
                 )}
               />
 
-              <div className='flex flex-col gap-3'>
+              <div className='grid grid-cols-1 gap-3 sm:grid-cols-3'>
                 <FormField
                   control={form.control}
                   name='enabled'
                   render={({ field }) => (
-                    <FormItem className={sideDrawerSwitchItemClassName()}>
-                      <FormLabel className='!mt-0'>
-                        {t('Enabled Status')}
-                      </FormLabel>
+                    <FormItem
+                      className={sideDrawerSwitchItemClassName(
+                        'min-h-0 flex-row items-center justify-start gap-2 rounded-lg border px-3 py-3'
+                      )}
+                    >
                       <FormControl>
                         <Switch
                           checked={field.value}
                           onCheckedChange={field.onChange}
                         />
                       </FormControl>
+                      <FormLabel className='!mt-0'>
+                        {t('Enabled Status')}
+                      </FormLabel>
                     </FormItem>
                   )}
                 />
@@ -537,16 +654,20 @@ export function SubscriptionsMutateDrawer({
                   control={form.control}
                   name='allow_balance_pay'
                   render={({ field }) => (
-                    <FormItem className={sideDrawerSwitchItemClassName()}>
-                      <FormLabel className='!mt-0'>
-                        {t('Allow balance redemption')}
-                      </FormLabel>
+                    <FormItem
+                      className={sideDrawerSwitchItemClassName(
+                        'min-h-0 flex-row items-center justify-start gap-2 rounded-lg border px-3 py-3'
+                      )}
+                    >
                       <FormControl>
                         <Switch
                           checked={field.value}
                           onCheckedChange={field.onChange}
                         />
                       </FormControl>
+                      <FormLabel className='!mt-0'>
+                        {t('Allow balance redemption')}
+                      </FormLabel>
                     </FormItem>
                   )}
                 />
@@ -555,16 +676,21 @@ export function SubscriptionsMutateDrawer({
                   control={form.control}
                   name='allow_wallet_overflow'
                   render={({ field }) => (
-                    <FormItem className={sideDrawerSwitchItemClassName()}>
-                      <FormLabel className='!mt-0'>
-                        {t('Allow wallet balance after quota used up')}
-                      </FormLabel>
+                    <FormItem
+                      className={sideDrawerSwitchItemClassName(
+                        'min-h-0 flex-row items-center justify-start gap-2 rounded-lg border px-3 py-3'
+                      )}
+                    >
                       <FormControl>
                         <Switch
                           checked={field.value}
                           onCheckedChange={field.onChange}
+                          disabled={hasQuotaWindows}
                         />
                       </FormControl>
+                      <FormLabel className='!mt-0'>
+                        {t('Allow wallet balance after quota used up')}
+                      </FormLabel>
                     </FormItem>
                   )}
                 />
@@ -572,7 +698,7 @@ export function SubscriptionsMutateDrawer({
             </SideDrawerSection>
 
             {/* Duration Settings */}
-            <SideDrawerSection>
+            <SideDrawerSection className='bg-card rounded-xl border p-4 shadow-sm sm:p-5'>
               <h3 className='flex items-center gap-2 text-sm font-medium'>
                 <IconBadge tone='chart-4' size='xs'>
                   <CalendarClock />
@@ -666,13 +792,21 @@ export function SubscriptionsMutateDrawer({
             </SideDrawerSection>
 
             {/* Quota Reset */}
-            <SideDrawerSection>
+            <SideDrawerSection className='bg-card rounded-xl border p-4 shadow-sm sm:p-5'>
               <h3 className='flex items-center gap-2 text-sm font-medium'>
                 <IconBadge tone='success' size='xs'>
                   <RefreshCw />
                 </IconBadge>
                 {t('Quota Reset')}
               </h3>
+
+              {hasQuotaWindows ? (
+                <p className='text-muted-foreground text-xs'>
+                  {t(
+                    'Reset cycle settings apply only to legacy single-pool plans and are ignored for rolling windows.'
+                  )}
+                </p>
+              ) : null}
 
               <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
                 <FormField
@@ -688,6 +822,7 @@ export function SubscriptionsMutateDrawer({
                         }))}
                         onValueChange={field.onChange}
                         value={field.value}
+                        disabled={hasQuotaWindows}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -735,8 +870,130 @@ export function SubscriptionsMutateDrawer({
               </div>
             </SideDrawerSection>
 
+            <SideDrawerSection className='bg-card rounded-xl border p-4 shadow-sm sm:col-span-2 sm:p-5'>
+              <div className='flex flex-wrap items-center justify-between gap-3'>
+                <div>
+                  <h3 className='flex items-center gap-2 text-sm font-medium'>
+                    <IconBadge tone='info' size='xs'>
+                      <RefreshCw />
+                    </IconBadge>
+                    {t('Rolling Quota Windows')}
+                  </h3>
+                  <p className='text-muted-foreground mt-1 text-xs'>
+                    {t(
+                      'Each request cost counts toward every configured window. Any exhausted window blocks further requests without falling back to wallet balance.'
+                    )}
+                  </p>
+                </div>
+                <div className='flex flex-wrap gap-2'>
+                  {[
+                    { seconds: 5 * 60 * 60, label: t('5 Hours') },
+                    { seconds: 7 * 24 * 60 * 60, label: t('7 Days') },
+                    { seconds: 30 * 24 * 60 * 60, label: t('30 Days') },
+                  ].map((preset) => (
+                    <Button
+                      key={preset.seconds}
+                      type='button'
+                      variant='outline'
+                      size='sm'
+                      onClick={() => addQuotaWindow(preset.seconds)}
+                    >
+                      <Plus className='mr-1 h-3.5 w-3.5' />
+                      {preset.label}
+                    </Button>
+                  ))}
+                  <Button
+                    type='button'
+                    variant='outline'
+                    size='sm'
+                    onClick={() => addQuotaWindow(24 * 60 * 60)}
+                  >
+                    <Plus className='mr-1 h-3.5 w-3.5' />
+                    {t('Custom Window')}
+                  </Button>
+                </div>
+              </div>
+
+              {quotaWindows.length > 0 ? (
+                <div className='grid grid-cols-1 gap-3 xl:grid-cols-2'>
+                  {quotaWindows.map((window, index) => (
+                    <div
+                      key={window._key || window.window_seconds}
+                      className='bg-muted/25 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2 rounded-lg border p-3'
+                    >
+                      <FormField
+                        control={form.control}
+                        name={`quota_windows.${index}.window_seconds`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>
+                              {t('Window ({{duration}})', {
+                                duration: formatWindowDuration(
+                                  window.window_seconds,
+                                  t
+                                ),
+                              })}
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                {...field}
+                                type='number'
+                                min={1}
+                                onChange={(e) =>
+                                  field.onChange(
+                                    Number.parseInt(e.target.value, 10) || 0
+                                  )
+                                }
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name={`quota_windows.${index}.quota_amount`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>
+                              {t('Window Quota ({{currency}})', {
+                                currency: currencyLabel,
+                              })}
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                {...field}
+                                type='number'
+                                min={0}
+                                step={tokensOnly ? 1 : 0.01}
+                                onChange={(e) =>
+                                  field.onChange(
+                                    Number.parseFloat(e.target.value) || 0
+                                  )
+                                }
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <Button
+                        type='button'
+                        variant='ghost'
+                        size='icon'
+                        aria-label={t('Remove window')}
+                        onClick={() => removeQuotaWindow(index)}
+                      >
+                        <X className='h-4 w-4' />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </SideDrawerSection>
+
             {/* Payment Config */}
-            <SideDrawerSection>
+            <SideDrawerSection className='bg-card rounded-xl border p-4 shadow-sm sm:col-span-2 sm:p-5'>
               <h3 className='flex items-center gap-2 text-sm font-medium'>
                 <IconBadge tone='warning' size='xs'>
                   <CreditCard />
@@ -744,33 +1001,35 @@ export function SubscriptionsMutateDrawer({
                 {t('Third-party Payment Config')}
               </h3>
 
-              <FormField
-                control={form.control}
-                name='stripe_price_id'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Stripe Price ID</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder='price_...' />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
+                <FormField
+                  control={form.control}
+                  name='stripe_price_id'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Stripe Price ID</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder='price_...' />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              <FormField
-                control={form.control}
-                name='creem_product_id'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Creem Product ID</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder='prod_...' />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                <FormField
+                  control={form.control}
+                  name='creem_product_id'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Creem Product ID</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder='prod_...' />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
               <FormField
                 control={form.control}

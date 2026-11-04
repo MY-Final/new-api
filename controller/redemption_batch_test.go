@@ -87,7 +87,7 @@ func TestDeleteRedemptionBatch(t *testing.T) {
 				common.SetDatabaseTypes(previousMain, previousLog)
 				common.RedisEnabled = previousRedis
 			})
-			for _, table := range []any{&model.User{}, &model.Redemption{}, &model.Option{}} {
+			for _, table := range []any{&model.User{}, &model.Redemption{}, &model.Option{}, &model.UserSubscription{}} {
 				require.False(t, db.Migrator().HasTable(table), "use an empty test database")
 				require.NoError(t, db.AutoMigrate(table))
 				t.Cleanup(func() { require.NoError(t, db.Migrator().DropTable(table)) })
@@ -233,7 +233,7 @@ func TestTopUpRedeemCreatesAuditLog(t *testing.T) {
 	require.NoError(t, err)
 	logDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Redemption{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Redemption{}, &model.UserSubscription{}))
 	require.NoError(t, logDB.AutoMigrate(&model.Log{}, &model.AuditLog{}))
 
 	model.DB, model.LOG_DB = db, logDB

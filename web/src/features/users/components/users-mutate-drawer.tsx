@@ -408,6 +408,34 @@ export function UsersMutateDrawer({
                     </FormItem>
                   )}
                 />
+
+                <FormField
+                  control={form.control}
+                  name='max_concurrency'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Concurrency Limit')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type='number'
+                          min={0}
+                          onChange={(e) =>
+                            field.onChange(
+                              Number.parseInt(e.target.value, 10) || 0
+                            )
+                          }
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        {t(
+                          'Maximum concurrent API requests for this user. 0 means no extra limit.'
+                        )}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </SideDrawerSection>
 
               {/* Group & Quota Settings (Update only) */}

@@ -35,6 +35,7 @@ export const apiKeySchema = z.object({
   accessed_time: z.number(),
   group: z.string().nullish().default(''),
   auto_groups: z.array(z.string()).nullish().default(null),
+  max_concurrency: z.number().optional(),
   cross_group_retry: z
     .preprocess((v) => {
       if (v === 1) return true
@@ -100,6 +101,7 @@ export interface ApiKeyFormData {
   allow_user_quota_query: boolean
   group: string
   auto_groups: string[]
+  max_concurrency: number
   cross_group_retry: boolean
 }
 

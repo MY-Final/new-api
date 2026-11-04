@@ -712,6 +712,10 @@ func UpdateUser(c *gin.Context) {
 		common.ApiErrorT(c, "Invalid parameters")
 		return
 	}
+	if updatedUser.MaxConcurrency < 0 {
+		common.ApiErrorT(c, "Concurrency limit cannot be negative")
+		return
+	}
 	if err := common.Validate.StructExcept(&updatedUser, "Password"); err != nil {
 		common.ApiErrorT(c, "Invalid input {{error}}", map[string]any{"error": err.Error()})
 		return
@@ -1070,6 +1074,10 @@ func CreateUser(c *gin.Context) {
 		common.ApiErrorT(c, "Invalid parameters")
 		return
 	}
+	if user.MaxConcurrency < 0 {
+		common.ApiErrorT(c, "Concurrency limit cannot be negative")
+		return
+	}
 	if user.DisplayName == "" {
 		user.DisplayName = user.Username
 	}
@@ -1089,10 +1097,11 @@ func CreateUser(c *gin.Context) {
 	}
 	// Even for admin users, we cannot fully trust them!
 	cleanUser := model.User{
-		Username:    user.Username,
-		Password:    user.Password,
-		DisplayName: user.DisplayName,
-		Role:        user.Role, // 保持管理员设置的角色
+		Username:       user.Username,
+		Password:       user.Password,
+		DisplayName:    user.DisplayName,
+		Role:           user.Role, // 保持管理员设置的角色
+		MaxConcurrency: user.MaxConcurrency,
 	}
 	authzTouched := false
 	if err := model.DB.Transaction(func(tx *gorm.DB) error {

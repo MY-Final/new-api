@@ -1,0 +1,615 @@
+package model
+
+import (
+	"errors"
+	"fmt"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
+)
+
+func seedQuotaWindowSubscription(t *testing.T, plan *SubscriptionPlan) (*User, *UserSubscription) {
+	t.Helper()
+	truncateTables(t)
+	user := &User{
+		Username: fmt.Sprintf("window-user-%d", plan.Id),
+		Password: "unused-password-hash",
+		Role:     common.RoleCommonUser,
+		Status:   common.UserStatusEnabled,
+		Group:    "default",
+	}
+	require.NoError(t, DB.Create(user).Error)
+	require.NoError(t, DB.Create(plan).Error)
+	require.NoError(t, ReplaceSubscriptionPlanQuotaWindowsTx(DB, plan.Id, plan.QuotaWindows))
+	InvalidateSubscriptionPlanCache(plan.Id)
+
+	mutation, err := UpsertUserSubscriptionFromPlanTx(DB, user.Id, plan, "test")
+	require.NoError(t, err)
+	require.NotNil(t, mutation.Subscription)
+	return user, mutation.Subscription
+}
+
+func quotaWindowUsed(t *testing.T, subscriptionID int) map[int64]int64 {
+	t.Helper()
+	var subscription UserSubscription
+	subscription.Id = subscriptionID
+	require.NoError(t, PopulateSubscriptionQuotaWindowUsage(&subscription, GetDBTimestamp()))
+	result := make(map[int64]int64, len(subscription.QuotaWindows))
+	for _, window := range subscription.QuotaWindows {
+		result[window.WindowSeconds] = window.Used
+	}
+	return result
+}
+
+func TestSubscriptionQuotaWindowsShareUsageAndSettlement(t *testing.T) {
+	plan := &SubscriptionPlan{
+		Id:             11001,
+		Title:          "Rolling",
+		Currency:       "CNY",
+		DurationUnit:   SubscriptionDurationDay,
+		DurationValue:  1,
+		UpgradeGroup:   "vip",
+		MaxConcurrency: 3,
+		Enabled:        true,
+		QuotaWindows: []SubscriptionQuotaWindow{
+			{WindowSeconds: 5 * 60 * 60, QuotaLimit: 300},
+			{WindowSeconds: 7 * 24 * 60 * 60, QuotaLimit: 500},
+			{WindowSeconds: 30 * 24 * 60 * 60, QuotaLimit: 700},
+		},
+	}
+	_, subscription := seedQuotaWindowSubscription(t, plan)
+	assert.Equal(t, 3, subscription.MaxConcurrency)
+
+	snapshot, err := LoadUserSubscriptionQuotaWindowsTx(DB, subscription.Id)
+	require.NoError(t, err)
+	require.Len(t, snapshot, 3)
+	assert.EqualValues(t, 300, snapshot[0].QuotaLimit)
+
+	preConsume, err := PreConsumeUserSubscription("rolling-request-1", subscription.UserId, "deepseek-chat", 0, "vip", 100)
+	require.NoError(t, err)
+	assert.EqualValues(t, 100, preConsume.AmountUsedAfter)
+	assert.Equal(t, map[int64]int64{
+		5 * 60 * 60:       100,
+		7 * 24 * 60 * 60:  100,
+		30 * 24 * 60 * 60: 100,
+	}, quotaWindowUsed(t, subscription.Id))
+
+	require.NoError(t, AdjustSubscriptionUsage("rolling-request-1", 25))
+	assert.Equal(t, map[int64]int64{
+		5 * 60 * 60:       125,
+		7 * 24 * 60 * 60:  125,
+		30 * 24 * 60 * 60: 125,
+	}, quotaWindowUsed(t, subscription.Id))
+
+	require.NoError(t, RefundSubscriptionPreConsume("rolling-request-1"))
+	assert.Equal(t, map[int64]int64{
+		5 * 60 * 60:       0,
+		7 * 24 * 60 * 60:  0,
+		30 * 24 * 60 * 60: 0,
+	}, quotaWindowUsed(t, subscription.Id))
+
+	_, err = PreConsumeUserSubscription("rolling-request-2", subscription.UserId, "deepseek-chat", 0, "vip", 80)
+	require.NoError(t, err)
+	require.NoError(t, AdjustSubscriptionUsage("rolling-request-2", -20))
+	require.NoError(t, FinalizeSubscriptionUsage("rolling-request-2"))
+
+	var record SubscriptionPreConsumeRecord
+	require.NoError(t, DB.Where("request_id = ?", "rolling-request-2").First(&record).Error)
+	assert.EqualValues(t, 60, record.UsageQuota)
+	assert.NotZero(t, record.FinalizedAt)
+	assert.Equal(t, map[int64]int64{
+		5 * 60 * 60:       60,
+		7 * 24 * 60 * 60:  60,
+		30 * 24 * 60 * 60: 60,
+	}, quotaWindowUsed(t, subscription.Id))
+
+	// Editing a plan must not rewrite an already purchased snapshot.
+	require.NoError(t, ReplaceSubscriptionPlanQuotaWindowsTx(DB, plan.Id, []SubscriptionQuotaWindow{
+		{WindowSeconds: 60, QuotaLimit: 1},
+	}))
+	snapshot, err = LoadUserSubscriptionQuotaWindowsTx(DB, subscription.Id)
+	require.NoError(t, err)
+	assert.Len(t, snapshot, 3)
+}
+
+func TestSubscriptionQuotaWindowRejectsAndExpiresOldUsage(t *testing.T) {
+	now := GetDBTimestamp()
+	plan := &SubscriptionPlan{
+		Id:            11002,
+		Title:         "Window rejection",
+		DurationUnit:  SubscriptionDurationDay,
+		DurationValue: 1,
+		UpgradeGroup:  "vip",
+		Enabled:       true,
+		QuotaWindows: []SubscriptionQuotaWindow{
+			{WindowSeconds: 5 * 60 * 60, QuotaLimit: 200},
+			{WindowSeconds: 7 * 24 * 60 * 60, QuotaLimit: 2000},
+			{WindowSeconds: 30 * 24 * 60 * 60, QuotaLimit: 4000},
+		},
+	}
+	_, subscription := seedQuotaWindowSubscription(t, plan)
+
+	oldRecord := SubscriptionPreConsumeRecord{
+		RequestId:          "old-window-request",
+		UserId:             subscription.UserId,
+		UserSubscriptionId: subscription.Id,
+		PreConsumed:        900,
+		UsageQuota:         900,
+		Status:             "consumed",
+		FinalizedAt:        now - 6*60*60,
+	}
+	require.NoError(t, DB.Create(&oldRecord).Error)
+	require.NoError(t, DB.Model(&SubscriptionPreConsumeRecord{}).Where("id = ?", oldRecord.Id).
+		Updates(map[string]any{"created_at": now - 6*60*60}).Error)
+	_, err := PreConsumeUserSubscription("current-window-request", subscription.UserId, "deepseek-chat", 0, "vip", 100)
+	require.NoError(t, err)
+
+	assert.Equal(t, map[int64]int64{
+		5 * 60 * 60:       100,
+		7 * 24 * 60 * 60:  1000,
+		30 * 24 * 60 * 60: 1000,
+	}, quotaWindowUsed(t, subscription.Id))
+
+	_, err = PreConsumeUserSubscription("blocked-window-request", subscription.UserId, "deepseek-chat", 0, "vip", 101)
+	require.Error(t, err)
+	var windowErr *SubscriptionWindowLimitError
+	require.ErrorAs(t, err, &windowErr)
+	assert.EqualValues(t, 5*60*60, windowErr.WindowSeconds)
+	assert.GreaterOrEqual(t, windowErr.RetryAfter, int64(1))
+
+	var blockedCount int64
+	require.NoError(t, DB.Model(&SubscriptionPreConsumeRecord{}).
+		Where("request_id = ?", "blocked-window-request").Count(&blockedCount).Error)
+	assert.Zero(t, blockedCount)
+}
+
+func TestSubscriptionWindowRetryUsesFastestRecoverableWindow(t *testing.T) {
+	t.Run("returns the soonest window recovery", func(t *testing.T) {
+		now := GetDBTimestamp()
+		plan := &SubscriptionPlan{
+			Id:            11009,
+			Title:         "Fastest recovery",
+			DurationUnit:  SubscriptionDurationDay,
+			DurationValue: 1,
+			Enabled:       true,
+			QuotaWindows: []SubscriptionQuotaWindow{
+				{WindowSeconds: 5 * 60 * 60, QuotaLimit: 100, SortOrder: 0},
+				{WindowSeconds: 7 * 24 * 60 * 60, QuotaLimit: 1000, SortOrder: 1},
+			},
+		}
+		_, subscription := seedQuotaWindowSubscription(t, plan)
+		rows := []SubscriptionPreConsumeRecord{
+			{
+				RequestId:          "short-window-used",
+				UserId:             subscription.UserId,
+				UserSubscriptionId: subscription.Id,
+				PreConsumed:        100,
+				UsageQuota:         100,
+				Status:             "consumed",
+			},
+			{
+				RequestId:          "long-window-used",
+				UserId:             subscription.UserId,
+				UserSubscriptionId: subscription.Id,
+				PreConsumed:        1000,
+				UsageQuota:         1000,
+				Status:             "consumed",
+			},
+		}
+		require.NoError(t, DB.Create(&rows).Error)
+		require.NoError(t, DB.Model(&SubscriptionPreConsumeRecord{}).Where("id = ?", rows[0].Id).
+			Update("created_at", now-60*60).Error)
+		require.NoError(t, DB.Model(&SubscriptionPreConsumeRecord{}).Where("id = ?", rows[1].Id).
+			Update("created_at", now-(7*24*60*60)+60*60).Error)
+
+		_, err := PreConsumeUserSubscription("fastest-window-request", subscription.UserId, "deepseek-chat", 0, "", 1)
+		require.Error(t, err)
+		var windowErr *SubscriptionWindowLimitError
+		require.ErrorAs(t, err, &windowErr)
+		assert.EqualValues(t, 7*24*60*60, windowErr.WindowSeconds)
+		assert.InDelta(t, 60*60, windowErr.RetryAfter, 2)
+	})
+
+	t.Run("waits for enough usage to leave the window", func(t *testing.T) {
+		now := GetDBTimestamp()
+		plan := &SubscriptionPlan{
+			Id:            11010,
+			Title:         "Partial release",
+			DurationUnit:  SubscriptionDurationDay,
+			DurationValue: 1,
+			Enabled:       true,
+			QuotaWindows: []SubscriptionQuotaWindow{
+				{WindowSeconds: 60 * 60, QuotaLimit: 100},
+			},
+		}
+		_, subscription := seedQuotaWindowSubscription(t, plan)
+		rows := []SubscriptionPreConsumeRecord{
+			{
+				RequestId:          "partial-release-first",
+				UserId:             subscription.UserId,
+				UserSubscriptionId: subscription.Id,
+				PreConsumed:        30,
+				UsageQuota:         30,
+				Status:             "consumed",
+			},
+			{
+				RequestId:          "partial-release-second",
+				UserId:             subscription.UserId,
+				UserSubscriptionId: subscription.Id,
+				PreConsumed:        90,
+				UsageQuota:         90,
+				Status:             "consumed",
+			},
+		}
+		require.NoError(t, DB.Create(&rows).Error)
+		require.NoError(t, DB.Model(&SubscriptionPreConsumeRecord{}).Where("id = ?", rows[0].Id).
+			Update("created_at", now-3000).Error)
+		require.NoError(t, DB.Model(&SubscriptionPreConsumeRecord{}).Where("id = ?", rows[1].Id).
+			Update("created_at", now-1000).Error)
+
+		_, err := PreConsumeUserSubscription("partial-release-request", subscription.UserId, "deepseek-chat", 0, "", 20)
+		require.Error(t, err)
+		var windowErr *SubscriptionWindowLimitError
+		require.ErrorAs(t, err, &windowErr)
+		assert.InDelta(t, 2600, windowErr.RetryAfter, 2)
+	})
+}
+
+func TestLegacySubscriptionResetUsesPostResetUsage(t *testing.T) {
+	now := time.Now()
+	plan := &SubscriptionPlan{
+		Id:               11003,
+		Title:            "Legacy reset",
+		DurationUnit:     SubscriptionDurationMonth,
+		DurationValue:    1,
+		TotalAmount:      100,
+		QuotaResetPeriod: SubscriptionResetDaily,
+		Enabled:          true,
+	}
+	user, subscription := seedQuotaWindowSubscription(t, plan)
+	require.NoError(t, DB.Model(&UserSubscription{}).Where("id = ?", subscription.Id).Updates(map[string]any{
+		"amount_used":     90,
+		"start_time":      now.Add(-48 * time.Hour).Unix(),
+		"last_reset_time": now.Add(-48 * time.Hour).Unix(),
+		"next_reset_time": now.Add(-time.Hour).Unix(),
+	}).Error)
+
+	result, err := PreConsumeUserSubscription("legacy-reset-request", user.Id, "deepseek-chat", 0, "default", 60)
+	require.NoError(t, err)
+	assert.Zero(t, result.AmountUsedBefore)
+	assert.EqualValues(t, 60, result.AmountUsedAfter)
+}
+
+func TestSubscriptionRenewalAndDifferentPlanConflict(t *testing.T) {
+	plan := &SubscriptionPlan{
+		Id:             11004,
+		Title:          "Hourly",
+		DurationUnit:   SubscriptionDurationHour,
+		DurationValue:  2,
+		UpgradeGroup:   "vip",
+		MaxConcurrency: 2,
+		Enabled:        true,
+		QuotaWindows:   []SubscriptionQuotaWindow{{WindowSeconds: 3600, QuotaLimit: 100}},
+	}
+	user, first := seedQuotaWindowSubscription(t, plan)
+	firstEnd := first.EndTime
+
+	changedPlan := *plan
+	changedPlan.MaxConcurrency = 9
+	require.NoError(t, DB.Model(&SubscriptionPlan{}).Where("id = ?", plan.Id).
+		Update("max_concurrency", changedPlan.MaxConcurrency).Error)
+	InvalidateSubscriptionPlanCache(plan.Id)
+
+	renewed, err := UpsertUserSubscriptionFromPlanTx(DB, user.Id, &changedPlan, "test")
+	require.NoError(t, err)
+	assert.True(t, renewed.Renewed)
+	assert.EqualValues(t, firstEnd+2*60*60, renewed.Subscription.EndTime)
+	assert.Equal(t, 2, renewed.Subscription.MaxConcurrency)
+
+	otherPlan := &SubscriptionPlan{
+		Id:            11005,
+		Title:         "Other",
+		DurationUnit:  SubscriptionDurationDay,
+		DurationValue: 1,
+		Enabled:       true,
+	}
+	require.NoError(t, DB.Create(otherPlan).Error)
+	_, err = UpsertUserSubscriptionFromPlanTx(DB, user.Id, otherPlan, "test")
+	require.ErrorIs(t, err, ErrActiveSubscriptionConflict)
+}
+
+func TestSubscriptionConcurrencyRequiresItsUpgradeGroup(t *testing.T) {
+	truncateTables(t)
+	user := User{
+		Username: "group-scoped-concurrency-user",
+		Password: "unused-password-hash",
+		Role:     common.RoleCommonUser,
+		Status:   common.UserStatusEnabled,
+		Group:    "vip",
+	}
+	require.NoError(t, DB.Create(&user).Error)
+
+	subscription := UserSubscription{
+		UserId:         user.Id,
+		PlanId:         11101,
+		Status:         "active",
+		StartTime:      time.Now().Unix(),
+		EndTime:        time.Now().Add(time.Hour).Unix(),
+		UpgradeGroup:   "vip",
+		MaxConcurrency: 2,
+	}
+	require.NoError(t, DB.Create(&subscription).Error)
+
+	subscriptionID, limit, err := GetActiveSubscriptionConcurrency(user.Id, "vip")
+	require.NoError(t, err)
+	assert.Equal(t, subscription.Id, subscriptionID)
+	assert.Equal(t, 2, limit)
+
+	subscriptionID, limit, err = GetActiveSubscriptionConcurrency(user.Id, "default")
+	require.NoError(t, err)
+	assert.Zero(t, subscriptionID)
+	assert.Zero(t, limit)
+
+	require.NoError(t, DB.Model(&subscription).Update("upgrade_group", "").Error)
+	subscriptionID, limit, err = GetActiveSubscriptionConcurrency(user.Id, "default")
+	require.NoError(t, err)
+	assert.Zero(t, subscriptionID)
+	assert.Zero(t, limit)
+}
+
+func TestConcurrentDifferentPlanPurchaseHasOneWinner(t *testing.T) {
+	truncateTables(t)
+	user := User{
+		Username: "concurrent-window-user",
+		Password: "unused-password-hash",
+		Role:     common.RoleCommonUser,
+		Status:   common.UserStatusEnabled,
+		Group:    "default",
+	}
+	require.NoError(t, DB.Create(&user).Error)
+	plans := []*SubscriptionPlan{
+		{Id: 11006, Title: "A", DurationUnit: SubscriptionDurationDay, DurationValue: 1, Enabled: true},
+		{Id: 11007, Title: "B", DurationUnit: SubscriptionDurationDay, DurationValue: 1, Enabled: true},
+	}
+	require.NoError(t, DB.Create(&plans).Error)
+
+	errs := make([]error, len(plans))
+	var wait sync.WaitGroup
+	for index := range plans {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			_, errs[index] = PurchaseSubscriptionWithBalance(user.Id, plans[index].Id)
+		}()
+	}
+	wait.Wait()
+
+	successCount := 0
+	conflictCount := 0
+	for _, err := range errs {
+		switch {
+		case err == nil:
+			successCount++
+		case errors.Is(err, ErrActiveSubscriptionConflict):
+			conflictCount++
+		default:
+			require.NoError(t, err)
+		}
+	}
+	assert.Equal(t, 1, successCount)
+	assert.Equal(t, 1, conflictCount)
+	var subscriptions int64
+	require.NoError(t, DB.Model(&UserSubscription{}).Where("user_id = ?", user.Id).Count(&subscriptions).Error)
+	assert.EqualValues(t, 1, subscriptions)
+}
+
+func TestBalancePurchaseRejectsNonCNYPlan(t *testing.T) {
+	truncateTables(t)
+	user := User{
+		Username:   "non-cny-plan-user",
+		Password:   "unused-password-hash",
+		Role:       common.RoleCommonUser,
+		Status:     common.UserStatusEnabled,
+		Group:      "default",
+		Quota:      1000,
+		PaidQuota:  1000,
+		BonusQuota: 0,
+	}
+	require.NoError(t, DB.Create(&user).Error)
+	plan := SubscriptionPlan{
+		Id:              11102,
+		Title:           "USD plan",
+		PriceAmount:     6,
+		Currency:        "USD",
+		DurationUnit:    SubscriptionDurationDay,
+		DurationValue:   1,
+		Enabled:         true,
+		AllowBalancePay: common.GetPointer(true),
+	}
+	require.NoError(t, DB.Create(&plan).Error)
+
+	_, err := PurchaseSubscriptionWithBalance(user.Id, plan.Id)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "only for CNY")
+
+	var subscriptions int64
+	require.NoError(t, DB.Model(&UserSubscription{}).Where("user_id = ?", user.Id).Count(&subscriptions).Error)
+	assert.Zero(t, subscriptions)
+	var updated User
+	require.NoError(t, DB.First(&updated, user.Id).Error)
+	assert.Equal(t, 1000, updated.Quota)
+}
+
+func TestSubscriptionCleanupKeepsUnfinalizedUsage(t *testing.T) {
+	truncateTables(t)
+	now := GetDBTimestamp()
+	rows := []SubscriptionPreConsumeRecord{
+		{RequestId: "settled-old", UserSubscriptionId: 1, PreConsumed: 1, UsageQuota: 1, Status: "consumed", FinalizedAt: now - 100},
+		{RequestId: "unsettled-old", UserSubscriptionId: 1, PreConsumed: 1, UsageQuota: 1, Status: "consumed"},
+	}
+	require.NoError(t, DB.Create(&rows).Error)
+	require.NoError(t, DB.Model(&SubscriptionPreConsumeRecord{}).Where("id IN ?", []int{rows[0].Id, rows[1].Id}).
+		Update("updated_at", now-100).Error)
+
+	deleted, err := CleanupSubscriptionPreConsumeRecords(1)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, deleted)
+
+	var remaining []SubscriptionPreConsumeRecord
+	require.NoError(t, DB.Find(&remaining).Error)
+	require.Len(t, remaining, 1)
+	assert.Equal(t, "unsettled-old", remaining[0].RequestId)
+}
+
+func TestSubscriptionExpirationDowngradesImmediately(t *testing.T) {
+	truncateTables(t)
+	user := User{
+		Username: "expired-window-user",
+		Password: "unused-password-hash",
+		Role:     common.RoleCommonUser,
+		Status:   common.UserStatusEnabled,
+		Group:    "vip",
+	}
+	require.NoError(t, DB.Create(&user).Error)
+	subscription := UserSubscription{
+		UserId:        user.Id,
+		PlanId:        11008,
+		StartTime:     GetDBTimestamp() - 7200,
+		EndTime:       GetDBTimestamp() - 1,
+		Status:        "active",
+		UpgradeGroup:  "vip",
+		PrevUserGroup: "default",
+	}
+	require.NoError(t, DB.Create(&subscription).Error)
+
+	expired, err := ExpireDueSubscriptionsForUser(user.Id)
+	require.NoError(t, err)
+	assert.Equal(t, 1, expired)
+
+	var updatedUser User
+	require.NoError(t, DB.First(&updatedUser, user.Id).Error)
+	assert.Equal(t, "default", updatedUser.Group)
+	var updatedSubscription UserSubscription
+	require.NoError(t, DB.First(&updatedSubscription, subscription.Id).Error)
+	assert.Equal(t, "expired", updatedSubscription.Status)
+}
+
+func TestNormalizeSubscriptionQuotaWindowsRejectsInvalidRules(t *testing.T) {
+	_, err := NormalizeSubscriptionQuotaWindows([]SubscriptionQuotaWindow{
+		{WindowSeconds: 3600, QuotaLimit: 1},
+		{WindowSeconds: 3600, QuotaLimit: 2},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unique")
+
+	_, err = NormalizeSubscriptionQuotaWindows([]SubscriptionQuotaWindow{
+		{WindowSeconds: 3600, QuotaLimit: 0},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "positive")
+}
+
+func TestDeleteSubscriptionPlanRemovesUnusedPlanAndWindows(t *testing.T) {
+	truncateTables(t)
+	plan := &SubscriptionPlan{
+		Id:            11103,
+		Title:         "Unused plan",
+		DurationUnit:  SubscriptionDurationDay,
+		DurationValue: 1,
+		Enabled:       true,
+		QuotaWindows: []SubscriptionQuotaWindow{
+			{WindowSeconds: 3600, QuotaLimit: 100},
+		},
+	}
+	require.NoError(t, DB.Create(plan).Error)
+	require.NoError(t, ReplaceSubscriptionPlanQuotaWindowsTx(DB, plan.Id, plan.QuotaWindows))
+	_, err := GetSubscriptionPlanById(plan.Id)
+	require.NoError(t, err)
+
+	require.NoError(t, DeleteSubscriptionPlan(plan.Id))
+
+	var storedPlan SubscriptionPlan
+	require.ErrorIs(t, DB.First(&storedPlan, plan.Id).Error, gorm.ErrRecordNotFound)
+	var windowCount int64
+	require.NoError(t, DB.Model(&SubscriptionPlanQuotaWindow{}).
+		Where("plan_id = ?", plan.Id).
+		Count(&windowCount).Error)
+	assert.Zero(t, windowCount)
+	_, err = GetSubscriptionPlanById(plan.Id)
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+}
+
+func TestDeleteSubscriptionPlanRejectsReferencedPlan(t *testing.T) {
+	t.Run("user subscription", func(t *testing.T) {
+		truncateTables(t)
+		plan := &SubscriptionPlan{
+			Id:            11104,
+			Title:         "Subscribed plan",
+			DurationUnit:  SubscriptionDurationDay,
+			DurationValue: 1,
+			Enabled:       true,
+			QuotaWindows: []SubscriptionQuotaWindow{
+				{WindowSeconds: 3600, QuotaLimit: 100},
+			},
+		}
+		require.NoError(t, DB.Create(plan).Error)
+		require.NoError(t, ReplaceSubscriptionPlanQuotaWindowsTx(DB, plan.Id, plan.QuotaWindows))
+		require.NoError(t, DB.Create(&UserSubscription{
+			UserId:    1,
+			PlanId:    plan.Id,
+			Status:    "active",
+			StartTime: GetDBTimestamp(),
+			EndTime:   GetDBTimestamp() + 3600,
+		}).Error)
+
+		err := DeleteSubscriptionPlan(plan.Id)
+		require.ErrorIs(t, err, ErrSubscriptionPlanInUse)
+
+		var storedPlan SubscriptionPlan
+		require.NoError(t, DB.First(&storedPlan, plan.Id).Error)
+		var windowCount int64
+		require.NoError(t, DB.Model(&SubscriptionPlanQuotaWindow{}).
+			Where("plan_id = ?", plan.Id).
+			Count(&windowCount).Error)
+		assert.EqualValues(t, 1, windowCount)
+	})
+
+	t.Run("subscription order", func(t *testing.T) {
+		truncateTables(t)
+		plan := &SubscriptionPlan{
+			Id:            11105,
+			Title:         "Ordered plan",
+			DurationUnit:  SubscriptionDurationDay,
+			DurationValue: 1,
+			Enabled:       true,
+			QuotaWindows: []SubscriptionQuotaWindow{
+				{WindowSeconds: 3600, QuotaLimit: 100},
+			},
+		}
+		require.NoError(t, DB.Create(plan).Error)
+		require.NoError(t, ReplaceSubscriptionPlanQuotaWindowsTx(DB, plan.Id, plan.QuotaWindows))
+		require.NoError(t, DB.Create(&SubscriptionOrder{
+			UserId:     1,
+			PlanId:     plan.Id,
+			TradeNo:    "delete-plan-order",
+			Status:     common.TopUpStatusPending,
+			CreateTime: GetDBTimestamp(),
+		}).Error)
+
+		err := DeleteSubscriptionPlan(plan.Id)
+		require.ErrorIs(t, err, ErrSubscriptionPlanInUse)
+
+		var storedPlan SubscriptionPlan
+		require.NoError(t, DB.First(&storedPlan, plan.Id).Error)
+		var windowCount int64
+		require.NoError(t, DB.Model(&SubscriptionPlanQuotaWindow{}).
+			Where("plan_id = ?", plan.Id).
+			Count(&windowCount).Error)
+		assert.EqualValues(t, 1, windowCount)
+	})
+}

@@ -261,6 +261,39 @@ describe('Custom pages sidebar group', () => {
   })
 })
 
+describe('subscription plans sidebar entry', () => {
+  it('shows a dedicated purchase entry for regular users', () => {
+    const { result } = sidebarFor(undefined, undefined, true, [], ROLE.USER)
+    const personal = result.current.find((group) => group.id === 'personal')
+    expect(
+      personal?.items.find((item) => item.title === 'Subscription Plans')
+    ).toMatchObject({
+      title: 'Subscription Plans',
+      url: '/subscription-plans',
+    })
+    expect(
+      personal?.items
+        .filter((item) => checkIsActive('/subscription-plans', item))
+        .map((item) => item.title)
+    ).toEqual(['Subscription Plans'])
+  })
+
+  it('follows the wallet top-up visibility setting', () => {
+    const { result } = sidebarFor(
+      { personal: { enabled: true, topup: false } },
+      undefined,
+      true,
+      [],
+      ROLE.USER
+    )
+    expect(
+      result.current
+        .flatMap((group) => group.items)
+        .some((item) => item.url === '/subscription-plans')
+    ).toBe(false)
+  })
+})
+
 describe('finance sidebar entries', () => {
   it('legacy configurations include manual credit in the finance group', () => {
     const { result } = sidebarFor({ admin: { enabled: true, finance: true } })

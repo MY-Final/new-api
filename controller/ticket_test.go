@@ -205,7 +205,7 @@ func TestTicketsConfiguredDatabases(t *testing.T) {
 			db := ticketDatabase(t, dialect)
 			ticketObjectStorage(t)
 			require.NoError(t, i18n.Init())
-			require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.UserAccessToken{}, &model.Option{}, &model.CasbinRule{}, &model.AuthzRole{}, &model.Log{}, &model.AuditLog{}))
+			require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.UserAccessToken{}, &model.Option{}, &model.CasbinRule{}, &model.AuthzRole{}, &model.Log{}, &model.AuditLog{}, &model.UserSubscription{}))
 			require.NoError(t, model.MigrateTickets(db))
 			require.NoError(t, model.MigrateTickets(db))
 			require.NoError(t, authz.Init(db))
@@ -423,7 +423,7 @@ func TestTicketsConfiguredDatabases(t *testing.T) {
 func TestTicketValidationRejectsOversizeAndInvalidScreenshots(t *testing.T) {
 	db := ticketDatabase(t, "sqlite")
 	ticketObjectStorage(t)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.UserAccessToken{}, &model.Option{}, &model.CasbinRule{}, &model.AuthzRole{}, &model.Log{}, &model.AuditLog{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.UserAccessToken{}, &model.Option{}, &model.CasbinRule{}, &model.AuthzRole{}, &model.Log{}, &model.AuditLog{}, &model.UserSubscription{}))
 	require.NoError(t, model.MigrateTickets(db))
 	require.NoError(t, authz.Init(db))
 	owner := &model.User{Username: "validation", Password: "placeholder", AffCode: "validation", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, AuthVersion: 1}
@@ -445,7 +445,7 @@ func TestTicketR2ExpiryFailuresAndSettings(t *testing.T) {
 		t.Run(dialect, func(t *testing.T) {
 			db := ticketDatabase(t, dialect)
 			storage := ticketObjectStorage(t)
-			require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.UserAccessToken{}, &model.Option{}, &model.CasbinRule{}, &model.AuthzRole{}, &model.Log{}, &model.AuditLog{}))
+			require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.UserAccessToken{}, &model.Option{}, &model.CasbinRule{}, &model.AuthzRole{}, &model.Log{}, &model.AuditLog{}, &model.UserSubscription{}))
 			require.NoError(t, model.MigrateTickets(db))
 			require.NoError(t, authz.Init(db))
 			owner := &model.User{Username: "r2-owner", Password: "placeholder", AffCode: "r2-owner", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, AuthVersion: 1}

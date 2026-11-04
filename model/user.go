@@ -100,6 +100,7 @@ type User struct {
 	UsedQuota            int                        `json:"used_quota" gorm:"type:int;default:0;column:used_quota"` // used quota
 	RequestCount         int                        `json:"request_count" gorm:"type:int;default:0;"`               // request number
 	Group                string                     `json:"group" gorm:"type:varchar(64);default:'default'"`
+	MaxConcurrency       int                        `json:"max_concurrency" gorm:"type:int;not null;default:0"`
 	AffCode              string                     `json:"aff_code" gorm:"type:varchar(32);column:aff_code;uniqueIndex"`
 	AffCount             int                        `json:"aff_count" gorm:"type:int;default:0;column:aff_count"`
 	AffQuota             int                        `json:"aff_quota" gorm:"type:int;default:0;column:aff_quota"`           // 邀请剩余额度
@@ -123,18 +124,19 @@ type User struct {
 
 func (user *User) ToBaseUser() *UserBase {
 	cache := &UserBase{
-		Id:          user.Id,
-		Group:       user.Group,
-		Quota:       user.Quota,
-		BonusQuota:  user.BonusQuota,
-		PaidQuota:   user.PaidQuota,
-		Status:      user.Status,
-		Role:        user.Role,
-		Username:    user.Username,
-		Setting:     user.Setting,
-		Email:       user.Email,
-		AuthVersion: user.AuthVersion,
-		CacheSchema: userCacheSchemaVersion,
+		Id:             user.Id,
+		Group:          user.Group,
+		MaxConcurrency: user.MaxConcurrency,
+		Quota:          user.Quota,
+		BonusQuota:     user.BonusQuota,
+		PaidQuota:      user.PaidQuota,
+		Status:         user.Status,
+		Role:           user.Role,
+		Username:       user.Username,
+		Setting:        user.Setting,
+		Email:          user.Email,
+		AuthVersion:    user.AuthVersion,
+		CacheSchema:    userCacheSchemaVersion,
 	}
 	return cache
 }
@@ -970,10 +972,11 @@ func (user *User) EditWithTx(tx *gorm.DB, updatePassword bool) error {
 
 	newUser := *user
 	updates := map[string]any{
-		"username":     newUser.Username,
-		"display_name": newUser.DisplayName,
-		"group":        newUser.Group,
-		"remark":       newUser.Remark,
+		"username":        newUser.Username,
+		"display_name":    newUser.DisplayName,
+		"group":           newUser.Group,
+		"max_concurrency": newUser.MaxConcurrency,
+		"remark":          newUser.Remark,
 	}
 	if updatePassword {
 		updates["password"] = newUser.Password
