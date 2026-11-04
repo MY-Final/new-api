@@ -56,8 +56,7 @@ export function GrantSubscriptionDialog() {
   const [granting, setGranting] = useState(false)
   const debouncedUserSearch = useDebounce(userSearch, 250)
   const plan = currentRow?.plan
-  const isOpen =
-    open === 'grant-subscription' && Boolean(currentRow?.plan.id)
+  const isOpen = open === 'grant-subscription' && Boolean(currentRow?.plan.id)
 
   useEffect(() => {
     setReviewing(false)
@@ -204,6 +203,11 @@ export function GrantSubscriptionDialog() {
               aria-label={t('Target user')}
               options={userOptions}
               filter={null}
+              popupCollisionAvoidance={{
+                side: 'shift',
+                align: 'none',
+                fallbackAxisSide: 'none',
+              }}
               value={selectedUser ? String(selectedUser.id) : ''}
               onValueChange={(value) => {
                 if (!value) return

@@ -53,6 +53,7 @@ type LegacyComboboxProps = {
   showSelectedIcon?: boolean
   className?: string
   popupClassName?: string
+  popupCollisionAvoidance?: ComboboxPrimitive.Positioner.Props['collisionAvoidance']
   id?: string
   openOnFocus?: boolean
   disabled?: boolean
@@ -175,7 +176,11 @@ function OptionCombobox(props: LegacyComboboxProps) {
           )}
         </ComboboxInput>
       </div>
-      <ComboboxContent anchor={anchor} className={props.popupClassName}>
+      <ComboboxContent
+        anchor={anchor}
+        className={props.popupClassName}
+        collisionAvoidance={props.popupCollisionAvoidance}
+      >
         <ComboboxEmpty>
           {props.emptyText ?? t('No results found')}
         </ComboboxEmpty>
@@ -288,12 +293,18 @@ function ComboboxContent({
   sideOffset = 6,
   align = 'start',
   alignOffset = 0,
+  collisionAvoidance,
   anchor,
   ...props
 }: ComboboxPrimitive.Popup.Props &
   Pick<
     ComboboxPrimitive.Positioner.Props,
-    'side' | 'align' | 'sideOffset' | 'alignOffset' | 'anchor'
+    | 'side'
+    | 'align'
+    | 'sideOffset'
+    | 'alignOffset'
+    | 'anchor'
+    | 'collisionAvoidance'
   >) {
   const container = usePortalContainer()
   return (
@@ -303,6 +314,7 @@ function ComboboxContent({
         sideOffset={sideOffset}
         align={align}
         alignOffset={alignOffset}
+        collisionAvoidance={collisionAvoidance}
         anchor={anchor}
         className='isolate z-50'
       >

@@ -403,7 +403,7 @@ export function SubscriptionsMutateDrawer({
                             { value: 'EUR', label: 'EUR' },
                           ]}
                           onValueChange={(value) =>
-                            form.setValue('currency', value, {
+                            form.setValue('currency', value ?? '', {
                               shouldDirty: true,
                               shouldValidate: true,
                             })

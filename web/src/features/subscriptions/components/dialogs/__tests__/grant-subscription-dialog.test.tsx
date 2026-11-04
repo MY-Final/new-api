@@ -119,6 +119,19 @@ async function selectUserAndReview() {
 }
 
 describe('GrantSubscriptionDialog', () => {
+  test('opens the user choices below the search field', async () => {
+    renderDialog()
+    const user = userEvent.setup()
+    const input = screen.getByRole('combobox', { name: 'Target user' })
+
+    await user.click(input)
+
+    expect(await screen.findByRole('option', { name: /Alice/ })).toBeVisible()
+    await waitFor(() =>
+      expect(input).toHaveAttribute('data-popup-side', 'bottom')
+    )
+  })
+
   test('grants the selected plan without charging the user', async () => {
     mocks.createUserSubscription.mockResolvedValue({ success: true })
     const user = await selectUserAndReview()
