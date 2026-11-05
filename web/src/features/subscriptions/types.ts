@@ -117,9 +117,92 @@ export interface SubscriptionUsageRecord {
   plan_id: number
   plan_title: string
   model_name: string
+  token_id: number
+  token_name: string
+  channel_id: number
+  channel_name: string
   quota: number
   refunded_quota: number
   created_at: number
+}
+
+export interface SubscriptionUsageRecordFilters {
+  modelName?: string
+  subscriptionId?: number
+  tokenId?: number
+  channelId?: number
+}
+
+export interface SubscriptionUsagePeriod {
+  start_time: number
+  end_time: number
+  quota: number
+  wallet_quota: number
+  subscription_quota: number
+  request_count: number
+  wallet_request_count: number
+  subscription_request_count: number
+  refunded_quota: number
+  refunded_request_count: number
+}
+
+export interface SubscriptionUsageDaily {
+  date: string
+  quota: number
+  wallet_quota: number
+  subscription_quota: number
+  request_count: number
+  wallet_request_count: number
+  subscription_request_count: number
+  refunded_quota: number
+}
+
+export interface SubscriptionUsageSubscriptionOption {
+  id: number
+  plan_title: string
+}
+
+export interface SubscriptionUsageTokenOption {
+  id: number
+  name: string
+}
+
+export interface SubscriptionUsageChannelOption {
+  id: number
+  name: string
+}
+
+export interface SubscriptionUsageFilterOptions {
+  models: string[]
+  subscriptions: SubscriptionUsageSubscriptionOption[]
+  tokens: SubscriptionUsageTokenOption[]
+  channels: SubscriptionUsageChannelOption[]
+}
+
+export interface SubscriptionPurchaseSpend {
+  currency: string
+  amount: number
+  count: number
+}
+
+export interface SubscriptionUsageStatistics {
+  used_quota: number
+  wallet_used_quota: number
+  subscription_used_quota: number
+  request_count: number
+  wallet_request_count: number
+  subscription_request_count: number
+  today: SubscriptionUsagePeriod
+  last_7_days: SubscriptionUsagePeriod
+  last_30_days: SubscriptionUsagePeriod
+  daily: SubscriptionUsageDaily[]
+  refunded_quota: number
+  refunded_request_count: number
+  pending_request_count: number
+  pending_quota: number
+  subscription_purchase_count: number
+  subscription_purchase_spend: SubscriptionPurchaseSpend[]
+  filter_options: SubscriptionUsageFilterOptions
 }
 
 export interface SubscriptionUsagePage {

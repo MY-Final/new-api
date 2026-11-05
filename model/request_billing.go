@@ -161,6 +161,10 @@ type SubscriptionUsageRecord struct {
 	PlanId         int    `json:"plan_id"`
 	PlanTitle      string `json:"plan_title"`
 	ModelName      string `json:"model_name"`
+	TokenId        int    `json:"token_id"`
+	TokenName      string `json:"token_name"`
+	ChannelId      int    `json:"channel_id"`
+	ChannelName    string `json:"channel_name"`
 	Quota          int    `json:"quota"`
 	RefundedQuota  int    `json:"refunded_quota"`
 	CreatedAt      int64  `json:"created_at"`
@@ -197,12 +201,65 @@ func GetUserUsageBreakdown(userId int, usedQuota int, requestCount int) (UserUsa
 	}, nil
 }
 
-func ListUserSubscriptionUsage(userId int, pageInfo *common.PageInfo) ([]SubscriptionUsageRecord, int64, error) {
+type subscriptionUsageLabel struct {
+	PlanId    int
+	PlanTitle string
+}
+
+func loadSubscriptionUsageLabels(userId int, subscriptionIds []int) (map[int]subscriptionUsageLabel, error) {
+	labels := make(map[int]subscriptionUsageLabel, len(subscriptionIds))
+	if len(subscriptionIds) == 0 {
+		return labels, nil
+	}
+	var subscriptions []UserSubscription
+	if err := DB.Select("id", "plan_id").
+		Where("user_id = ? AND id IN ?", userId, subscriptionIds).
+		Find(&subscriptions).Error; err != nil {
+		return nil, err
+	}
+	planIdsBySubscription := make(map[int]int, len(subscriptions))
+	planIds := make([]int, 0, len(subscriptions))
+	for _, subscription := range subscriptions {
+		planIdsBySubscription[subscription.Id] = subscription.PlanId
+		planIds = append(planIds, subscription.PlanId)
+	}
+	if len(planIds) == 0 {
+		return labels, nil
+	}
+	var plans []SubscriptionPlan
+	if err := DB.Select("id", "title").Where("id IN ?", planIds).Find(&plans).Error; err != nil {
+		return nil, err
+	}
+	planTitles := make(map[int]string, len(plans))
+	for _, plan := range plans {
+		planTitles[plan.Id] = plan.Title
+	}
+	for subscriptionId, planId := range planIdsBySubscription {
+		labels[subscriptionId] = subscriptionUsageLabel{
+			PlanId:    planId,
+			PlanTitle: planTitles[planId],
+		}
+	}
+	return labels, nil
+}
+
+func ListUserSubscriptionUsage(userId int, filter SubscriptionUsageFilter, pageInfo *common.PageInfo) ([]SubscriptionUsageRecord, int64, error) {
 	if userId <= 0 {
 		return []SubscriptionUsageRecord{}, 0, nil
 	}
-	query := consumedRequestBillingQuery(DB.Model(&RequestBilling{})).
-		Where("user_id = ? AND funding_source = ?", userId, "subscription")
+	query := subscriptionUsageQuery(userId)
+	if filter.ModelName != "" {
+		query = query.Where("model_name = ?", strings.TrimSpace(filter.ModelName))
+	}
+	if filter.SubscriptionId > 0 {
+		query = query.Where("subscription_id = ?", filter.SubscriptionId)
+	}
+	if filter.TokenId > 0 {
+		query = query.Where("token_id = ?", filter.TokenId)
+	}
+	if filter.ChannelId > 0 {
+		query = query.Where("channel_id = ?", filter.ChannelId)
+	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -222,37 +279,41 @@ func ListUserSubscriptionUsage(userId int, pageInfo *common.PageInfo) ([]Subscri
 	for _, record := range records {
 		subscriptionIds = append(subscriptionIds, record.SubscriptionId)
 	}
-	var subscriptions []UserSubscription
-	if err := DB.Select("id", "plan_id").
-		Where("user_id = ? AND id IN ?", userId, subscriptionIds).
-		Find(&subscriptions).Error; err != nil {
+	labels, err := loadSubscriptionUsageLabels(userId, subscriptionIds)
+	if err != nil {
 		return nil, 0, err
 	}
-	planIdsBySubscription := make(map[int]int, len(subscriptions))
-	planIds := make([]int, 0, len(subscriptions))
-	for _, subscription := range subscriptions {
-		planIdsBySubscription[subscription.Id] = subscription.PlanId
-		planIds = append(planIds, subscription.PlanId)
+	channelIds := make([]int, 0, len(records))
+	for _, record := range records {
+		if record.ChannelId > 0 {
+			channelIds = append(channelIds, record.ChannelId)
+		}
 	}
-	var plans []SubscriptionPlan
-	if err := DB.Select("id", "title").Where("id IN ?", planIds).Find(&plans).Error; err != nil {
-		return nil, 0, err
-	}
-	planTitles := make(map[int]string, len(plans))
-	for _, plan := range plans {
-		planTitles[plan.Id] = plan.Title
+	channelNames := make(map[int]string)
+	if len(channelIds) > 0 {
+		var channels []Channel
+		if err := DB.Select("id", "name").Where("id IN ?", channelIds).Find(&channels).Error; err != nil {
+			return nil, 0, err
+		}
+		for _, channel := range channels {
+			channelNames[channel.Id] = channel.Name
+		}
 	}
 
 	result := make([]SubscriptionUsageRecord, 0, len(records))
 	for _, record := range records {
-		planId := planIdsBySubscription[record.SubscriptionId]
+		label := labels[record.SubscriptionId]
 		result = append(result, SubscriptionUsageRecord{
 			BillingId:      record.Id,
 			RequestId:      record.RequestId,
 			SubscriptionId: record.SubscriptionId,
-			PlanId:         planId,
-			PlanTitle:      planTitles[planId],
+			PlanId:         label.PlanId,
+			PlanTitle:      label.PlanTitle,
 			ModelName:      record.ModelName,
+			TokenId:        record.TokenId,
+			TokenName:      record.TokenName,
+			ChannelId:      record.ChannelId,
+			ChannelName:    channelNames[record.ChannelId],
 			Quota:          max(record.Quota-record.RefundedQuota, 0),
 			RefundedQuota:  record.RefundedQuota,
 			CreatedAt:      record.CreatedAt,

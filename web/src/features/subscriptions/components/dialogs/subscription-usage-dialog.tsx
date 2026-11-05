@@ -21,18 +21,24 @@ import { ChevronLeft, ChevronRight, ReceiptText } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { CopyButton } from '@/components/copy-button'
 import { Dialog } from '@/components/dialog'
 import { EmptyState } from '@/components/empty-state'
-import { StatusBadge } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toIntlLocale } from '@/i18n/languages'
-import { formatQuota } from '@/lib/format'
 import { requireServerSuccess } from '@/lib/server-error-message'
 
-import { getSelfSubscriptionUsage } from '../../api'
-import type { SubscriptionUsageRecord } from '../../types'
+import {
+  getSelfSubscriptionUsage,
+  getSelfSubscriptionUsageStatistics,
+} from '../../api'
+import type {
+  SubscriptionUsageRecordFilters,
+  SubscriptionUsageStatistics,
+} from '../../types'
+import { SubscriptionUsageFilters } from '../subscription-usage-filters'
+import { SubscriptionUsageRecordCard } from '../subscription-usage-record-card'
+import { SubscriptionUsageSummary } from '../subscription-usage-summary'
 
 const PAGE_SIZE = 10
 const skeletonKeys = ['one', 'two', 'three', 'four', 'five']
@@ -42,81 +48,36 @@ interface SubscriptionUsageDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
-function SubscriptionUsageRecordCard(props: {
-  record: SubscriptionUsageRecord
-  locale?: string
-}) {
-  const { t } = useTranslation()
-  const record = props.record
-  const planLabel = record.plan_title || t('Subscription')
-
-  return (
-    <div className='rounded-lg border p-3 sm:p-4'>
-      <div className='flex items-start justify-between gap-3'>
-        <div className='min-w-0 space-y-1'>
-          <div className='flex min-w-0 flex-wrap items-center gap-2'>
-            <span className='truncate text-sm font-medium'>
-              {record.model_name || '-'}
-            </span>
-            {record.refunded_quota > 0 && (
-              <StatusBadge
-                label={t('Refunded')}
-                variant='neutral'
-                size='sm'
-                copyable={false}
-              />
-            )}
-          </div>
-          <div className='text-muted-foreground text-xs'>
-            {planLabel} · {t('Subscription')} #{record.subscription_id}
-          </div>
-        </div>
-        <div className='shrink-0 text-right'>
-          <div className='text-muted-foreground text-[11px] font-medium tracking-wider uppercase'>
-            {t('Consumed Quota')}
-          </div>
-          <div className='mt-1 font-mono text-sm font-semibold tabular-nums sm:text-base'>
-            {formatQuota(record.quota)}
-          </div>
-        </div>
-      </div>
-      <div className='text-muted-foreground mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs'>
-        <span>
-          {new Date(record.created_at * 1000).toLocaleString(props.locale)}
-        </span>
-        <span className='flex min-w-0 items-center gap-1'>
-          <span>{t('Request ID')}:</span>
-          <code className='text-foreground max-w-52 truncate font-mono'>
-            {record.request_id}
-          </code>
-          <CopyButton
-            value={record.request_id}
-            size='sm'
-            className='h-5 w-5 p-0'
-            iconClassName='h-3 w-3'
-          />
-        </span>
-      </div>
-    </div>
-  )
-}
-
 export function SubscriptionUsageDialog(props: SubscriptionUsageDialogProps) {
   const { t, i18n } = useTranslation()
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const [page, setPage] = useState(1)
+  const [filters, setFilters] = useState<SubscriptionUsageRecordFilters>({})
 
   useEffect(() => {
     if (props.open) {
       setPage(1)
+      setFilters({})
     }
   }, [props.open])
 
-  const usageQuery = useQuery({
-    queryKey: ['subscription', 'self', 'usage', page],
+  const statisticsQuery = useQuery({
+    queryKey: ['subscription', 'self', 'usage', 'statistics'],
     queryFn: async () => {
       const response = requireServerSuccess(
-        await getSelfSubscriptionUsage(page, PAGE_SIZE)
+        await getSelfSubscriptionUsageStatistics()
+      )
+      return response.data as SubscriptionUsageStatistics
+    },
+    enabled: props.open,
+    staleTime: 15 * 1000,
+  })
+
+  const usageQuery = useQuery({
+    queryKey: ['subscription', 'self', 'usage', page, filters],
+    queryFn: async () => {
+      const response = requireServerSuccess(
+        await getSelfSubscriptionUsage(page, PAGE_SIZE, filters)
       )
       return (
         response.data ?? {
@@ -135,6 +96,16 @@ export function SubscriptionUsageDialog(props: SubscriptionUsageDialogProps) {
   const records = usageQuery.data?.items ?? []
   const total = usageQuery.data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const hasFilters =
+    filters.modelName != null ||
+    filters.subscriptionId != null ||
+    filters.tokenId != null ||
+    filters.channelId != null
+
+  function selectFilters(nextFilters: SubscriptionUsageRecordFilters) {
+    setFilters(nextFilters)
+    setPage(1)
+  }
 
   return (
     <Dialog
@@ -142,95 +113,161 @@ export function SubscriptionUsageDialog(props: SubscriptionUsageDialogProps) {
       onOpenChange={props.onOpenChange}
       title={t('Subscription Usage')}
       description={t(
-        'Requests billed to a subscription are shown using the net charged amount.'
+        'Track wallet and subscription usage, refunds, and settlement.'
       )}
-      contentClassName='sm:max-w-3xl'
-      bodyClassName='space-y-3'
+      contentClassName='sm:max-w-5xl'
+      bodyClassName='space-y-4'
     >
-      {usageQuery.isLoading && (
-        <div className='space-y-3'>
-          {skeletonKeys.map((key) => (
-            <div key={key} className='rounded-lg border p-3 sm:p-4'>
-              <div className='flex items-start justify-between gap-3'>
-                <div className='space-y-2'>
-                  <Skeleton className='h-4 w-40' />
-                  <Skeleton className='h-3 w-28' />
-                </div>
-                <Skeleton className='h-8 w-20' />
-              </div>
-              <Skeleton className='mt-3 h-3 w-56' />
-            </div>
-          ))}
-        </div>
-      )}
-      {!usageQuery.isLoading && usageQuery.isError && records.length === 0 && (
-        <div className='flex flex-col items-center gap-3 py-12 text-center'>
-          <p className='text-muted-foreground text-sm'>{t('Failed to load')}</p>
+      {statisticsQuery.isError && !statisticsQuery.data ? (
+        <div className='border-destructive/30 bg-destructive/5 flex items-center justify-between gap-3 rounded-lg border px-3 py-2'>
+          <span className='text-muted-foreground text-sm'>
+            {t('Failed to load usage statistics')}
+          </span>
           <Button
             variant='outline'
             size='sm'
-            onClick={() => usageQuery.refetch()}
+            onClick={() => statisticsQuery.refetch()}
           >
             {t('Retry')}
           </Button>
         </div>
-      )}
-      {!usageQuery.isLoading && !usageQuery.isError && records.length === 0 && (
-        <EmptyState
-          icon={ReceiptText}
-          title={t('No subscription usage records')}
-          description={t(
-            'Usage will appear here after a request is billed to a subscription.'
-          )}
-          className='min-h-56'
+      ) : (
+        <SubscriptionUsageSummary
+          statistics={statisticsQuery.data}
+          loading={statisticsQuery.isLoading}
         />
       )}
-      {!usageQuery.isLoading && records.length > 0 && (
-        <>
-          <div className='max-h-[min(56vh,540px)] space-y-3 overflow-y-auto pr-1'>
-            {records.map((record) => (
-              <SubscriptionUsageRecordCard
-                key={record.billing_id}
-                record={record}
-                locale={locale}
-              />
+
+      {statisticsQuery.data?.filter_options && (
+        <SubscriptionUsageFilters
+          filters={filters}
+          options={statisticsQuery.data.filter_options}
+          onChange={selectFilters}
+        />
+      )}
+
+      <section className='space-y-3 border-t pt-4'>
+        <div className='flex items-center justify-between gap-2'>
+          <h3 className='text-sm font-medium'>{t('Usage Records')}</h3>
+          {usageQuery.isFetching && !usageQuery.isLoading && (
+            <span className='text-muted-foreground text-xs'>
+              {t('Loading...')}
+            </span>
+          )}
+        </div>
+
+        {usageQuery.isLoading && (
+          <div className='space-y-3'>
+            {skeletonKeys.map((key) => (
+              <div key={key} className='rounded-lg border p-3 sm:p-4'>
+                <div className='flex items-start justify-between gap-3'>
+                  <div className='space-y-2'>
+                    <Skeleton className='h-4 w-40' />
+                    <Skeleton className='h-3 w-28' />
+                  </div>
+                  <Skeleton className='h-8 w-20' />
+                </div>
+                <Skeleton className='mt-3 h-3 w-56' />
+              </div>
             ))}
           </div>
-          <div className='flex flex-col items-center gap-3 border-t pt-4 sm:flex-row sm:justify-between'>
-            <div className='text-muted-foreground text-xs sm:text-sm'>
-              {t('Showing')} {(page - 1) * PAGE_SIZE + 1}-
-              {Math.min(page * PAGE_SIZE, total)} {t('of')} {total}
-            </div>
-            <div className='flex items-center gap-2'>
+        )}
+        {!usageQuery.isLoading &&
+          usageQuery.isError &&
+          records.length === 0 && (
+            <div className='flex flex-col items-center gap-3 py-12 text-center'>
+              <p className='text-muted-foreground text-sm'>
+                {t('Failed to load')}
+              </p>
               <Button
                 variant='outline'
                 size='sm'
-                onClick={() => setPage((current) => current - 1)}
-                disabled={page <= 1}
-                className='h-8 w-8 p-0'
-                aria-label={t('Previous')}
+                onClick={() => usageQuery.refetch()}
               >
-                <ChevronLeft className='h-4 w-4' />
+                {t('Retry')}
               </Button>
-              <div className='text-muted-foreground flex items-center gap-1 text-sm'>
-                <span className='font-medium'>{page}</span>
-                <span>/</span>
-                <span>{totalPages}</span>
+            </div>
+          )}
+        {!usageQuery.isLoading &&
+          !usageQuery.isError &&
+          records.length === 0 && (
+            <EmptyState
+              icon={ReceiptText}
+              title={
+                hasFilters
+                  ? t('No matching usage records')
+                  : t('No subscription usage records')
+              }
+              description={
+                hasFilters
+                  ? t(
+                      'Try adjusting the filters or clear them to see all usage.'
+                    )
+                  : t(
+                      'Usage will appear here after a request is billed to a subscription.'
+                    )
+              }
+              action={
+                hasFilters ? (
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    onClick={() => selectFilters({})}
+                  >
+                    {t('Clear filters')}
+                  </Button>
+                ) : undefined
+              }
+              className='min-h-56'
+            />
+          )}
+        {!usageQuery.isLoading && records.length > 0 && (
+          <>
+            <div className='max-h-[min(48vh,480px)] space-y-3 overflow-y-auto pr-1'>
+              {records.map((record) => (
+                <SubscriptionUsageRecordCard
+                  key={record.billing_id}
+                  record={record}
+                  locale={locale}
+                />
+              ))}
+            </div>
+            <div className='flex flex-col items-center gap-3 border-t pt-4 sm:flex-row sm:justify-between'>
+              <div className='text-muted-foreground text-xs sm:text-sm'>
+                {t('Showing')} {(page - 1) * PAGE_SIZE + 1}-
+                {Math.min(page * PAGE_SIZE, total)} {t('of')} {total}
               </div>
-              <Button
-                variant='outline'
-                size='sm'
-                onClick={() => setPage((current) => current + 1)}
-                disabled={page >= totalPages}
-                className='h-8 w-8 p-0'
-                aria-label={t('Next')}
-              >
-                <ChevronRight className='h-4 w-4' />
-              </Button>
+              <div className='flex items-center gap-2'>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  onClick={() => setPage((current) => current - 1)}
+                  disabled={page <= 1}
+                  className='h-8 w-8 p-0'
+                  aria-label={t('Previous')}
+                >
+                  <ChevronLeft className='h-4 w-4' />
+                </Button>
+                <div className='text-muted-foreground flex items-center gap-1 text-sm'>
+                  <span className='font-medium'>{page}</span>
+                  <span>/</span>
+                  <span>{totalPages}</span>
+                </div>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  onClick={() => setPage((current) => current + 1)}
+                  disabled={page >= totalPages}
+                  className='h-8 w-8 p-0'
+                  aria-label={t('Next')}
+                >
+                  <ChevronRight className='h-4 w-4' />
+                </Button>
+              </div>
             </div>
-          </div>
-        </>
-      )}
+          </>
+        )}
+      </section>
     </Dialog>
   )
 }

@@ -16,13 +16,21 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Activity, BarChart3, Crown, WalletCards } from 'lucide-react'
+import {
+  Activity,
+  BarChart3,
+  Crown,
+  TrendingUp,
+  WalletCards,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { toIntlLocale } from '@/i18n/languages'
 import {
   formatCompactNumber,
+  formatPercent,
   formatQuota,
   formatQuotaPrecise,
   resolveUserUsageBreakdown,
@@ -36,20 +44,23 @@ interface WalletStatsCardProps {
 }
 
 export function WalletStatsCard(props: WalletStatsCardProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   if (props.loading) {
     return (
-      <div className='bg-border/60 grid grid-cols-2 gap-px overflow-hidden rounded-lg border sm:grid-cols-4'>
-        {['balance', 'wallet', 'subscription', 'requests'].map((key) => (
-          <div
-            key={key}
-            className='bg-card min-w-0 px-2.5 py-2.5 sm:px-5 sm:py-4'
-          >
-            <Skeleton className='h-3.5 w-full' />
-            <Skeleton className='mt-2 h-6 w-full sm:h-7' />
-            <Skeleton className='mt-1.5 hidden h-3.5 w-24 md:block' />
-          </div>
-        ))}
+      <div className='bg-border/60 grid grid-cols-2 gap-px overflow-hidden rounded-lg border lg:grid-cols-5'>
+        {['balance', 'total', 'wallet', 'subscription', 'requests'].map(
+          (key) => (
+            <div
+              key={key}
+              className='bg-card min-w-0 px-2.5 py-2.5 sm:px-5 sm:py-4'
+            >
+              <Skeleton className='h-3.5 w-full' />
+              <Skeleton className='mt-2 h-6 w-full sm:h-7' />
+              <Skeleton className='mt-1.5 hidden h-3.5 w-24 md:block' />
+            </div>
+          )
+        )}
       </div>
     )
   }
@@ -77,16 +88,27 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
       tone: hasDebt ? 'destructive' : 'success',
     },
     {
+      label: t('Total Usage'),
+      value: formatQuota(usage.totalUsedQuota),
+      description: `${t('Wallet')}: ${formatQuota(usage.walletUsedQuota)} · ${t('Subscription')}: ${formatQuota(usage.subscriptionUsedQuota)}`,
+      icon: TrendingUp,
+      tone: 'chart-4',
+    },
+    {
       label: t('Wallet Usage'),
       value: formatQuota(usage.walletUsedQuota),
-      description: t('Consumed from wallet'),
+      description: t('{{percent}} of total usage', {
+        percent: formatPercent(usage.walletUsageRatio, locale),
+      }),
       icon: BarChart3,
       tone: 'info',
     },
     {
       label: t('Subscription Usage'),
       value: formatQuota(usage.subscriptionUsedQuota),
-      description: t('Consumed from subscriptions'),
+      description: t('{{percent}} of total usage', {
+        percent: formatPercent(usage.subscriptionUsageRatio, locale),
+      }),
       icon: Crown,
       tone: 'warning',
     },
@@ -100,7 +122,7 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
   ]
 
   return (
-    <div className='bg-border/60 grid grid-cols-2 gap-px overflow-hidden rounded-lg border sm:grid-cols-4'>
+    <div className='bg-border/60 grid grid-cols-2 gap-px overflow-hidden rounded-lg border lg:grid-cols-5'>
       {stats.map((item) => (
         <div
           key={item.label}

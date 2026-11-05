@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -87,8 +88,23 @@ func GetSubscriptionSelf(c *gin.Context) {
 }
 
 func GetSubscriptionSelfUsage(c *gin.Context) {
+	var query struct {
+		ModelName      string `form:"model_name" binding:"max=255"`
+		SubscriptionId int    `form:"subscription_id" binding:"gte=0"`
+		TokenId        int    `form:"token_id" binding:"gte=0"`
+		ChannelId      int    `form:"channel_id" binding:"gte=0"`
+	}
+	if err := c.ShouldBindQuery(&query); err != nil {
+		common.ApiErrorT(c, "Invalid parameters")
+		return
+	}
 	page := common.GetPageQuery(c)
-	records, total, err := model.ListUserSubscriptionUsage(c.GetInt("id"), page)
+	records, total, err := model.ListUserSubscriptionUsage(c.GetInt("id"), model.SubscriptionUsageFilter{
+		ModelName:      query.ModelName,
+		SubscriptionId: query.SubscriptionId,
+		TokenId:        query.TokenId,
+		ChannelId:      query.ChannelId,
+	}, page)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -96,6 +112,15 @@ func GetSubscriptionSelfUsage(c *gin.Context) {
 	page.SetItems(records)
 	page.SetTotal(int(total))
 	common.ApiSuccess(c, page)
+}
+
+func GetSubscriptionSelfUsageStatistics(c *gin.Context) {
+	statistics, err := model.GetUserUsageStatistics(c.GetInt("id"), time.Now())
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, statistics)
 }
 
 func UpdateSubscriptionPreference(c *gin.Context) {

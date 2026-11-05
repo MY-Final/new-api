@@ -16,12 +16,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 import { afterEach, describe, expect, test } from 'vitest'
 
+import { toIntlLocale } from '@/i18n/languages'
 import {
   DEFAULT_CURRENCY_CONFIG,
   useSystemConfigStore,
 } from '@/stores/system-config-store'
 
 import {
+  formatPercent,
   getEditableQuotaStep,
   parseQuotaFromDollars,
   quotaUnitsToEditableAmount,
@@ -84,10 +86,14 @@ describe('user usage breakdown', () => {
         subscription_request_count: 6,
       })
     ).toEqual({
+      totalUsedQuota: 100,
+      totalRequestCount: 10,
       walletUsedQuota: 40,
       subscriptionUsedQuota: 60,
       walletRequestCount: 4,
       subscriptionRequestCount: 6,
+      walletUsageRatio: 40,
+      subscriptionUsageRatio: 60,
     })
   })
 
@@ -95,10 +101,26 @@ describe('user usage breakdown', () => {
     expect(
       resolveUserUsageBreakdown({ used_quota: 100, request_count: 10 })
     ).toEqual({
+      totalUsedQuota: 100,
+      totalRequestCount: 10,
       walletUsedQuota: 100,
       subscriptionUsedQuota: 0,
       walletRequestCount: 10,
       subscriptionRequestCount: 0,
+      walletUsageRatio: 100,
+      subscriptionUsageRatio: 0,
     })
+  })
+})
+
+describe('percentage formatting locales', () => {
+  test('formats percentages for every interface language', () => {
+    for (const language of ['zhCN', 'zhTW', 'en', 'fr', 'ja', 'ru', 'vi']) {
+      expect(formatPercent(12.5, toIntlLocale(language))).toMatch(/12[,.]5/)
+    }
+  })
+
+  test('falls back to the runtime locale for an invalid language', () => {
+    expect(formatPercent(12.5, toIntlLocale('not a locale'))).toMatch(/12[,.]5/)
   })
 })

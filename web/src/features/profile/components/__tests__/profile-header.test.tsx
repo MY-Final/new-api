@@ -60,8 +60,8 @@ describe('ProfileHeader usage split', () => {
 
     expect(screen.getByText('Wallet Usage')).toBeVisible()
     expect(screen.getByText('Subscription Usage')).toBeVisible()
-    expect(screen.getByText('Consumed from wallet')).toBeVisible()
-    expect(screen.getByText('Consumed from subscriptions')).toBeVisible()
+    expect(screen.getByText('40% of total usage')).toBeVisible()
+    expect(screen.getByText('60% of total usage')).toBeVisible()
     expect(screen.getByText('Wallet: 2 · Subscription: 3')).toBeVisible()
   })
 })

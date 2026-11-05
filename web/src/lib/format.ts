@@ -60,10 +60,14 @@ interface UserUsageBreakdownInput {
 }
 
 export interface UserUsageBreakdown {
+  totalUsedQuota: number
+  totalRequestCount: number
   walletUsedQuota: number
   subscriptionUsedQuota: number
   walletRequestCount: number
   subscriptionRequestCount: number
+  walletUsageRatio: number
+  subscriptionUsageRatio: number
 }
 
 export function resolveUserUsageBreakdown(
@@ -80,23 +84,35 @@ export function resolveUserUsageBreakdown(
     0
   )
 
+  const walletUsedQuota =
+    input.wallet_used_quota == null
+      ? Math.max(totalUsedQuota - subscriptionUsedQuota, 0)
+      : Math.max(Number(input.wallet_used_quota), 0)
+  const walletRequestCount =
+    input.wallet_request_count == null
+      ? Math.max(totalRequestCount - subscriptionRequestCount, 0)
+      : Math.max(Number(input.wallet_request_count), 0)
+
   return {
-    walletUsedQuota:
-      input.wallet_used_quota == null
-        ? Math.max(totalUsedQuota - subscriptionUsedQuota, 0)
-        : Math.max(Number(input.wallet_used_quota), 0),
+    totalUsedQuota,
+    totalRequestCount,
+    walletUsedQuota,
     subscriptionUsedQuota,
-    walletRequestCount:
-      input.wallet_request_count == null
-        ? Math.max(totalRequestCount - subscriptionRequestCount, 0)
-        : Math.max(Number(input.wallet_request_count), 0),
+    walletRequestCount,
     subscriptionRequestCount,
+    walletUsageRatio:
+      totalUsedQuota > 0 ? (walletUsedQuota / totalUsedQuota) * 100 : 0,
+    subscriptionUsageRatio:
+      totalUsedQuota > 0 ? (subscriptionUsedQuota / totalUsedQuota) * 100 : 0,
   }
 }
 
-export function formatPercent(value: number | null | undefined): string {
+export function formatPercent(
+  value: number | null | undefined,
+  locales?: Intl.LocalesArgument
+): string {
   if (value == null || Number.isNaN(value as number)) return '-'
-  return Intl.NumberFormat(undefined, {
+  return Intl.NumberFormat(locales, {
     style: 'percent',
     maximumFractionDigits: 2,
   }).format((value as number) / 100)

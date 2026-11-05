@@ -32,6 +32,8 @@ import type {
   SelfSubscriptionData,
   SubscriptionBalancePayData,
   SubscriptionUsagePage,
+  SubscriptionUsageRecordFilters,
+  SubscriptionUsageStatistics,
 } from './types'
 
 // ============================================================================
@@ -228,11 +230,28 @@ export async function getSelfSubscriptionFull(): Promise<
 
 export async function getSelfSubscriptionUsage(
   page: number,
-  pageSize: number
+  pageSize: number,
+  filters: SubscriptionUsageRecordFilters = {}
 ): Promise<ApiResponse<SubscriptionUsagePage>> {
   const res = await api.get('/api/subscription/self/usage', {
-    params: { p: page, page_size: pageSize },
+    params: {
+      p: page,
+      page_size: pageSize,
+      ...(filters.modelName ? { model_name: filters.modelName } : {}),
+      ...(filters.subscriptionId
+        ? { subscription_id: filters.subscriptionId }
+        : {}),
+      ...(filters.tokenId ? { token_id: filters.tokenId } : {}),
+      ...(filters.channelId ? { channel_id: filters.channelId } : {}),
+    },
   })
+  return res.data
+}
+
+export async function getSelfSubscriptionUsageStatistics(): Promise<
+  ApiResponse<SubscriptionUsageStatistics>
+> {
+  const res = await api.get('/api/subscription/self/usage/stats')
   return res.data
 }
 

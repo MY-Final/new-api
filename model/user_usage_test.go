@@ -158,7 +158,7 @@ func TestListUserSubscriptionUsageReturnsNetChargedRecords(t *testing.T) {
 		{Id: "usage-record-pending", RequestId: "usage-record-pending-request", UserId: user.Id, FundingSource: "subscription", SubscriptionId: subscription.Id, ModelName: "pending-model", TaskId: "usage-record-pending-task", Quota: 50, CreatedAt: 400},
 	}).Error)
 
-	records, total, err := ListUserSubscriptionUsage(user.Id, &common.PageInfo{Page: 1, PageSize: 10})
+	records, total, err := ListUserSubscriptionUsage(user.Id, SubscriptionUsageFilter{}, &common.PageInfo{Page: 1, PageSize: 10})
 	require.NoError(t, err)
 	require.Equal(t, int64(2), total)
 	require.Len(t, records, 2)
@@ -169,4 +169,94 @@ func TestListUserSubscriptionUsageReturnsNetChargedRecords(t *testing.T) {
 	assert.Equal(t, 30, records[0].RefundedQuota)
 	assert.Equal(t, "usage-record-one", records[1].BillingId)
 	assert.Equal(t, 20, records[1].Quota)
+}
+
+func TestGetUserUsageStatisticsSeparatesPeriodsAndLedger(t *testing.T) {
+	truncateTables(t)
+	user := User{
+		Username: "usage-statistics-user", Password: "password123",
+		AffCode: "usage-statistics-aff", UsedQuota: 150, RequestCount: 6,
+	}
+	require.NoError(t, DB.Create(&user).Error)
+	plan := SubscriptionPlan{Title: "Monthly Pass", Currency: "CNY", Enabled: true}
+	require.NoError(t, DB.Create(&plan).Error)
+	subscription := UserSubscription{
+		UserId: user.Id, PlanId: plan.Id, Status: "active",
+		StartTime: 100, EndTime: 200, AmountTotal: 100, AmountUsed: 60,
+	}
+	require.NoError(t, DB.Create(&subscription).Error)
+	channel := Channel{Name: "Stats channel"}
+	require.NoError(t, DB.Create(&channel).Error)
+
+	now := time.Date(2026, time.November, 5, 15, 0, 0, 0, time.Local)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+	todayAtTen := today.Add(10 * time.Hour)
+	threeDaysAgo := today.AddDate(0, 0, -3)
+	tenDaysAgo := today.AddDate(0, 0, -10)
+	fortyDaysAgo := today.AddDate(0, 0, -40)
+	require.NoError(t, DB.Create(&[]RequestBilling{
+		{Id: "stats-today-wallet", RequestId: "stats-today-wallet-request", UserId: user.Id, FundingSource: "wallet", ModelName: "wallet-model", Quota: 10, Settled: true, CreatedAt: todayAtTen.Unix()},
+		{Id: "stats-today-subscription", RequestId: "stats-today-subscription-request", UserId: user.Id, FundingSource: "subscription", SubscriptionId: subscription.Id, TokenId: 11, TokenName: "CLI", ChannelId: channel.Id, ModelName: "model-a", Quota: 20, Settled: true, CreatedAt: todayAtTen.Add(time.Hour).Unix()},
+		{Id: "stats-refunded", RequestId: "stats-refunded-request", UserId: user.Id, FundingSource: "subscription", SubscriptionId: subscription.Id, ModelName: "model-b", Quota: 15, RefundedQuota: 5, Settled: true, CreatedAt: threeDaysAgo.Unix()},
+		{Id: "stats-ten-days", RequestId: "stats-ten-days-request", UserId: user.Id, FundingSource: "subscription", SubscriptionId: subscription.Id, ModelName: "model-c", Quota: 30, Settled: true, CreatedAt: tenDaysAgo.Unix()},
+		{Id: "stats-pending", RequestId: "stats-pending-request", UserId: user.Id, FundingSource: "subscription", SubscriptionId: subscription.Id, TaskId: "stats-pending-task", ModelName: "pending-model", Quota: 7, CreatedAt: now.Unix()},
+		{Id: "stats-old", RequestId: "stats-old-request", UserId: user.Id, FundingSource: "subscription", SubscriptionId: subscription.Id, ModelName: "old-model", Quota: 40, Settled: true, CreatedAt: fortyDaysAgo.Unix()},
+	}).Error)
+	require.NoError(t, DB.Create(&[]SubscriptionOrder{
+		{UserId: user.Id, PlanId: plan.Id, Money: 10.5, TradeNo: "stats-order-one", Status: common.TopUpStatusSuccess},
+		{UserId: user.Id, PlanId: plan.Id, Money: 4.5, TradeNo: "stats-order-two", Status: common.TopUpStatusSuccess},
+	}).Error)
+
+	statistics, err := GetUserUsageStatistics(user.Id, now)
+	require.NoError(t, err)
+	assert.Equal(t, int64(150), statistics.UsedQuota)
+	assert.Equal(t, int64(50), statistics.WalletUsedQuota)
+	assert.Equal(t, int64(100), statistics.SubscriptionUsedQuota)
+	assert.Equal(t, UserUsagePeriodStat{
+		StartTime: today.Unix(), EndTime: now.Unix(),
+		Quota: 30, WalletQuota: 10, SubscriptionQuota: 20,
+		RequestCount: 2, WalletRequestCount: 1, SubscriptionRequestCount: 1,
+	}, statistics.Today)
+	assert.Equal(t, UserUsagePeriodStat{
+		StartTime: today.AddDate(0, 0, -6).Unix(), EndTime: now.Unix(),
+		Quota: 40, WalletQuota: 10, SubscriptionQuota: 30,
+		RequestCount: 3, WalletRequestCount: 1, SubscriptionRequestCount: 2,
+		RefundedQuota: 5, RefundedRequestCount: 1,
+	}, statistics.Last7Days)
+	assert.Equal(t, UserUsagePeriodStat{
+		StartTime: today.AddDate(0, 0, -29).Unix(), EndTime: now.Unix(),
+		Quota: 70, WalletQuota: 10, SubscriptionQuota: 60,
+		RequestCount: 4, WalletRequestCount: 1, SubscriptionRequestCount: 3,
+		RefundedQuota: 5, RefundedRequestCount: 1,
+	}, statistics.Last30Days)
+	require.Len(t, statistics.Daily, 30)
+	assert.Equal(t, UserUsageDailyStat{
+		Date: now.Format("2006-01-02"), Quota: 30, WalletQuota: 10,
+		SubscriptionQuota: 20, RequestCount: 2, WalletRequestCount: 1,
+		SubscriptionRequestCount: 1,
+	}, statistics.Daily[29])
+	assert.Equal(t, int64(5), statistics.RefundedQuota)
+	assert.Equal(t, int64(1), statistics.RefundedRequestCount)
+	assert.Equal(t, int64(1), statistics.PendingRequestCount)
+	assert.Equal(t, int64(7), statistics.PendingQuota)
+	assert.Equal(t, int64(2), statistics.SubscriptionPurchaseCount)
+	assert.Equal(t, []SubscriptionPurchaseSpend{{Currency: "CNY", Amount: 15, Count: 2}}, statistics.SubscriptionPurchaseSpend)
+	assert.Contains(t, statistics.FilterOptions.Models, "model-a")
+	assert.Contains(t, statistics.FilterOptions.Models, "old-model")
+	require.Len(t, statistics.FilterOptions.Subscriptions, 1)
+	assert.Equal(t, plan.Title, statistics.FilterOptions.Subscriptions[0].PlanTitle)
+	require.Len(t, statistics.FilterOptions.Tokens, 1)
+	assert.Equal(t, SubscriptionUsageTokenOption{Id: 11, Name: "CLI"}, statistics.FilterOptions.Tokens[0])
+	require.Len(t, statistics.FilterOptions.Channels, 1)
+	assert.Equal(t, SubscriptionUsageChannelOption{Id: channel.Id, Name: channel.Name}, statistics.FilterOptions.Channels[0])
+
+	records, total, err := ListUserSubscriptionUsage(user.Id, SubscriptionUsageFilter{
+		ModelName: "model-a", SubscriptionId: subscription.Id, TokenId: 11, ChannelId: channel.Id,
+	}, &common.PageInfo{Page: 1, PageSize: 10})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), total)
+	require.Len(t, records, 1)
+	assert.Equal(t, plan.Title, records[0].PlanTitle)
+	assert.Equal(t, "CLI", records[0].TokenName)
+	assert.Equal(t, channel.Name, records[0].ChannelName)
 }

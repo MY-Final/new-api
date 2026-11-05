@@ -80,8 +80,8 @@ describe('WalletStatsCard balance state', () => {
 
     expect(screen.getByText('Wallet Usage')).toBeInTheDocument()
     expect(screen.getByText('Subscription Usage')).toBeInTheDocument()
-    expect(screen.getByText('Consumed from wallet')).toBeInTheDocument()
-    expect(screen.getByText('Consumed from subscriptions')).toBeInTheDocument()
+    expect(screen.getByText('40% of total usage')).toBeInTheDocument()
+    expect(screen.getByText('60% of total usage')).toBeInTheDocument()
     expect(screen.getByText('Wallet: 4 · Subscription: 6')).toBeInTheDocument()
   })
 })
