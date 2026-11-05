@@ -365,6 +365,38 @@ func TestPrepareSubscriptionRequestPinsZeroWalletAutoToFundedGroup(t *testing.T)
 	assert.Equal(t, []string{"deepseek-a"}, common.GetContextKeyStringSlice(c, constant.ContextKeyTokenAutoGroups))
 	assert.Equal(t, "deepseek-a", common.GetContextKeyString(c, constant.ContextKeyAutoGroup))
 
+	require.NoError(t, database.Model(&user).Update("quota", 10000).Error)
+	fundedWallet, _ := gin.CreateTestContext(httptest.NewRecorder())
+	fundedWallet.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	fundedWallet.Set("id", user.Id)
+	fundedWalletInfo := &relaycommon.RelayInfo{
+		UserId:     user.Id,
+		UserGroup:  "default",
+		UsingGroup: "auto",
+		Request:    &dto.OpenAIResponsesRequest{Model: "gpt-test"},
+	}
+	require.NoError(t, PrepareSubscriptionRequest(fundedWallet, fundedWalletInfo))
+	assert.Equal(t, "deepseek-a", fundedWalletInfo.UsingGroup)
+	assert.Equal(t, subscription.Id, fundedWalletInfo.SubscriptionId)
+
+	walletFallback, _ := gin.CreateTestContext(httptest.NewRecorder())
+	walletFallback.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	walletFallback.Set("id", user.Id)
+	walletFallbackInfo := &relaycommon.RelayInfo{
+		UserId:     user.Id,
+		UserGroup:  "default",
+		UsingGroup: "auto",
+		Request:    &dto.OpenAIResponsesRequest{Model: "gpt-test"},
+		UserSetting: dto.UserSetting{
+			BillingPreference: "wallet_first",
+		},
+	}
+	bound, err := PrepareSubscriptionFallbackForAuto(walletFallback, walletFallbackInfo)
+	require.NoError(t, err)
+	assert.True(t, bound)
+	assert.Equal(t, "deepseek-a", walletFallbackInfo.UsingGroup)
+	assert.Equal(t, subscription.Id, walletFallbackInfo.SubscriptionId)
+
 	explicit, _ := gin.CreateTestContext(httptest.NewRecorder())
 	explicit.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
 	explicit.Set("id", user.Id)
@@ -378,4 +410,50 @@ func TestPrepareSubscriptionRequestPinsZeroWalletAutoToFundedGroup(t *testing.T)
 	assert.Equal(t, "default", explicitInfo.UsingGroup)
 	_, overridden := common.GetContextKey(explicit, constant.ContextKeyTokenAutoGroups)
 	assert.False(t, overridden)
+
+	walletOnly, _ := gin.CreateTestContext(httptest.NewRecorder())
+	walletOnly.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	walletOnly.Set("id", user.Id)
+	walletOnlyInfo := &relaycommon.RelayInfo{
+		UserId:     user.Id,
+		UserGroup:  "default",
+		UsingGroup: "deepseek-a",
+		Request: &dto.OpenAIResponsesRequest{
+			Model:           "gpt-test",
+			MaxOutputTokens: common.GetPointer[uint](16384),
+		},
+		UserSetting: dto.UserSetting{BillingPreference: "wallet_only"},
+	}
+	require.NoError(t, PrepareSubscriptionRequest(walletOnly, walletOnlyInfo))
+	assert.True(t, walletOnlyInfo.SubscriptionRouteCovered)
+	assert.Zero(t, walletOnlyInfo.SubscriptionId)
+	assert.Zero(t, walletOnlyInfo.SubscriptionOutputLimit)
+	require.NotNil(t, walletOnlyInfo.Request.(*dto.OpenAIResponsesRequest).MaxOutputTokens)
+	assert.EqualValues(t, 16384, *walletOnlyInfo.Request.(*dto.OpenAIResponsesRequest).MaxOutputTokens)
+
+	walletFirst, _ := gin.CreateTestContext(httptest.NewRecorder())
+	walletFirst.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	walletFirst.Set("id", user.Id)
+	walletFirstInfo := &relaycommon.RelayInfo{
+		UserId:     user.Id,
+		UserGroup:  "default",
+		UsingGroup: "deepseek-a",
+		Request: &dto.OpenAIResponsesRequest{
+			Model:           "gpt-test",
+			MaxOutputTokens: common.GetPointer[uint](16384),
+		},
+		UserSetting: dto.UserSetting{BillingPreference: "wallet_first"},
+	}
+	require.NoError(t, PrepareSubscriptionRequest(walletFirst, walletFirstInfo))
+	assert.Equal(t, subscription.Id, walletFirstInfo.SubscriptionId)
+	assert.EqualValues(t, 2048, walletFirstInfo.SubscriptionOutputLimit)
+	assert.EqualValues(t, 16384, *walletFirstInfo.Request.(*dto.OpenAIResponsesRequest).MaxOutputTokens)
+	require.Error(t, ValidateSubscriptionRequestLimits(walletFirstInfo.Request, walletFirstInfo.SubscriptionOutputLimit))
+
+	walletFirstInfo.Request.(*dto.OpenAIResponsesRequest).MaxOutputTokens = nil
+	require.NoError(t, ValidateSubscriptionRequestLimits(walletFirstInfo.Request, walletFirstInfo.SubscriptionOutputLimit))
+	effectiveLimit, err := ApplySubscriptionRequestLimits(walletFirstInfo.Request, walletFirstInfo.SubscriptionOutputLimit)
+	require.NoError(t, err)
+	assert.Equal(t, 2048, effectiveLimit)
+	assert.EqualValues(t, 2048, *walletFirstInfo.Request.(*dto.OpenAIResponsesRequest).MaxOutputTokens)
 }

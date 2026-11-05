@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/reasoning"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
@@ -47,13 +48,27 @@ func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) hostty
 		logger.LogDebug(ctx, "final group: %s", autoGroup)
 		relayInfo.UsingGroup = autoGroup.(string)
 	}
-	if relayInfo.SubscriptionOutputLimit > 0 {
+	if relayInfo.BillingSourceTarget == service.BillingSourceSubscription ||
+		relayInfo.BillingSourceTarget == "" && relayInfo.SubscriptionOutputLimit > 0 {
 		// Subscription usage is an internal budget, not a wallet charge. A
 		// zero promotional account multiplier must never erase that budget.
-		groupRatioInfo.GroupRatio = ratio_setting.GetGroupRatio(relayInfo.UsingGroup)
+		// A positive snapshotted route ratio gives the plan its own price
+		// while zero keeps the normal route-group multiplier.
+		groupRatioInfo.GroupRatio = relayInfo.SubscriptionGroupRatio
+		if groupRatioInfo.GroupRatio <= 0 {
+			groupRatioInfo.GroupRatio = ratio_setting.GetGroupRatio(relayInfo.UsingGroup)
+		}
 		if groupRatioInfo.GroupRatio <= 0 || math.IsNaN(groupRatioInfo.GroupRatio) || math.IsInf(groupRatioInfo.GroupRatio, 0) {
 			groupRatioInfo.GroupRatio = 1
 		}
+		return groupRatioInfo
+	}
+	if relayInfo.BillingSourceTarget == service.BillingSourceWallet &&
+		relayInfo.SubscriptionRouteCovered {
+		// A wallet payment on a route covered by a subscription is still a
+		// normal wallet charge. Account-level promotional ratios, including a
+		// zero subscription qualification rate, must not leak into fallback.
+		groupRatioInfo.GroupRatio = ratio_setting.GetGroupRatio(relayInfo.UsingGroup)
 		return groupRatioInfo
 	}
 
@@ -216,7 +231,7 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		logger.LogDebug(c, "model_price_helper result: %s", priceData.ToSetting())
 	}
 	info.PriceData = priceData
-	if info.SubscriptionOutputLimit > 0 {
+	if info.SubscriptionOutputLimit > 0 && info.BillingSourceTarget != service.BillingSourceWallet {
 		if err := UpdateSubscriptionPriceBudget(info); err != nil {
 			return hosttypes.PriceData{}, err
 		}
@@ -468,7 +483,7 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, billing
 	logger.LogDebug(c, "model_price_helper_tiered result: model=%s preConsume=%d quotaBeforeGroup=%.2f groupRatio=%.2f tier=%s", billingModelName, preConsumedQuota, quotaBeforeGroup, groupRatioInfo.GroupRatio, trace.MatchedTier)
 
 	info.PriceData = priceData
-	if info.SubscriptionOutputLimit > 0 {
+	if info.SubscriptionOutputLimit > 0 && info.BillingSourceTarget != service.BillingSourceWallet {
 		if err := UpdateSubscriptionPriceBudget(info); err != nil {
 			return hosttypes.PriceData{}, err
 		}

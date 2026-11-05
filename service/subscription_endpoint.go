@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/gin-gonic/gin"
 )
@@ -18,6 +19,10 @@ import (
 func ValidateSubscriptionEndpoint(c *gin.Context, usingGroup string) *types.NewAPIError {
 	userID := c.GetInt("id")
 	if userID <= 0 {
+		return nil
+	}
+	if userSetting, ok := common.GetContextKeyType[dto.UserSetting](c, constant.ContextKeyUserSetting); ok &&
+		common.NormalizeBillingPreference(userSetting.BillingPreference) == "wallet_only" {
 		return nil
 	}
 	if usingGroup == "auto" {

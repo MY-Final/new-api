@@ -103,9 +103,14 @@ describe('subscription plan form', () => {
     expect(nonPositive.success).toBe(false)
   })
 
-  test('snapshots window plans without wallet overflow and preserves concurrency', () => {
+  test('preserves route ratios, wallet fallback, and concurrency', () => {
     const payload = formValuesToPlanPayload({
       ...validPlanValues(),
+      route_groups: ['deepseek-a', 'deepseek-b'],
+      route_group_ratios: {
+        'deepseek-a': 1,
+        'deepseek-b': 0.2,
+      },
       max_concurrency: 2,
       max_output_tokens: 8192,
       allow_wallet_overflow: true,
@@ -113,8 +118,12 @@ describe('subscription plan form', () => {
 
     expect(payload.plan.max_concurrency).toBe(2)
     expect(payload.plan.max_output_tokens).toBe(8192)
-    expect(payload.plan.route_groups).toEqual(['deepseek-a'])
-    expect(payload.plan.allow_wallet_overflow).toBe(false)
+    expect(payload.plan.route_groups).toEqual(['deepseek-a', 'deepseek-b'])
+    expect(payload.plan.route_group_ratios).toEqual({
+      'deepseek-a': 1,
+      'deepseek-b': 0.2,
+    })
+    expect(payload.plan.allow_wallet_overflow).toBe(true)
     expect(payload.plan.quota_windows).toEqual([
       {
         window_seconds: 5 * 60 * 60,
@@ -122,5 +131,14 @@ describe('subscription plan form', () => {
         sort_order: 0,
       },
     ])
+  })
+
+  test('rejects a negative subscription route multiplier', () => {
+    expect(
+      schema.safeParse({
+        ...validPlanValues(),
+        route_group_ratios: { 'deepseek-a': -0.1 },
+      }).success
+    ).toBe(false)
   })
 })

@@ -66,6 +66,7 @@ export const subscriptionPlanSchema = z.object({
   quota_windows: z.array(subscriptionQuotaWindowSchema).optional(),
   upgrade_group: z.string().optional(),
   route_groups: z.array(z.string()).optional(),
+  route_group_ratios: z.record(z.string(), z.number()).optional(),
   downgrade_group: z.string().optional(),
   stripe_price_id: z.string().optional(),
   creem_product_id: z.string().optional(),
@@ -95,6 +96,7 @@ export const userSubscriptionSchema = z.object({
   next_reset_time: z.number().optional(),
   upgrade_group: z.string().optional(),
   route_groups: z.array(z.string()).optional(),
+  route_group_ratios: z.record(z.string(), z.number()).optional(),
   downgrade_group: z.string().optional(),
   allow_wallet_overflow: z.boolean().optional(),
   max_concurrency: z.number().optional(),
@@ -151,6 +153,7 @@ export interface SubscriptionBalancePayData {
   end_time: number
   upgrade_group: string
   route_groups: string[]
+  route_group_ratios: Record<string, number>
   max_concurrency: number
   max_output_tokens: number
   quota_windows: SubscriptionQuotaWindowUsage[]

@@ -136,14 +136,15 @@ func SubscriptionRequestBalancePay(c *gin.Context) {
 	}
 	subscription := mutation.Subscription
 	common.ApiSuccess(c, gin.H{
-		"renewed":           mutation.Renewed,
-		"end_time":          subscription.EndTime,
-		"upgrade_group":     subscription.UpgradeGroup,
-		"route_groups":      subscription.RouteGroups,
-		"max_concurrency":   subscription.MaxConcurrency,
-		"max_output_tokens": subscription.MaxOutputTokens,
-		"quota_windows":     subscription.QuotaWindows,
-		"subscription":      subscription,
+		"renewed":            mutation.Renewed,
+		"end_time":           subscription.EndTime,
+		"upgrade_group":      subscription.UpgradeGroup,
+		"route_groups":       subscription.RouteGroups,
+		"route_group_ratios": subscription.RouteGroupRatios,
+		"max_concurrency":    subscription.MaxConcurrency,
+		"max_output_tokens":  subscription.MaxOutputTokens,
+		"quota_windows":      subscription.QuotaWindows,
+		"subscription":       subscription,
 	})
 }
 
@@ -271,6 +272,12 @@ func normalizeSubscriptionPlanInput(c *gin.Context, plan *model.SubscriptionPlan
 		}
 	}
 	plan.RouteGroups = routeGroups
+	routeGroupRatios, err := model.NormalizeSubscriptionRouteGroupRatios(routeGroups, plan.RouteGroupRatios)
+	if err != nil {
+		common.ApiErrorT(c, err.Error())
+		return false
+	}
+	plan.RouteGroupRatios = routeGroupRatios
 	windows, err := model.NormalizeSubscriptionQuotaWindows(plan.QuotaWindows)
 	if err != nil {
 		common.ApiErrorT(c, err.Error())
@@ -281,7 +288,6 @@ func normalizeSubscriptionPlanInput(c *gin.Context, plan *model.SubscriptionPlan
 		plan.TotalAmount = 0
 		plan.QuotaResetPeriod = model.SubscriptionResetNever
 		plan.QuotaResetCustomSeconds = 0
-		plan.AllowWalletOverflow = common.GetPointer(false)
 	} else {
 		plan.QuotaResetPeriod = model.NormalizeResetPeriod(plan.QuotaResetPeriod)
 		if plan.QuotaResetPeriod == model.SubscriptionResetCustom && plan.QuotaResetCustomSeconds <= 0 {
@@ -313,7 +319,7 @@ func AdminCreateSubscriptionPlan(c *gin.Context) {
 		if err := model.ReplaceSubscriptionPlanQuotaWindowsTx(tx, req.Plan.Id, req.Plan.QuotaWindows); err != nil {
 			return err
 		}
-		return model.ReplaceSubscriptionPlanRouteGroupsTx(tx, req.Plan.Id, req.Plan.RouteGroups)
+		return model.ReplaceSubscriptionPlanRouteGroupsWithRatiosTx(tx, req.Plan.Id, req.Plan.RouteGroups, req.Plan.RouteGroupRatios)
 	})
 	if err != nil {
 		common.ApiError(c, err)
@@ -380,7 +386,7 @@ func AdminUpdateSubscriptionPlan(c *gin.Context) {
 		if err := model.ReplaceSubscriptionPlanQuotaWindowsTx(tx, id, req.Plan.QuotaWindows); err != nil {
 			return err
 		}
-		return model.ReplaceSubscriptionPlanRouteGroupsTx(tx, id, req.Plan.RouteGroups)
+		return model.ReplaceSubscriptionPlanRouteGroupsWithRatiosTx(tx, id, req.Plan.RouteGroups, req.Plan.RouteGroupRatios)
 	})
 	if err != nil {
 		common.ApiError(c, err)

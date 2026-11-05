@@ -397,6 +397,7 @@ func (s *BillingSession) syncRelayInfo() {
 	info := s.relayInfo
 	info.FinalPreConsumedQuota = s.preConsumedQuota
 	info.BillingSource = s.funding.Source()
+	info.BillingSourceTarget = info.BillingSource
 
 	if sub, ok := s.funding.(*SubscriptionFunding); ok {
 		info.SubscriptionId = sub.subscriptionId
@@ -416,8 +417,9 @@ func (s *BillingSession) syncRelayInfo() {
 // NewBillingSession 工厂 — 根据计费偏好创建会话并处理回退
 // ---------------------------------------------------------------------------
 
-// NewBillingSession reserves subscription quota for a covered route group and
-// wallet quota for other groups, unless the user explicitly requires a subscription.
+// NewBillingSession reserves quota from the funding source selected by the
+// caller or by the user's billing preference. PrepareRequestBilling reprices
+// fallback attempts so subscription and wallet charges use their own ratios.
 func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preConsumedQuota int) (*BillingSession, *types.NewAPIError) {
 	if relayInfo == nil {
 		return nil, types.NewError(fmt.Errorf("relayInfo is nil"), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
@@ -513,28 +515,64 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 		// 必须传 subConsume 而非 preConsumedQuota，保证 SubscriptionFunding.amount、
 		// preConsume 参数和 FinalPreConsumedQuota 三者一致，避免订阅多扣费。
 		if apiErr := session.preConsume(c, int(subConsume)); apiErr != nil {
+			relayInfo.SubscriptionUsageRequestId = ""
 			return nil, apiErr
 		}
 		return session, nil
 	}
 
-	// A request routed through an active package group is charged to that
-	// package even when the account preference says wallet-first or wallet-only.
-	// Otherwise users could bypass a purchased card by changing a preference.
-	if relayInfo.UserId > 0 {
-		inPackageGroup, checkErr := model.HasActiveSubscriptionForGroup(relayInfo.UserId, usingGroup)
-		if checkErr != nil {
-			return nil, types.NewError(checkErr, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())
+	clearRetryAfter := func() {
+		if c.Writer != nil {
+			c.Writer.Header().Del("Retry-After")
 		}
-		if inPackageGroup {
-			return trySubscription()
-		}
+	}
+	switch relayInfo.BillingSourceTarget {
+	case BillingSourceSubscription:
+		return trySubscription()
+	case BillingSourceWallet:
+		return tryWallet()
 	}
 
-	if pref == "subscription_only" {
+	switch pref {
+	case "subscription_first":
+		session, apiErr := trySubscription()
+		if apiErr == nil {
+			return session, nil
+		}
+		if relayInfo.SubscriptionId <= 0 || relayInfo.SubscriptionAllowWalletOverflow {
+			if canFallbackFundingSource(apiErr) {
+				clearRetryAfter()
+				return tryWallet()
+			}
+		}
+		return nil, apiErr
+	case "wallet_first":
+		session, apiErr := tryWallet()
+		if apiErr == nil {
+			return session, nil
+		}
+		if relayInfo.SubscriptionId > 0 && canFallbackFundingSource(apiErr) {
+			clearRetryAfter()
+			return trySubscription()
+		}
+		return nil, apiErr
+	case "subscription_only":
 		return trySubscription()
+	default:
+		return tryWallet()
 	}
-	return tryWallet()
+}
+
+func canFallbackFundingSource(apiErr *types.NewAPIError) bool {
+	if apiErr == nil {
+		return false
+	}
+	switch apiErr.GetErrorCode() {
+	case types.ErrorCodeInsufficientUserQuota, types.ErrorCodeRateLimitExceeded:
+		return true
+	default:
+		return false
+	}
 }
 
 // BillingID identifies a single settlement independently of its request ID.

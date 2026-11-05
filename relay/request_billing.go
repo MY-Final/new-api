@@ -67,15 +67,7 @@ func PrepareRequestBilling(c *gin.Context, info *relaycommon.RelayInfo) *types.N
 	}
 	info.SetEstimatePromptTokens(tokens)
 
-	priceData, err := helper.ModelPriceHelper(c, info, tokens, meta)
-	if err != nil {
-		return types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))
-	}
-	if priceData.FreeModel {
-		logger.LogInfo(c, common.LogText("model %s is free, skipping pre-consume", info.OriginModelName))
-		return nil
-	}
-	return service.PreConsumeBilling(c, priceData.QuotaToPreConsume, info)
+	return reserveRequestBilling(c, info, tokens, meta)
 }
 
 // PrepareSelectedGroupBilling reconciles the package/wallet funding source
@@ -87,6 +79,7 @@ func PrepareSelectedGroupBilling(c *gin.Context, info *relaycommon.RelayInfo) *t
 	if session, ok := info.Billing.(*service.BillingSession); ok {
 		currentSubscriptionID = session.SubscriptionID()
 	}
+	currentGroupRatio := info.PriceData.GroupRatioInfo.GroupRatio
 	if err := helper.PrepareSubscriptionRequest(c, info); err != nil {
 		return types.NewErrorWithStatusCode(
 			err,
@@ -101,11 +94,10 @@ func PrepareSelectedGroupBilling(c *gin.Context, info *relaycommon.RelayInfo) *t
 	subscriptionChanged := desiredSubscriptionID > 0 &&
 		currentSource == service.BillingSourceSubscription &&
 		currentSubscriptionID != desiredSubscriptionID
-	if !sourceChanged && !subscriptionChanged {
+	groupRatioChanged := helper.HandleGroupRatio(c, info).GroupRatio != currentGroupRatio
+	if !sourceChanged && !subscriptionChanged && !groupRatioChanged {
 		return nil
 	}
-	hadSubscriptionUsage := currentSource == service.BillingSourceSubscription ||
-		info.SubscriptionUsageRequestId != ""
 
 	if info.Billing != nil {
 		session, ok := info.Billing.(*service.BillingSession)
@@ -122,7 +114,8 @@ func PrepareSelectedGroupBilling(c *gin.Context, info *relaycommon.RelayInfo) *t
 		info.Billing = nil
 	}
 	info.BillingSource = ""
-	if hadSubscriptionUsage && desiredSubscriptionID > 0 {
+	info.SubscriptionUsageRequestId = ""
+	if desiredSubscriptionID > 0 {
 		info.SubscriptionUsageRequestId = fmt.Sprintf("%s:subscription:%s", info.RequestId, common.NewRequestId())
 	}
 	info.SubscriptionPreConsumed = 0
@@ -131,6 +124,9 @@ func PrepareSelectedGroupBilling(c *gin.Context, info *relaycommon.RelayInfo) *t
 	info.SubscriptionAmountUsedAfterPreConsume = 0
 	info.SubscriptionPlanId = 0
 	info.SubscriptionPlanTitle = ""
+	info.SubscriptionGroupRatio = 0
+	info.SubscriptionAllowWalletOverflow = false
+	info.BillingSourceTarget = ""
 	info.FinalPreConsumedQuota = 0
 	info.SubscriptionInputBudget = 0
 	info.TieredBillingSnapshot = nil
@@ -143,19 +139,124 @@ func PrepareSelectedGroupBilling(c *gin.Context, info *relaycommon.RelayInfo) *t
 	} else {
 		meta = &types.TokenCountMeta{}
 	}
-	priceData, err := helper.ModelPriceHelper(c, info, info.GetEstimatePromptTokens(), meta)
-	if err != nil {
-		return types.NewErrorWithStatusCode(
-			err,
-			types.ErrorCodeModelPriceError,
-			http.StatusBadRequest,
-			types.ErrOptionWithSkipRetry(),
-		)
+	return reserveRequestBilling(c, info, info.GetEstimatePromptTokens(), meta)
+}
+
+func reserveRequestBilling(c *gin.Context, info *relaycommon.RelayInfo, tokens int, meta *types.TokenCountMeta) *types.NewAPIError {
+	candidates := requestBillingSourceCandidates(info)
+	var lastErr *types.NewAPIError
+	for index, source := range candidates {
+		info.BillingSourceTarget = source
+		info.QuotaClamp = nil
+		info.TieredBillingSnapshot = nil
+		info.BillingRequestInput = nil
+
+		if source == service.BillingSourceSubscription && info.SubscriptionOutputLimit > 0 {
+			if err := helper.ValidateSubscriptionRequestLimits(info.Request, info.SubscriptionOutputLimit); err != nil {
+				lastErr = types.NewErrorWithStatusCode(
+					err,
+					types.ErrorCodeInvalidRequest,
+					http.StatusBadRequest,
+					types.ErrOptionWithSkipRetry(),
+				)
+				if index == len(candidates)-1 {
+					return lastErr
+				}
+				continue
+			}
+		}
+		priceData, err := helper.ModelPriceHelper(c, info, tokens, meta)
+		if err != nil {
+			return types.NewErrorWithStatusCode(
+				err,
+				types.ErrorCodeModelPriceError,
+				http.StatusBadRequest,
+				types.ErrOptionWithSkipRetry(),
+			)
+		}
+		if priceData.FreeModel {
+			logger.LogInfo(c, common.LogText("model %s is free, skipping pre-consume", info.OriginModelName))
+			return nil
+		}
+		lastErr = service.PreConsumeBilling(c, priceData.QuotaToPreConsume, info)
+		if lastErr == nil {
+			return nil
+		}
+		if source == service.BillingSourceSubscription {
+			// A failed subscription attempt must not leave its candidate usage
+			// ID or partial compatibility state attached to a wallet fallback.
+			info.SubscriptionUsageRequestId = ""
+			info.SubscriptionPreConsumed = 0
+			info.SubscriptionPostDelta = 0
+			info.SubscriptionAmountTotal = 0
+			info.SubscriptionAmountUsedAfterPreConsume = 0
+			info.SubscriptionPlanId = 0
+			info.SubscriptionPlanTitle = ""
+		}
+		if source == service.BillingSourceWallet &&
+			index == len(candidates)-1 &&
+			common.NormalizeBillingPreference(info.UserSetting.BillingPreference) == "wallet_first" &&
+			info.UsingGroup == "auto" &&
+			info.SubscriptionId == 0 &&
+			requestBillingCanFallback(lastErr) {
+			bound, bindErr := helper.PrepareSubscriptionFallbackForAuto(c, info)
+			if bindErr != nil {
+				return types.NewError(bindErr, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())
+			}
+			if bound {
+				if c.Writer != nil {
+					c.Writer.Header().Del("Retry-After")
+				}
+				return reserveRequestBilling(c, info, tokens, meta)
+			}
+		}
+		if index == len(candidates)-1 || !requestBillingCanFallback(lastErr) {
+			return lastErr
+		}
+		if c.Writer != nil {
+			c.Writer.Header().Del("Retry-After")
+		}
 	}
-	if priceData.FreeModel {
-		return nil
+	return lastErr
+}
+
+// requestBillingSourceCandidates keeps the selected source order aligned with
+// the user's preference. Each source is repriced before reservation because
+// subscription and wallet requests can use different route multipliers.
+func requestBillingSourceCandidates(info *relaycommon.RelayInfo) []string {
+	preference := common.NormalizeBillingPreference(info.UserSetting.BillingPreference)
+	hasSubscription := info.SubscriptionId > 0
+	switch preference {
+	case "subscription_only":
+		return []string{service.BillingSourceSubscription}
+	case "wallet_only":
+		return []string{service.BillingSourceWallet}
+	case "wallet_first":
+		if hasSubscription {
+			return []string{service.BillingSourceWallet, service.BillingSourceSubscription}
+		}
+		return []string{service.BillingSourceWallet}
+	default:
+		if hasSubscription && info.SubscriptionAllowWalletOverflow {
+			return []string{service.BillingSourceSubscription, service.BillingSourceWallet}
+		}
+		if hasSubscription {
+			return []string{service.BillingSourceSubscription}
+		}
+		return []string{service.BillingSourceWallet}
 	}
-	return service.PreConsumeBilling(c, priceData.QuotaToPreConsume, info)
+}
+
+func requestBillingCanFallback(apiErr *types.NewAPIError) bool {
+	if apiErr == nil {
+		return false
+	}
+	switch apiErr.GetErrorCode() {
+	case types.ErrorCodeInsufficientUserQuota, types.ErrorCodeRateLimitExceeded:
+		return true
+	default:
+		return false
+	}
 }
 
 // FinalizeSubscriptionRequestBilling validates and reserves the final

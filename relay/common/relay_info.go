@@ -164,9 +164,25 @@ type RelayInfo struct {
 	SubscriptionPlanTitle      string
 	SubscriptionUsageRequestId string
 	// SubscriptionOutputLimit is the effective cap sent to the upstream. A
-	// positive value enables subscription budget metering at normal route prices.
+	// positive value enables subscription budget metering at the selected
+	// subscription route multiplier.
 	SubscriptionOutputLimit int
 	SubscriptionInputBudget int
+	// BillingSourceTarget selects wallet or subscription for the current
+	// price estimate. PrepareRequestBilling changes it before repricing a
+	// fallback attempt so each source uses its own multiplier.
+	BillingSourceTarget string
+	// SubscriptionGroupRatio is the route-group multiplier snapshotted on
+	// the user subscription. Zero inherits the route group's normal ratio.
+	SubscriptionGroupRatio float64
+	// SubscriptionAllowWalletOverflow controls automatic wallet fallback
+	// for Subscription First. Explicit Wallet Only remains available.
+	SubscriptionAllowWalletOverflow bool
+	// SubscriptionRouteCovered records that an active subscription covers the
+	// selected route even when the user explicitly pays from the wallet. Wallet
+	// pricing then uses the normal route multiplier and ignores account-level
+	// promotional multipliers intended for the subscription qualification.
+	SubscriptionRouteCovered bool
 	// RequestId is used for idempotent pre-consume/refund
 	RequestId string
 	// SubscriptionAmountTotal / SubscriptionAmountUsedAfterPreConsume are used to compute remaining in logs.

@@ -101,6 +101,32 @@ function getBillingPreferenceLabel(
   }
 }
 
+function getBillingPreferenceDescription(
+  preference: string,
+  t: (key: string) => string
+): string {
+  switch (preference) {
+    case 'subscription_first':
+      return t(
+        'Use the subscription first; fall back to wallet only when the plan allows it.'
+      )
+    case 'wallet_first':
+      return t(
+        'Use wallet first and fall back to the subscription if the wallet balance is insufficient.'
+      )
+    case 'subscription_only':
+      return t(
+        'Use only the subscription and reject requests when it cannot cover the cost.'
+      )
+    case 'wallet_only':
+      return t(
+        'Use only wallet at the normal route multiplier; subscription quota is not consumed.'
+      )
+    default:
+      return ''
+  }
+}
+
 export function SubscriptionPlansCard({
   topupInfo,
   userQuota,
@@ -409,6 +435,16 @@ export function SubscriptionPlansCard({
                   )}
             </p>
           )}
+          <p className='text-muted-foreground mt-2 text-xs leading-5'>
+            {getBillingPreferenceDescription(billingPreference, t)}
+          </p>
+          {hasActive && (
+            <p className='text-muted-foreground mt-2 text-xs leading-5'>
+              {t(
+                'Subscription payments use each plan route multiplier. Wallet payments use the normal route multiplier and do not consume subscription quota.'
+              )}
+            </p>
+          )}
 
           {hasAny && (
             <>
@@ -519,7 +555,23 @@ export function SubscriptionPlansCard({
                             {t('Allowed Route Groups')}:
                           </span>
                           {(subscription?.route_groups || []).map((group) => (
-                            <GroupBadge key={group} group={group} />
+                            <span
+                              key={group}
+                              className='inline-flex items-center gap-1'
+                            >
+                              <GroupBadge group={group} />
+                              {(subscription?.route_group_ratios?.[group] ||
+                                0) > 0 && (
+                                <span className='text-muted-foreground'>
+                                  ×{' '}
+                                  {formatNumber(
+                                    subscription?.route_group_ratios?.[group] ||
+                                      0,
+                                    locale
+                                  )}
+                                </span>
+                              )}
+                            </span>
                           ))}
                         </div>
                       )}
@@ -663,7 +715,16 @@ export function SubscriptionPlansCard({
                   ? `${t('Upgrade Group')}: ${plan.upgrade_group}`
                   : null,
                 (plan.route_groups || []).length > 0
-                  ? `${t('Route Groups')}: ${(plan.route_groups || []).join(' · ')}`
+                  ? `${t('Route Groups')}: ${(plan.route_groups || [])
+                      .map((group) => {
+                        const ratio = Number(
+                          plan.route_group_ratios?.[group] || 0
+                        )
+                        return ratio > 0
+                          ? `${group} × ${formatNumber(ratio, locale)}`
+                          : group
+                      })
+                      .join(' · ')}`
                   : null,
               ].filter(Boolean) as string[]
 

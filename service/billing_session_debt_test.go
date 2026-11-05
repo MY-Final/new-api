@@ -130,36 +130,36 @@ func TestNewBillingSessionUsesResolvedAutoGroupForSubscription(t *testing.T) {
 	assert.EqualValues(t, 7, record.UsageQuota)
 }
 
-func TestNewBillingSessionForcesSubscriptionForPackageGroup(t *testing.T) {
-	truncate(t)
-	const userID = 910
-	seedUser(t, userID, 1000)
-	now := time.Now().Unix()
-	plan := model.SubscriptionPlan{
-		Id:            905,
-		Title:         "DeepSeek one-day card",
-		Currency:      "CNY",
-		DurationUnit:  model.SubscriptionDurationDay,
-		DurationValue: 1,
-		UpgradeGroup:  "deepseek-day",
-		Enabled:       true,
-	}
-	require.NoError(t, model.DB.Create(&plan).Error)
-	subscription := model.UserSubscription{
-		UserId:              userID,
-		PlanId:              plan.Id,
-		Status:              "active",
-		StartTime:           now,
-		EndTime:             now + 3600,
-		UpgradeGroup:        "deepseek-day",
-		AllowWalletOverflow: false,
-	}
-	require.NoError(t, model.DB.Create(&subscription).Error)
-	require.NoError(t, model.SnapshotPlanRouteGroupsTx(model.DB, subscription.Id, []string{"deepseek-a"}))
-
+func TestNewBillingSessionHonorsPackageWalletPreference(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	for _, preference := range []string{"wallet_only", "wallet_first"} {
+	for index, preference := range []string{"wallet_only", "wallet_first", "subscription_first"} {
 		t.Run(preference, func(t *testing.T) {
+			truncate(t)
+			userID := 910 + index
+			seedUser(t, userID, 1000)
+			now := time.Now().Unix()
+			plan := model.SubscriptionPlan{
+				Id:            905 + index,
+				Title:         "DeepSeek one-day card",
+				Currency:      "CNY",
+				DurationUnit:  model.SubscriptionDurationDay,
+				DurationValue: 1,
+				UpgradeGroup:  "deepseek-day",
+				Enabled:       true,
+			}
+			require.NoError(t, model.DB.Create(&plan).Error)
+			subscription := model.UserSubscription{
+				UserId:              userID,
+				PlanId:              plan.Id,
+				Status:              "active",
+				StartTime:           now,
+				EndTime:             now + 3600,
+				UpgradeGroup:        "deepseek-day",
+				AllowWalletOverflow: true,
+			}
+			require.NoError(t, model.DB.Create(&subscription).Error)
+			require.NoError(t, model.SnapshotPlanRouteGroupsTx(model.DB, subscription.Id, []string{"deepseek-a"}))
+
 			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 			ctx.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
 			relayInfo := &relaycommon.RelayInfo{
@@ -175,86 +175,140 @@ func TestNewBillingSessionForcesSubscriptionForPackageGroup(t *testing.T) {
 			session, apiErr := NewBillingSession(ctx, relayInfo, 50)
 			require.Nil(t, apiErr)
 			require.NotNil(t, session)
-			_, ok := session.funding.(*SubscriptionFunding)
-			require.True(t, ok)
-			assert.Equal(t, 1000, getUserQuota(t, userID))
-
 			require.NoError(t, session.Settle(70))
-			assert.Equal(t, 1000, getUserQuota(t, userID))
-			var record model.SubscriptionPreConsumeRecord
-			require.NoError(t, model.DB.Where("request_id = ?", relayInfo.RequestId).First(&record).Error)
-			assert.EqualValues(t, 70, record.UsageQuota)
+			if preference == "subscription_first" {
+				assert.Equal(t, BillingSourceSubscription, session.funding.Source())
+				assert.Equal(t, 1000, getUserQuota(t, userID))
+				var record model.SubscriptionPreConsumeRecord
+				require.NoError(t, model.DB.Where("request_id = ?", relayInfo.RequestId).First(&record).Error)
+				assert.EqualValues(t, 70, record.UsageQuota)
+				return
+			}
+			assert.Equal(t, BillingSourceWallet, session.funding.Source())
+			assert.Equal(t, 930, getUserQuota(t, userID))
 		})
 	}
-	t.Run("subscription first uses wallet outside the allowed route groups", func(t *testing.T) {
-		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-		ctx.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
-		relayInfo := &relaycommon.RelayInfo{
-			UserId: userID, RequestId: "outside-package-route", IsPlayground: true,
-			UsingGroup:  "paid-gpt",
-			UserSetting: dto.UserSetting{BillingPreference: "subscription_first"},
-		}
-
-		session, apiErr := NewBillingSession(ctx, relayInfo, 50)
-		require.Nil(t, apiErr)
-		require.NotNil(t, session)
-		assert.Equal(t, "wallet", session.funding.Source())
-		require.NoError(t, session.Settle(70))
-		assert.Equal(t, 930, getUserQuota(t, userID))
-	})
 }
 
-func TestNewBillingSessionDoesNotFallbackToWalletForExhaustedPackageWindow(t *testing.T) {
+func TestNewBillingSessionUsesWalletOutsidePackageRoutes(t *testing.T) {
 	truncate(t)
-	const userID = 920
+	const userID = 915
 	seedUser(t, userID, 1000)
-	now := time.Now().Unix()
-	plan := model.SubscriptionPlan{
-		Id:            906,
-		Title:         "DeepSeek rolling card",
-		Currency:      "CNY",
-		DurationUnit:  model.SubscriptionDurationDay,
-		DurationValue: 1,
-		UpgradeGroup:  "deepseek-day",
-		Enabled:       true,
-	}
-	require.NoError(t, model.DB.Create(&plan).Error)
-	subscription := model.UserSubscription{
-		Id:                  920,
-		UserId:              userID,
-		PlanId:              plan.Id,
-		Status:              "active",
-		StartTime:           now,
-		EndTime:             now + 3600,
-		UpgradeGroup:        "deepseek-day",
-		AllowWalletOverflow: false,
-	}
-	require.NoError(t, model.DB.Create(&subscription).Error)
-	require.NoError(t, model.SnapshotPlanQuotaWindowsTx(model.DB, subscription.Id, []model.SubscriptionQuotaWindow{
-		{WindowSeconds: 5 * 60 * 60, QuotaLimit: 40},
-	}))
-	require.NoError(t, model.SnapshotPlanRouteGroupsTx(model.DB, subscription.Id, []string{"deepseek-a"}))
 
 	gin.SetMode(gin.TestMode)
-	recorder := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(recorder)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	ctx.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
 	relayInfo := &relaycommon.RelayInfo{
-		UserId:       userID,
-		RequestId:    "exhausted-package-window",
-		IsPlayground: true,
-		UsingGroup:   "deepseek-a",
-		UserSetting: dto.UserSetting{
-			BillingPreference: "wallet_first",
-		},
+		UserId: userID, RequestId: "outside-package-route", IsPlayground: true,
+		UsingGroup:  "paid-gpt",
+		UserSetting: dto.UserSetting{BillingPreference: "subscription_first"},
 	}
 
 	session, apiErr := NewBillingSession(ctx, relayInfo, 50)
-	require.Nil(t, session)
-	require.NotNil(t, apiErr)
-	assert.Equal(t, types.ErrorCodeRateLimitExceeded, apiErr.GetErrorCode())
-	assert.NotEmpty(t, recorder.Header().Get("Retry-After"))
-	assert.Equal(t, 1000, getUserQuota(t, userID))
+	require.Nil(t, apiErr)
+	require.NotNil(t, session)
+	assert.Equal(t, BillingSourceWallet, session.funding.Source())
+	require.NoError(t, session.Settle(70))
+	assert.Equal(t, 930, getUserQuota(t, userID))
+}
+
+func TestNewBillingSessionExhaustedPackageWindowHonorsPreference(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for index, tc := range []struct {
+		name                string
+		preference          string
+		allowWalletOverflow bool
+		wantSource          string
+		wantWalletQuota     int
+		wantError           types.ErrorCode
+	}{
+		{
+			name:            "wallet first",
+			preference:      "wallet_first",
+			wantSource:      BillingSourceWallet,
+			wantWalletQuota: 930,
+		},
+		{
+			name:            "subscription first without fallback",
+			preference:      "subscription_first",
+			wantWalletQuota: 1000,
+			wantError:       types.ErrorCodeRateLimitExceeded,
+		},
+		{
+			name:                "subscription first with fallback",
+			preference:          "subscription_first",
+			allowWalletOverflow: true,
+			wantSource:          BillingSourceWallet,
+			wantWalletQuota:     930,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			truncate(t)
+			userID := 920 + index
+			seedUser(t, userID, 1000)
+			now := time.Now().Unix()
+			plan := model.SubscriptionPlan{
+				Id:            906 + index,
+				Title:         "DeepSeek rolling card",
+				Currency:      "CNY",
+				DurationUnit:  model.SubscriptionDurationDay,
+				DurationValue: 1,
+				UpgradeGroup:  "deepseek-day",
+				Enabled:       true,
+			}
+			require.NoError(t, model.DB.Create(&plan).Error)
+			subscription := model.UserSubscription{
+				UserId:              userID,
+				PlanId:              plan.Id,
+				Status:              "active",
+				StartTime:           now,
+				EndTime:             now + 3600,
+				UpgradeGroup:        "deepseek-day",
+				AllowWalletOverflow: tc.allowWalletOverflow,
+			}
+			require.NoError(t, model.DB.Create(&subscription).Error)
+			require.NoError(t, model.SnapshotPlanQuotaWindowsTx(model.DB, subscription.Id, []model.SubscriptionQuotaWindow{
+				{WindowSeconds: 5 * 60 * 60, QuotaLimit: 40},
+			}))
+			require.NoError(t, model.SnapshotPlanRouteGroupsTx(model.DB, subscription.Id, []string{"deepseek-a"}))
+
+			recorder := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(recorder)
+			ctx.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
+			relayInfo := &relaycommon.RelayInfo{
+				UserId:                          userID,
+				RequestId:                       "exhausted-package-window-" + tc.preference,
+				IsPlayground:                    true,
+				UsingGroup:                      "deepseek-a",
+				SubscriptionId:                  subscription.Id,
+				SubscriptionOutputLimit:         4096,
+				SubscriptionAllowWalletOverflow: tc.allowWalletOverflow,
+				UserSetting: dto.UserSetting{
+					BillingPreference: tc.preference,
+				},
+			}
+
+			session, apiErr := NewBillingSession(ctx, relayInfo, 50)
+			if tc.wantError != "" {
+				require.Nil(t, session)
+				require.NotNil(t, apiErr)
+				assert.Equal(t, tc.wantError, apiErr.GetErrorCode())
+				assert.NotEmpty(t, recorder.Header().Get("Retry-After"))
+				assert.Empty(t, relayInfo.SubscriptionUsageRequestId)
+			} else {
+				require.Nil(t, apiErr)
+				require.NotNil(t, session)
+				assert.Equal(t, tc.wantSource, session.funding.Source())
+				require.NoError(t, session.Settle(70))
+				if tc.wantSource == BillingSourceSubscription {
+					assert.Empty(t, recorder.Header().Get("Retry-After"))
+				} else {
+					assert.Empty(t, relayInfo.SubscriptionUsageRequestId)
+				}
+			}
+			assert.Equal(t, tc.wantWalletQuota, getUserQuota(t, userID))
+		})
+	}
 }
 
 func TestPostConsumeQuotaSubscriptionFallbackUpdatesRollingUsage(t *testing.T) {

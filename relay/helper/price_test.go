@@ -746,6 +746,86 @@ func TestModelPriceHelperNativeGeminiNoThinkingDoesNotAliasBillingModel(t *testi
 	assert.NotEqual(t, 37.5, priceData.ModelRatio)
 }
 
+func TestHandleGroupRatioKeepsWalletAndSubscriptionPricingSeparate(t *testing.T) {
+	previousGroupRatios := ratio_setting.GroupRatio2JSONString()
+	previousSpecialRatios := ratio_setting.GroupGroupRatio2JSONString()
+	t.Cleanup(func() {
+		require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(previousGroupRatios))
+		require.NoError(t, ratio_setting.UpdateGroupGroupRatioByJSONString(previousSpecialRatios))
+	})
+	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1,"fatfish-a":0.2}`))
+	require.NoError(t, ratio_setting.UpdateGroupGroupRatioByJSONString(`{"fatfish-day":{"fatfish-a":0}}`))
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	wallet := &relaycommon.RelayInfo{
+		UserGroup:                "fatfish-day",
+		UsingGroup:               "fatfish-a",
+		BillingSourceTarget:      service.BillingSourceWallet,
+		SubscriptionRouteCovered: true,
+		SubscriptionGroupRatio:   1,
+	}
+	walletRatio := HandleGroupRatio(ctx, wallet)
+	assert.Equal(t, 0.2, walletRatio.GroupRatio)
+	assert.False(t, walletRatio.HasSpecialRatio)
+
+	walletWithoutPlan := &relaycommon.RelayInfo{
+		UserGroup:           "fatfish-day",
+		UsingGroup:          "fatfish-a",
+		BillingSourceTarget: service.BillingSourceWallet,
+	}
+	walletWithoutPlanRatio := HandleGroupRatio(ctx, walletWithoutPlan)
+	assert.Equal(t, 0.0, walletWithoutPlanRatio.GroupRatio)
+	assert.True(t, walletWithoutPlanRatio.HasSpecialRatio)
+
+	subscription := &relaycommon.RelayInfo{
+		UserGroup:              "fatfish-day",
+		UsingGroup:             "fatfish-a",
+		BillingSourceTarget:    service.BillingSourceSubscription,
+		SubscriptionGroupRatio: 1,
+	}
+	assert.Equal(t, 1.0, HandleGroupRatio(ctx, subscription).GroupRatio)
+
+	inheritSubscriptionRatio := *subscription
+	inheritSubscriptionRatio.SubscriptionGroupRatio = 0
+	assert.Equal(t, 0.2, HandleGroupRatio(ctx, &inheritSubscriptionRatio).GroupRatio)
+}
+
+func TestModelPriceHelperWalletFallbackUsesNormalReservation(t *testing.T) {
+	previousRatios := ratio_setting.ModelRatio2JSONString()
+	previousGroupRatios := ratio_setting.GroupRatio2JSONString()
+	t.Cleanup(func() {
+		require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(previousRatios))
+		require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(previousGroupRatios))
+	})
+	ratios := ratio_setting.GetModelRatioCopy()
+	ratios["wallet-fallback-test"] = 1
+	ratioJSON, err := common.Marshal(ratios)
+	require.NoError(t, err)
+	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(string(ratioJSON)))
+	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1,"fatfish-a":0.2}`))
+
+	previousMultiplier := operation_setting.GetQuotaSetting().PreConsumeMultiplier
+	operation_setting.GetQuotaSetting().PreConsumeMultiplier = 1
+	t.Cleanup(func() {
+		operation_setting.GetQuotaSetting().PreConsumeMultiplier = previousMultiplier
+	})
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	info := &relaycommon.RelayInfo{
+		OriginModelName:          "wallet-fallback-test",
+		UserGroup:                "fatfish-day",
+		UsingGroup:               "fatfish-a",
+		BillingSourceTarget:      service.BillingSourceWallet,
+		SubscriptionRouteCovered: true,
+		SubscriptionOutputLimit:  4096,
+		SubscriptionGroupRatio:   1,
+	}
+	priceData, err := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{})
+	require.NoError(t, err)
+	assert.Equal(t, 200, priceData.QuotaToPreConsume)
+	assert.False(t, priceData.FreeModel)
+}
+
 func TestInputPreConsumeMultiplierLegacyAndRequestPrices(t *testing.T) {
 	previous := config.GlobalConfig.ExportAllConfigs()
 	previousRatios, previousPrices := ratio_setting.ModelRatio2JSONString(), ratio_setting.ModelPrice2JSONString()

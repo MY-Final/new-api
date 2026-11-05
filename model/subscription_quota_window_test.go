@@ -33,7 +33,7 @@ func seedQuotaWindowSubscription(t *testing.T, plan *SubscriptionPlan) (*User, *
 		}
 		plan.RouteGroups = []string{routeGroup}
 	}
-	require.NoError(t, ReplaceSubscriptionPlanRouteGroupsTx(DB, plan.Id, plan.RouteGroups))
+	require.NoError(t, ReplaceSubscriptionPlanRouteGroupsWithRatiosTx(DB, plan.Id, plan.RouteGroups, plan.RouteGroupRatios))
 	InvalidateSubscriptionPlanCache(plan.Id)
 
 	mutation, err := UpsertUserSubscriptionFromPlanTx(DB, user.Id, plan, "test")
@@ -64,6 +64,10 @@ func TestSubscriptionQuotaWindowsShareUsageAndSettlement(t *testing.T) {
 		UpgradeGroup:   "vip",
 		MaxConcurrency: 3,
 		Enabled:        true,
+		RouteGroups:    []string{"vip"},
+		RouteGroupRatios: map[string]float64{
+			"vip": 1.5,
+		},
 		QuotaWindows: []SubscriptionQuotaWindow{
 			{WindowSeconds: 5 * 60 * 60, QuotaLimit: 300},
 			{WindowSeconds: 7 * 24 * 60 * 60, QuotaLimit: 500},
@@ -72,6 +76,7 @@ func TestSubscriptionQuotaWindowsShareUsageAndSettlement(t *testing.T) {
 	}
 	_, subscription := seedQuotaWindowSubscription(t, plan)
 	assert.Equal(t, 3, subscription.MaxConcurrency)
+	assert.Equal(t, map[string]float64{"vip": 1.5}, subscription.RouteGroupRatios)
 
 	snapshot, err := LoadUserSubscriptionQuotaWindowsTx(DB, subscription.Id)
 	require.NoError(t, err)
@@ -120,13 +125,18 @@ func TestSubscriptionQuotaWindowsShareUsageAndSettlement(t *testing.T) {
 	require.NoError(t, ReplaceSubscriptionPlanQuotaWindowsTx(DB, plan.Id, []SubscriptionQuotaWindow{
 		{WindowSeconds: 60, QuotaLimit: 1},
 	}))
-	require.NoError(t, ReplaceSubscriptionPlanRouteGroupsTx(DB, plan.Id, []string{"other-route"}))
+	require.NoError(t, ReplaceSubscriptionPlanRouteGroupsWithRatiosTx(DB, plan.Id, []string{"other-route"}, map[string]float64{
+		"other-route": 3,
+	}))
 	snapshot, err = LoadUserSubscriptionQuotaWindowsTx(DB, subscription.Id)
 	require.NoError(t, err)
 	assert.Len(t, snapshot, 3)
 	routeGroups, err := LoadUserSubscriptionRouteGroupsTx(DB, subscription.Id)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"vip"}, routeGroups)
+	routeGroupRatios, err := LoadUserSubscriptionRouteGroupRatiosTx(DB, subscription.Id)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]float64{"vip": 1.5}, routeGroupRatios)
 }
 
 func TestSubscriptionConsumesOnlyThroughSnapshottedRouteGroups(t *testing.T) {
@@ -163,6 +173,19 @@ func TestNormalizeSubscriptionRouteGroupsTrimsDeduplicatesAndRejectsAuto(t *test
 	assert.Equal(t, []string{"deepseek-a", "deepseek-b"}, groups)
 
 	_, err = NormalizeSubscriptionRouteGroups([]string{"auto"})
+	require.Error(t, err)
+
+	ratios, err := NormalizeSubscriptionRouteGroupRatios(
+		[]string{"deepseek-a", "deepseek-b"},
+		map[string]float64{"deepseek-a": 1.5},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]float64{"deepseek-a": 1.5, "deepseek-b": 0}, ratios)
+
+	_, err = NormalizeSubscriptionRouteGroupRatios(
+		[]string{"deepseek-a"},
+		map[string]float64{"deepseek-a": -0.1},
+	)
 	require.Error(t, err)
 }
 
@@ -406,7 +429,10 @@ func TestSubscriptionRenewalAndDifferentPlanConflict(t *testing.T) {
 		UpgradeGroup:   "vip",
 		MaxConcurrency: 2,
 		Enabled:        true,
-		QuotaWindows:   []SubscriptionQuotaWindow{{WindowSeconds: 3600, QuotaLimit: 100}},
+		RouteGroupRatios: map[string]float64{
+			"vip": 1.5,
+		},
+		QuotaWindows: []SubscriptionQuotaWindow{{WindowSeconds: 3600, QuotaLimit: 100}},
 	}
 	user, first := seedQuotaWindowSubscription(t, plan)
 	firstEnd := first.EndTime
@@ -424,6 +450,7 @@ func TestSubscriptionRenewalAndDifferentPlanConflict(t *testing.T) {
 	assert.EqualValues(t, firstEnd+2*60*60, renewed.Subscription.EndTime)
 	assert.Equal(t, 2, renewed.Subscription.MaxConcurrency)
 	assert.Equal(t, []string{"vip"}, renewed.Subscription.RouteGroups)
+	assert.Equal(t, map[string]float64{"vip": 1.5}, renewed.Subscription.RouteGroupRatios)
 
 	otherPlan := &SubscriptionPlan{
 		Id:            11005,

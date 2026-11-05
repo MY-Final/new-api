@@ -72,6 +72,10 @@ export function getPlanFormSchema(t: TFunction) {
         .array(z.string().trim().min(1))
         .min(1, t('Select at least one allowed route group'))
         .max(32),
+      route_group_ratios: z.record(
+        z.string(),
+        z.coerce.number().min(0, t('Route multiplier cannot be negative'))
+      ),
       downgrade_group: z.string().optional(),
       stripe_price_id: z.string().optional(),
       creem_product_id: z.string().optional(),
@@ -115,6 +119,7 @@ export const PLAN_FORM_DEFAULTS: PlanFormValues = {
   quota_windows: [],
   upgrade_group: '',
   route_groups: [],
+  route_group_ratios: {},
   downgrade_group: '',
   stripe_price_id: '',
   creem_product_id: '',
@@ -147,6 +152,12 @@ export function planToFormValues(plan: SubscriptionPlan): PlanFormValues {
     })),
     upgrade_group: plan.upgrade_group || '',
     route_groups: [...new Set(plan.route_groups || [])],
+    route_group_ratios: Object.fromEntries(
+      (plan.route_groups || []).map((group) => [
+        group,
+        Number(plan.route_group_ratios?.[group] || 0),
+      ])
+    ),
     downgrade_group: plan.downgrade_group || '',
     stripe_price_id: plan.stripe_price_id || '',
     creem_product_id: plan.creem_product_id || '',
@@ -177,14 +188,19 @@ export function formValuesToPlanPayload(values: PlanFormValues): PlanPayload {
         quota_limit: parseQuotaFromDollars(Number(window.quota_amount || 0)),
         sort_order: index,
       })),
-      allow_wallet_overflow:
-        values.quota_windows.length > 0 ? false : values.allow_wallet_overflow,
+      allow_wallet_overflow: values.allow_wallet_overflow,
       upgrade_group: values.upgrade_group || '',
       route_groups: [
         ...new Set(
           values.route_groups.map((group) => group.trim()).filter(Boolean)
         ),
       ],
+      route_group_ratios: Object.fromEntries(
+        values.route_groups.map((group) => [
+          group.trim(),
+          Number(values.route_group_ratios[group] || 0),
+        ])
+      ),
       downgrade_group: values.downgrade_group || '',
     },
   }

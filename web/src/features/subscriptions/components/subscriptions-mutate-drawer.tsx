@@ -163,6 +163,7 @@ export function SubscriptionsMutateDrawer({
   const resetPeriod = form.watch('quota_reset_period')
   const planCurrency = form.watch('currency')
   const quotaWindows = form.watch('quota_windows')
+  const routeGroupRatios = form.watch('route_group_ratios')
   const hasQuotaWindows = quotaWindows.length > 0
   // Gate "+ Create on Pancake" on the same checks the mint handler runs.
   const watchedTitle = form.watch('title')
@@ -199,6 +200,21 @@ export function SubscriptionsMutateDrawer({
       current.filter((_, itemIndex) => itemIndex !== index),
       { shouldDirty: true, shouldValidate: true }
     )
+  }
+
+  const updateRouteGroups = (groups: string[]) => {
+    const currentRatios = form.getValues('route_group_ratios')
+    form.setValue(
+      'route_group_ratios',
+      Object.fromEntries(
+        groups.map((group) => [group, Number(currentRatios[group] ?? 0)])
+      ),
+      { shouldDirty: true, shouldValidate: true }
+    )
+    form.setValue('route_groups', groups, {
+      shouldDirty: true,
+      shouldValidate: true,
+    })
   }
 
   const onSubmit = async (values: PlanFormValues) => {
@@ -485,7 +501,7 @@ export function SubscriptionsMutateDrawer({
                   "Plan price and usage quota are separate. Price is charged in the selected payment currency. Quota is the internal usage limit and follows the site's display currency; changing a custom currency symbol or display rate does not change the amount charged."
                 )}{' '}
                 {t(
-                  'Subscription requests consume plan quota at the standard route rate, even when the account multiplier is zero. Wallet balance is not charged.'
+                  'Subscription payments use the plan route multiplier. Wallet payments use the normal route multiplier and never consume subscription quota.'
                 )}
               </p>
 
@@ -570,7 +586,7 @@ export function SubscriptionsMutateDrawer({
                             label: group,
                           }))}
                         selected={field.value || []}
-                        onChange={(groups) => field.onChange(groups)}
+                        onChange={updateRouteGroups}
                         placeholder={t(
                           'Select groups whose channels can consume this subscription'
                         )}
@@ -579,10 +595,56 @@ export function SubscriptionsMutateDrawer({
                     </FormControl>
                     <FormDescription>
                       {t(
-                        'These groups provide the actual channels. The qualification group controls the account and multiplier; it does not need to contain channels.'
+                        'These groups provide the actual channels. Each route can use its normal wallet multiplier or a separate multiplier while the subscription funds the request.'
                       )}
                     </FormDescription>
                     <FormMessage />
+                    {(field.value || []).length > 0 && (
+                      <div className='space-y-2'>
+                        {(field.value || []).map((group, index) => (
+                          <div
+                            key={group}
+                            className='bg-muted/25 grid grid-cols-[minmax(0,1fr)_8rem] items-center gap-3 rounded-lg border p-2.5'
+                          >
+                            <label
+                              htmlFor={`route-ratio-${index}`}
+                              className='truncate text-sm font-medium'
+                            >
+                              {t('Subscription Ratio for {{group}}', {
+                                group,
+                              })}
+                            </label>
+                            <Input
+                              id={`route-ratio-${index}`}
+                              type='number'
+                              min={0}
+                              step={0.01}
+                              value={routeGroupRatios[group] ?? 0}
+                              onChange={(event) =>
+                                form.setValue(
+                                  'route_group_ratios',
+                                  {
+                                    ...form.getValues('route_group_ratios'),
+                                    [group]:
+                                      Number.parseFloat(event.target.value) ||
+                                      0,
+                                  },
+                                  {
+                                    shouldDirty: true,
+                                    shouldValidate: true,
+                                  }
+                                )
+                              }
+                            />
+                          </div>
+                        ))}
+                        <p className='text-muted-foreground text-xs'>
+                          {t(
+                            '0 inherits the route group normal multiplier. Wallet payments always use the normal route multiplier.'
+                          )}
+                        </p>
+                      </div>
+                    )}
                   </FormItem>
                 )}
               />
@@ -760,11 +822,10 @@ export function SubscriptionsMutateDrawer({
                         <Switch
                           checked={field.value}
                           onCheckedChange={field.onChange}
-                          disabled={hasQuotaWindows}
                         />
                       </FormControl>
                       <FormLabel className='!mt-0'>
-                        {t('Allow wallet balance after quota used up')}
+                        {t('Allow automatic wallet fallback')}
                       </FormLabel>
                     </FormItem>
                   )}
@@ -956,7 +1017,7 @@ export function SubscriptionsMutateDrawer({
                   </h3>
                   <p className='text-muted-foreground mt-1 text-xs'>
                     {t(
-                      'Each request cost counts toward every configured window. Any exhausted window blocks further requests without falling back to wallet balance.'
+                      'Each request cost counts toward every configured window. When a window is exhausted, Subscription First can fall back to wallet only if automatic wallet fallback is enabled.'
                     )}
                   </p>
                 </div>
