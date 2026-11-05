@@ -227,6 +227,33 @@ func GetActiveSubscriptionRouteGroups(userId int) ([]string, error) {
 	return groups, nil
 }
 
+// GetActiveSubscriptionForRoute loads the active budget and output-limit
+// snapshot used before pricing and forwarding one request.
+func GetActiveSubscriptionForRoute(userId int, groupName string) (*UserSubscription, error) {
+	if userId <= 0 || strings.TrimSpace(groupName) == "" {
+		return nil, nil
+	}
+	if DB == nil {
+		return nil, errors.New("subscription database is unavailable")
+	}
+	ids := DB.Model(&UserSubscriptionRouteGroup{}).
+		Select("user_subscription_id").Where("group_name = ?", groupName)
+	var subscription UserSubscription
+	result := DB.Where("user_id = ? AND status = ? AND end_time > ? AND id IN (?)",
+		userId, "active", common.GetTimestamp(), ids).
+		Order("end_time desc, id desc").Limit(1).Find(&subscription)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, nil
+	}
+	if subscription.MaxOutputTokens <= 0 {
+		subscription.MaxOutputTokens = DefaultSubscriptionMaxOutputTokens
+	}
+	return &subscription, nil
+}
+
 func UserSubscriptionHasRouteGroupTx(tx *gorm.DB, subscriptionId int, groupName string) (bool, error) {
 	if subscriptionId <= 0 {
 		return false, errors.New("invalid user subscription id")

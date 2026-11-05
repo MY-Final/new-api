@@ -245,6 +245,37 @@ func subscriptionUsageSinceTx(tx *gorm.DB, subscriptionId int, since int64) (int
 	return result.Used, result.OldestAt, nil
 }
 
+func checkSubscriptionQuotaWindowsTx(tx *gorm.DB, subscriptionId int, windows []UserSubscriptionQuotaWindow, amount, now int64) error {
+	var limitErr *SubscriptionWindowLimitError
+	for _, window := range windows {
+		used, _, err := subscriptionUsageSinceTx(tx, subscriptionId, now-window.WindowSeconds)
+		if err != nil {
+			return err
+		}
+		if used <= window.QuotaLimit && amount <= window.QuotaLimit-used {
+			continue
+		}
+		recoveryAt, err := subscriptionWindowRecoveryAfterTx(tx, subscriptionId,
+			now-window.WindowSeconds, max(used+amount-window.QuotaLimit, 0))
+		if err != nil {
+			return err
+		}
+		retryAfter := max(recoveryAt+window.WindowSeconds-now, int64(1))
+		candidate := &SubscriptionWindowLimitError{
+			WindowSeconds: window.WindowSeconds, QuotaLimit: window.QuotaLimit,
+			Used: used, RetryAfter: retryAfter,
+		}
+		// Admission needs every window to recover, not merely the first one.
+		if limitErr == nil || candidate.RetryAfter > limitErr.RetryAfter {
+			limitErr = candidate
+		}
+	}
+	if limitErr != nil {
+		return limitErr
+	}
+	return nil
+}
+
 func subscriptionWindowRecoveryAfterTx(tx *gorm.DB, subscriptionId int, since int64, releaseAmount int64) (int64, error) {
 	if releaseAmount <= 0 {
 		return 0, nil

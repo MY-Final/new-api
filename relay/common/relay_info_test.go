@@ -161,6 +161,18 @@ func TestRelayInfoGetFinalRequestRelayFormatNilReceiver(t *testing.T) {
 	require.Equal(t, types.RelayFormat(""), info.GetFinalRequestRelayFormat())
 }
 
+func TestAppendRequestConversionFailsClosedForSubscriptionProtocols(t *testing.T) {
+	type providerSpecificRequest struct{}
+
+	subscriptionInfo := &RelayInfo{RelayFormat: types.RelayFormatOpenAI, SubscriptionOutputLimit: 4096}
+	AppendRequestConversionFromRequest(subscriptionInfo, providerSpecificRequest{})
+	require.Equal(t, unsupportedSubscriptionRequestFormat, subscriptionInfo.GetFinalRequestRelayFormat())
+
+	walletInfo := &RelayInfo{RelayFormat: types.RelayFormatOpenAI}
+	AppendRequestConversionFromRequest(walletInfo, providerSpecificRequest{})
+	assert.Equal(t, types.RelayFormat(types.RelayFormatOpenAI), walletInfo.GetFinalRequestRelayFormat())
+}
+
 func TestRelayInfoMetaTypedNilReceiver(t *testing.T) {
 	var info *RelayInfo
 	var meta convmeta.Meta = info

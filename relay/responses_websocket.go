@@ -109,6 +109,7 @@ type responsesWSSession struct {
 	current            *responsesWSCallState
 	concurrencyMu      sync.Mutex
 	concurrencyRelease func()
+	concurrencyGuard   *middleware.RequestConcurrency
 	concurrencyGroup   string
 
 	// clientWriteBudget is guarded by clientWriteMu.
@@ -300,6 +301,17 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 			return types.NewError(err, types.ErrorCodeBadResponse, types.ErrOptionWithSkipRetry())
 		}
 	} else {
+		info = relaycommon.GenRelayInfoResponses(c, &create.Request)
+		info.IsStream = true
+		common.SetContextKey(c, appconstant.ContextKeyIsStream, true)
+		if err := helper.PrepareSubscriptionRequest(c, info); err != nil {
+			return types.NewErrorWithStatusCode(
+				err,
+				types.ErrorCodeInvalidRequest,
+				http.StatusBadRequest,
+				types.ErrOptionWithSkipRetry(),
+			)
+		}
 		retry := &service.RetryParam{Ctx: c, TokenGroup: common.GetContextKeyString(c, appconstant.ContextKeyUsingGroup), ModelName: modelName, RequestPath: c.Request.URL.Path, Retry: common.GetPointer(0)}
 		for ; retry.GetRetry() <= common.RetryTimes; retry.IncreaseRetry() {
 			var channel *appmodel.Channel
@@ -311,15 +323,15 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 				return apiErr
 			}
 			service.AppendUsedChannel(c, channel.Id)
-			if info == nil {
-				info = relaycommon.GenRelayInfoResponses(c, &create.Request)
-				info.IsStream = true
-				common.SetContextKey(c, appconstant.ContextKeyIsStream, true)
+			if !billingPrepared {
 				if apiErr = PrepareRequestBilling(c, info); apiErr != nil {
 					return apiErr
 				}
 				billingPrepared = true
 			} else {
+				if apiErr = PrepareSelectedGroupBilling(c, info); apiErr != nil {
+					return apiErr
+				}
 				info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
 				if apiErr = service.PrepareTieredBillingForSelectedGroup(c, info); apiErr != nil {
 					return apiErr
@@ -778,6 +790,7 @@ func (s *responsesWSSession) acquireConnectionConcurrency(c *gin.Context) *types
 	}
 	s.concurrencyMu.Lock()
 	if s.concurrencyRelease != nil {
+		guard := s.concurrencyGuard
 		if s.concurrencyGroup != group {
 			s.concurrencyMu.Unlock()
 			return types.NewErrorWithStatusCode(
@@ -788,10 +801,17 @@ func (s *responsesWSSession) acquireConnectionConcurrency(c *gin.Context) *types
 			)
 		}
 		s.concurrencyMu.Unlock()
+		middleware.BindRequestConcurrency(c, guard)
+		middleware.SetConcurrencyCancellation(c, func() {
+			s.shutdown(websocket.CloseInternalServerErr, "concurrency protection lost")
+		})
 		return nil
 	}
 	s.concurrencyMu.Unlock()
 
+	middleware.SetConcurrencyCancellation(c, func() {
+		s.shutdown(websocket.CloseInternalServerErr, "concurrency protection lost")
+	})
 	release, apiErr := middleware.AcquireRequestConcurrency(c)
 	if apiErr != nil {
 		return apiErr
@@ -804,11 +824,16 @@ func (s *responsesWSSession) acquireConnectionConcurrency(c *gin.Context) *types
 		return types.NewError(context.Canceled, types.ErrorCodeBadResponse, types.ErrOptionWithSkipRetry())
 	}
 	if s.concurrencyRelease != nil {
-		s.concurrencyMu.Unlock()
 		release()
-		return nil
+		s.concurrencyMu.Unlock()
+		return types.NewError(
+			errors.New("responses websocket concurrency admission changed unexpectedly"),
+			types.ErrorCodeUpdateDataError,
+			types.ErrOptionWithSkipRetry(),
+		)
 	}
 	s.concurrencyRelease = release
+	s.concurrencyGuard = middleware.CurrentRequestConcurrency(c)
 	s.concurrencyGroup = group
 	s.concurrencyMu.Unlock()
 	return nil
@@ -818,6 +843,7 @@ func (s *responsesWSSession) releaseConnectionConcurrency() {
 	s.concurrencyMu.Lock()
 	release := s.concurrencyRelease
 	s.concurrencyRelease = nil
+	s.concurrencyGuard = nil
 	s.concurrencyGroup = ""
 	s.concurrencyMu.Unlock()
 	if release != nil {

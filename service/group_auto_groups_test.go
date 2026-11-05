@@ -105,6 +105,28 @@ func TestActiveSubscriptionAddsRouteGroupsToUserPermissions(t *testing.T) {
 	assert.Equal(t, subscriptionRouteGroupDescription, groups["deepseek-a"])
 	assert.Equal(t, subscriptionRouteGroupDescription, groups["deepseek-b"])
 	assert.Equal(t, []string{"deepseek-a", "default", "deepseek-b"}, GetUserAutoGroupForUser("default", user.Id))
+	for _, path := range []string{"/v1/chat/completions", "/v1/messages", "/v1/responses", "/v1beta/models/gemini:generateContent"} {
+		ctx := newRequestAutoGroupsContext()
+		ctx.Request = httptest.NewRequest("POST", path, nil)
+		ctx.Set("id", user.Id)
+		assert.Nil(t, ValidateSubscriptionEndpoint(ctx, "deepseek-a"), path)
+	}
+	for _, path := range []string{"/v1/images/generations", "/v1/realtime", "/mj/submit/imagine"} {
+		ctx := newRequestAutoGroupsContext()
+		ctx.Request = httptest.NewRequest("POST", path, nil)
+		ctx.Set("id", user.Id)
+		err := ValidateSubscriptionEndpoint(ctx, "deepseek-a")
+		require.NotNil(t, err, path)
+		assert.Equal(t, 400, err.StatusCode, path)
+		assert.Nil(t, ValidateSubscriptionEndpoint(ctx, "default"), "wallet routing remains available")
+	}
+	taskPluginContext := newRequestAutoGroupsContext()
+	taskPluginContext.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
+	taskPluginContext.Set("id", user.Id)
+	taskPluginContext.Set("channel_type", constant.ChannelTypeTaskPlugin)
+	err := ValidateSubscriptionEndpoint(taskPluginContext, "deepseek-a")
+	require.NotNil(t, err)
+	assert.Equal(t, 400, err.StatusCode)
 
 	require.NoError(t, model.DB.Model(&subscription).Update("end_time", now-1).Error)
 	groups = GetUserUsableGroupsForUser("default", user.Id)

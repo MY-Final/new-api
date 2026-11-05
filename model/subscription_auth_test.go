@@ -162,3 +162,135 @@ func TestSubscriptionGroupCacheRefreshFailureDoesNotChangeCommittedResult(t *tes
 	require.NoError(t, DB.Where("user_id = ?", user.Id).First(&subscription).Error)
 	assert.Equal(t, "active", subscription.Status)
 }
+
+func TestExpiredSubscriptionRepurchasePreservesOriginalGroup(t *testing.T) {
+	for _, source := range []string{"admin", "balance", "order"} {
+		t.Run(source, func(t *testing.T) {
+			truncateTables(t)
+			user := User{Username: "expired-repurchase-user", Password: "unused-password-hash", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "paid-user"}
+			require.NoError(t, DB.Create(&user).Error)
+			plan := SubscriptionPlan{Title: "Subscription", Currency: "CNY", DurationUnit: SubscriptionDurationDay, DurationValue: 1, UpgradeGroup: "subscription-user", RouteGroups: []string{"subscription-route"}, Enabled: true}
+			require.NoError(t, DB.Create(&plan).Error)
+			require.NoError(t, ReplaceSubscriptionPlanRouteGroupsTx(DB, plan.Id, plan.RouteGroups))
+			InvalidateSubscriptionPlanCache(plan.Id)
+			_, err := AdminBindSubscription(user.Id, plan.Id, "test")
+			require.NoError(t, err)
+			var first UserSubscription
+			require.NoError(t, DB.Where("user_id = ?", user.Id).First(&first).Error)
+			now := time.Now().Unix()
+			require.NoError(t, DB.Model(&first).Update("end_time", now-10).Error)
+
+			switch source {
+			case "admin":
+				_, err = AdminBindSubscription(user.Id, plan.Id, "test")
+			case "balance":
+				_, err = PurchaseSubscriptionWithBalance(user.Id, plan.Id)
+			case "order":
+				order := SubscriptionOrder{UserId: user.Id, PlanId: plan.Id, TradeNo: "expired-repurchase-order", PaymentProvider: "test", PaymentMethod: "test", Status: common.TopUpStatusPending}
+				require.NoError(t, DB.Create(&order).Error)
+				err = CompleteSubscriptionOrder(order.TradeNo, "", "test", "")
+			}
+			require.NoError(t, err)
+			var renewed UserSubscription
+			require.NoError(t, DB.Where("user_id = ?", user.Id).Order("id desc").First(&renewed).Error)
+			assert.NotEqual(t, first.Id, renewed.Id)
+			assert.Equal(t, "paid-user", renewed.PrevUserGroup)
+			require.NoError(t, DB.First(&first, first.Id).Error)
+			assert.Equal(t, "expired", first.Status)
+			require.NoError(t, DB.Model(&renewed).Update("end_time", now-1).Error)
+			if source == "admin" {
+				_, err = ExpireDueSubscriptions(200)
+			} else {
+				_, err = ExpireDueSubscriptionsForUser(user.Id)
+			}
+			require.NoError(t, err)
+			var updated User
+			require.NoError(t, DB.First(&updated, user.Id).Error)
+			assert.Equal(t, "paid-user", updated.Group)
+		})
+	}
+}
+
+func TestSubscriptionRepurchaseFailureRollsBackExpiredGroupTransition(t *testing.T) {
+	truncateTables(t)
+	user := User{Username: "failed-repurchase-user", Password: "unused-password-hash", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "paid-user"}
+	require.NoError(t, DB.Create(&user).Error)
+	plan := SubscriptionPlan{Title: "Subscription", Currency: "CNY", DurationUnit: SubscriptionDurationDay, DurationValue: 1, UpgradeGroup: "subscription-user", RouteGroups: []string{"subscription-route"}, Enabled: true}
+	require.NoError(t, DB.Create(&plan).Error)
+	require.NoError(t, ReplaceSubscriptionPlanRouteGroupsTx(DB, plan.Id, plan.RouteGroups))
+	InvalidateSubscriptionPlanCache(plan.Id)
+	_, err := AdminBindSubscription(user.Id, plan.Id, "test")
+	require.NoError(t, err)
+	var first UserSubscription
+	require.NoError(t, DB.Where("user_id = ?", user.Id).First(&first).Error)
+	require.NoError(t, DB.Model(&first).Update("end_time", time.Now().Unix()-10).Error)
+	const callbackName = "test:fail-subscription-repurchase"
+	require.NoError(t, DB.Callback().Create().Before("gorm:create").Register(callbackName, func(tx *gorm.DB) {
+		if tx.Statement.Table == "user_subscriptions" {
+			tx.AddError(errors.New("forced subscription insert failure"))
+		}
+	}))
+	t.Cleanup(func() { DB.Callback().Create().Remove(callbackName) })
+
+	_, err = AdminBindSubscription(user.Id, plan.Id, "test")
+	require.ErrorContains(t, err, "forced subscription insert failure")
+	var updated User
+	require.NoError(t, DB.First(&updated, user.Id).Error)
+	assert.Equal(t, "subscription-user", updated.Group)
+	require.NoError(t, DB.First(&first, first.Id).Error)
+	assert.Equal(t, "active", first.Status)
+	assert.Equal(t, "paid-user", first.PrevUserGroup)
+	var count int64
+	require.NoError(t, DB.Model(&UserSubscription{}).Where("user_id = ?", user.Id).Count(&count).Error)
+	assert.EqualValues(t, 1, count)
+}
+
+func TestExpiredSubscriptionReplacementWithoutUpgradeRefreshesGroupCache(t *testing.T) {
+	truncateTables(t)
+	useUserCacheMiniRedis(t)
+	user := User{Username: "replacement-cache-user", Password: "unused-password-hash", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "paid-user", AuthVersion: 1}
+	require.NoError(t, DB.Create(&user).Error)
+	require.NoError(t, populateUserCache(user))
+	firstPlan := SubscriptionPlan{Title: "First subscription", Currency: "CNY", DurationUnit: SubscriptionDurationDay, DurationValue: 1, UpgradeGroup: "subscription-user", RouteGroups: []string{"subscription-route"}, Enabled: true}
+	require.NoError(t, DB.Create(&firstPlan).Error)
+	require.NoError(t, ReplaceSubscriptionPlanRouteGroupsTx(DB, firstPlan.Id, firstPlan.RouteGroups))
+	InvalidateSubscriptionPlanCache(firstPlan.Id)
+	_, err := AdminBindSubscription(user.Id, firstPlan.Id, "test")
+	require.NoError(t, err)
+	var first UserSubscription
+	require.NoError(t, DB.Where("user_id = ?", user.Id).First(&first).Error)
+	require.NoError(t, DB.Model(&first).Update("end_time", time.Now().Unix()-10).Error)
+	secondPlan := SubscriptionPlan{Title: "Replacement subscription", Currency: "CNY", DurationUnit: SubscriptionDurationDay, DurationValue: 1, RouteGroups: []string{"regular-route"}, Enabled: true}
+	require.NoError(t, DB.Create(&secondPlan).Error)
+	require.NoError(t, ReplaceSubscriptionPlanRouteGroupsTx(DB, secondPlan.Id, secondPlan.RouteGroups))
+	InvalidateSubscriptionPlanCache(secondPlan.Id)
+
+	_, err = AdminBindSubscription(user.Id, secondPlan.Id, "test")
+	require.NoError(t, err)
+	cached, err := GetUserCache(user.Id)
+	require.NoError(t, err)
+	assert.Equal(t, "paid-user", cached.Group)
+}
+
+func TestSubscriptionExpirationDoesNotStallForDeletedOwner(t *testing.T) {
+	for _, hardDelete := range []bool{false, true} {
+		t.Run(fmt.Sprintf("hard_delete=%t", hardDelete), func(t *testing.T) {
+			truncateTables(t)
+			user := User{Username: "deleted-subscription-owner", Password: "unused-password-hash", Group: "subscription-user"}
+			require.NoError(t, DB.Create(&user).Error)
+			subscription := UserSubscription{UserId: user.Id, Status: "active", StartTime: time.Now().Unix() - 100, EndTime: time.Now().Unix() - 1, UpgradeGroup: "subscription-user", PrevUserGroup: "paid-user"}
+			require.NoError(t, DB.Create(&subscription).Error)
+			deleteQuery := DB
+			if hardDelete {
+				deleteQuery = deleteQuery.Unscoped()
+			}
+			require.NoError(t, deleteQuery.Delete(&user).Error)
+
+			count, err := ExpireDueSubscriptions(200)
+			require.NoError(t, err)
+			assert.Equal(t, 1, count)
+			require.NoError(t, DB.First(&subscription, subscription.Id).Error)
+			assert.Equal(t, "expired", subscription.Status)
+		})
+	}
+}

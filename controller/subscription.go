@@ -136,13 +136,14 @@ func SubscriptionRequestBalancePay(c *gin.Context) {
 	}
 	subscription := mutation.Subscription
 	common.ApiSuccess(c, gin.H{
-		"renewed":         mutation.Renewed,
-		"end_time":        subscription.EndTime,
-		"upgrade_group":   subscription.UpgradeGroup,
-		"route_groups":    subscription.RouteGroups,
-		"max_concurrency": subscription.MaxConcurrency,
-		"quota_windows":   subscription.QuotaWindows,
-		"subscription":    subscription,
+		"renewed":           mutation.Renewed,
+		"end_time":          subscription.EndTime,
+		"upgrade_group":     subscription.UpgradeGroup,
+		"route_groups":      subscription.RouteGroups,
+		"max_concurrency":   subscription.MaxConcurrency,
+		"max_output_tokens": subscription.MaxOutputTokens,
+		"quota_windows":     subscription.QuotaWindows,
+		"subscription":      subscription,
 	})
 }
 
@@ -208,6 +209,13 @@ func normalizeSubscriptionPlanInput(c *gin.Context, plan *model.SubscriptionPlan
 		common.ApiErrorT(c, "Concurrency limit cannot be negative")
 		return false
 	}
+	if plan.MaxOutputTokens == 0 {
+		plan.MaxOutputTokens = model.DefaultSubscriptionMaxOutputTokens
+	}
+	if plan.MaxOutputTokens < 1 || plan.MaxOutputTokens > model.MaxSubscriptionOutputTokens {
+		common.ApiErrorT(c, "Output token limit must be between 1 and {{max}}", map[string]any{"max": model.MaxSubscriptionOutputTokens})
+		return false
+	}
 	if plan.AllowBalancePay == nil {
 		plan.AllowBalancePay = common.GetPointer(true)
 	}
@@ -269,6 +277,10 @@ func normalizeSubscriptionPlanInput(c *gin.Context, plan *model.SubscriptionPlan
 		return false
 	}
 	plan.QuotaWindows = windows
+	if plan.PriceAmount > 0 && plan.TotalAmount == 0 && len(windows) == 0 {
+		common.ApiErrorT(c, "Paid plans require a total quota or at least one rolling quota window")
+		return false
+	}
 	if len(windows) > 0 {
 		plan.TotalAmount = 0
 		plan.QuotaResetPeriod = model.SubscriptionResetNever
@@ -352,6 +364,7 @@ func AdminUpdateSubscriptionPlan(c *gin.Context) {
 			"waffo_pancake_product_id":   req.Plan.WaffoPancakeProductId,
 			"max_purchase_per_user":      req.Plan.MaxPurchasePerUser,
 			"max_concurrency":            req.Plan.MaxConcurrency,
+			"max_output_tokens":          req.Plan.MaxOutputTokens,
 			"total_amount":               req.Plan.TotalAmount,
 			"upgrade_group":              req.Plan.UpgradeGroup,
 			"downgrade_group":            req.Plan.DowngradeGroup,

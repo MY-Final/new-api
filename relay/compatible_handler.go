@@ -2,7 +2,6 @@ package relay
 
 import (
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 
@@ -97,19 +96,20 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		return nil
 	}
 
-	var requestBody io.Reader
+	var jsonData []byte
 
 	if passThroughGlobal || info.ChannelSetting.PassThroughBodyEnabled {
 		storage, err := common.GetBodyStorage(c)
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 		}
-		if common.DebugEnabled {
-			if debugBytes, bErr := storage.Bytes(); bErr == nil {
-				logger.LogDebug(c, "requestBody: %s", debugBytes)
-			}
+		jsonData, err = storage.Bytes()
+		if err != nil {
+			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 		}
-		requestBody = common.NewReplayableBodyReader(storage)
+		if common.DebugEnabled {
+			logger.LogDebug(c, "requestBody: %s", jsonData)
+		}
 	} else {
 		convertedRequest, err := adaptor.ConvertOpenAIRequest(c, info, request)
 		if err != nil {
@@ -121,7 +121,7 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 			applySystemPromptIfNeeded(c, info, req)
 		}
 
-		jsonData, err := common.Marshal(convertedRequest)
+		jsonData, err = common.Marshal(convertedRequest)
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeJsonMarshalFailed, types.ErrOptionWithSkipRetry())
 		}
@@ -141,15 +141,16 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		}
 
 		logger.LogDebug(c, "text request body: %s", jsonData)
-
-		body, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
-		if err != nil {
-			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
-		}
-		defer closer.Close()
-		jsonData = nil
-		requestBody = body
 	}
+	jsonData, billingErr := FinalizeSubscriptionRequestBilling(c, info, jsonData)
+	if billingErr != nil {
+		return billingErr
+	}
+	requestBody, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
+	if err != nil {
+		return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+	}
+	defer closer.Close()
 
 	var httpResp *http.Response
 	resp, err := adaptor.DoRequest(c, info, requestBody)

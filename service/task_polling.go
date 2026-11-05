@@ -297,9 +297,15 @@ func updateBatchTasks(ctx context.Context, adaptor BatchTaskPollingAdaptor, chan
 	tasks := make([]*model.Task, 0, len(taskIds))
 	for _, upstreamID := range taskIds {
 		if task := taskM[upstreamID]; task != nil {
+			if err := refreshTaskConcurrencyLease(ctx, task); err != nil {
+				logger.LogWarn(ctx, common.LogText("skip polling task %s because its concurrency lease is unavailable: %s", task.TaskID, err.Error()))
+				continue
+			}
 			tasks = append(tasks, task)
-			refreshTaskConcurrencyLease(ctx, task)
 		}
+	}
+	if len(tasks) == 0 {
+		return nil
 	}
 	// The channel type tells plugin adaptors whether the upstream is another
 	// New API gateway, the same signal submission derives from the request.
@@ -536,7 +542,9 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	if !model.IsTaskBillingReady(task) {
 		return nil
 	}
-	refreshTaskConcurrencyLease(ctx, task)
+	if err := refreshTaskConcurrencyLease(ctx, task); err != nil {
+		return fmt.Errorf("task concurrency protection unavailable: %w", err)
+	}
 	key := ch.Key
 
 	privateData := task.PrivateData

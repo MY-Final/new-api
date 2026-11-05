@@ -334,9 +334,12 @@ func TestExecuteTaskSubmissionHonorsRouteRetainResult(t *testing.T) {
 	}
 }
 
-func TestExecuteTaskSubmissionRefundsCancellationBeforeDurableBarrier(t *testing.T) {
+func TestExecuteTaskSubmissionCompletesAfterUpstreamAcceptanceDespiteCancellation(t *testing.T) {
 	events := make([]string, 0, 2)
-	setupTaskSubmissionDatabase(t, true, &events)
+	database := setupTaskSubmissionDatabase(t, true, &events)
+	previousLogConsumeEnabled := common.LogConsumeEnabled
+	common.LogConsumeEnabled = false
+	t.Cleanup(func() { common.LogConsumeEnabled = previousLogConsumeEnabled })
 	billing := &taskSubmissionTestBilling{events: &events}
 	c := taskSubmissionTestContext()
 	requestContext, cancel := context.WithCancel(c.Request.Context())
@@ -351,11 +354,14 @@ func TestExecuteTaskSubmissionRefundsCancellationBeforeDurableBarrier(t *testing
 		}, nil
 	})
 
-	assert.Nil(t, outcome)
-	require.NotNil(t, taskErr)
-	assert.Equal(t, "request_cancelled", taskErr.Code)
-	assert.Equal(t, []string{"refund"}, events)
-	assert.Equal(t, 1, billing.refunds)
+	require.Nil(t, taskErr)
+	require.NotNil(t, outcome)
+	assert.Equal(t, "task_public", outcome.Task.TaskID)
+	assert.Equal(t, []string{"reserve", "insert", "settle"}, events)
+	assert.Zero(t, billing.refunds)
+	var count int64
+	require.NoError(t, database.Model(&model.Task{}).Where("task_id = ?", "task_public").Count(&count).Error)
+	assert.Equal(t, int64(1), count)
 	assert.False(t, c.Writer.Written())
 }
 

@@ -3,6 +3,7 @@ package helper
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -45,6 +46,15 @@ func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) hostty
 	if exists {
 		logger.LogDebug(ctx, "final group: %s", autoGroup)
 		relayInfo.UsingGroup = autoGroup.(string)
+	}
+	if relayInfo.SubscriptionOutputLimit > 0 {
+		// Subscription usage is an internal budget, not a wallet charge. A
+		// zero promotional account multiplier must never erase that budget.
+		groupRatioInfo.GroupRatio = ratio_setting.GetGroupRatio(relayInfo.UsingGroup)
+		if groupRatioInfo.GroupRatio <= 0 || math.IsNaN(groupRatioInfo.GroupRatio) || math.IsInf(groupRatioInfo.GroupRatio, 0) {
+			groupRatioInfo.GroupRatio = 1
+		}
+		return groupRatioInfo
 	}
 
 	// check user group special ratio
@@ -206,6 +216,12 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		logger.LogDebug(c, "model_price_helper result: %s", priceData.ToSetting())
 	}
 	info.PriceData = priceData
+	if info.SubscriptionOutputLimit > 0 {
+		if err := UpdateSubscriptionPriceBudget(info); err != nil {
+			return hosttypes.PriceData{}, err
+		}
+		priceData = info.PriceData
+	}
 	return priceData, nil
 }
 
@@ -452,5 +468,11 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, billing
 	logger.LogDebug(c, "model_price_helper_tiered result: model=%s preConsume=%d quotaBeforeGroup=%.2f groupRatio=%.2f tier=%s", billingModelName, preConsumedQuota, quotaBeforeGroup, groupRatioInfo.GroupRatio, trace.MatchedTier)
 
 	info.PriceData = priceData
+	if info.SubscriptionOutputLimit > 0 {
+		if err := UpdateSubscriptionPriceBudget(info); err != nil {
+			return hosttypes.PriceData{}, err
+		}
+		priceData = info.PriceData
+	}
 	return priceData, nil
 }

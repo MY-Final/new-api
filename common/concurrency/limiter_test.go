@@ -149,3 +149,68 @@ func TestRedisEnabledButUnavailableFailsClosed(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unavailable")
 }
+
+func TestReplaceScopesIsAtomicAndDoesNotDoubleCountTheOwner(t *testing.T) {
+	for _, backend := range []string{"memory", "redis"} {
+		t.Run(backend, func(t *testing.T) {
+			if backend == "redis" {
+				useConcurrencyMiniRedis(t)
+			} else {
+				resetConcurrencyTestState(t)
+			}
+			ctx := context.Background()
+			first, _, err := Acquire(ctx, "request", []Scope{{Name: "old", Limit: 1}, {Name: "account", Limit: 1}}, time.Minute)
+			require.NoError(t, err)
+			occupied, _, err := Acquire(ctx, "other", []Scope{{Name: "new", Limit: 1}}, time.Minute)
+			require.NoError(t, err)
+			nextScopes := []Scope{{Name: "new", Limit: 1}, {Name: "account", Limit: 1}}
+			_, retry, err := Replace(ctx, first, nextScopes, time.Minute)
+			require.NoError(t, err)
+			assert.Positive(t, retry)
+			_, retry, err = Acquire(ctx, "blocked-old", []Scope{{Name: "old", Limit: 1}}, time.Minute)
+			require.NoError(t, err)
+			assert.Positive(t, retry, "a failed replacement must retain the old scopes")
+			require.NoError(t, Release(ctx, occupied))
+			next, retry, err := Replace(ctx, first, nextScopes, time.Minute)
+			require.NoError(t, err)
+			assert.Zero(t, retry)
+			next, retry, err = Replace(ctx, next, nextScopes, time.Minute)
+			require.NoError(t, err)
+			assert.Zero(t, retry, "rechecking one's own full scope must succeed")
+			freed, retry, err := Acquire(ctx, "freed-old", []Scope{{Name: "old", Limit: 1}}, time.Minute)
+			require.NoError(t, err)
+			assert.Zero(t, retry)
+			require.NoError(t, Release(ctx, freed))
+			require.NoError(t, Release(ctx, next))
+			_, _, err = Replace(ctx, next, nextScopes, time.Minute)
+			assert.ErrorIs(t, err, ErrLeaseLost)
+		})
+	}
+}
+
+func TestRestoreDurableWorkBlocksNewAdmissionAfterLostLease(t *testing.T) {
+	for _, backend := range []string{"memory", "redis"} {
+		t.Run(backend, func(t *testing.T) {
+			if backend == "redis" {
+				useConcurrencyMiniRedis(t)
+			} else {
+				resetConcurrencyTestState(t)
+			}
+			ctx := context.Background()
+			scopes := []Scope{{Name: "task-user", Limit: 1}, {Name: "task-key", Limit: 1}}
+			lease, _, err := Acquire(ctx, "accepted-task", scopes, time.Minute)
+			require.NoError(t, err)
+			require.NoError(t, Release(ctx, lease))
+			require.NoError(t, Restore(ctx, lease, time.Minute))
+			require.NoError(t, Restore(ctx, lease, time.Minute))
+			_, retry, err := Acquire(ctx, "new-request", scopes, time.Minute)
+			require.NoError(t, err)
+			assert.Positive(t, retry)
+			require.NoError(t, Release(ctx, lease))
+			admitted, retry, err := Acquire(ctx, "new-request", scopes, time.Minute)
+			require.NoError(t, err)
+			assert.Zero(t, retry)
+			require.NoError(t, Release(ctx, admitted))
+		})
+	}
+}

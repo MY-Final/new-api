@@ -245,8 +245,8 @@ func TestSubscriptionQuotaWindowRejectsAndExpiresOldUsage(t *testing.T) {
 	assert.Zero(t, blockedCount)
 }
 
-func TestSubscriptionWindowRetryUsesFastestRecoverableWindow(t *testing.T) {
-	t.Run("returns the soonest window recovery", func(t *testing.T) {
+func TestSubscriptionWindowRetryUsesSlowestRecoverableWindow(t *testing.T) {
+	t.Run("returns the last window recovery", func(t *testing.T) {
 		now := GetDBTimestamp()
 		plan := &SubscriptionPlan{
 			Id:            11009,
@@ -288,8 +288,8 @@ func TestSubscriptionWindowRetryUsesFastestRecoverableWindow(t *testing.T) {
 		require.Error(t, err)
 		var windowErr *SubscriptionWindowLimitError
 		require.ErrorAs(t, err, &windowErr)
-		assert.EqualValues(t, 7*24*60*60, windowErr.WindowSeconds)
-		assert.InDelta(t, 60*60, windowErr.RetryAfter, 2)
+		assert.EqualValues(t, 5*60*60, windowErr.WindowSeconds)
+		assert.InDelta(t, 4*60*60, windowErr.RetryAfter, 2)
 	})
 
 	t.Run("waits for enough usage to leave the window", func(t *testing.T) {

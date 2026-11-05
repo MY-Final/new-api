@@ -48,15 +48,28 @@ type memoryStore struct {
 
 var globalMemoryStore = &memoryStore{leases: make(map[string]map[string]memoryLease)}
 
-const acquireScript = `
+var ErrLeaseLost = errors.New("concurrency lease was lost")
+
+const replaceScript = `
 local owner = ARGV[1]
 local now = tonumber(ARGV[2])
 local ttl = tonumber(ARGV[3])
 local retry = tonumber(ARGV[4])
-for i, key in ipairs(KEYS) do
+local oldCount = tonumber(ARGV[5])
+for i = 1, oldCount do
+  local score = redis.call('ZSCORE', KEYS[i], owner)
+  if not score or tonumber(score) <= now then
+    return {-1, 0}
+  end
+end
+for i = oldCount + 1, #KEYS do
+  local key = KEYS[i]
   redis.call('ZREMRANGEBYSCORE', key, '-inf', now)
-  local limit = tonumber(ARGV[4 + i])
+  local limit = tonumber(ARGV[5 + i - oldCount])
   local count = tonumber(redis.call('ZCARD', key))
+  if redis.call('ZSCORE', key, owner) then
+    count = count - 1
+  end
   if count >= limit then
     local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
     if oldest[2] then
@@ -68,11 +81,23 @@ for i, key in ipairs(KEYS) do
     return {0, retry}
   end
 end
-for i, key in ipairs(KEYS) do
+for i = 1, oldCount do
+  redis.call('ZREM', KEYS[i], owner)
+end
+for i = oldCount + 1, #KEYS do
+  local key = KEYS[i]
   redis.call('ZADD', key, now + ttl, owner)
   redis.call('PEXPIRE', key, ttl + 1000)
 end
 return {1, 0}
+`
+
+const restoreScript = `
+for i, key in ipairs(KEYS) do
+  redis.call('ZADD', key, ARGV[2] + ARGV[3], ARGV[1])
+  redis.call('PEXPIRE', key, ARGV[3] + 1000)
+end
+return 1
 `
 
 const refreshScript = `
@@ -123,11 +148,18 @@ func redisKey(scopeName string) string {
 }
 
 func Acquire(ctx context.Context, owner string, scopes []Scope, ttl time.Duration) (Lease, time.Duration, error) {
+	return Replace(ctx, Lease{Owner: owner}, scopes, ttl)
+}
+
+// Replace atomically switches an existing reservation to the scopes required by
+// the next upstream attempt. A failed admission retains every previous slot.
+func Replace(ctx context.Context, previous Lease, scopes []Scope, ttl time.Duration) (Lease, time.Duration, error) {
+	owner := previous.Owner
 	if owner == "" {
 		return Lease{}, 0, errors.New("concurrency lease owner is empty")
 	}
 	scopes = normalizeScopes(scopes)
-	if len(scopes) == 0 {
+	if len(scopes) == 0 && len(previous.Scopes) == 0 {
 		return Lease{Owner: owner}, 0, nil
 	}
 	if ttl <= 0 {
@@ -137,13 +169,16 @@ func Acquire(ctx context.Context, owner string, scopes []Scope, ttl time.Duratio
 		if common.RDB == nil {
 			return Lease{}, 0, errors.New("Redis is enabled but unavailable for concurrency limiting")
 		}
-		keys := make([]string, 0, len(scopes))
-		args := []any{owner, time.Now().UnixMilli(), ttl.Milliseconds(), MinimumRetryMillis}
+		keys := make([]string, 0, len(previous.Scopes)+len(scopes))
+		for _, scope := range previous.Scopes {
+			keys = append(keys, redisKey(scope.Name))
+		}
+		args := []any{owner, time.Now().UnixMilli(), ttl.Milliseconds(), MinimumRetryMillis, len(previous.Scopes)}
 		for _, scope := range scopes {
 			keys = append(keys, redisKey(scope.Name))
 			args = append(args, scope.Limit)
 		}
-		values, err := common.RDB.Eval(ctx, acquireScript, keys, args...).Slice()
+		values, err := common.RDB.Eval(ctx, replaceScript, keys, args...).Slice()
 		if err != nil {
 			return Lease{}, 0, fmt.Errorf("acquire concurrency lease: %w", err)
 		}
@@ -161,15 +196,25 @@ func Acquire(ctx context.Context, owner string, scopes []Scope, ttl time.Duratio
 		if allowed == 0 {
 			return Lease{}, max(time.Duration(retryMillis)*time.Millisecond, time.Second), nil
 		}
+		if allowed < 0 {
+			return Lease{}, 0, ErrLeaseLost
+		}
 		return Lease{Owner: owner, Scopes: scopes}, 0, nil
 	}
-	return acquireMemory(owner, scopes, ttl)
+	return replaceMemory(previous, scopes, ttl)
 }
 
-func acquireMemory(owner string, scopes []Scope, ttl time.Duration) (Lease, time.Duration, error) {
+func replaceMemory(previous Lease, scopes []Scope, ttl time.Duration) (Lease, time.Duration, error) {
+	owner := previous.Owner
 	now := time.Now()
 	globalMemoryStore.mu.Lock()
 	defer globalMemoryStore.mu.Unlock()
+	for _, scope := range previous.Scopes {
+		entry, exists := globalMemoryStore.leases[scope.Name][owner]
+		if !exists || !entry.expiresAt.After(now) {
+			return Lease{}, 0, ErrLeaseLost
+		}
+	}
 	for scopeName, entries := range globalMemoryStore.leases {
 		for entryOwner, entry := range entries {
 			if !entry.expiresAt.After(now) {
@@ -183,7 +228,11 @@ func acquireMemory(owner string, scopes []Scope, ttl time.Duration) (Lease, time
 	retry := time.Duration(0)
 	for _, scope := range scopes {
 		entries := globalMemoryStore.leases[scope.Name]
-		if len(entries) < scope.Limit {
+		count := len(entries)
+		if _, exists := entries[owner]; exists {
+			count--
+		}
+		if count < scope.Limit {
 			continue
 		}
 		for _, entry := range entries {
@@ -196,6 +245,9 @@ func acquireMemory(owner string, scopes []Scope, ttl time.Duration) (Lease, time
 	if retry > 0 {
 		return Lease{}, max(retry, time.Second), nil
 	}
+	for _, scope := range previous.Scopes {
+		delete(globalMemoryStore.leases[scope.Name], owner)
+	}
 	expiresAt := now.Add(ttl)
 	for _, scope := range scopes {
 		entries := globalMemoryStore.leases[scope.Name]
@@ -206,6 +258,39 @@ func acquireMemory(owner string, scopes []Scope, ttl time.Duration) (Lease, time
 		entries[owner] = memoryLease{owner: owner, expiresAt: expiresAt}
 	}
 	return Lease{Owner: owner, Scopes: scopes}, 0, nil
+}
+
+// Restore reserves capacity already consumed by a durable asynchronous task.
+// It may exceed the current limit: existing upstream work cannot be cancelled
+// by forgetting its slot, and subsequent admissions must see that occupancy.
+func Restore(ctx context.Context, lease Lease, ttl time.Duration) error {
+	if lease.Owner == "" || len(lease.Scopes) == 0 {
+		return nil
+	}
+	if ttl <= 0 {
+		ttl = DefaultLeaseTTL
+	}
+	if common.RedisEnabled {
+		if common.RDB == nil {
+			return errors.New("Redis is enabled but unavailable for concurrency limiting")
+		}
+		keys := make([]string, 0, len(lease.Scopes))
+		for _, scope := range lease.Scopes {
+			keys = append(keys, redisKey(scope.Name))
+		}
+		return common.RDB.Eval(ctx, restoreScript, keys, lease.Owner, time.Now().UnixMilli(), ttl.Milliseconds()).Err()
+	}
+	globalMemoryStore.mu.Lock()
+	defer globalMemoryStore.mu.Unlock()
+	for _, scope := range lease.Scopes {
+		entries := globalMemoryStore.leases[scope.Name]
+		if entries == nil {
+			entries = make(map[string]memoryLease)
+			globalMemoryStore.leases[scope.Name] = entries
+		}
+		entries[lease.Owner] = memoryLease{owner: lease.Owner, expiresAt: time.Now().Add(ttl)}
+	}
+	return nil
 }
 
 func Refresh(ctx context.Context, lease Lease, ttl time.Duration) (bool, error) {

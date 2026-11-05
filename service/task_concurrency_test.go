@@ -32,7 +32,7 @@ func TestTaskConcurrencyLeaseRefreshAndRelease(t *testing.T) {
 		},
 	}
 
-	refreshTaskConcurrencyLease(ctx, task)
+	require.NoError(t, refreshTaskConcurrencyLease(ctx, task))
 	_, retryAfter, err := concurrency.Acquire(ctx, "blocked-owner", []concurrency.Scope{scope}, time.Minute)
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, retryAfter, time.Second)
@@ -42,4 +42,32 @@ func TestTaskConcurrencyLeaseRefreshAndRelease(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "next-owner", next.Owner)
 	require.NoError(t, concurrency.Release(ctx, next))
+}
+
+func TestTaskConcurrencyLeaseLossStopsPollingAndRestoresOccupancy(t *testing.T) {
+	previousRedisEnabled, previousRedis := common.RedisEnabled, common.RDB
+	common.RedisEnabled = false
+	common.RDB = nil
+	t.Cleanup(func() {
+		common.RedisEnabled, common.RDB = previousRedisEnabled, previousRedis
+	})
+
+	ctx := context.Background()
+	scope := concurrency.Scope{Name: "task-lease-loss-test", Limit: 1}
+	lease, _, err := concurrency.Acquire(ctx, "lost-task-owner", []concurrency.Scope{scope}, time.Minute)
+	require.NoError(t, err)
+	task := &model.Task{
+		TaskID: "task-lease-loss-test",
+		PrivateData: model.TaskPrivateData{
+			ConcurrencyLeaseOwner: lease.Owner,
+			ConcurrencyScopes:     concurrency.ScopeFromLease(lease),
+		},
+	}
+	require.NoError(t, concurrency.Release(ctx, lease))
+	require.ErrorIs(t, refreshTaskConcurrencyLease(ctx, task), concurrency.ErrLeaseLost)
+
+	_, retryAfter, err := concurrency.Acquire(ctx, "blocked-after-loss", []concurrency.Scope{scope}, time.Minute)
+	require.NoError(t, err)
+	assert.Positive(t, retryAfter)
+	require.NoError(t, concurrency.Release(ctx, lease))
 }

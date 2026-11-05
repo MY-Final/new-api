@@ -61,6 +61,7 @@ export const subscriptionPlanSchema = z.object({
   allow_wallet_overflow: z.boolean().optional().default(true),
   max_purchase_per_user: z.number(),
   max_concurrency: z.number().optional(),
+  max_output_tokens: z.number().optional(),
   total_amount: z.number(),
   quota_windows: z.array(subscriptionQuotaWindowSchema).optional(),
   upgrade_group: z.string().optional(),
@@ -97,6 +98,7 @@ export const userSubscriptionSchema = z.object({
   downgrade_group: z.string().optional(),
   allow_wallet_overflow: z.boolean().optional(),
   max_concurrency: z.number().optional(),
+  max_output_tokens: z.number().optional(),
   quota_windows: z.array(subscriptionQuotaWindowUsageSchema).optional(),
 })
 
@@ -150,6 +152,7 @@ export interface SubscriptionBalancePayData {
   upgrade_group: string
   route_groups: string[]
   max_concurrency: number
+  max_output_tokens: number
   quota_windows: SubscriptionQuotaWindowUsage[]
   subscription: UserSubscription
 }

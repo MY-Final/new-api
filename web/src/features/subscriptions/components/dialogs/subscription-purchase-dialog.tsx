@@ -30,7 +30,7 @@ import { Combobox } from '@/components/ui/combobox'
 import { Separator } from '@/components/ui/separator'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { toIntlLocale } from '@/i18n/languages'
-import { formatQuota } from '@/lib/format'
+import { formatNumber, formatQuota } from '@/lib/format'
 import { handleServerError } from '@/lib/handle-server-error'
 import { getServerErrorStatus } from '@/lib/server-error-message'
 import { DEFAULT_CURRENCY_CONFIG } from '@/stores/system-config-store'
@@ -341,6 +341,14 @@ export function SubscriptionPurchaseDialog(props: Props) {
               <span className='text-sm'>{plan.max_concurrency}</span>
             </div>
           )}
+          <div className='flex items-center justify-between gap-3'>
+            <span className='text-muted-foreground text-sm'>
+              {t('Max Output Tokens per Request')}
+            </span>
+            <span className='text-sm tabular-nums'>
+              {formatNumber(plan.max_output_tokens || 4096, locale)}
+            </span>
+          </div>
           {plan.upgrade_group && (
             <div className='flex items-center justify-between'>
               <span className='text-muted-foreground text-sm'>
@@ -391,6 +399,11 @@ export function SubscriptionPurchaseDialog(props: Props) {
           </Alert>
         )}
 
+        <p className='text-muted-foreground text-xs'>
+          {t(
+            'Subscriptions currently support OpenAI, Claude, Responses and Gemini text generation APIs. Other endpoints are unavailable with subscription funding.'
+          )}
+        </p>
         <p className='text-muted-foreground text-xs'>
           {t(
             'Renewing the same plan extends the current expiry. Purchasing a different plan is available after the current plan expires or is cancelled by an administrator.'

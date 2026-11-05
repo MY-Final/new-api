@@ -47,6 +47,7 @@ describe('subscription plan form', () => {
 
     expect(parsed.currency).toBe('CNY')
     expect(parsed.max_concurrency).toBe(0)
+    expect(parsed.max_output_tokens).toBe(4096)
     expect(parsed.quota_windows).toEqual([])
     expect(parsed.route_groups).toEqual(['deepseek-a'])
   })
@@ -58,6 +59,31 @@ describe('subscription plan form', () => {
     })
 
     expect(result.success).toBe(false)
+  })
+
+  test('requires a budget for paid plans and a positive output token limit', () => {
+    expect(
+      schema.safeParse({
+        ...validPlanValues(),
+        quota_windows: [],
+        total_amount: 0,
+      }).success
+    ).toBe(false)
+    expect(
+      schema.safeParse({
+        ...validPlanValues(),
+        quota_windows: [],
+        total_amount: 10,
+      }).success
+    ).toBe(true)
+    for (const limit of [0, -1, 1.5, 1_073_741_824]) {
+      expect(
+        schema.safeParse({
+          ...validPlanValues(),
+          max_output_tokens: limit,
+        }).success
+      ).toBe(false)
+    }
   })
 
   test('rejects duplicate window durations and non-positive quotas', () => {
@@ -81,10 +107,12 @@ describe('subscription plan form', () => {
     const payload = formValuesToPlanPayload({
       ...validPlanValues(),
       max_concurrency: 2,
+      max_output_tokens: 8192,
       allow_wallet_overflow: true,
     })
 
     expect(payload.plan.max_concurrency).toBe(2)
+    expect(payload.plan.max_output_tokens).toBe(8192)
     expect(payload.plan.route_groups).toEqual(['deepseek-a'])
     expect(payload.plan.allow_wallet_overflow).toBe(false)
     expect(payload.plan.quota_windows).toEqual([

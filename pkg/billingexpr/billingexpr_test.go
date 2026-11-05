@@ -372,6 +372,13 @@ func TestRequestProbeTracePreservesIntegerConditionalType(t *testing.T) {
 	}, trace.RequestRules)
 }
 
+func TestSubscriptionCostUpperBoundIncludesRequestMultiplier(t *testing.T) {
+	const expression = `(tier("base", p * 2 + c * 8)) * (header("x-priority") == "high" ? 6 : 1)`
+	bound, err := billingexpr.SubscriptionCostUpperBound(expression, 1000, 1000)
+	require.NoError(t, err)
+	assert.InDelta(t, 60000, bound, 1e-9)
+}
+
 func TestRequestProbeNonUnitFallbackIsNotTraced(t *testing.T) {
 	cost, trace, err := billingexpr.RunExprWithRequest(
 		`10 * (param("service_tier") == "fast" ? 2 : 1.5)`,

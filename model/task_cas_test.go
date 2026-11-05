@@ -278,6 +278,35 @@ func TestTaskPrivateDataPersistsConcurrencyLease(t *testing.T) {
 	assert.Equal(t, privateData.ConcurrencyScopes, restored.ConcurrencyScopes)
 }
 
+func TestGetUserConcurrencyTasksExcludesStaleAndUnknownStatuses(t *testing.T) {
+	truncateTables(t)
+	originalTimeout := constant.TaskTimeoutMinutes
+	constant.TaskTimeoutMinutes = 60
+	t.Cleanup(func() {
+		constant.TaskTimeoutMinutes = originalTimeout
+	})
+
+	now := time.Now().Unix()
+	privateData := TaskPrivateData{
+		ConcurrencyLeaseOwner: "request-owner",
+		ConcurrencyScopes:     []string{"user:1"},
+	}
+	tasks := []*Task{
+		{TaskID: "recent-not-start", UserId: 1, Status: TaskStatusNotStart, SubmitTime: now, PrivateData: privateData},
+		{TaskID: "recent-unknown", UserId: 1, Status: TaskStatusUnknown, SubmitTime: now, PrivateData: privateData},
+		{TaskID: "stale-submitted", UserId: 1, Status: TaskStatusSubmitted, SubmitTime: now - 7200, PrivateData: privateData},
+		{TaskID: "corrupt-recent", UserId: 1, Status: TaskStatus("CORRUPT"), SubmitTime: now, PrivateData: privateData},
+	}
+	for _, task := range tasks {
+		insertTask(t, task)
+	}
+
+	active, err := GetUserConcurrencyTasks(t.Context(), 1)
+	require.NoError(t, err)
+	require.Len(t, active, 2)
+	assert.ElementsMatch(t, []int64{tasks[0].ID, tasks[1].ID}, []int64{active[0].ID, active[1].ID})
+}
+
 // ---------------------------------------------------------------------------
 // UpdateWithStatus CAS — DB integration tests
 // ---------------------------------------------------------------------------

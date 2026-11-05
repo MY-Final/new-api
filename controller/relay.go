@@ -201,6 +201,14 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			newAPIError = channelErr
 			break
 		}
+		if billingErr := relay.PrepareSelectedGroupBilling(c, relayInfo); billingErr != nil {
+			newAPIError = billingErr
+			break
+		}
+		if concurrencyErr := middleware.RecheckRequestConcurrency(c); concurrencyErr != nil {
+			newAPIError = concurrencyErr
+			break
+		}
 		service.AppendUsedChannel(c, channel.Id)
 		if billingErr := service.PrepareTieredBillingForSelectedGroup(c, relayInfo); billingErr != nil {
 			newAPIError = billingErr
@@ -516,6 +524,9 @@ func RelayTask(c *gin.Context) {
 // come from c.Request.Context: native task endpoints use the client context,
 // while the Responses bridge supplies an independently bounded context.
 func executeTaskSubmission(c *gin.Context, relayInfo *relaycommon.RelayInfo) (*taskSubmissionOutcome, *taskdto.TaskError) {
+	if apiErr := service.ValidateSubscriptionEndpoint(c, relayInfo.UsingGroup); apiErr != nil {
+		return nil, service.TaskErrorWrapperLocal(apiErr, string(apiErr.GetErrorCode()), apiErr.StatusCode)
+	}
 	return executeTaskSubmissionWith(c, relayInfo, relay.RelayTaskSubmit)
 }
 
@@ -582,6 +593,10 @@ func executeTaskSubmissionWith(
 				break
 			}
 		}
+		if concurrencyErr := middleware.RecheckRequestConcurrency(c); concurrencyErr != nil {
+			taskErr = service.TaskErrorWrapperLocal(concurrencyErr.Err, string(concurrencyErr.GetErrorCode()), concurrencyErr.StatusCode)
+			break
+		}
 		diagnostics.attempt(retryParam.GetRetry()+1, channel, relayInfo.LockedChannel != nil)
 
 		service.AppendUsedChannel(c, channel.Id)
@@ -599,12 +614,18 @@ func executeTaskSubmissionWith(
 
 		stage = "submit"
 		result, taskErr = submit(c, relayInfo)
-		if requestErr := c.Request.Context().Err(); requestErr != nil {
+		if requestErr := c.Request.Context().Err(); requestErr != nil && (result == nil || taskErr != nil) {
 			diagnostics.cancelled("after_submit", retryParam.GetRetry()+1)
 			taskErr = service.TaskErrorWrapperLocal(requestErr, "request_cancelled", http.StatusRequestTimeout)
 			break
 		}
 		if taskErr == nil {
+			// The vendor has accepted the work. Cancellation (including a lost
+			// concurrency lease) cannot cancel that work or justify a refund.
+			// Finish its durable accounting independently of the client socket.
+			acceptedContext, cancelAccepted := context.WithTimeout(context.WithoutCancel(c.Request.Context()), 30*time.Second)
+			defer cancelAccepted()
+			c.Request = c.Request.WithContext(acceptedContext)
 			diagnostics.attemptSucceeded(retryParam.GetRetry()+1, result)
 			break
 		}

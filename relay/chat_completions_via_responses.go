@@ -143,6 +143,10 @@ func relayResponsesRequest(c *gin.Context, info *relaycommon.RelayInfo, adaptor 
 			return nil, newAPIErrorFromParamOverride(err)
 		}
 	}
+	jsonData, billingErr := FinalizeSubscriptionRequestBilling(c, info, jsonData)
+	if billingErr != nil {
+		return nil, billingErr
+	}
 
 	body, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
 	if err != nil {

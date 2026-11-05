@@ -5,6 +5,8 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/types"
 )
 
+const unsupportedSubscriptionRequestFormat types.RelayFormat = "subscription_unsupported"
+
 // GuessRelayFormatFromRequest moved to convmeta with the converters; the
 // delegation keeps host callers unchanged.
 func GuessRelayFormatFromRequest(req any) (types.RelayFormat, bool) {
@@ -17,6 +19,9 @@ func AppendRequestConversionFromRequest(info *RelayInfo, req any) {
 	}
 	format, ok := GuessRelayFormatFromRequest(req)
 	if !ok {
+		if info.SubscriptionOutputLimit > 0 {
+			info.FinalRequestRelayFormat = unsupportedSubscriptionRequestFormat
+		}
 		return
 	}
 	info.AppendRequestConversion(format)

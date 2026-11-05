@@ -160,8 +160,13 @@ type RelayInfo struct {
 	// SubscriptionPostDelta is the post-consume delta applied to amount_used (quota units; can be negative).
 	SubscriptionPostDelta int64
 	// SubscriptionPlanId / SubscriptionPlanTitle are used for logging/UI display.
-	SubscriptionPlanId    int
-	SubscriptionPlanTitle string
+	SubscriptionPlanId         int
+	SubscriptionPlanTitle      string
+	SubscriptionUsageRequestId string
+	// SubscriptionOutputLimit is the effective cap sent to the upstream. A
+	// positive value enables subscription budget metering at normal route prices.
+	SubscriptionOutputLimit int
+	SubscriptionInputBudget int
 	// RequestId is used for idempotent pre-consume/refund
 	RequestId string
 	// SubscriptionAmountTotal / SubscriptionAmountUsedAfterPreConsume are used to compute remaining in logs.

@@ -49,36 +49,43 @@ func PrepareResponsesRequest(c *gin.Context, info *relaycommon.RelayInfo, req *d
 		return nil, nil, nil, types.NewError(fmt.Errorf("invalid api type: %d", info.ApiType), types.ErrorCodeInvalidApiType, types.ErrOptionWithSkipRetry())
 	}
 	adaptor.Init(info)
+	var jsonData []byte
 	if model_setting.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled {
 		storage, err := common.GetBodyStorage(c)
 		if err != nil {
 			return nil, nil, nil, types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
 		}
-		body := common.NewReplayableBodyReader(storage)
-		return adaptor, body, io.NopCloser(body), nil
-	}
-
-	convertedRequest, err := adaptor.ConvertOpenAIResponsesRequest(c, info, *request)
-	if err != nil {
-		return nil, nil, nil, newConvertRequestFailedError(c, info, err)
-	}
-	relaycommon.AppendRequestConversionFromRequest(info, convertedRequest)
-	jsonData, err := common.Marshal(convertedRequest)
-	if err != nil {
-		return nil, nil, nil, types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
-	}
-	jsonData, err = relaycommon.RemoveDisabledFields(jsonData, info.ChannelOtherSettings, info.ChannelSetting.PassThroughBodyEnabled)
-	if err != nil {
-		return nil, nil, nil, types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
-	}
-	if len(info.ParamOverride) > 0 {
-		jsonData, err = relaycommon.ApplyParamOverrideWithRelayInfo(jsonData, info)
+		jsonData, err = storage.Bytes()
 		if err != nil {
-			return nil, nil, nil, newAPIErrorFromParamOverride(err)
+			return nil, nil, nil, types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
 		}
+	} else {
+		convertedRequest, err := adaptor.ConvertOpenAIResponsesRequest(c, info, *request)
+		if err != nil {
+			return nil, nil, nil, newConvertRequestFailedError(c, info, err)
+		}
+		relaycommon.AppendRequestConversionFromRequest(info, convertedRequest)
+		jsonData, err = common.Marshal(convertedRequest)
+		if err != nil {
+			return nil, nil, nil, types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+		}
+		jsonData, err = relaycommon.RemoveDisabledFields(jsonData, info.ChannelOtherSettings, info.ChannelSetting.PassThroughBodyEnabled)
+		if err != nil {
+			return nil, nil, nil, types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+		}
+		if len(info.ParamOverride) > 0 {
+			jsonData, err = relaycommon.ApplyParamOverrideWithRelayInfo(jsonData, info)
+			if err != nil {
+				return nil, nil, nil, newAPIErrorFromParamOverride(err)
+			}
+		}
+		logger.LogDebug(c, "requestBody: %s", jsonData)
+	}
+	jsonData, billingErr := FinalizeSubscriptionRequestBilling(c, info, jsonData)
+	if billingErr != nil {
+		return nil, nil, nil, billingErr
 	}
 
-	logger.LogDebug(c, "requestBody: %s", jsonData)
 	body, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
 	if err != nil {
 		return nil, nil, nil, types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())

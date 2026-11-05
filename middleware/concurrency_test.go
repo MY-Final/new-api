@@ -20,6 +20,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 package middleware
 
 import (
+	"context"
 	"fmt"
 	"net/http/httptest"
 	"strings"
@@ -27,6 +28,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/common/concurrency"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -59,6 +61,7 @@ func setupConcurrencyAdmissionDB(t *testing.T) {
 		&model.User{},
 		&model.UserSubscription{},
 		&model.UserSubscriptionRouteGroup{},
+		&model.Task{},
 	))
 	model.DB, model.LOG_DB = db, db
 	t.Cleanup(func() {
@@ -145,4 +148,71 @@ func TestConcurrencyAdmissionEnforcesAccountTokenAndSubscriptionScopes(t *testin
 		require.NotNil(t, apiErr)
 		assert.Equal(t, 429, apiErr.StatusCode)
 	})
+}
+
+func TestRetryIntoSubscriptionGroupMustAcquireItsCapacity(t *testing.T) {
+	setupConcurrencyAdmissionDB(t)
+	user := model.User{Username: "retry-concurrency-user", Group: "default", Status: common.UserStatusEnabled}
+	require.NoError(t, model.DB.Create(&user).Error)
+	subscription := model.UserSubscription{UserId: user.Id, Status: "active", EndTime: time.Now().Add(time.Hour).Unix(), MaxConcurrency: 1}
+	require.NoError(t, model.DB.Create(&subscription).Error)
+	require.NoError(t, model.SnapshotPlanRouteGroupsTx(model.DB, subscription.Id, []string{"deepseek-a"}))
+	first := concurrencyAdmissionContext(user.Id, 11, 0, 0, "paid")
+	releaseFirst, apiErr := AcquireRequestConcurrency(first)
+	require.Nil(t, apiErr)
+	t.Cleanup(releaseFirst)
+	occupied := concurrencyAdmissionContext(user.Id, 12, 0, 0, "deepseek-a")
+	releaseOccupied, apiErr := AcquireRequestConcurrency(occupied)
+	require.Nil(t, apiErr)
+	t.Cleanup(releaseOccupied)
+	common.SetContextKey(first, constant.ContextKeyUsingGroup, "auto")
+	common.SetContextKey(first, constant.ContextKeyAutoGroup, "deepseek-a")
+	apiErr = RecheckRequestConcurrency(first)
+	require.NotNil(t, apiErr)
+	assert.Equal(t, 429, apiErr.StatusCode)
+	releaseOccupied()
+	require.Nil(t, RecheckRequestConcurrency(first))
+	require.Nil(t, RecheckRequestConcurrency(first), "retries must not count the same request twice")
+	third := concurrencyAdmissionContext(user.Id, 13, 0, 0, "deepseek-a")
+	_, apiErr = AcquireRequestConcurrency(third)
+	require.NotNil(t, apiErr)
+	assert.Equal(t, 429, apiErr.StatusCode)
+}
+
+func TestLostConcurrencyLeaseCancelsTheUpstreamContextAndTransport(t *testing.T) {
+	setupConcurrencyAdmissionDB(t)
+	c := concurrencyAdmissionContext(901, 1, 0, 1, "paid")
+	transportClosed := make(chan struct{})
+	SetConcurrencyCancellation(c, func() { close(transportClosed) })
+	release, apiErr := AcquireRequestConcurrency(c)
+	require.Nil(t, apiErr)
+	t.Cleanup(release)
+	leaseValue, exists := c.Get(concurrency.ContextKeyLease)
+	require.True(t, exists)
+	require.NoError(t, concurrency.Release(context.Background(), leaseValue.(concurrency.Lease)))
+	assert.False(t, CurrentRequestConcurrency(c).refresh())
+	assert.ErrorIs(t, context.Cause(c.Request.Context()), concurrency.ErrLeaseLost)
+	select {
+	case <-transportClosed:
+	case <-time.After(time.Second):
+		t.Fatal("losing concurrency protection did not close the transport")
+	}
+}
+
+func TestAdmissionRestoresDurableTaskCapacityBeforeAcceptingNewWork(t *testing.T) {
+	setupConcurrencyAdmissionDB(t)
+	lease := concurrency.Lease{Owner: "durable-task-owner", Scopes: []concurrency.Scope{{Name: "user:902", Limit: 1}}}
+	task := model.Task{TaskID: "durable-concurrency-task", UserId: 902, Status: model.TaskStatusSubmitted,
+		PrivateData: model.TaskPrivateData{ConcurrencyLeaseOwner: lease.Owner, ConcurrencyScopes: concurrency.ScopeFromLease(lease)}}
+	require.NoError(t, model.DB.Create(&task).Error)
+	c := concurrencyAdmissionContext(902, 1, 0, 1, "paid")
+	_, apiErr := AcquireRequestConcurrency(c)
+	require.NotNil(t, apiErr)
+	assert.Equal(t, 429, apiErr.StatusCode)
+	require.NoError(t, model.DB.Model(&task).Update("status", model.TaskStatusSuccess).Error)
+	require.NoError(t, concurrency.Release(context.Background(), lease))
+	next := concurrencyAdmissionContext(902, 1, 0, 1, "paid")
+	release, apiErr := AcquireRequestConcurrency(next)
+	require.Nil(t, apiErr)
+	t.Cleanup(release)
 }

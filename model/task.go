@@ -384,6 +384,27 @@ func GetTimedOutUnfinishedTasks(cutoffUnix int64, limit int) []*Task {
 	return tasks
 }
 
+// GetUserConcurrencyTasks returns durable work whose upstream execution still
+// occupies capacity, including work whose Redis lease was lost on restart.
+func GetUserConcurrencyTasks(ctx context.Context, userID int) ([]Task, error) {
+	var tasks []Task
+	query := DB.WithContext(ctx).Select("id", "private_data").
+		Where("user_id = ?", userID).
+		Where("status IN ?", []TaskStatus{
+			TaskStatusNotStart,
+			TaskStatusSubmitted,
+			TaskStatusQueued,
+			TaskStatusInProgress,
+			TaskStatusUnknown,
+		})
+	if constant.TaskTimeoutMinutes > 0 {
+		cutoff := time.Now().Unix() - int64(constant.TaskTimeoutMinutes)*60
+		query = query.Where("submit_time >= ?", cutoff)
+	}
+	err := query.Find(&tasks).Error
+	return tasks, err
+}
+
 func GetAllUnFinishSyncTasks(limit int) []*Task {
 	var tasks []*Task
 	var err error

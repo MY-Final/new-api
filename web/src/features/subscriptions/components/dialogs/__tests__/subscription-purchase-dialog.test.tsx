@@ -117,6 +117,7 @@ describe('SubscriptionPurchaseDialog', () => {
             },
           ],
           max_concurrency: 3,
+          max_output_tokens: 8192,
         },
       },
     })
@@ -126,6 +127,11 @@ describe('SubscriptionPurchaseDialog', () => {
     expect(screen.getByText('7 days')).toBeVisible()
     expect(screen.getByText('Account Concurrency')).toBeVisible()
     expect(screen.getByText('3')).toBeVisible()
+    expect(screen.getByText('Max Output Tokens per Request')).toBeVisible()
+    expect(screen.getByText('8,192')).toBeVisible()
+    expect(
+      screen.getByText(/Subscriptions currently support OpenAI/)
+    ).toBeVisible()
     expect(screen.queryByText('$6.00')).not.toBeInTheDocument()
   })
 

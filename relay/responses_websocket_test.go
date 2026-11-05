@@ -717,6 +717,24 @@ func TestResponsesWSConnectionRejectsConcurrencyGroupChange(t *testing.T) {
 	assert.Zero(t, releases.Load())
 }
 
+func TestResponsesWSReusesConnectionConcurrencyWithinGroup(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var releases atomic.Int32
+	s := &responsesWSSession{
+		ctx:                ctx,
+		concurrencyRelease: func() { releases.Add(1) },
+		concurrencyGroup:   "subscription-group",
+	}
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	common.SetContextKey(c, constant.ContextKeyUsingGroup, "subscription-group")
+
+	apiErr := s.acquireConnectionConcurrency(c)
+	require.Nil(t, apiErr, "an established connection must not acquire a second lease")
+	assert.Zero(t, releases.Load())
+}
+
 func TestResponsesWSPassthroughPreservesRawPricingParameters(t *testing.T) {
 	create, _, err := normalizeResponsesWSTestMessage([]byte(`{"type":"response.create","generate":false,"response":{"model":"gpt-5.1","input":"hi","vendor":{"tier":"premium"},"stream":true}}`))
 	require.NoError(t, err)

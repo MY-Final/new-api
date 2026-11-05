@@ -483,6 +483,9 @@ export function SubscriptionsMutateDrawer({
               <p className='text-muted-foreground rounded-lg border border-dashed px-3 py-2 text-xs leading-5'>
                 {t(
                   "Plan price and usage quota are separate. Price is charged in the selected payment currency. Quota is the internal usage limit and follows the site's display currency; changing a custom currency symbol or display rate does not change the amount charged."
+                )}{' '}
+                {t(
+                  'Subscription requests consume plan quota at the standard route rate, even when the account multiplier is zero. Wallet balance is not charged.'
                 )}
               </p>
 
@@ -640,27 +643,64 @@ export function SubscriptionsMutateDrawer({
                 />
               </div>
 
-              <FormField
-                control={form.control}
-                name='sort_order'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('Sort Order')}</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        type='number'
-                        onChange={(e) =>
-                          field.onChange(
-                            Number.parseInt(e.target.value, 10) || 0
-                          )
-                        }
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
+              <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
+                <FormField
+                  control={form.control}
+                  name='max_output_tokens'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        {t('Max Output Tokens per Request')}
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type='number'
+                          min={1}
+                          max={1_073_741_823}
+                          step={1}
+                          onChange={(e) =>
+                            field.onChange(Number(e.target.value))
+                          }
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        {t(
+                          'Used when the client omits an output limit. Higher client limits are rejected. The output budget is reserved before contacting the provider.'
+                        )}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name='sort_order'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Sort Order')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type='number'
+                          onChange={(e) =>
+                            field.onChange(
+                              Number.parseInt(e.target.value, 10) || 0
+                            )
+                          }
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <p className='text-muted-foreground text-xs leading-5'>
+                {t(
+                  'Subscriptions currently support OpenAI, Claude, Responses and Gemini text generation APIs. Other endpoints are unavailable with subscription funding.'
                 )}
-              />
+              </p>
 
               <div className='grid grid-cols-1 gap-3 sm:grid-cols-3'>
                 <FormField

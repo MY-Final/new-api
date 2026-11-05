@@ -52,6 +52,11 @@ export function getPlanFormSchema(t: TFunction) {
       allow_wallet_overflow: z.boolean(),
       max_purchase_per_user: z.coerce.number().min(0),
       max_concurrency: z.coerce.number().int().min(0),
+      max_output_tokens: z.coerce
+        .number()
+        .int()
+        .min(1, t('Output token limit must be greater than zero'))
+        .max(1_073_741_823, t('Output token limit is too large')),
       total_amount: z.coerce.number().min(0),
       quota_windows: z
         .array(
@@ -73,6 +78,19 @@ export function getPlanFormSchema(t: TFunction) {
       waffo_pancake_product_id: z.string().optional(),
     })
     .superRefine((value, ctx) => {
+      if (
+        value.price_amount > 0 &&
+        value.total_amount <= 0 &&
+        value.quota_windows.length === 0
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['total_amount'],
+          message: t(
+            'Paid plans require a total quota or at least one rolling quota window'
+          ),
+        })
+      }
       const seen = new Set<number>()
       for (const [index, window] of value.quota_windows.entries()) {
         if (seen.has(window.window_seconds)) {
@@ -105,6 +123,7 @@ export const PLAN_FORM_DEFAULTS: PlanFormValues = {
   allow_wallet_overflow: true,
   max_purchase_per_user: 0,
   max_concurrency: 0,
+  max_output_tokens: 4096,
   total_amount: 0,
   quota_windows: [],
   upgrade_group: '',
@@ -132,6 +151,7 @@ export function planToFormValues(plan: SubscriptionPlan): PlanFormValues {
     allow_wallet_overflow: plan.allow_wallet_overflow !== false,
     max_purchase_per_user: Number(plan.max_purchase_per_user || 0),
     max_concurrency: Number(plan.max_concurrency || 0),
+    max_output_tokens: Number(plan.max_output_tokens || 4096),
     total_amount: quotaUnitsToDollars(Number(plan.total_amount || 0)),
     quota_windows: (plan.quota_windows || []).map((window) => ({
       _key: crypto.randomUUID(),
@@ -163,6 +183,7 @@ export function formValuesToPlanPayload(values: PlanFormValues): PlanPayload {
       sort_order: Number(values.sort_order || 0),
       max_purchase_per_user: Number(values.max_purchase_per_user || 0),
       max_concurrency: Number(values.max_concurrency || 0),
+      max_output_tokens: Number(values.max_output_tokens),
       total_amount: parseQuotaFromDollars(Number(values.total_amount || 0)),
       quota_windows: values.quota_windows.map((window, index) => ({
         window_seconds: Number(window.window_seconds || 0),

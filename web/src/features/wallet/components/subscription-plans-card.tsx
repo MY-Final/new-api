@@ -64,7 +64,7 @@ import type {
   UserSubscriptionRecord,
 } from '@/features/subscriptions/types'
 import { toIntlLocale } from '@/i18n/languages'
-import { formatQuota } from '@/lib/format'
+import { formatNumber, formatQuota } from '@/lib/format'
 import { handleServerError } from '@/lib/handle-server-error'
 import { requireServerSuccess } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
@@ -506,6 +506,13 @@ export function SubscriptionPlansCard({
                           {subscription?.max_concurrency}
                         </div>
                       )}
+                      <div className='text-muted-foreground mt-1'>
+                        {t('Max Output Tokens per Request')}:{' '}
+                        {formatNumber(
+                          subscription?.max_output_tokens || 4096,
+                          locale
+                        )}
+                      </div>
                       {(subscription?.route_groups || []).length > 0 && (
                         <div className='mt-1 flex flex-wrap items-center gap-1.5'>
                           <span className='text-muted-foreground'>
@@ -630,14 +637,19 @@ export function SubscriptionPlansCard({
               const count = planPurchaseCountMap.get(plan.id) || 0
               const reached = limit > 0 && count >= limit
 
+              let totalQuotaBenefit: string | null = null
+              if (quotaWindows.length === 0) {
+                const quotaLabel =
+                  totalAmount > 0 ? formatQuota(totalAmount) : t('Unlimited')
+                totalQuotaBenefit = `${t('Total Quota')}: ${quotaLabel}`
+              }
+
               const benefits = [
                 `${t('Validity Period')}: ${formatDuration(plan, t)}`,
                 formatResetPeriod(plan, t) !== t('No Reset')
                   ? `${t('Quota Reset')}: ${formatResetPeriod(plan, t)}`
                   : null,
-                totalAmount > 0
-                  ? `${t('Total Quota')}: ${formatQuota(totalAmount)}`
-                  : `${t('Total Quota')}: ${t('Unlimited')}`,
+                totalQuotaBenefit,
                 ...quotaWindows.map(
                   (window) =>
                     `${formatWindowDuration(window.window_seconds, t)}: ${formatQuota(window.quota_limit)}`
@@ -645,6 +657,7 @@ export function SubscriptionPlansCard({
                 (plan.max_concurrency || 0) > 0
                   ? `${t('Account Concurrency')}: ${plan.max_concurrency}`
                   : null,
+                `${t('Max Output Tokens per Request')}: ${formatNumber(plan.max_output_tokens || 4096, locale)}`,
                 limit > 0 ? `${t('Purchase Limit')}: ${limit}` : null,
                 plan.upgrade_group
                   ? `${t('Upgrade Group')}: ${plan.upgrade_group}`

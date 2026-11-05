@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/pkg/wsmanager"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -37,16 +38,21 @@ func WssHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types.
 		info.TargetWs = resp.(*websocket.Conn)
 		defer info.TargetWs.Close()
 		var closeOnce sync.Once
-		unregister := wsmanager.Register(info.ChannelId, wsmanager.KindRealtime, func(reason string) {
+		clientConn, targetConn := info.ClientWs, info.TargetWs
+		closeConnections := func(reason string) {
 			closeOnce.Do(func() {
 				deadline := time.Now().Add(time.Second)
 				closeMessage := websocket.FormatCloseMessage(websocket.ClosePolicyViolation, reason)
-				_ = info.ClientWs.WriteControl(websocket.CloseMessage, closeMessage, deadline)
-				_ = info.TargetWs.WriteControl(websocket.CloseMessage, closeMessage, deadline)
-				_ = info.ClientWs.Close()
-				_ = info.TargetWs.Close()
+				_ = clientConn.WriteControl(websocket.CloseMessage, closeMessage, deadline)
+				_ = targetConn.WriteControl(websocket.CloseMessage, closeMessage, deadline)
+				_ = clientConn.Close()
+				_ = targetConn.Close()
 			})
+		}
+		middleware.SetConcurrencyCancellation(c, func() {
+			closeConnections("concurrency_lease_lost")
 		})
+		unregister := wsmanager.Register(info.ChannelId, wsmanager.KindRealtime, closeConnections)
 		defer unregister()
 	}
 

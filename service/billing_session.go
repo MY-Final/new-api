@@ -152,6 +152,56 @@ func (s *BillingSession) GetPreConsumedQuota() int {
 	return s.preConsumedQuota
 }
 
+// SubscriptionID returns the package currently funding this session.
+func (s *BillingSession) SubscriptionID() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if funding, ok := s.funding.(*SubscriptionFunding); ok {
+		return funding.subscriptionId
+	}
+	return 0
+}
+
+// SubscriptionUsageRequestID identifies the rolling-usage record for the
+// currently active subscription reservation. It differs from the public
+// request ID after a routing retry refunds one package and reserves another.
+func (s *BillingSession) SubscriptionUsageRequestID() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if funding, ok := s.funding.(*SubscriptionFunding); ok {
+		return funding.requestId
+	}
+	return ""
+}
+
+// CancelReservation releases a billing session that has not settled. Routing
+// retries use it when the selected group changes between wallet and package
+// funding, so the next attempt cannot inherit the previous group's source.
+func (s *BillingSession) CancelReservation() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.settled || s.fundingSettled {
+		return errors.New("billing session has already settled")
+	}
+	if s.refunded {
+		return nil
+	}
+	if err := s.funding.Refund(); err != nil {
+		return fmt.Errorf("refund previous billing source: %w", err)
+	}
+	if s.tokenConsumed > 0 && !s.relayInfo.IsPlayground {
+		if err := model.IncreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, s.tokenConsumed); err != nil {
+			return fmt.Errorf("refund previous token reservation: %w", err)
+		}
+	}
+	s.refunded = true
+	s.preConsumedQuota = 0
+	s.tokenConsumed = 0
+	s.extraReserved = 0
+	s.syncRelayInfo()
+	return nil
+}
+
 func (s *BillingSession) Reserve(targetQuota int) error {
 	return s.reserve(targetQuota, false)
 }
@@ -293,7 +343,12 @@ func (s *BillingSession) reserveFunding(delta int, requireAvailableQuota bool) e
 		}
 		return nil
 	case *SubscriptionFunding:
-		if err := model.AdjustSubscriptionUsage(funding.requestId, int64(delta)); err != nil {
+		if err := model.ReserveSubscriptionUsage(funding.requestId, int64(delta)); err != nil {
+			var windowLimitErr *model.SubscriptionWindowLimitError
+			if errors.As(err, &windowLimitErr) {
+				return types.NewErrorWithStatusCode(err, types.ErrorCodeRateLimitExceeded, http.StatusTooManyRequests,
+					types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
+			}
 			return types.NewErrorWithStatusCode(
 				errors.New(i18n.Translate(s.lang, i18n.MsgQuotaSubscriptionInsufficient, map[string]any{"Error": err.Error()})),
 				types.ErrorCodeInsufficientUserQuota,
@@ -367,6 +422,15 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 	if relayInfo == nil {
 		return nil, types.NewError(fmt.Errorf("relayInfo is nil"), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
 	}
+	if relayInfo.UserId <= 0 {
+		return nil, types.NewErrorWithStatusCode(
+			errors.New("billing requires an authenticated user"),
+			types.ErrorCodeInvalidRequest,
+			http.StatusBadRequest,
+			types.ErrOptionWithSkipRetry(),
+			types.ErrOptionWithNoRecordErrorLog(),
+		)
+	}
 
 	// A debt is a wallet-level restriction and must not be bypassed by a
 	// subscription fallback. A non-negative wallet balance still allows users
@@ -430,11 +494,16 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 		if subConsume <= 0 {
 			subConsume = 1
 		}
+		subscriptionUsageRequestId := relayInfo.SubscriptionUsageRequestId
+		if subscriptionUsageRequestId == "" {
+			subscriptionUsageRequestId = relayInfo.RequestId
+		}
+		relayInfo.SubscriptionUsageRequestId = subscriptionUsageRequestId
 		session := &BillingSession{
 			relayInfo: relayInfo,
 			lang:      i18n.StatedLang(c),
 			funding: &SubscriptionFunding{
-				requestId:  relayInfo.RequestId,
+				requestId:  subscriptionUsageRequestId,
 				userId:     relayInfo.UserId,
 				modelName:  relayInfo.GetBillingModelName(),
 				usingGroup: usingGroup,

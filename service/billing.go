@@ -96,8 +96,14 @@ func SettleBilling(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, actualQuo
 			}
 		}
 		if relayInfo.BillingSource == BillingSourceSubscription && ctx.GetString(model.RequestBillingTaskContextKey) == "" {
-			if err := model.FinalizeSubscriptionUsage(relayInfo.RequestId); err != nil {
-				common.SysError(common.LogText("failed to finalize subscription usage for request %s: %s", relayInfo.RequestId, err.Error()))
+			subscriptionUsageRequestID := relayInfo.RequestId
+			if session, ok := relayInfo.Billing.(*BillingSession); ok {
+				if value := session.SubscriptionUsageRequestID(); value != "" {
+					subscriptionUsageRequestID = value
+				}
+			}
+			if err := model.FinalizeSubscriptionUsage(subscriptionUsageRequestID); err != nil {
+				common.SysError(common.LogText("failed to finalize subscription usage for request %s: %s", subscriptionUsageRequestID, err.Error()))
 			}
 		}
 
