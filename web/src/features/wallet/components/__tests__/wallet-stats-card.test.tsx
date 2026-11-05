@@ -62,4 +62,26 @@ describe('WalletStatsCard balance state', () => {
     expect(screen.getByText('🥚 1.999998')).toBeInTheDocument()
     expect(screen.queryByText('Debt')).not.toBeInTheDocument()
   })
+
+  test('separates wallet usage, subscription usage, and their request counts', () => {
+    render(
+      <WalletStatsCard
+        user={{
+          ...user,
+          used_quota: 100,
+          wallet_used_quota: 40,
+          subscription_used_quota: 60,
+          request_count: 10,
+          wallet_request_count: 4,
+          subscription_request_count: 6,
+        }}
+      />
+    )
+
+    expect(screen.getByText('Wallet Usage')).toBeInTheDocument()
+    expect(screen.getByText('Subscription Usage')).toBeInTheDocument()
+    expect(screen.getByText('Consumed from wallet')).toBeInTheDocument()
+    expect(screen.getByText('Consumed from subscriptions')).toBeInTheDocument()
+    expect(screen.getByText('Wallet: 4 · Subscription: 6')).toBeInTheDocument()
+  })
 })

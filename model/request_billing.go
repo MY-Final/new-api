@@ -147,6 +147,120 @@ type RequestBillingQuery struct {
 	EndTime       int64  `form:"end_time" binding:"gte=0"`
 }
 
+type UserUsageBreakdown struct {
+	WalletUsedQuota          int `json:"wallet_used_quota"`
+	SubscriptionUsedQuota    int `json:"subscription_used_quota"`
+	WalletRequestCount       int `json:"wallet_request_count"`
+	SubscriptionRequestCount int `json:"subscription_request_count"`
+}
+
+type SubscriptionUsageRecord struct {
+	BillingId      string `json:"billing_id"`
+	RequestId      string `json:"request_id"`
+	SubscriptionId int    `json:"subscription_id"`
+	PlanId         int    `json:"plan_id"`
+	PlanTitle      string `json:"plan_title"`
+	ModelName      string `json:"model_name"`
+	Quota          int    `json:"quota"`
+	RefundedQuota  int    `json:"refunded_quota"`
+	CreatedAt      int64  `json:"created_at"`
+}
+
+func consumedRequestBillingQuery(query *gorm.DB) *gorm.DB {
+	return query.Where("(settled = ? OR usage_recorded = ?)", true, true)
+}
+
+// GetUserUsageBreakdown keeps used_quota as the lifetime total while splitting
+// subscription charges out of the wallet portion.
+func GetUserUsageBreakdown(userId int, usedQuota int, requestCount int) (UserUsageBreakdown, error) {
+	if userId <= 0 {
+		return UserUsageBreakdown{}, ErrRequestBillingNotFound
+	}
+	var aggregate struct {
+		Quota int64
+		Count int64
+	}
+	err := consumedRequestBillingQuery(DB.Model(&RequestBilling{})).
+		Select("COALESCE(SUM(CASE WHEN quota > refunded_quota THEN quota - refunded_quota ELSE 0 END), 0) AS quota, COUNT(*) AS count").
+		Where("user_id = ? AND funding_source = ?", userId, "subscription").
+		Scan(&aggregate).Error
+	if err != nil {
+		return UserUsageBreakdown{}, err
+	}
+	subscriptionQuota := max(int(aggregate.Quota), 0)
+	subscriptionRequests := max(int(aggregate.Count), 0)
+	return UserUsageBreakdown{
+		WalletUsedQuota:          max(usedQuota-subscriptionQuota, 0),
+		SubscriptionUsedQuota:    subscriptionQuota,
+		WalletRequestCount:       max(requestCount-subscriptionRequests, 0),
+		SubscriptionRequestCount: subscriptionRequests,
+	}, nil
+}
+
+func ListUserSubscriptionUsage(userId int, pageInfo *common.PageInfo) ([]SubscriptionUsageRecord, int64, error) {
+	if userId <= 0 {
+		return []SubscriptionUsageRecord{}, 0, nil
+	}
+	query := consumedRequestBillingQuery(DB.Model(&RequestBilling{})).
+		Where("user_id = ? AND funding_source = ?", userId, "subscription")
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var records []RequestBilling
+	if err := query.Order("created_at DESC, id DESC").
+		Offset(pageInfo.GetStartIdx()).
+		Limit(pageInfo.GetPageSize()).
+		Find(&records).Error; err != nil {
+		return nil, 0, err
+	}
+	if len(records) == 0 {
+		return []SubscriptionUsageRecord{}, total, nil
+	}
+
+	subscriptionIds := make([]int, 0, len(records))
+	for _, record := range records {
+		subscriptionIds = append(subscriptionIds, record.SubscriptionId)
+	}
+	var subscriptions []UserSubscription
+	if err := DB.Select("id", "plan_id").
+		Where("user_id = ? AND id IN ?", userId, subscriptionIds).
+		Find(&subscriptions).Error; err != nil {
+		return nil, 0, err
+	}
+	planIdsBySubscription := make(map[int]int, len(subscriptions))
+	planIds := make([]int, 0, len(subscriptions))
+	for _, subscription := range subscriptions {
+		planIdsBySubscription[subscription.Id] = subscription.PlanId
+		planIds = append(planIds, subscription.PlanId)
+	}
+	var plans []SubscriptionPlan
+	if err := DB.Select("id", "title").Where("id IN ?", planIds).Find(&plans).Error; err != nil {
+		return nil, 0, err
+	}
+	planTitles := make(map[int]string, len(plans))
+	for _, plan := range plans {
+		planTitles[plan.Id] = plan.Title
+	}
+
+	result := make([]SubscriptionUsageRecord, 0, len(records))
+	for _, record := range records {
+		planId := planIdsBySubscription[record.SubscriptionId]
+		result = append(result, SubscriptionUsageRecord{
+			BillingId:      record.Id,
+			RequestId:      record.RequestId,
+			SubscriptionId: record.SubscriptionId,
+			PlanId:         planId,
+			PlanTitle:      planTitles[planId],
+			ModelName:      record.ModelName,
+			Quota:          max(record.Quota-record.RefundedQuota, 0),
+			RefundedQuota:  record.RefundedQuota,
+			CreatedAt:      record.CreatedAt,
+		})
+	}
+	return result, total, nil
+}
+
 func ListRequestBillings(filter RequestBillingQuery, page *common.PageInfo) ([]RequestBilling, int64, error) {
 	query := DB.Model(&RequestBilling{})
 	if filter.UserId > 0 {

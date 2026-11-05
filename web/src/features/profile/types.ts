@@ -57,8 +57,16 @@ export interface UserProfile {
   paid_quota?: number
   /** Total used quota */
   used_quota: number
+  /** Quota consumed from wallet balance */
+  wallet_used_quota?: number
+  /** Quota consumed from subscriptions */
+  subscription_used_quota?: number
   /** Total request count */
   request_count: number
+  /** Requests billed to wallet balance */
+  wallet_request_count?: number
+  /** Requests billed to subscriptions */
+  subscription_request_count?: number
   /** Account status (1=启用, 2=禁用, 3=待审核, 4=已删除) */
   status: number
   /** Access token (system token) */

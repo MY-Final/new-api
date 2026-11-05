@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Activity, BarChart3, WalletCards } from 'lucide-react'
+import { Activity, BarChart3, Crown, WalletCards } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { StatusBadge } from '@/components/status-badge'
@@ -29,6 +29,7 @@ import {
   formatCompactNumber,
   formatQuota,
   formatQuotaPrecise,
+  resolveUserUsageBreakdown,
 } from '@/lib/format'
 import { getRoleLabel } from '@/lib/roles'
 
@@ -66,16 +67,14 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
             </div>
           </div>
         </CardContent>
-        <div className='border-t'>
-          <div className='divide-border/60 grid grid-cols-1 divide-y sm:grid-cols-3 sm:divide-x sm:divide-y-0'>
-            {['balance', 'usage', 'requests'].map((key) => (
-              <div key={key} className='px-4 py-3.5 sm:px-5 sm:py-4'>
-                <Skeleton className='h-3.5 w-20' />
-                <Skeleton className='mt-2 h-7 w-28' />
-                <Skeleton className='mt-1.5 h-3.5 w-24' />
-              </div>
-            ))}
-          </div>
+        <div className='bg-border/60 grid grid-cols-2 gap-px border-t sm:grid-cols-4'>
+          {['balance', 'wallet', 'subscription', 'requests'].map((key) => (
+            <div key={key} className='bg-card px-4 py-3.5 sm:px-5 sm:py-4'>
+              <Skeleton className='h-3.5 w-20' />
+              <Skeleton className='mt-2 h-7 w-28' />
+              <Skeleton className='mt-1.5 h-3.5 w-24' />
+            </div>
+          ))}
         </div>
       </Card>
     )
@@ -92,6 +91,7 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
   const displayedQuota = Math.abs(profile.quota)
   const bonusQuota = Math.max(profile.bonus_quota ?? 0, 0)
   const paidQuota = profile.paid_quota ?? 0
+  const usage = resolveUserUsageBreakdown(profile)
   const stats: {
     label: string
     value: string
@@ -109,16 +109,23 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
       tone: hasDebt ? 'destructive' : 'success',
     },
     {
-      label: t('Total Usage'),
-      value: formatQuota(profile.used_quota),
-      description: t('Total consumed quota'),
+      label: t('Wallet Usage'),
+      value: formatQuota(usage.walletUsedQuota),
+      description: t('Consumed from wallet'),
       icon: BarChart3,
       tone: 'info',
     },
     {
+      label: t('Subscription Usage'),
+      value: formatQuota(usage.subscriptionUsedQuota),
+      description: t('Consumed from subscriptions'),
+      icon: Crown,
+      tone: 'warning',
+    },
+    {
       label: t('API Requests'),
       value: formatCompactNumber(profile.request_count),
-      description: t('Total requests made'),
+      description: `${t('Wallet')}: ${formatCompactNumber(usage.walletRequestCount)} · ${t('Subscription')}: ${formatCompactNumber(usage.subscriptionRequestCount)}`,
       icon: Activity,
       tone: 'chart-4',
     },
@@ -172,28 +179,29 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
           </div>
         </div>
       </CardContent>
-      <div className='border-t'>
-        <div className='divide-border/60 grid grid-cols-3 divide-x'>
-          {stats.map((item) => (
-            <div key={item.label} className='min-w-0 px-3 py-3 sm:px-5 sm:py-4'>
-              <div className='flex items-center gap-2'>
-                <IconBadge tone={item.tone} size='stat'>
-                  <item.icon />
-                </IconBadge>
-                <div className='text-muted-foreground truncate text-xs font-medium tracking-wider uppercase'>
-                  {item.label}
-                </div>
-              </div>
-
-              <div className='text-foreground mt-1.5 truncate font-mono text-lg font-bold tracking-tight tabular-nums sm:mt-2 sm:text-2xl'>
-                {item.value}
-              </div>
-              <div className='text-muted-foreground/60 mt-1 hidden text-xs md:block'>
-                {item.description}
+      <div className='bg-border/60 grid grid-cols-2 gap-px border-t sm:grid-cols-4'>
+        {stats.map((item) => (
+          <div
+            key={item.label}
+            className='bg-card min-w-0 px-3 py-3 sm:px-5 sm:py-4'
+          >
+            <div className='flex items-center gap-2'>
+              <IconBadge tone={item.tone} size='stat'>
+                <item.icon />
+              </IconBadge>
+              <div className='text-muted-foreground truncate text-xs font-medium tracking-wider uppercase'>
+                {item.label}
               </div>
             </div>
-          ))}
-        </div>
+
+            <div className='text-foreground mt-1.5 truncate font-mono text-lg font-bold tracking-tight tabular-nums sm:mt-2 sm:text-2xl'>
+              {item.value}
+            </div>
+            <div className='text-muted-foreground/60 mt-1 hidden text-xs md:block'>
+              {item.description}
+            </div>
+          </div>
+        ))}
       </div>
     </Card>
   )

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -115,4 +116,57 @@ func TestGetUserUsageSeparatesCacheAndReasoningTokens(t *testing.T) {
 	require.Equal(t, int64(20), requests.Items[0].CacheWriteTokens)
 	require.Equal(t, int64(8), requests.Items[0].ReasoningTokens)
 	require.Equal(t, int64(40), requests.Items[0].UserCost)
+}
+
+func TestGetUserUsageBreakdownSeparatesWalletAndSubscriptionCharges(t *testing.T) {
+	truncateTables(t)
+	user := User{Username: "usage-breakdown-user", Password: "password123", AffCode: "usage-breakdown-aff", UsedQuota: 100, RequestCount: 4}
+	require.NoError(t, DB.Create(&user).Error)
+	require.NoError(t, DB.Create(&[]RequestBilling{
+		{Id: "breakdown-wallet", RequestId: "breakdown-wallet-request", UserId: user.Id, FundingSource: "wallet", Quota: 30, Settled: true},
+		{Id: "breakdown-subscription", RequestId: "breakdown-subscription-request", UserId: user.Id, FundingSource: "subscription", SubscriptionId: 1, Quota: 20, Settled: true},
+		{Id: "breakdown-refunded", RequestId: "breakdown-refunded-request", UserId: user.Id, FundingSource: "subscription", SubscriptionId: 1, Quota: 30, RefundedQuota: 30, Settled: true},
+		{Id: "breakdown-task", RequestId: "breakdown-task-request", UserId: user.Id, FundingSource: "subscription", SubscriptionId: 1, TaskId: "breakdown-task", Quota: 10, UsageRecorded: true},
+		{Id: "breakdown-pending", RequestId: "breakdown-pending-request", UserId: user.Id, FundingSource: "subscription", SubscriptionId: 1, TaskId: "breakdown-pending", Quota: 99},
+	}).Error)
+
+	breakdown, err := GetUserUsageBreakdown(user.Id, user.UsedQuota, user.RequestCount)
+	require.NoError(t, err)
+	assert.Equal(t, UserUsageBreakdown{
+		WalletUsedQuota:          70,
+		SubscriptionUsedQuota:    30,
+		WalletRequestCount:       1,
+		SubscriptionRequestCount: 3,
+	}, breakdown)
+}
+
+func TestListUserSubscriptionUsageReturnsNetChargedRecords(t *testing.T) {
+	truncateTables(t)
+	user := User{Username: "subscription-usage-user", Password: "password123", AffCode: "subscription-usage-aff"}
+	require.NoError(t, DB.Create(&user).Error)
+	plan := SubscriptionPlan{Title: "Daily Pass", Enabled: true}
+	require.NoError(t, DB.Create(&plan).Error)
+	subscription := UserSubscription{
+		UserId: user.Id, PlanId: plan.Id, Status: "active",
+		StartTime: 100, EndTime: 200, AmountTotal: 100, AmountUsed: 50,
+	}
+	require.NoError(t, DB.Create(&subscription).Error)
+	require.NoError(t, DB.Create(&[]RequestBilling{
+		{Id: "usage-record-one", RequestId: "usage-record-one-request", UserId: user.Id, FundingSource: "subscription", SubscriptionId: subscription.Id, ModelName: "model-one", Quota: 20, Settled: true, CreatedAt: 100},
+		{Id: "usage-record-two", RequestId: "usage-record-two-request", UserId: user.Id, FundingSource: "subscription", SubscriptionId: subscription.Id, ModelName: "model-two", Quota: 30, RefundedQuota: 30, Settled: true, CreatedAt: 200},
+		{Id: "usage-record-wallet", RequestId: "usage-record-wallet-request", UserId: user.Id, FundingSource: "wallet", ModelName: "wallet-model", Quota: 40, Settled: true, CreatedAt: 300},
+		{Id: "usage-record-pending", RequestId: "usage-record-pending-request", UserId: user.Id, FundingSource: "subscription", SubscriptionId: subscription.Id, ModelName: "pending-model", TaskId: "usage-record-pending-task", Quota: 50, CreatedAt: 400},
+	}).Error)
+
+	records, total, err := ListUserSubscriptionUsage(user.Id, &common.PageInfo{Page: 1, PageSize: 10})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), total)
+	require.Len(t, records, 2)
+	assert.Equal(t, "usage-record-two", records[0].BillingId)
+	assert.Equal(t, "Daily Pass", records[0].PlanTitle)
+	assert.Equal(t, plan.Id, records[0].PlanId)
+	assert.Equal(t, 0, records[0].Quota)
+	assert.Equal(t, 30, records[0].RefundedQuota)
+	assert.Equal(t, "usage-record-one", records[1].BillingId)
+	assert.Equal(t, 20, records[1].Quota)
 }

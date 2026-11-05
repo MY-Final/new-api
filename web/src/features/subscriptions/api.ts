@@ -31,6 +31,7 @@ import type {
   SubscriptionPayRequest,
   SelfSubscriptionData,
   SubscriptionBalancePayData,
+  SubscriptionUsagePage,
 } from './types'
 
 // ============================================================================
@@ -222,6 +223,16 @@ export async function getSelfSubscriptionFull(): Promise<
   ApiResponse<SelfSubscriptionData>
 > {
   const res = await api.get('/api/subscription/self')
+  return res.data
+}
+
+export async function getSelfSubscriptionUsage(
+  page: number,
+  pageSize: number
+): Promise<ApiResponse<SubscriptionUsagePage>> {
+  const res = await api.get('/api/subscription/self/usage', {
+    params: { p: page, page_size: pageSize },
+  })
   return res.data
 }
 

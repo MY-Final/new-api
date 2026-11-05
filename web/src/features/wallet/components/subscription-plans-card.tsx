@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Crown, RefreshCw, Sparkles, Check } from 'lucide-react'
+import { Crown, ReceiptText, RefreshCw, Sparkles, Check } from 'lucide-react'
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -53,6 +53,7 @@ import {
   updateBillingPreference,
 } from '@/features/subscriptions/api'
 import { SubscriptionPurchaseDialog } from '@/features/subscriptions/components/dialogs/subscription-purchase-dialog'
+import { SubscriptionUsageDialog } from '@/features/subscriptions/components/dialogs/subscription-usage-dialog'
 import {
   formatDuration,
   formatPlanPrice,
@@ -149,6 +150,7 @@ export function SubscriptionPlansCard({
 
   const [purchaseOpen, setPurchaseOpen] = useState(false)
   const [selectedPlan, setSelectedPlan] = useState<PlanRecord | null>(null)
+  const [usageDialogOpen, setUsageDialogOpen] = useState(false)
 
   const enableStripe = !!topupInfo?.enable_stripe_topup
   const enableCreem = !!topupInfo?.enable_creem_topup
@@ -408,6 +410,18 @@ export function SubscriptionPlansCard({
                   </SelectGroup>
                 </SelectContent>
               </Select>
+              {hasAny && (
+                <Button
+                  variant='outline'
+                  size='sm'
+                  className='h-8 shrink-0 gap-1.5 px-2.5'
+                  onClick={() => setUsageDialogOpen(true)}
+                  aria-label={t('Usage Records')}
+                >
+                  <ReceiptText className='h-3.5 w-3.5' />
+                  <span className='hidden sm:inline'>{t('Usage Records')}</span>
+                </Button>
+              )}
               <Button
                 variant='ghost'
                 size='icon'
@@ -839,6 +853,10 @@ export function SubscriptionPlansCard({
             ? planPurchaseCountMap.get(selectedPlan.plan.id)
             : undefined
         }
+      />
+      <SubscriptionUsageDialog
+        open={usageDialogOpen}
+        onOpenChange={setUsageDialogOpen}
       />
     </>
   )

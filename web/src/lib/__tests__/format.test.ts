@@ -25,6 +25,7 @@ import {
   getEditableQuotaStep,
   parseQuotaFromDollars,
   quotaUnitsToEditableAmount,
+  resolveUserUsageBreakdown,
 } from '../format'
 
 afterEach(() => {
@@ -68,5 +69,36 @@ describe('editable quota amount conversion', () => {
     expect(quotaUnitsToEditableAmount(500000)).toBe(500000)
     expect(parseQuotaFromDollars(500000)).toBe(500000)
     expect(getEditableQuotaStep()).toBe(1)
+  })
+})
+
+describe('user usage breakdown', () => {
+  test('uses explicit wallet and subscription totals from the server', () => {
+    expect(
+      resolveUserUsageBreakdown({
+        used_quota: 100,
+        wallet_used_quota: 40,
+        subscription_used_quota: 60,
+        request_count: 10,
+        wallet_request_count: 4,
+        subscription_request_count: 6,
+      })
+    ).toEqual({
+      walletUsedQuota: 40,
+      subscriptionUsedQuota: 60,
+      walletRequestCount: 4,
+      subscriptionRequestCount: 6,
+    })
+  })
+
+  test('falls back to treating legacy totals as wallet usage', () => {
+    expect(
+      resolveUserUsageBreakdown({ used_quota: 100, request_count: 10 })
+    ).toEqual({
+      walletUsedQuota: 100,
+      subscriptionUsedQuota: 0,
+      walletRequestCount: 10,
+      subscriptionRequestCount: 0,
+    })
   })
 })

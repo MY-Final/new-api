@@ -538,7 +538,7 @@ func buildSelfUserData(user *model.User) map[string]any {
 	userSetting := user.GetSetting()
 	permissions := calculateUserPermissions(user.Role)
 	permissions["admin_permissions"] = authz.Capabilities(user.Id, user.Role)
-	return map[string]any{
+	responseData := map[string]any{
 		"id":                               user.Id,
 		"username":                         user.Username,
 		"display_name":                     user.DisplayName,
@@ -571,6 +571,15 @@ func buildSelfUserData(user *model.User) map[string]any {
 		"sidebar_modules":                  userSetting.SidebarModules, // 正确提取sidebar_modules字段
 		"permissions":                      permissions,
 	}
+	if breakdown, err := model.GetUserUsageBreakdown(user.Id, user.UsedQuota, user.RequestCount); err != nil {
+		common.SysError(common.LogText("failed to load user usage breakdown: %s", err.Error()))
+	} else {
+		responseData["wallet_used_quota"] = breakdown.WalletUsedQuota
+		responseData["subscription_used_quota"] = breakdown.SubscriptionUsedQuota
+		responseData["wallet_request_count"] = breakdown.WalletRequestCount
+		responseData["subscription_request_count"] = breakdown.SubscriptionRequestCount
+	}
+	return responseData
 }
 
 // 计算用户权限的辅助函数

@@ -86,6 +86,18 @@ func GetSubscriptionSelf(c *gin.Context) {
 	})
 }
 
+func GetSubscriptionSelfUsage(c *gin.Context) {
+	page := common.GetPageQuery(c)
+	records, total, err := model.ListUserSubscriptionUsage(c.GetInt("id"), page)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	page.SetItems(records)
+	page.SetTotal(int(total))
+	common.ApiSuccess(c, page)
+}
+
 func UpdateSubscriptionPreference(c *gin.Context) {
 	userId := c.GetInt("id")
 	var req BillingPreferenceRequest

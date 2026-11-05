@@ -228,16 +228,24 @@ export interface UserWalletData {
   id: number
   /** Username */
   username: string
-	/** Current quota balance */
-	quota: number
-	/** Balance from non-paid rewards */
-	bonus_quota?: number
-	/** Balance from paid top-ups and paid codes */
-	paid_quota?: number
+  /** Current quota balance */
+  quota: number
+  /** Balance from non-paid rewards */
+  bonus_quota?: number
+  /** Balance from paid top-ups and paid codes */
+  paid_quota?: number
   /** Total used quota */
   used_quota: number
+  /** Quota consumed from wallet balance */
+  wallet_used_quota?: number
+  /** Quota consumed from subscriptions */
+  subscription_used_quota?: number
   /** Total request count */
   request_count: number
+  /** Requests billed to wallet balance */
+  wallet_request_count?: number
+  /** Requests billed to subscriptions */
+  subscription_request_count?: number
   /** Affiliate quota (pending rewards) */
   aff_quota: number
   /** Total affiliate quota earned (historical) */

@@ -50,6 +50,50 @@ export function formatCompactNumber(
   }).format(value as number)
 }
 
+interface UserUsageBreakdownInput {
+  used_quota?: number
+  wallet_used_quota?: number
+  subscription_used_quota?: number
+  request_count?: number
+  wallet_request_count?: number
+  subscription_request_count?: number
+}
+
+export interface UserUsageBreakdown {
+  walletUsedQuota: number
+  subscriptionUsedQuota: number
+  walletRequestCount: number
+  subscriptionRequestCount: number
+}
+
+export function resolveUserUsageBreakdown(
+  input: UserUsageBreakdownInput
+): UserUsageBreakdown {
+  const totalUsedQuota = Math.max(Number(input.used_quota ?? 0), 0)
+  const totalRequestCount = Math.max(Number(input.request_count ?? 0), 0)
+  const subscriptionUsedQuota = Math.max(
+    Number(input.subscription_used_quota ?? 0),
+    0
+  )
+  const subscriptionRequestCount = Math.max(
+    Number(input.subscription_request_count ?? 0),
+    0
+  )
+
+  return {
+    walletUsedQuota:
+      input.wallet_used_quota == null
+        ? Math.max(totalUsedQuota - subscriptionUsedQuota, 0)
+        : Math.max(Number(input.wallet_used_quota), 0),
+    subscriptionUsedQuota,
+    walletRequestCount:
+      input.wallet_request_count == null
+        ? Math.max(totalRequestCount - subscriptionRequestCount, 0)
+        : Math.max(Number(input.wallet_request_count), 0),
+    subscriptionRequestCount,
+  }
+}
+
 export function formatPercent(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value as number)) return '-'
   return Intl.NumberFormat(undefined, {

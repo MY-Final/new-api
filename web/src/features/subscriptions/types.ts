@@ -110,6 +110,25 @@ export interface UserSubscriptionRecord {
   subscription: UserSubscription
 }
 
+export interface SubscriptionUsageRecord {
+  billing_id: string
+  request_id: string
+  subscription_id: number
+  plan_id: number
+  plan_title: string
+  model_name: string
+  quota: number
+  refunded_quota: number
+  created_at: number
+}
+
+export interface SubscriptionUsagePage {
+  page: number
+  page_size: number
+  total: number
+  items: SubscriptionUsageRecord[]
+}
+
 // ============================================================================
 // API Request/Response Types
 // ============================================================================
