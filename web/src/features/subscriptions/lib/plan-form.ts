@@ -78,19 +78,6 @@ export function getPlanFormSchema(t: TFunction) {
       waffo_pancake_product_id: z.string().optional(),
     })
     .superRefine((value, ctx) => {
-      if (
-        value.price_amount > 0 &&
-        value.total_amount <= 0 &&
-        value.quota_windows.length === 0
-      ) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['total_amount'],
-          message: t(
-            'Paid plans require a total quota or at least one rolling quota window'
-          ),
-        })
-      }
       const seen = new Set<number>()
       for (const [index, window] of value.quota_windows.entries()) {
         if (seen.has(window.window_seconds)) {

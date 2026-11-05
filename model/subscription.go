@@ -631,15 +631,6 @@ func UpsertUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *Subscriptio
 		if current.PlanId != plan.Id {
 			return nil, ErrActiveSubscriptionConflict
 		}
-		if plan.PriceAmount > 0 && current.AmountTotal <= 0 {
-			windows, err := LoadUserSubscriptionQuotaWindowsTx(tx, current.Id)
-			if err != nil {
-				return nil, err
-			}
-			if len(windows) == 0 {
-				return nil, common.NewMessage("Paid subscription plans require a finite quota budget")
-			}
-		}
 		base := now
 		if current.EndTime > base.Unix() {
 			base = time.Unix(current.EndTime, 0)
@@ -668,9 +659,6 @@ func UpsertUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *Subscriptio
 	}
 	if err := LoadSubscriptionPlanQuotaWindowsTx(tx, plan); err != nil {
 		return nil, err
-	}
-	if plan.PriceAmount > 0 && plan.TotalAmount <= 0 && len(plan.QuotaWindows) == 0 {
-		return nil, common.NewMessage("Paid subscription plans require a finite quota budget")
 	}
 	outputLimit := plan.MaxOutputTokens
 	if outputLimit <= 0 {

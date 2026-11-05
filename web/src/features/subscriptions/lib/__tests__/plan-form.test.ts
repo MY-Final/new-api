@@ -61,14 +61,14 @@ describe('subscription plan form', () => {
     expect(result.success).toBe(false)
   })
 
-  test('requires a budget for paid plans and a positive output token limit', () => {
+  test('allows paid plans with unlimited quota and requires a positive output token limit', () => {
     expect(
       schema.safeParse({
         ...validPlanValues(),
         quota_windows: [],
         total_amount: 0,
       }).success
-    ).toBe(false)
+    ).toBe(true)
     expect(
       schema.safeParse({
         ...validPlanValues(),

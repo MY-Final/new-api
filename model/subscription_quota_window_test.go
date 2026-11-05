@@ -362,6 +362,41 @@ func TestLegacySubscriptionResetUsesPostResetUsage(t *testing.T) {
 	assert.EqualValues(t, 60, result.AmountUsedAfter)
 }
 
+func TestPaidUnlimitedSubscriptionAllowsUseAndRenewal(t *testing.T) {
+	plan := &SubscriptionPlan{
+		Id:             11106,
+		Title:          "Unlimited day pass",
+		PriceAmount:    6,
+		Currency:       "CNY",
+		DurationUnit:   SubscriptionDurationDay,
+		DurationValue:  1,
+		UpgradeGroup:   "vip",
+		MaxConcurrency: 2,
+		Enabled:        true,
+	}
+	user, subscription := seedQuotaWindowSubscription(t, plan)
+	require.Zero(t, subscription.AmountTotal)
+
+	for index, amount := range []int64{100, 1_000_000} {
+		result, err := PreConsumeUserSubscription(
+			fmt.Sprintf("unlimited-day-pass-%d", index),
+			user.Id,
+			"deepseek-chat",
+			0,
+			"vip",
+			amount,
+		)
+		require.NoError(t, err)
+		assert.Zero(t, result.AmountTotal)
+	}
+
+	renewed, err := UpsertUserSubscriptionFromPlanTx(DB, user.Id, plan, "test")
+	require.NoError(t, err)
+	assert.True(t, renewed.Renewed)
+	assert.Equal(t, subscription.Id, renewed.Subscription.Id)
+	assert.Zero(t, renewed.Subscription.AmountTotal)
+}
+
 func TestSubscriptionRenewalAndDifferentPlanConflict(t *testing.T) {
 	plan := &SubscriptionPlan{
 		Id:             11004,

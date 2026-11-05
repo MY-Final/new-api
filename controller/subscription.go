@@ -277,10 +277,6 @@ func normalizeSubscriptionPlanInput(c *gin.Context, plan *model.SubscriptionPlan
 		return false
 	}
 	plan.QuotaWindows = windows
-	if plan.PriceAmount > 0 && plan.TotalAmount == 0 && len(windows) == 0 {
-		common.ApiErrorT(c, "Paid plans require a total quota or at least one rolling quota window")
-		return false
-	}
 	if len(windows) > 0 {
 		plan.TotalAmount = 0
 		plan.QuotaResetPeriod = model.SubscriptionResetNever
