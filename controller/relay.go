@@ -227,6 +227,10 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 		c.Request.Body = io.NopCloser(bodyStorage)
 
+		if relayFormat == types.RelayFormatOpenAIRealtime && service.IsFreeGroup(c, relayInfo.UsingGroup) {
+			newAPIError = types.NewErrorWithStatusCode(errors.New("realtime is not supported for the free group"), types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+			break
+		}
 		switch relayFormat {
 		case types.RelayFormatOpenAIRealtime:
 			newAPIError = relay.WssHelper(c, relayInfo)
@@ -343,7 +347,9 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 		return nil, types.NewError(errors.New(i18n.T(c, i18n.MsgRelayRetryNoAvailableChannel, map[string]any{"Group": selectGroup, "Model": info.OriginModelName})), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 	}
 
-	info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
+	// Resolve the selected auto group without overwriting the previous price:
+	// PrepareSelectedGroupBilling compares it with the new group's price.
+	helper.HandleGroupRatio(c, info)
 
 	service.RequestPolicy(c).BeginAttempt(channel, selectGroup)
 	newAPIError := middleware.SetupContextForSelectedChannel(c, channel, info.OriginModelName)
@@ -358,6 +364,10 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 }
 
 func RelayMidjourney(c *gin.Context) {
+	if apiErr := service.LoadFreeGroupSetting(c); apiErr != nil {
+		c.JSON(apiErr.StatusCode, gin.H{"description": apiErr.Error(), "type": "upstream_error", "code": 4})
+		return
+	}
 	policy := service.RequestPolicy(c)
 	defer func() {
 		if policy.Attempts > 0 && !policy.Successful {
@@ -393,7 +403,9 @@ func RelayMidjourney(c *gin.Context) {
 	if mjErr != nil {
 		policy.Successful = false
 		statusCode := http.StatusBadRequest
-		if mjErr.Code == 30 {
+		if freeGroupStatus := c.GetInt("free_group_error_status"); freeGroupStatus != 0 {
+			statusCode = freeGroupStatus
+		} else if mjErr.Code == 30 {
 			mjErr.Result = i18n.T(c, i18n.MsgRelayGroupSaturated)
 			statusCode = http.StatusTooManyRequests
 		}
@@ -524,6 +536,9 @@ func RelayTask(c *gin.Context) {
 // come from c.Request.Context: native task endpoints use the client context,
 // while the Responses bridge supplies an independently bounded context.
 func executeTaskSubmission(c *gin.Context, relayInfo *relaycommon.RelayInfo) (*taskSubmissionOutcome, *taskdto.TaskError) {
+	if apiErr := service.LoadFreeGroupSetting(c); apiErr != nil {
+		return nil, service.TaskErrorFromAPIError(apiErr)
+	}
 	if apiErr := service.ValidateSubscriptionEndpoint(c, relayInfo.UsingGroup); apiErr != nil {
 		return nil, service.TaskErrorWrapperLocal(apiErr, string(apiErr.GetErrorCode()), apiErr.StatusCode)
 	}
@@ -705,6 +720,7 @@ func executeTaskSubmissionWith(
 	task.PrivateData.TokenId = relayInfo.TokenId
 	task.PrivateData.NodeName = common.NodeName
 	task.PrivateData.BillingContext = &model.TaskBillingContext{
+		FreeGroup:       service.IsFreeGroup(c, relayInfo.UsingGroup),
 		ModelPrice:      relayInfo.PriceData.ModelPrice,
 		GroupRatio:      relayInfo.PriceData.GroupRatioInfo.GroupRatio,
 		ModelRatio:      relayInfo.PriceData.ModelRatio,

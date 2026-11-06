@@ -66,6 +66,9 @@ func EmbeddingHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	jsonData = nil
 	var requestBody io.Reader = body
 	statusCodeMappingStr := c.GetString("status_code_mapping")
+	if apiErr := service.ReserveFreeGroupCall(c, info.UsingGroup, info.UserId); apiErr != nil {
+		return apiErr
+	}
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {
 		return types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)

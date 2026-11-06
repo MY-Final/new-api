@@ -28,6 +28,9 @@ func ValidateSubscriptionEndpoint(c *gin.Context, usingGroup string) *types.NewA
 	if usingGroup == "auto" {
 		usingGroup = common.GetContextKeyString(c, constant.ContextKeyAutoGroup)
 	}
+	if IsFreeGroup(c, usingGroup) {
+		return nil
+	}
 	covered, err := model.HasActiveSubscriptionForGroup(userID, usingGroup)
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())

@@ -362,6 +362,7 @@ func migrateDB() error {
 		&RequestErrorLog{},
 		&QuotaData{},
 		&QuotaUsageDaily{},
+		&FreeGroupDailyUsage{},
 		&Task{},
 		&TaskPlugin{},
 		&Model{},

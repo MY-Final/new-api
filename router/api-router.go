@@ -56,6 +56,7 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/custom-pages", middleware.UserAuth(), controller.GetCustomPages)
 		//apiRouter.GET("/midjourney", controller.GetMidjourney)
 		apiRouter.GET("/home_page_content", controller.GetHomePageContent)
+		apiRouter.GET("/free_group/usage", controller.GetFreeGroupUsage)
 		apiRouter.GET("/pricing", middleware.HeaderNavModuleAuth("pricing"), controller.GetPricing)
 		perfMetricsRoute := apiRouter.Group("/perf-metrics")
 		perfMetricsRoute.Use(middleware.HeaderNavModulePublicOrUserAuth("pricing"))

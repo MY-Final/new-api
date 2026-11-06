@@ -21,6 +21,7 @@ const (
 
 	MsgRateLimitReached      = "rate_limit.reached"
 	MsgRateLimitTotalReached = "rate_limit.total_reached"
+	MsgFreeGroupLimitReached = "rate_limit.free_group_daily"
 
 	MsgDistributorInvalidRequest               = "distributor.invalid_request"
 	MsgDistributorInvalidChannelId             = "distributor.invalid_channel_id"

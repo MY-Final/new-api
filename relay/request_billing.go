@@ -23,6 +23,9 @@ import (
 // provide the current request body through BodyStorage or BillingRequestInput;
 // channel retries retain the resulting billing session and pricing snapshot.
 func PrepareRequestBilling(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPIError {
+	if apiErr := service.LoadFreeGroupSetting(c); apiErr != nil {
+		return apiErr
+	}
 	if err := helper.PrepareSubscriptionRequest(c, info); err != nil {
 		return types.NewErrorWithStatusCode(
 			err,

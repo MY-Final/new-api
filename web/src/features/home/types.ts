@@ -37,3 +37,23 @@ export interface HomePageContentResult {
   isLoaded: boolean
   isUrl: boolean
 }
+
+export interface FreeGroupUsage {
+  enabled: boolean
+  group: string
+  daily_limit: number
+  used: number
+  remaining: number
+}
+
+export interface FreeGroupUsageState {
+  usage?: FreeGroupUsage
+  isLoading: boolean
+  isError: boolean
+}
+
+export interface FreeGroupUsageResponse {
+  success: boolean
+  message?: string
+  data?: FreeGroupUsage
+}

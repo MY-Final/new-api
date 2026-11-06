@@ -74,6 +74,9 @@ func AlphaSearchHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError
 	}
 	adaptor.Init(info)
 
+	if apiErr := service.ReserveFreeGroupCall(c, info.UsingGroup, info.UserId); apiErr != nil {
+		return apiErr
+	}
 	resp, err := adaptor.DoRequest(c, info, body)
 	if err != nil {
 		return types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)

@@ -157,6 +157,9 @@ func relayResponsesRequest(c *gin.Context, info *relaycommon.RelayInfo, adaptor 
 	var requestBody io.Reader = body
 
 	var httpResp *http.Response
+	if apiErr := service.ReserveFreeGroupCall(c, info.UsingGroup, info.UserId); apiErr != nil {
+		return nil, apiErr
+	}
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)

@@ -8,6 +8,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -19,9 +20,81 @@ import (
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
+	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
+
+func TestFreeGroupPricingAndDailyLimit(t *testing.T) {
+	require.NoError(t, i18n.Init())
+	db, err := gorm.Open(sqlite.Open("file:free_group_pricing?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.Option{}, &model.FreeGroupDailyUsage{}))
+	oldDB := model.DB
+	model.DB = db
+	t.Cleanup(func() {
+		model.DB = oldDB
+		sqlDB, dbErr := db.DB()
+		require.NoError(t, dbErr)
+		require.NoError(t, sqlDB.Close())
+	})
+	require.NoError(t, db.Create(&model.Option{Key: model.FreeGroupSettingOption, Value: `{"enabled":true,"group":"free","daily_limit":2,"user_limit":1}`}).Error)
+
+	saved := map[string]string{}
+	require.NoError(t, config.GlobalConfig.SaveToDB(func(key, value string) error {
+		saved[key] = value
+		return nil
+	}))
+	t.Cleanup(func() { require.NoError(t, config.GlobalConfig.LoadFromDB(saved)) })
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"billing_setting.billing_mode": `{"free-expr-test":"tiered_expr"}`,
+		"billing_setting.billing_expr": `{"free-expr-test":"tier(\"base\", p * 2)"}`,
+	}))
+	savedRatios, err := common.Marshal(ratio_setting.GetModelRatioCopy())
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(string(savedRatios))) })
+	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{"free-token-test":2}`))
+	savedPrices, err := common.Marshal(ratio_setting.GetModelPriceCopy())
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(string(savedPrices))) })
+	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"free-fixed-test":2}`))
+	for _, modelName := range []string{"free-token-test", "free-fixed-test", "free-expr-test"} {
+		t.Run(modelName, func(t *testing.T) {
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+			require.Nil(t, service.LoadFreeGroupSetting(ctx))
+			info := &relaycommon.RelayInfo{
+				UserId: 1, OriginModelName: modelName, UserGroup: "free", UsingGroup: "free",
+				BillingRequestInput: &billingexpr.RequestInput{},
+			}
+			require.NoError(t, PrepareSubscriptionRequest(ctx, info))
+			assert.Zero(t, info.SubscriptionId)
+			price, priceErr := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{})
+			require.NoError(t, priceErr)
+			assert.True(t, price.FreeModel)
+			assert.Zero(t, price.QuotaToPreConsume)
+			assert.Zero(t, price.GroupRatioInfo.GroupRatio)
+			require.NoError(t, service.SettleBilling(ctx, info, 0))
+		})
+	}
+	for _, tc := range []struct {
+		user   int
+		status int
+	}{{1, 0}, {1, http.StatusTooManyRequests}, {2, 0}, {3, http.StatusTooManyRequests}} {
+		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+		ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+		require.Nil(t, service.LoadFreeGroupSetting(ctx))
+		apiErr := service.ReserveFreeGroupCall(ctx, "free", tc.user)
+		if tc.status == 0 {
+			require.Nil(t, apiErr)
+			require.Nil(t, service.ReserveFreeGroupCall(ctx, "free", tc.user), "a retry must not consume another slot")
+		} else {
+			require.NotNil(t, apiErr)
+			assert.Equal(t, tc.status, apiErr.StatusCode)
+		}
+	}
+}
 
 func TestModelPriceHelperTieredUsesPreloadedRequestInput(t *testing.T) {
 	gin.SetMode(gin.TestMode)

@@ -58,6 +58,10 @@ func PrepareSubscriptionRequest(c *gin.Context, info *relaycommon.RelayInfo) err
 	if group == "" {
 		return nil
 	}
+	if service.IsFreeGroup(c, group) {
+		info.UsingGroup = group
+		return nil
+	}
 	subscription, err := model.GetActiveSubscriptionForRoute(info.UserId, group)
 	if err != nil {
 		return err

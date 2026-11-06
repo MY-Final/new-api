@@ -25,6 +25,10 @@ import {
 } from './section-registry.tsx'
 
 const defaultSecuritySettings: SecuritySettings = {
+  FreeGroupSetting:
+    '{"enabled":false,"group":"","daily_limit":10000,"user_limit":0}',
+  FreeGroupDailyUsed: 0,
+  GroupRatio: '{}',
   ModelRequestRateLimitEnabled: false,
   ModelRequestRateLimitCount: 0,
   ModelRequestRateLimitSuccessCount: 1000,

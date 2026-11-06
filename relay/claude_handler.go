@@ -133,6 +133,9 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 
 	statusCodeMappingStr := c.GetString("status_code_mapping")
 	var httpResp *http.Response
+	if apiErr := service.ReserveFreeGroupCall(c, info.UsingGroup, info.UserId); apiErr != nil {
+		return apiErr
+	}
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {
 		return types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)

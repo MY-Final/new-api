@@ -39,6 +39,7 @@ func InitOptionMap() {
 
 	// 添加原有的系统配置
 	common.OptionMap["SupportTicketsEnabled"] = "true"
+	common.OptionMap[FreeGroupSettingOption] = `{"enabled":false,"group":"","daily_limit":10000,"user_limit":0}`
 	common.OptionMap["FileUploadPermission"] = strconv.Itoa(common.FileUploadPermission)
 	common.OptionMap["FileDownloadPermission"] = strconv.Itoa(common.FileDownloadPermission)
 	common.OptionMap["ImageUploadPermission"] = strconv.Itoa(common.ImageUploadPermission)
@@ -249,6 +250,16 @@ func SyncOptions(frequency int) {
 }
 
 func validateOptionValue(key string, value string) error {
+	if key == FreeGroupSettingOption {
+		setting, err := ParseFreeGroupSetting(value)
+		if err != nil {
+			return err
+		}
+		if setting.Enabled && !ratio_setting.ContainsGroupRatio(setting.Group) {
+			return common.NewMessage("The selected group does not exist")
+		}
+		return nil
+	}
 	if key == system_setting.TicketStorageOption {
 		return ValidateTicketStorageOption(value)
 	}
@@ -346,6 +357,9 @@ func validateOptionValue(key string, value string) error {
 }
 
 func UpdateOption(key string, value string) error {
+	if key == FreeGroupSettingOption {
+		return UpdateOptionsBulk(map[string]string{key: value})
+	}
 	if key == system_setting.TicketStorageOption {
 		return UpdateOptionsBulk(map[string]string{key: value})
 	}

@@ -18,6 +18,8 @@ For commercial licensing, please contact support@quantumnous.com
 */
 export { CTA } from './sections/cta'
 export { Features } from './sections/features'
+export { FreeGroupUsage, FreeGroupUsageIndicator } from './free-group-usage'
 export { Hero } from './sections/hero'
 export { HowItWorks } from './sections/how-it-works'
+export { KunCodeHomePage } from './kuncode-home-page'
 export { Stats } from './sections/stats'

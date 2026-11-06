@@ -473,6 +473,9 @@ export type OperationsSettings = {
 }
 
 export type SecuritySettings = {
+  FreeGroupSetting: string
+  FreeGroupDailyUsed: number
+  GroupRatio: string
   ModelRequestRateLimitEnabled: boolean
   ModelRequestRateLimitCount: number
   ModelRequestRateLimitSuccessCount: number

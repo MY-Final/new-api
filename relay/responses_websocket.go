@@ -243,6 +243,9 @@ func (s *responsesWSSession) runRequest(state *responsesWSCallState, message []b
 }
 
 func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState, create responsesWSCreateRequest) (apiErr *types.NewAPIError) {
+	if apiErr = service.LoadFreeGroupSetting(c); apiErr != nil {
+		return apiErr
+	}
 	policy := service.RequestPolicy(c)
 	modelName := create.Request.Model
 	started := time.Now()
@@ -296,6 +299,9 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 		if apiErr != nil {
 			return apiErr
 		}
+		if apiErr = service.ReserveFreeGroupCall(c, info.UsingGroup, info.UserId); apiErr != nil {
+			return apiErr
+		}
 		if err := s.writeTarget(websocket.TextMessage, payload); err != nil {
 			state.closeCode = websocket.CloseInternalServerErr
 			return types.NewError(err, types.ErrorCodeBadResponse, types.ErrOptionWithSkipRetry())
@@ -342,6 +348,9 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 			var payload []byte
 			payload, apiErr = buildResponsesWSCreatePayload(c, info, create.Request, create.Generate, create.StreamID)
 			if apiErr != nil {
+				return apiErr
+			}
+			if apiErr = service.ReserveFreeGroupCall(c, info.UsingGroup, info.UserId); apiErr != nil {
 				return apiErr
 			}
 			adaptor := GetAdaptor(info.ApiType)

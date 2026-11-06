@@ -224,6 +224,7 @@ func newTaskSubmitContext(t *testing.T, originalModel, mapping string) (*gin.Con
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", nil)
+	c.Set("free_group_setting", model.FreeGroupSetting{})
 	common.SetContextKey(c, constant.ContextKeyOriginalModel, originalModel)
 	common.SetContextKey(c, constant.ContextKeyChannelBaseUrl, "https://provider.example")
 	if mapping != "" {

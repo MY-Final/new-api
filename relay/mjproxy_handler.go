@@ -220,7 +220,7 @@ func RelaySwapFace(c *gin.Context, info *relaycommon.RelayInfo) *dto.MidjourneyR
 		}
 	}
 
-	if userQuota-priceData.Quota < 0 {
+	if !service.IsFreeGroup(c, info.UsingGroup) && userQuota-priceData.Quota < 0 {
 		return &dto.MidjourneyResponse{
 			Code:        4,
 			Description: "quota_not_enough",
@@ -230,6 +230,13 @@ func RelaySwapFace(c *gin.Context, info *relaycommon.RelayInfo) *dto.MidjourneyR
 	baseURL := c.GetString("base_url")
 	fullRequestURL := fmt.Sprintf("%s%s", baseURL, requestURL)
 	service.RequestPolicy(c).BeginAttempt(&model.Channel{Id: c.GetInt("channel_id")}, info.UsingGroup)
+	if apiErr := service.ReserveFreeGroupCall(c, info.UsingGroup, info.UserId); apiErr != nil {
+		c.Set("free_group_error_status", apiErr.StatusCode)
+		if apiErr.StatusCode == http.StatusTooManyRequests {
+			return &dto.MidjourneyResponse{Code: 30, Description: apiErr.Error()}
+		}
+		return &dto.MidjourneyResponse{Code: 4, Description: apiErr.Error()}
+	}
 	mjResp, _, err := service.DoMidjourneyHttpRequest(c, time.Second*60, fullRequestURL)
 	accepted := service.RecordMidjourneyPolicyResponse(c, mjResp, err)
 	if err != nil {
@@ -543,7 +550,7 @@ func RelayMidjourneySubmit(c *gin.Context, relayInfo *relaycommon.RelayInfo) *dt
 		}
 	}
 
-	if consumeQuota && userQuota-priceData.Quota < 0 {
+	if consumeQuota && !service.IsFreeGroup(c, relayInfo.UsingGroup) && userQuota-priceData.Quota < 0 {
 		return &dto.MidjourneyResponse{
 			Code:        4,
 			Description: "quota_not_enough",
@@ -551,6 +558,13 @@ func RelayMidjourneySubmit(c *gin.Context, relayInfo *relaycommon.RelayInfo) *dt
 	}
 
 	service.RequestPolicy(c).BeginAttempt(&model.Channel{Id: c.GetInt("channel_id")}, relayInfo.UsingGroup)
+	if apiErr := service.ReserveFreeGroupCall(c, relayInfo.UsingGroup, relayInfo.UserId); apiErr != nil {
+		c.Set("free_group_error_status", apiErr.StatusCode)
+		if apiErr.StatusCode == http.StatusTooManyRequests {
+			return &dto.MidjourneyResponse{Code: 30, Description: apiErr.Error()}
+		}
+		return &dto.MidjourneyResponse{Code: 4, Description: apiErr.Error()}
+	}
 	midjResponseWithStatus, responseBody, err := service.DoMidjourneyHttpRequest(c, time.Second*60, fullRequestURL)
 	accepted := service.RecordMidjourneyPolicyResponse(c, midjResponseWithStatus, err)
 	if err != nil {

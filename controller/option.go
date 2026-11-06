@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -82,6 +83,12 @@ func buildCompletionRatioMetaValue(optionValues map[string]string) string {
 
 func GetOptions(c *gin.Context) {
 	var options []*model.Option
+	freeGroupUsed, err := model.FreeGroupDailyCount(time.Now())
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	options = append(options, &model.Option{Key: "FreeGroupDailyUsed", Value: strconv.FormatInt(freeGroupUsed, 10)})
 	optionValues := make(map[string]string)
 	common.OptionMapRWMutex.Lock()
 	for k, v := range common.OptionMap {

@@ -48,6 +48,10 @@ func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) hostty
 		logger.LogDebug(ctx, "final group: %s", autoGroup)
 		relayInfo.UsingGroup = autoGroup.(string)
 	}
+	if service.IsFreeGroup(ctx, relayInfo.UsingGroup) {
+		groupRatioInfo.GroupRatio = 0
+		return groupRatioInfo
+	}
 	if relayInfo.BillingSourceTarget == service.BillingSourceSubscription ||
 		relayInfo.BillingSourceTarget == "" && relayInfo.SubscriptionOutputLimit > 0 {
 		// Subscription usage is an internal budget, not a wallet charge. A
@@ -162,7 +166,7 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 	}
 
 	// check if free model pre-consume is disabled
-	if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
+	if service.IsFreeGroup(c, info.UsingGroup) || !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
 		// if model price or ratio is 0, do not pre-consume quota
 		if groupRatioInfo.GroupRatio == 0 {
 			preConsumedQuota = 0
@@ -276,7 +280,7 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (hostt
 		if err != nil {
 			return hosttypes.PriceData{}, err
 		}
-		if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
+		if service.IsFreeGroup(c, info.UsingGroup) || !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
 			if groupRatioInfo.GroupRatio == 0 || modelPrice == 0 {
 				quota = 0
 				freeModel = true
@@ -290,7 +294,7 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (hostt
 			return hosttypes.PriceData{}, err
 		}
 		modelPrice = -1
-		if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
+		if service.IsFreeGroup(c, info.UsingGroup) || !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
 			if groupRatioInfo.GroupRatio == 0 || modelRatio == 0 {
 				quota = 0
 				freeModel = true
@@ -446,7 +450,7 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, billing
 	}
 
 	freeModel := false
-	if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
+	if service.IsFreeGroup(c, info.UsingGroup) || !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
 		if groupRatioInfo.GroupRatio == 0 {
 			preConsumedQuota = 0
 			freeModel = true

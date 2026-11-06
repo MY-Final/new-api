@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
 
-import type { HomePageContentResponse } from './types'
+import type { FreeGroupUsageResponse, HomePageContentResponse } from './types'
 
 // ============================================================================
 // Home Page APIs
@@ -35,5 +35,10 @@ export async function getHomePageContent(): Promise<HomePageContentResponse> {
   const res = await api.get('/api/home_page_content', {
     headers: { 'Cache-Control': null },
   })
+  return res.data
+}
+
+export async function getFreeGroupUsage(): Promise<FreeGroupUsageResponse> {
+  const res = await api.get('/api/free_group/usage')
   return res.data
 }
