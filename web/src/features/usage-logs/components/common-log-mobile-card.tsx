@@ -45,6 +45,7 @@ import {
   isDisplayableLogType,
   isTimingLogType,
 } from '../lib/utils'
+import { CacheHitProgress } from './cache-hit-progress'
 import { ModelBadge, ResponseModelDetails } from './model-badge'
 import { StreamTpsCell, TimingMetricsCell } from './timing-metrics-cell'
 import { useUsageLogsContext } from './usage-logs-provider'
@@ -143,6 +144,11 @@ export function CommonLogMobileCard<TData>(props: {
     other?.usage_sources?.cache_tokens !== 'unavailable' &&
     missed > 0 &&
     missed < (log.prompt_tokens || 0)
+  const inputTotal = cacheRead + missed
+  const showCacheComposition =
+    (cacheRead > 0 || showCacheMiss || cacheWrite > 0) &&
+    inputTotal > 0 &&
+    other?.usage_sources?.cache_tokens !== 'unavailable'
   const endpoint = other?.request_path?.trim()
   const reasoningEffort = other?.reasoning_effort?.trim()
   const showTokens =
@@ -371,6 +377,9 @@ export function CommonLogMobileCard<TData>(props: {
             </span>
           )}
         </div>
+      )}
+      {showTokens && showCacheComposition && (
+        <CacheHitProgress cacheRead={cacheRead} inputTotal={inputTotal} />
       )}
       {showTokens && <UsageSourceNotice sources={other?.usage_sources} />}
       {contentCell && (

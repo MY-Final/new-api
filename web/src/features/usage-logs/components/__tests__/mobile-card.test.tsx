@@ -249,6 +249,9 @@ it('keeps input, output and cache quantities readable without empty metric cells
   expect(screen.getByText(/300/)).toBeVisible()
   expect(screen.getByText('Cache ↑ 200')).toBeVisible()
   expect(screen.getByText('Cache Miss')).toHaveTextContent('900')
+  expect(
+    screen.getByRole('progressbar', { name: 'Cache Hit Rate' })
+  ).toHaveAttribute('aria-valuetext', '25%')
 })
 
 it('shows the established empty state when no logs exist', () => {

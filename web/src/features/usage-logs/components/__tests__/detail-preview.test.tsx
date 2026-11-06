@@ -296,9 +296,12 @@ test('token column shows the cache breakdown below the totals', () => {
 
   const bar = document.querySelector('[data-slot="token-composition-bar"]')
   expect(bar).not.toBeNull()
-  expect(bar?.children).toHaveLength(3)
-
-  expect(screen.getByText('97.7%')).toBeInTheDocument()
+  expect(
+    within(bar as HTMLElement).getByRole('progressbar', {
+      name: 'Cache Hit Rate',
+    })
+  ).toHaveAttribute('aria-valuetext', '97.7%')
+  expect(within(bar as HTMLElement).getByText('97.7%')).toBeVisible()
 })
 
 test('token column keeps the group label line box tall enough for underscore descenders', () => {

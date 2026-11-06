@@ -301,6 +301,9 @@ describe('usage facts billing details', () => {
     expect(screen.getByText('Cache Miss').nextElementSibling).toHaveTextContent(
       '700'
     )
+    expect(
+      screen.getByRole('progressbar', { name: 'Cache Hit Rate' })
+    ).toHaveAttribute('aria-valuetext', '30%')
   })
 
   beforeAll(() => {

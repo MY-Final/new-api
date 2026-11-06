@@ -95,6 +95,7 @@ import {
   isTimingLogType,
 } from '../../lib/utils'
 import { USAGE_BILLING_PATH, type LogOtherData } from '../../types'
+import { CacheHitProgress } from '../cache-hit-progress'
 import { ResponseModelDetails } from '../model-badge'
 import { PluginAuthorLink } from '../plugin-author-link'
 import { UsageSourceNotice } from '../usage-source-notice'
@@ -437,6 +438,11 @@ function TokenBreakdown(props: { log: UsageLog; other: LogOtherData }) {
 
   const { missed } = getInputTokenBreakdown(promptTokens, other)
   const showCacheMiss = missed > 0 && missed < promptTokens
+  const inputTotal = cacheRead + missed
+  const showCacheComposition =
+    (cacheRead > 0 || showCacheMiss || cacheWrite > 0) &&
+    inputTotal > 0 &&
+    sources?.cache_tokens !== 'unavailable'
 
   const rows: Array<{ label: string; value: string }> = []
 
@@ -535,6 +541,13 @@ function TokenBreakdown(props: { log: UsageLog; other: LogOtherData }) {
       {rows.map((row) => (
         <DetailRow key={row.label} label={row.label} value={row.value} mono />
       ))}
+      {showCacheComposition && (
+        <CacheHitProgress
+          cacheRead={cacheRead}
+          inputTotal={inputTotal}
+          className='pt-0.5'
+        />
+      )}
       {other.billing_tokens && (
         <div
           role='group'

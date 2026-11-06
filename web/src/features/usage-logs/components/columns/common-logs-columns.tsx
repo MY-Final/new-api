@@ -76,6 +76,7 @@ import {
   isPerCallBilling,
 } from '../../lib/utils'
 import type { LogOtherData } from '../../types'
+import { CacheHitProgress } from '../cache-hit-progress'
 import { DetailsDialog } from '../dialogs/details-dialog'
 import { LogCostDisplay } from '../log-cost-display'
 import { ModelBadge } from '../model-badge'
@@ -815,17 +816,11 @@ export function useCommonLogsColumns(
             missed < promptTokens
           const hasCacheBreakdown =
             cacheRead > 0 || showCacheMiss || cacheWrite > 0
-          const cacheWriteShown = Math.min(cacheWrite, missed)
-          const freshMiss = Math.max(missed - cacheWriteShown, 0)
           const inputTotal = cacheRead + missed
           const showCacheComposition =
             hasCacheBreakdown &&
             inputTotal > 0 &&
             other?.usage_sources?.cache_tokens !== 'unavailable'
-          const cacheHitRateLabel =
-            inputTotal > 0
-              ? `${((cacheRead / inputTotal) * 100).toFixed(1).replace(/\.0$/, '')}%`
-              : '0%'
 
           return (
             <div className='flex min-w-[9.5rem] flex-col gap-0.5'>
@@ -898,41 +893,11 @@ export function useCommonLogsColumns(
                 </div>
               )}
               {showCacheComposition && (
-                <span className='mt-0.5 flex items-center gap-2'>
-                  <span
-                    data-slot='token-composition-bar'
-                    aria-hidden='true'
-                    className='bg-muted flex h-[3px] min-w-6 flex-1 overflow-hidden rounded-full'
-                  >
-                    {cacheRead > 0 && (
-                      <span
-                        className='bg-primary/70 h-full'
-                        style={{
-                          width: `${(cacheRead / inputTotal) * 100}%`,
-                        }}
-                      />
-                    )}
-                    {freshMiss > 0 && (
-                      <span
-                        className='bg-muted-foreground/25 h-full'
-                        style={{
-                          width: `${(freshMiss / inputTotal) * 100}%`,
-                        }}
-                      />
-                    )}
-                    {cacheWriteShown > 0 && (
-                      <span
-                        className='bg-primary/30 h-full'
-                        style={{
-                          width: `${(cacheWriteShown / inputTotal) * 100}%`,
-                        }}
-                      />
-                    )}
-                  </span>
-                  <span className='text-foreground/80 shrink-0 font-mono text-[11px] font-medium whitespace-nowrap tabular-nums'>
-                    {cacheHitRateLabel}
-                  </span>
-                </span>
+                <CacheHitProgress
+                  cacheRead={cacheRead}
+                  inputTotal={inputTotal}
+                  className='mt-0.5'
+                />
               )}
             </div>
           )
