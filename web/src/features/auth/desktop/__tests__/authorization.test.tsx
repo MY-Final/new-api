@@ -179,6 +179,47 @@ it('shows an expired request and offers no authorization actions', async () => {
   ).not.toBeInTheDocument()
 })
 
+it('shows the selected group on the success page before returning', async () => {
+  requests({
+    ...request,
+    client_id: 'magpie',
+    scopes: ['profile:read', 'wallet:read', 'wallet:write'],
+  })
+  vi.spyOn(api, 'post').mockImplementation(async (url) => ({
+    data: {
+      success: true,
+      data:
+        url === '/api/verify'
+          ? proof
+          : {
+              callback_url:
+                'http://127.0.0.1:31415/callback?state=state&code=code',
+            },
+    },
+  }))
+  const returned = show()
+  const user = userEvent.setup()
+  const group = await screen.findByRole('combobox', { name: 'Group' })
+  await user.click(group)
+  await user.click(await screen.findByText('VIP group'))
+  await user.click(screen.getByRole('button', { name: 'Authorize' }))
+  await user.type(
+    await screen.findByLabelText('Password', { selector: 'input' }),
+    'test-password'
+  )
+  await user.click(screen.getByRole('button', { name: 'Verify' }))
+
+  const success = await screen.findByRole('status')
+  expect(within(success).getByText('Authorization complete')).toBeVisible()
+  expect(within(success).getByText('vip')).toBeVisible()
+  expect(
+    within(success).getByRole('button', { name: 'Return now' })
+  ).toBeVisible()
+  await waitFor(() => expect(returned).toHaveBeenCalledOnce(), {
+    timeout: 3000,
+  })
+})
+
 it('denies authorization without asking for security verification', async () => {
   requests()
   const post = vi.spyOn(api, 'post').mockResolvedValue({
@@ -192,7 +233,12 @@ it('denies authorization without asking for security verification', async () => 
   })
   const returned = show()
   await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
-  await waitFor(() => expect(returned).toHaveBeenCalledOnce())
+  expect(
+    await screen.findByRole('heading', { name: 'Authorization cancelled' })
+  ).toBeInTheDocument()
+  await waitFor(() => expect(returned).toHaveBeenCalledOnce(), {
+    timeout: 3000,
+  })
   expect(post).toHaveBeenCalledExactlyOnceWith(
     '/api/desktop/auth/authorize',
     { flow: 'f'.repeat(43), approve: false },
@@ -226,7 +272,12 @@ it('binds password verification to the request and submits approval once', async
     'test-password'
   )
   await user.click(screen.getByRole('button', { name: 'Verify' }))
-  await waitFor(() => expect(returned).toHaveBeenCalledOnce())
+  expect(
+    await screen.findByRole('heading', { name: 'Authorization complete' })
+  ).toBeInTheDocument()
+  await waitFor(() => expect(returned).toHaveBeenCalledOnce(), {
+    timeout: 3000,
+  })
   expect(post).toHaveBeenCalledWith(
     '/api/verify',
     expect.objectContaining({

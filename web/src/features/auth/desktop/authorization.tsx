@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
+import { CircleCheck, CircleSlash } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { z } from 'zod'
@@ -29,12 +30,14 @@ import {
   ApiKeyGroupCombobox,
   type ApiKeyGroupOption,
 } from '@/features/keys/components/api-key-group-combobox'
+import { useSystemConfig } from '@/hooks/use-system-config'
 import { api, getUserGroups } from '@/lib/api'
 import { handleServerError } from '@/lib/handle-server-error'
 import {
   requireServerSuccess,
   translateServerText,
 } from '@/lib/server-error-message'
+import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
 import {
@@ -50,15 +53,24 @@ const requestSchema = z.object({
   scopes: z.array(z.string()),
 })
 
+// 成功页停留一会再回跳，让用户看清楚结果；手动点按钮可以立刻回去。
+const RETURN_DELAY_MS = 1500
+
+type AuthorizationOutcome = {
+  approved: boolean
+  href: string
+}
+
 export function DesktopAuthorization(props: {
   flow: string
   onReturn?: (url: string) => void
 }) {
   const { t } = useTranslation()
+  const { systemName, logo } = useSystemConfig()
   const user = useAuthStore((state) => state.auth.user)
   const verification = useSecureVerification()
   const [pending, setPending] = useState(false)
-  const [completed, setCompleted] = useState(false)
+  const [outcome, setOutcome] = useState<AuthorizationOutcome | null>(null)
   const [selectedGroup, setSelectedGroup] = useState('')
   const request = useQuery({
     queryKey: ['desktop-authorization', props.flow],
@@ -111,9 +123,27 @@ export function DesktopAuthorization(props: {
       groupOptions[0].value
     setSelectedGroup(defaultGroup)
   }, [groupOptions, isMagpie, selectedGroup, user?.group])
+  const returnHref = outcome?.href
+  const onReturn = props.onReturn
+  useEffect(() => {
+    if (!returnHref) return
+    const timer = window.setTimeout(() => {
+      if (onReturn) onReturn(returnHref)
+      else window.location.assign(returnHref)
+    }, RETURN_DELAY_MS)
+    return () => window.clearTimeout(timer)
+  }, [returnHref, onReturn])
   const authorizationTitle = isMagpie
     ? t('Authorize Magpie')
     : t('Authorize KunCode Setup')
+  let outcomeSubtitle = ''
+  if (outcome?.approved) {
+    outcomeSubtitle = isMagpie
+      ? t('Returning to Magpie…')
+      : t('Returning to KunCode Setup…')
+  } else if (outcome) {
+    outcomeSubtitle = t('Nothing was shared. You can close this page.')
+  }
   const groupUnavailable =
     isMagpie &&
     (groups.isPending ||
@@ -166,9 +196,7 @@ export function DesktopAuthorization(props: {
       ) {
         throw new Error(t('Invalid authorization callback.'))
       }
-      setCompleted(true)
-      if (props.onReturn) props.onReturn(callback.href)
-      else window.location.assign(callback.href)
+      setOutcome({ approved: approve, href: callback.href })
     } catch (error) {
       handleServerError(
         error,
@@ -182,14 +210,60 @@ export function DesktopAuthorization(props: {
   }
 
   return (
-    <main className='mx-auto flex min-h-svh max-w-lg flex-col justify-center gap-6 px-6 py-12'>
-      <header className='space-y-2'>
-        <p className='text-muted-foreground text-sm'>
-          {isMagpie ? 'Magpie' : 'KunCode Setup'}
-        </p>
-        <h1 className='text-2xl font-semibold'>{authorizationTitle}</h1>
-      </header>
-      {request.isPending && <LoadingState />}
+    <main className='mx-auto flex min-h-svh w-full max-w-md flex-col justify-center gap-8 px-6 py-12'>
+      <div className='flex items-center gap-2.5'>
+        <img
+          src={logo}
+          alt={t('Logo')}
+          className='size-8 rounded-full object-cover'
+        />
+        <span className='text-lg font-medium'>{systemName}</span>
+      </div>
+      {outcome ? (
+        <section
+          role='status'
+          aria-live='polite'
+          className='flex flex-col items-center gap-5 py-6 text-center'
+        >
+          <span
+            className={cn(
+              'flex size-16 items-center justify-center rounded-full',
+              outcome.approved
+                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                : 'bg-muted text-muted-foreground'
+            )}
+          >
+            {outcome.approved ? (
+              <CircleCheck className='size-9' aria-hidden='true' />
+            ) : (
+              <CircleSlash className='size-9' aria-hidden='true' />
+            )}
+          </span>
+          <div className='space-y-2'>
+            <h1 className='text-xl font-semibold tracking-tight'>
+              {outcome.approved
+                ? t('Authorization complete')
+                : t('Authorization cancelled')}
+            </h1>
+            <p className='text-muted-foreground text-sm'>{outcomeSubtitle}</p>
+            {outcome.approved && isMagpie && selectedGroup && (
+              <p className='text-muted-foreground text-sm'>
+                {t('Group')}:{' '}
+                <span className='text-foreground font-medium'>
+                  {selectedGroup}
+                </span>
+              </p>
+            )}
+          </div>
+          <Button variant='outline' render={<a href={outcome.href} />}>
+            {t('Return now')}
+          </Button>
+          <p className='text-muted-foreground text-xs'>
+            {t('If the app did not open automatically, use the button above.')}
+          </p>
+        </section>
+      ) : null}
+      {!outcome && request.isPending && <LoadingState />}
       {request.isError && (
         <Alert variant='destructive'>
           <AlertDescription>
@@ -199,14 +273,28 @@ export function DesktopAuthorization(props: {
           </AlertDescription>
         </Alert>
       )}
-      {request.data && !completed && (
-        <>
-          <p>
-            {t('Account')}: {user?.display_name || user?.username}
-          </p>
-          <p>
-            {t('Device')}: {request.data.device_name}
-          </p>
+      {request.data && !outcome && (
+        <div className='space-y-6'>
+          <header className='space-y-2'>
+            <p className='text-muted-foreground text-sm'>
+              {isMagpie ? 'Magpie' : 'KunCode Setup'}
+            </p>
+            <h1 className='text-2xl font-semibold tracking-tight'>
+              {authorizationTitle}
+            </h1>
+          </header>
+          <dl className='bg-muted/40 divide-border divide-y rounded-xl border text-sm'>
+            <div className='flex items-baseline justify-between gap-4 px-4 py-2.5'>
+              <dt className='text-muted-foreground'>{t('Account')}</dt>
+              <dd className='font-medium'>
+                {user?.display_name || user?.username}
+              </dd>
+            </div>
+            <div className='flex items-baseline justify-between gap-4 px-4 py-2.5'>
+              <dt className='text-muted-foreground'>{t('Device')}</dt>
+              <dd className='font-medium'>{request.data.device_name}</dd>
+            </div>
+          </dl>
           <p className='text-muted-foreground text-sm'>
             {isMagpie
               ? t(
@@ -275,14 +363,7 @@ export function DesktopAuthorization(props: {
               {t('Cancel')}
             </Button>
           </div>
-        </>
-      )}
-      {completed && (
-        <p role='status'>
-          {isMagpie
-            ? t('Returning to Magpie…')
-            : t('Returning to KunCode Setup…')}
-        </p>
+        </div>
       )}
       <SecureVerificationDialog {...verification.dialogProps} />
     </main>
