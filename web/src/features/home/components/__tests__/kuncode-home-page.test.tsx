@@ -40,12 +40,15 @@ const freeGroupUsage: FreeGroupUsageState = {
   isError: false,
 }
 
-async function renderHomePage(apiBaseUrl = 'https://api.example.com/v1') {
+async function renderHomePage(
+  apiBaseUrl = 'https://api.example.com/v1',
+  freeGroupUsageState: FreeGroupUsageState = freeGroupUsage
+) {
   const root = createRootRoute({
     component: () => (
       <KunCodeHomePage
         apiBaseUrl={apiBaseUrl}
-        freeGroupUsage={freeGroupUsage}
+        freeGroupUsage={freeGroupUsageState}
       />
     ),
   })
@@ -75,6 +78,26 @@ describe('KunCode home page', () => {
     expect(
       usage.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
+  })
+
+  it('omits the free group allowance when the free group is off', async () => {
+    await renderHomePage(undefined, {
+      usage: {
+        enabled: false,
+        group: '',
+        daily_limit: 10000,
+        used: 0,
+        remaining: 10000,
+      },
+      isLoading: false,
+      isError: false,
+    })
+
+    expect(
+      screen.queryByRole('region', {
+        name: 'Free group calls today',
+      })
+    ).not.toBeInTheDocument()
   })
 
   it('renders the practice studio hero and links the main action to keys', async () => {

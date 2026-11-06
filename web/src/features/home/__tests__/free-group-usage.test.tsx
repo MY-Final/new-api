@@ -55,7 +55,7 @@ describe('free group usage', () => {
     ).toBeVisible()
   })
 
-  it('shows a disabled state without a progress bar when the free group is off', () => {
+  it('renders nothing when the free group is off', () => {
     render(
       <FreeGroupUsage
         usage={{
@@ -70,11 +70,11 @@ describe('free group usage', () => {
       />
     )
 
-    const usage = screen.getByRole('region', {
-      name: 'Free group calls today',
-    })
-    expect(within(usage).getByText('Disabled')).toBeVisible()
-    expect(within(usage).queryByRole('progressbar')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('region', {
+        name: 'Free group calls today',
+      })
+    ).not.toBeInTheDocument()
   })
 
   it('shows an unavailable state when the public usage request fails', () => {
@@ -106,7 +106,7 @@ describe('free group usage', () => {
     ).toBeVisible()
   })
 
-  it('shows the disabled state in the compact header indicator', () => {
+  it('renders no compact indicator when the free group is off', () => {
     render(
       <FreeGroupUsageIndicator
         usage={{
@@ -121,6 +121,6 @@ describe('free group usage', () => {
       />
     )
 
-    expect(screen.getByText('Disabled')).toBeVisible()
+    expect(screen.queryByText('Disabled')).not.toBeInTheDocument()
   })
 })

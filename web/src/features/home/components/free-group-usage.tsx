@@ -38,6 +38,10 @@ export function FreeGroupUsage(props: FreeGroupUsageProps) {
   const used = props.usage?.used ?? 0
   const progress = dailyLimit > 0 ? Math.min((used / dailyLimit) * 100, 100) : 0
 
+  if (props.usage?.enabled === false) {
+    return null
+  }
+
   let value: ReactNode
   if (props.isLoading) {
     value = <Skeleton className='h-8 w-28' />
@@ -47,8 +51,6 @@ export function FreeGroupUsage(props: FreeGroupUsageProps) {
         {t('Unavailable')}
       </Badge>
     )
-  } else if (!props.usage.enabled) {
-    value = <Badge variant='secondary'>{t('Disabled')}</Badge>
   } else {
     value = (
       <div className='text-right'>
@@ -129,6 +131,10 @@ export function FreeGroupUsageIndicator(props: FreeGroupUsageProps) {
   const { i18n, t } = useTranslation()
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
 
+  if (props.usage?.enabled === false) {
+    return null
+  }
+
   if (props.isLoading) {
     return <Skeleton className='h-8 w-20 rounded-full' />
   }
@@ -141,15 +147,6 @@ export function FreeGroupUsageIndicator(props: FreeGroupUsageProps) {
       >
         <Activity className='size-3.5' aria-hidden='true' />
         {t('Unavailable')}
-      </Badge>
-    )
-  }
-
-  if (!props.usage.enabled) {
-    return (
-      <Badge variant='secondary' className='h-8 gap-1.5 rounded-full px-2.5'>
-        <Activity className='size-3.5' aria-hidden='true' />
-        {t('Disabled')}
       </Badge>
     )
   }
