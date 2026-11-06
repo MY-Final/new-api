@@ -68,6 +68,7 @@ const consoleRouteSegments = new Set([
   'embed',
   'error-requests',
   'finance',
+  'invite-codes',
   'intelligence-test',
   'keys',
   'ledger',

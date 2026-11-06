@@ -233,6 +233,7 @@ func Register(c *gin.Context) {
 	}
 	user.Username = strings.TrimSpace(user.Username)
 	user.Email = model.NormalizeEmail(user.Email)
+	user.InviteCode = model.NormalizeInviteCode(user.InviteCode)
 	if user.Username == "" {
 		common.ApiErrorT(c, "Invalid parameters")
 		return
@@ -285,7 +286,21 @@ func Register(c *gin.Context) {
 	if common.EmailVerificationEnabled {
 		cleanUser.Email = user.Email
 	}
-	if err := cleanUser.Insert(inviterId); err != nil {
+	var appliedInviteCode *model.InviteCode
+	if user.InviteCode != "" {
+		appliedInviteCode, err = cleanUser.InsertWithInviteCode(user.InviteCode)
+	} else {
+		err = cleanUser.Insert(inviterId)
+	}
+	if err != nil {
+		if errors.Is(err, model.ErrInviteCodeInvalid) ||
+			errors.Is(err, model.ErrInviteCodeDisabled) ||
+			errors.Is(err, model.ErrInviteCodeExpired) ||
+			errors.Is(err, model.ErrInviteCodeLimitReached) ||
+			errors.Is(err, model.ErrInviteCodeAlreadyClaimed) {
+			writeInviteCodeRegistrationError(c, err)
+			return
+		}
 		if errors.Is(err, model.ErrEmailAlreadyTaken) {
 			common.ApiErrorT(c, "Email address is already in use")
 			return
@@ -327,7 +342,9 @@ func Register(c *gin.Context) {
 			ModelLimitsEnabled: false,
 		}
 		token.AllowUserQuotaQuery = true
-		if setting.DefaultUseAutoGroup {
+		if appliedInviteCode != nil {
+			token.Group = appliedInviteCode.GroupName
+		} else if setting.DefaultUseAutoGroup {
 			token.Group = "auto"
 		}
 		if err := token.Insert(); err != nil {

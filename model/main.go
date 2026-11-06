@@ -363,6 +363,8 @@ func migrateDB() error {
 		&QuotaData{},
 		&QuotaUsageDaily{},
 		&FreeGroupDailyUsage{},
+		&InviteCode{},
+		&InviteCodeClaim{},
 		&Task{},
 		&TaskPlugin{},
 		&Model{},

@@ -544,13 +544,29 @@ export interface UserInfo {
   id: number
   username: string
   display_name?: string
+  email?: string
+  status: number
+  role: number
   quota: number
+  bonus_quota?: number
+  paid_quota?: number
   used_quota: number
   request_count: number
   group?: string
+  max_concurrency?: number
   aff_code?: string
   aff_count?: number
   aff_quota?: number
+  aff_history_quota?: number
+  aff_reversed_quota?: number
   inviter_id?: number
+  created_at?: number
+  last_login_at?: number
+  github_id?: string
+  discord_id?: string
+  oidc_id?: string
+  wechat_id?: string
+  telegram_id?: string
+  linux_do_id?: string
   remark?: string
 }

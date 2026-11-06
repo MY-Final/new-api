@@ -112,7 +112,8 @@ type AccessTokenGenerateContext struct {
 }
 
 type DesktopAuthorizeContext struct {
-	RequestID int64 `json:"request_id"`
+	RequestID int64  `json:"request_id"`
+	Group     string `json:"group,omitempty"`
 }
 
 // AccessTokenUpdateContext binds a grant change to one token and the exact new
@@ -170,7 +171,19 @@ func BindVerificationOperation(operation VerificationOperation) (VerificationBin
 	switch operation.Scope {
 	case VerificationScopeDesktopAuthorize:
 		var context DesktopAuthorizeContext
-		if len(fields) != 1 || common.Unmarshal(operation.Context, &context) != nil || context.RequestID <= 0 {
+		if len(fields) < 1 || len(fields) > 2 || common.Unmarshal(operation.Context, &context) != nil || context.RequestID <= 0 {
+			return VerificationBinding{}, ErrVerificationContextInvalid
+		}
+		if _, hasRequestID := fields["request_id"]; !hasRequestID {
+			return VerificationBinding{}, ErrVerificationContextInvalid
+		}
+		if len(fields) == 2 {
+			if _, hasGroup := fields["group"]; !hasGroup {
+				return VerificationBinding{}, ErrVerificationContextInvalid
+			}
+		}
+		context.Group = strings.TrimSpace(context.Group)
+		if _, hasGroup := fields["group"]; hasGroup && (context.Group == "" || len(context.Group) > 128) {
 			return VerificationBinding{}, ErrVerificationContextInvalid
 		}
 		normalized = context

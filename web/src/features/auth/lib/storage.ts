@@ -26,6 +26,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 const STORAGE_KEYS = {
   AFFILIATE: 'aff',
+  INVITE_CODE: 'invite_code',
   STATUS: 'status',
 } as const
 
@@ -57,5 +58,35 @@ export function saveAffiliateCode(code: string): void {
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('Failed to save affiliate code:', error)
+  }
+}
+
+// ============================================================================
+// Invitation Code Storage
+// ============================================================================
+
+export function getInviteCode(): string {
+  if (typeof window === 'undefined') return ''
+  try {
+    return window.localStorage.getItem(STORAGE_KEYS.INVITE_CODE) ?? ''
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to get invitation code:', error)
+    return ''
+  }
+}
+
+export function saveInviteCode(code: string): void {
+  if (typeof window === 'undefined') return
+  try {
+    const normalized = code.trim().toLowerCase()
+    if (normalized) {
+      window.localStorage.setItem(STORAGE_KEYS.INVITE_CODE, normalized)
+    } else {
+      window.localStorage.removeItem(STORAGE_KEYS.INVITE_CODE)
+    }
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to save invitation code:', error)
   }
 }

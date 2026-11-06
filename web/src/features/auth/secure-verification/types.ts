@@ -52,7 +52,10 @@ export type SecurityProofScope =
 export type AdminUserManageAction = 'disable' | 'enable' | 'promote' | 'demote'
 
 export type VerificationOperation =
-  | { scope: 'desktop.authorize'; context: { request_id: number } }
+  | {
+      scope: 'desktop.authorize'
+      context: { request_id: number; group?: string }
+    }
   | { scope: 'channel.key.read'; context: { channel_id: number } }
   | {
       scope: 'account.binding.bind'

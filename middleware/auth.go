@@ -27,6 +27,7 @@ const (
 	authIdentityContextKey        = "auth_identity"
 	accessTokenLookupContextKey   = "access_token_lookup"
 	accessTokenIdentityContextKey = "access_token_identity"
+	magpieAccessTokenContextKey   = "magpie_access_token"
 	accessTokenSessionRequiredMsg = "a dashboard login session is required"
 )
 
@@ -264,11 +265,12 @@ func classifyDashboardCredential(c *gin.Context) (*model.UserBase, service.AuthI
 // accessTokenLookup is the per-request result of resolving an opaque dashboard
 // credential. A nil user with a nil err means the value is not a PAT.
 type accessTokenLookup struct {
-	ref    string
-	legacy bool
-	token  *model.UserAccessToken
-	user   *model.UserBase
-	err    error
+	ref          string
+	legacy       bool
+	token        *model.UserAccessToken
+	user         *model.UserBase
+	installation *model.DesktopInstallation
+	err          error
 }
 
 // lookupAccessToken resolves raw once per request, so the access audit and
@@ -297,10 +299,12 @@ func lookupAccessToken(c *gin.Context, raw string) *accessTokenLookup {
 	}
 	lookup.token = token
 	if token.DesktopInstallationId != 0 {
-		if err := model.ValidateDesktopAccessToken(token.Id, token.UserId); err != nil {
+		installation, err := model.GetDesktopInstallation(token.Id, token.UserId)
+		if err != nil {
 			lookup.err = err
 			return lookup
 		}
+		lookup.installation = installation
 	}
 	lookup.user, lookup.err = model.GetUserCache(token.UserId)
 	if lookup.err == nil && token.Expired(common.GetTimestamp()) {
@@ -322,16 +326,28 @@ func requestAccessTokenLookup(c *gin.Context) *accessTokenLookup {
 func enforceAccessTokenRoute(c *gin.Context, lookup *accessTokenLookup, abort bool) bool {
 	key := c.Request.Method + " " + c.FullPath()
 	if lookup.token != nil && lookup.token.DesktopInstallationId != 0 {
-		switch key {
-		case "GET /api/user/self", "GET /api/user/self/groups", "GET /api/user/models", "GET /api/models",
-			"GET /api/desktop/profile", "POST /api/desktop/auth/logout", "PUT /api/desktop/tools/:agent",
-			"GET /api/desktop/keys", "POST /api/desktop/keys", "GET /api/desktop/keys/:id",
-			"PUT /api/desktop/keys/:id", "DELETE /api/desktop/keys/:id", "POST /api/desktop/keys/:id/reveal":
-		default:
-			if abort {
-				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"success": false, "code": "ACCESS_TOKEN_SCOPE_DENIED", "message": "Desktop authorization cannot access this route."})
+		if model.IsMagpieInstallation(lookup.installation) {
+			switch key {
+			case "GET /api/user/self", "GET /api/user/checkin", "POST /api/user/checkin", "POST /api/desktop/auth/logout":
+				c.Set(magpieAccessTokenContextKey, true)
+			default:
+				if abort {
+					c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"success": false, "code": "ACCESS_TOKEN_SCOPE_DENIED", "message": "Magpie authorization cannot access this route."})
+				}
+				return false
 			}
-			return false
+		} else {
+			switch key {
+			case "GET /api/user/self", "GET /api/user/self/groups", "GET /api/user/models", "GET /api/models",
+				"GET /api/desktop/profile", "POST /api/desktop/auth/logout", "PUT /api/desktop/tools/:agent",
+				"GET /api/desktop/keys", "POST /api/desktop/keys", "GET /api/desktop/keys/:id",
+				"PUT /api/desktop/keys/:id", "DELETE /api/desktop/keys/:id", "POST /api/desktop/keys/:id/reveal":
+			default:
+				if abort {
+					c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"success": false, "code": "ACCESS_TOKEN_SCOPE_DENIED", "message": "Desktop authorization cannot access this route."})
+				}
+				return false
+			}
 		}
 	}
 	rule, declared := AccessTokenRouteRule(key)

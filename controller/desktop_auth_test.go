@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -95,6 +96,9 @@ func setupDesktopAuth(t *testing.T, kind, dsn string, upgrade, fullStartup bool)
 	router.DELETE("/api/desktop/keys/:id", middleware.UserAuth(), DesktopDeleteKey)
 	router.POST("/api/desktop/keys/:id/reveal", middleware.UserAuth(), DesktopRevealKey)
 	router.GET("/api/user/self", middleware.UserAuth(), func(c *gin.Context) { common.ApiSuccess(c, gin.H{"id": c.GetInt("id")}) })
+	router.GET("/api/user/checkin", middleware.UserAuth(), func(c *gin.Context) { common.ApiSuccess(c, gin.H{"status": "ready"}) })
+	router.POST("/api/user/checkin", middleware.UserAuth(), middleware.TurnstileCheck(), func(c *gin.Context) { common.ApiSuccess(c, gin.H{"status": "done"}) })
+	router.POST("/api/user/pay", middleware.UserAuth(), func(c *gin.Context) { common.ApiSuccess(c, nil) })
 	router.GET("/api/token/", middleware.UserAuth(), func(c *gin.Context) { common.ApiSuccess(c, nil) })
 	return user, router
 }
@@ -140,11 +144,19 @@ func desktopResponseData(t *testing.T, response *httptest.ResponseRecorder) map[
 }
 
 func desktopAuthorizationCode(t *testing.T, router *gin.Engine, user *model.User, installID string) (string, string) {
+	return clientAuthorizationCode(t, router, user, model.DesktopClientID, installID)
+}
+
+func clientAuthorizationCode(t *testing.T, router *gin.Engine, user *model.User, clientID, installID string, groups ...string) (string, string) {
 	t.Helper()
+	selectedGroup := ""
+	if len(groups) > 0 {
+		selectedGroup = groups[0]
+	}
 	identity, jwt := createAccessTokenTestSession(t, user.Id, uuid.NewString())
 	verifier := strings.Repeat("v", 43)
 	digest := sha256.Sum256([]byte(verifier))
-	input := model.DesktopRequest{ClientId: model.DesktopClientID, InstallationId: installID, DeviceName: "test device", RedirectURI: "http://127.0.0.1:31415/callback", State: strings.Repeat("s", 43), CodeChallenge: base64.RawURLEncoding.EncodeToString(digest[:]), CodeChallengeMethod: "S256"}
+	input := model.DesktopRequest{ClientId: clientID, InstallationId: installID, DeviceName: "test device", RedirectURI: "http://127.0.0.1:31415/callback", State: strings.Repeat("s", 43), CodeChallenge: base64.RawURLEncoding.EncodeToString(digest[:]), CodeChallengeMethod: "S256"}
 	body, err := common.Marshal(input)
 	require.NoError(t, err)
 	start := desktopResponseData(t, accessTokenRequest(router, "POST", "/api/desktop/auth/start", "", "", string(body)))
@@ -152,10 +164,13 @@ func desktopAuthorizationCode(t *testing.T, router *gin.Engine, user *model.User
 	require.NoError(t, err)
 	flow := authorizeURL.Query().Get("flow")
 	data := desktopResponseData(t, accessTokenRequest(router, "GET", "/api/desktop/auth/request?flow="+flow, jwt, "", ""))
-	proofContext, err := common.Marshal(service.DesktopAuthorizeContext{RequestID: int64(data["request_id"].(float64))})
+	require.Equal(t, clientID, data["client_id"])
+	proofContext, err := common.Marshal(service.DesktopAuthorizeContext{RequestID: int64(data["request_id"].(float64)), Group: selectedGroup})
 	require.NoError(t, err)
 	proof := issueSecurityEnrollmentProof(t, identity, service.VerificationOperation{Scope: service.VerificationScopeDesktopAuthorize, Context: proofContext}, service.VerificationMethodPassword)
-	decision := desktopResponseData(t, accessTokenRequest(router, "POST", "/api/desktop/auth/authorize", jwt, proof, `{"flow":"`+flow+`","approve":true}`))
+	decisionBody, err := common.Marshal(map[string]any{"flow": flow, "approve": true, "group": selectedGroup})
+	require.NoError(t, err)
+	decision := desktopResponseData(t, accessTokenRequest(router, "POST", "/api/desktop/auth/authorize", jwt, proof, string(decisionBody)))
 	callback, err := url.Parse(decision["callback_url"].(string))
 	require.NoError(t, err)
 	assert.Equal(t, input.State, callback.Query().Get("state"))
@@ -163,12 +178,16 @@ func desktopAuthorizationCode(t *testing.T, router *gin.Engine, user *model.User
 	return callback.Query().Get("code"), verifier
 }
 
-func desktopExchange(t *testing.T, router *gin.Engine, code, verifier string) string {
+func clientExchange(t *testing.T, router *gin.Engine, code, verifier string) map[string]any {
 	t.Helper()
 	body, err := common.Marshal(map[string]string{"code": code, "code_verifier": verifier, "redirect_uri": "http://127.0.0.1:31415/callback"})
 	require.NoError(t, err)
-	data := desktopResponseData(t, accessTokenRequest(router, "POST", "/api/desktop/auth/exchange", "", "", string(body)))
-	return data["token"].(string)
+	return desktopResponseData(t, accessTokenRequest(router, "POST", "/api/desktop/auth/exchange", "", "", string(body)))
+}
+
+func desktopExchange(t *testing.T, router *gin.Engine, code, verifier string) string {
+	t.Helper()
+	return clientExchange(t, router, code, verifier)["token"].(string)
 }
 
 func TestDesktopAuthorizationLifecycle(t *testing.T) {
@@ -217,6 +236,170 @@ func TestDesktopAuthorizationLifecycle(t *testing.T) {
 	assert.Equal(t, 401, accessTokenRequest(router, "GET", "/api/user/self", pat2, "", "").Code)
 }
 
+func TestMagpieBrowserAuthorizationLifecycle(t *testing.T) {
+	user, router := setupDesktopAuth(t, "sqlite", "", false, false)
+	oldTurnstile := common.TurnstileCheckEnabled
+	common.TurnstileCheckEnabled = true
+	t.Cleanup(func() { common.TurnstileCheckEnabled = oldTurnstile })
+
+	installID := uuid.NewString()
+	code, verifier := clientAuthorizationCode(t, router, user, model.MagpieClientID, installID, "vip")
+	first := clientExchange(t, router, code, verifier)
+	assert.Equal(t, model.MagpieClientID, first["client_id"])
+	assert.Equal(t, "vip", first["group"])
+	assert.Equal(t, first["token"], first["access_token"])
+	firstPAT := first["access_token"].(string)
+	firstAPIKey := first["api_key"].(string)
+	require.True(t, strings.HasPrefix(firstAPIKey, "sk-"))
+	assert.NotEmpty(t, first["expires_at"])
+
+	var pat model.UserAccessToken
+	require.NoError(t, model.DB.Where("token_hash = ?", model.AccessTokenFingerprint(firstPAT)).First(&pat).Error)
+	assert.Equal(t, []string{"profile:read", "wallet:read", "wallet:write"}, pat.GetScopes())
+
+	var installation model.DesktopInstallation
+	require.NoError(t, model.DB.Where("user_id = ? AND client_installation_id = ?", user.Id, "magpie:"+installID).First(&installation).Error)
+	assert.Equal(t, pat.Id, installation.AccessTokenId)
+
+	var binding model.DesktopToolKey
+	require.NoError(t, model.DB.Where("installation_id = ? AND agent = ?", installation.Id, model.MagpieAPITokenAgent).First(&binding).Error)
+	var apiToken model.Token
+	require.NoError(t, model.DB.First(&apiToken, binding.TokenId).Error)
+	assert.Equal(t, "vip", apiToken.Group)
+	assert.True(t, apiToken.AllowUserQuotaQuery)
+	assert.True(t, apiToken.UnlimitedQuota)
+
+	assert.Equal(t, 200, accessTokenRequest(router, "GET", "/api/user/self", firstPAT, "", "").Code)
+	assert.Equal(t, 200, accessTokenRequest(router, "GET", "/api/user/checkin", firstPAT, "", "").Code)
+	assert.Equal(t, 200, accessTokenRequest(router, "POST", "/api/user/checkin", firstPAT, "", "").Code, "Magpie tokens use their installation as the check-in anti-abuse proof")
+	assert.Equal(t, 403, accessTokenRequest(router, "GET", "/api/token/", firstPAT, "", "").Code)
+	assert.Equal(t, 403, accessTokenRequest(router, "POST", "/api/user/pay", firstPAT, "", "").Code)
+	require.NoError(t, model.DB.Where(&model.Token{Key: strings.TrimPrefix(firstAPIKey, "sk-")}).First(&model.Token{}).Error)
+
+	code, verifier = clientAuthorizationCode(t, router, user, model.MagpieClientID, installID, "vip")
+	second := clientExchange(t, router, code, verifier)
+	secondPAT := second["access_token"].(string)
+	secondAPIKey := second["api_key"].(string)
+	assert.NotEqual(t, firstPAT, secondPAT)
+	assert.NotEqual(t, firstAPIKey, secondAPIKey)
+	assert.Equal(t, 401, accessTokenRequest(router, "GET", "/api/user/self", firstPAT, "", "").Code)
+	assert.Error(t, model.DB.Where(&model.Token{Key: strings.TrimPrefix(firstAPIKey, "sk-")}).First(&model.Token{}).Error)
+	require.NoError(t, model.DB.Where(&model.Token{Key: strings.TrimPrefix(secondAPIKey, "sk-")}).First(&model.Token{}).Error)
+	var rebound model.DesktopToolKey
+	require.NoError(t, model.DB.Where("installation_id = ? AND agent = ?", installation.Id, model.MagpieAPITokenAgent).First(&rebound).Error)
+	assert.Equal(t, apiToken.Id, rebound.TokenId, "reauthorization rotates the key without accumulating token rows")
+
+	assert.Equal(t, 200, accessTokenRequest(router, "POST", "/api/desktop/auth/logout", secondPAT, "", "").Code)
+	assert.Equal(t, 401, accessTokenRequest(router, "GET", "/api/user/self", secondPAT, "", "").Code)
+	assert.Error(t, model.DB.Where(&model.Token{Key: strings.TrimPrefix(secondAPIKey, "sk-")}).First(&model.Token{}).Error)
+	var remainingBindings int64
+	require.NoError(t, model.DB.Model(&model.DesktopToolKey{}).Where("installation_id = ?", installation.Id).Count(&remainingBindings).Error)
+	assert.Zero(t, remainingBindings)
+}
+
+func TestMagpieAuthorizationRejectsUnavailableGroup(t *testing.T) {
+	user, router := setupDesktopAuth(t, "sqlite", "", false, false)
+	_, jwt := createAccessTokenTestSession(t, user.Id, uuid.NewString())
+	verifier := strings.Repeat("v", 43)
+	digest := sha256.Sum256([]byte(verifier))
+	input := model.DesktopRequest{
+		ClientId:            model.MagpieClientID,
+		InstallationId:      uuid.NewString(),
+		DeviceName:          "test device",
+		RedirectURI:         "http://127.0.0.1:31415/callback",
+		State:               strings.Repeat("s", 43),
+		CodeChallenge:       base64.RawURLEncoding.EncodeToString(digest[:]),
+		CodeChallengeMethod: "S256",
+	}
+	body, err := common.Marshal(input)
+	require.NoError(t, err)
+	start := desktopResponseData(t, accessTokenRequest(router, "POST", "/api/desktop/auth/start", "", "", string(body)))
+	authorizationURL, err := url.Parse(start["authorization_url"].(string))
+	require.NoError(t, err)
+	flow := authorizationURL.Query().Get("flow")
+	decision, err := common.Marshal(map[string]any{
+		"flow":    flow,
+		"approve": true,
+		"group":   "not-a-user-group",
+	})
+	require.NoError(t, err)
+	response := accessTokenRequest(router, "POST", "/api/desktop/auth/authorize", jwt, "", string(decision))
+	assert.Equal(t, 400, response.Code)
+	assert.Contains(t, response.Body.String(), "DESKTOP_GROUP_INVALID")
+}
+
+func TestMagpieExchangeRechecksSelectedGroup(t *testing.T) {
+	user, router := setupDesktopAuth(t, "sqlite", "", false, false)
+	originalGroups := setting.UserUsableGroups2JSONString()
+	t.Cleanup(func() {
+		require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(originalGroups))
+	})
+
+	code, verifier := clientAuthorizationCode(
+		t,
+		router,
+		user,
+		model.MagpieClientID,
+		uuid.NewString(),
+		"vip",
+	)
+	require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(`{"default":"Default group"}`))
+
+	body, err := common.Marshal(map[string]string{
+		"code":          code,
+		"code_verifier": verifier,
+		"redirect_uri":  "http://127.0.0.1:31415/callback",
+	})
+	require.NoError(t, err)
+	response := accessTokenRequest(router, "POST", "/api/desktop/auth/exchange", "", "", string(body))
+	assert.Equal(t, 400, response.Code)
+	assert.Contains(t, response.Body.String(), "DESKTOP_GROUP_INVALID")
+}
+
+func TestMagpieSecurityProofIsBoundToSelectedGroup(t *testing.T) {
+	user, router := setupDesktopAuth(t, "sqlite", "", false, false)
+	identity, jwt := createAccessTokenTestSession(t, user.Id, uuid.NewString())
+	verifier := strings.Repeat("v", 43)
+	digest := sha256.Sum256([]byte(verifier))
+	input := model.DesktopRequest{
+		ClientId:            model.MagpieClientID,
+		InstallationId:      uuid.NewString(),
+		DeviceName:          "test device",
+		RedirectURI:         "http://127.0.0.1:31415/callback",
+		State:               strings.Repeat("s", 43),
+		CodeChallenge:       base64.RawURLEncoding.EncodeToString(digest[:]),
+		CodeChallengeMethod: "S256",
+	}
+	body, err := common.Marshal(input)
+	require.NoError(t, err)
+	start := desktopResponseData(t, accessTokenRequest(router, "POST", "/api/desktop/auth/start", "", "", string(body)))
+	authorizationURL, err := url.Parse(start["authorization_url"].(string))
+	require.NoError(t, err)
+	flow := authorizationURL.Query().Get("flow")
+	request := desktopResponseData(t, accessTokenRequest(router, "GET", "/api/desktop/auth/request?flow="+flow, jwt, "", ""))
+	context, err := common.Marshal(service.DesktopAuthorizeContext{
+		RequestID: int64(request["request_id"].(float64)),
+		Group:     "vip",
+	})
+	require.NoError(t, err)
+	proof := issueSecurityEnrollmentProof(
+		t,
+		identity,
+		service.VerificationOperation{
+			Scope:   service.VerificationScopeDesktopAuthorize,
+			Context: context,
+		},
+		service.VerificationMethodPassword,
+	)
+	decision, err := common.Marshal(map[string]any{
+		"flow":    flow,
+		"approve": true,
+		"group":   "default",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 403, accessTokenRequest(router, "POST", "/api/desktop/auth/authorize", jwt, proof, string(decision)).Code)
+}
+
 func TestDesktopAuthorizationRejectsInvalidAuthority(t *testing.T) {
 	user, router := setupDesktopAuth(t, "sqlite", "", false, false)
 	code, verifier := desktopAuthorizationCode(t, router, user, uuid.NewString())
@@ -251,6 +434,10 @@ func TestDesktopDatabaseMatrix(t *testing.T) {
 				for _, agent := range []string{"codex", "claude", "opencode"} {
 					desktopResponseData(t, accessTokenRequest(router, "PUT", "/api/desktop/tools/"+agent, pat, "", `{"model":"coding-model"}`))
 				}
+				code, verifier = clientAuthorizationCode(t, router, user, model.MagpieClientID, uuid.NewString())
+				magpie := clientExchange(t, router, code, verifier)
+				assert.Equal(t, model.MagpieClientID, magpie["client_id"])
+				assert.Contains(t, magpie, "api_key")
 				var installation model.DesktopInstallation
 				require.NoError(t, model.DB.Where("user_id = ?", user.Id).First(&installation).Error)
 				duplicate := model.DesktopInstallation{UserId: user.Id, ClientInstallationId: installation.ClientInstallationId}

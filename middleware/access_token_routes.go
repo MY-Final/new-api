@@ -67,7 +67,7 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"GET /api/desktop/profile":                           accessTokenScopeRule("profile:read"),
 	"GET /api/desktop/auth/request":                      accessTokenSessionRule,
 	"POST /api/desktop/auth/authorize":                   accessTokenSessionRule,
-	"POST /api/desktop/auth/logout":                      accessTokenScopeRule(model.DesktopConfigureScope),
+	"POST /api/desktop/auth/logout":                      accessTokenAnyRule,
 	"PUT /api/desktop/tools/:agent":                      accessTokenScopeRule(model.DesktopConfigureScope),
 	"GET /api/desktop/keys":                              accessTokenScopeRule(model.DesktopKeysReadScope),
 	"POST /api/desktop/keys":                             accessTokenScopeRule(model.DesktopKeysWriteScope),

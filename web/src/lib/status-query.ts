@@ -20,10 +20,10 @@ import { queryOptions, type QueryClient } from '@tanstack/react-query'
 
 import { getStatus } from '@/lib/api'
 import { DEFAULT_SYSTEM_NAME, DEFAULT_LOGO } from '@/lib/constants'
+import { parseCurrencyDisplayType } from '@/lib/currency'
 import {
   useSystemConfigStore,
   type CurrencyConfig,
-  type CurrencyDisplayType,
   type SystemConfig,
   DEFAULT_CURRENCY_CONFIG,
 } from '@/stores/system-config-store'
@@ -65,9 +65,10 @@ export function mapStatusDataToConfig(
 ): Partial<SystemConfig> {
   if (!data) return {}
 
-  const quotaDisplayType =
-    (data.quota_display_type as CurrencyDisplayType | undefined) ??
+  const quotaDisplayType = parseCurrencyDisplayType(
+    data.quota_display_type,
     DEFAULT_CURRENCY_CONFIG.quotaDisplayType
+  )
 
   const currency: CurrencyConfig = {
     displayInCurrency:

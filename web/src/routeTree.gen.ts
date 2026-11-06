@@ -48,6 +48,7 @@ import { Route as AuthenticatedEmbedSlugRouteImport } from './routes/_authentica
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedFinanceSectionRouteImport } from './routes/_authenticated/finance/$section'
 import { Route as AuthenticatedIntelligenceTestIndexRouteImport } from './routes/_authenticated/intelligence-test/index'
+import { Route as AuthenticatedInviteCodesIndexRouteImport } from './routes/_authenticated/invite-codes/index'
 import { Route as AuthenticatedKeysIndexRouteImport } from './routes/_authenticated/keys/index'
 import { Route as AuthenticatedLedgerIndexRouteImport } from './routes/_authenticated/ledger/index'
 import { Route as AuthenticatedModelsIndexRouteImport } from './routes/_authenticated/models/index'
@@ -290,6 +291,12 @@ const AuthenticatedIntelligenceTestIndexRoute =
   AuthenticatedIntelligenceTestIndexRouteImport.update({
     id: '/intelligence-test/',
     path: '/intelligence-test/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedInviteCodesIndexRoute =
+  AuthenticatedInviteCodesIndexRouteImport.update({
+    id: '/invite-codes/',
+    path: '/invite-codes/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedKeysIndexRoute = AuthenticatedKeysIndexRouteImport.update({
@@ -564,6 +571,7 @@ export interface FileRoutesByFullPath {
   '/channels/': typeof AuthenticatedChannelsIndexRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/intelligence-test/': typeof AuthenticatedIntelligenceTestIndexRoute
+  '/invite-codes/': typeof AuthenticatedInviteCodesIndexRoute
   '/keys/': typeof AuthenticatedKeysIndexRoute
   '/ledger/': typeof AuthenticatedLedgerIndexRoute
   '/models/': typeof AuthenticatedModelsIndexRoute
@@ -641,6 +649,7 @@ export interface FileRoutesByTo {
   '/channels': typeof AuthenticatedChannelsIndexRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
   '/intelligence-test': typeof AuthenticatedIntelligenceTestIndexRoute
+  '/invite-codes': typeof AuthenticatedInviteCodesIndexRoute
   '/keys': typeof AuthenticatedKeysIndexRoute
   '/ledger': typeof AuthenticatedLedgerIndexRoute
   '/models': typeof AuthenticatedModelsIndexRoute
@@ -722,6 +731,7 @@ export interface FileRoutesById {
   '/_authenticated/channels/': typeof AuthenticatedChannelsIndexRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/_authenticated/intelligence-test/': typeof AuthenticatedIntelligenceTestIndexRoute
+  '/_authenticated/invite-codes/': typeof AuthenticatedInviteCodesIndexRoute
   '/_authenticated/keys/': typeof AuthenticatedKeysIndexRoute
   '/_authenticated/ledger/': typeof AuthenticatedLedgerIndexRoute
   '/_authenticated/models/': typeof AuthenticatedModelsIndexRoute
@@ -802,6 +812,7 @@ export interface FileRouteTypes {
     | '/channels/'
     | '/dashboard/'
     | '/intelligence-test/'
+    | '/invite-codes/'
     | '/keys/'
     | '/ledger/'
     | '/models/'
@@ -879,6 +890,7 @@ export interface FileRouteTypes {
     | '/channels'
     | '/dashboard'
     | '/intelligence-test'
+    | '/invite-codes'
     | '/keys'
     | '/ledger'
     | '/models'
@@ -959,6 +971,7 @@ export interface FileRouteTypes {
     | '/_authenticated/channels/'
     | '/_authenticated/dashboard/'
     | '/_authenticated/intelligence-test/'
+    | '/_authenticated/invite-codes/'
     | '/_authenticated/keys/'
     | '/_authenticated/ledger/'
     | '/_authenticated/models/'
@@ -1290,6 +1303,13 @@ declare module '@tanstack/react-router' {
       path: '/intelligence-test'
       fullPath: '/intelligence-test/'
       preLoaderRoute: typeof AuthenticatedIntelligenceTestIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/invite-codes/': {
+      id: '/_authenticated/invite-codes/'
+      path: '/invite-codes'
+      fullPath: '/invite-codes/'
+      preLoaderRoute: typeof AuthenticatedInviteCodesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/keys/': {
@@ -1677,6 +1697,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedChannelsIndexRoute: typeof AuthenticatedChannelsIndexRoute
   AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
   AuthenticatedIntelligenceTestIndexRoute: typeof AuthenticatedIntelligenceTestIndexRoute
+  AuthenticatedInviteCodesIndexRoute: typeof AuthenticatedInviteCodesIndexRoute
   AuthenticatedKeysIndexRoute: typeof AuthenticatedKeysIndexRoute
   AuthenticatedLedgerIndexRoute: typeof AuthenticatedLedgerIndexRoute
   AuthenticatedModelsIndexRoute: typeof AuthenticatedModelsIndexRoute
@@ -1718,6 +1739,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardIndexRoute: AuthenticatedDashboardIndexRoute,
   AuthenticatedIntelligenceTestIndexRoute:
     AuthenticatedIntelligenceTestIndexRoute,
+  AuthenticatedInviteCodesIndexRoute: AuthenticatedInviteCodesIndexRoute,
   AuthenticatedKeysIndexRoute: AuthenticatedKeysIndexRoute,
   AuthenticatedLedgerIndexRoute: AuthenticatedLedgerIndexRoute,
   AuthenticatedModelsIndexRoute: AuthenticatedModelsIndexRoute,

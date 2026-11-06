@@ -38,7 +38,7 @@ func DesktopAuthStart(c *gin.Context) {
 		return
 	}
 	challenge, err := base64.RawURLEncoding.DecodeString(request.CodeChallenge)
-	if request.ClientId != model.DesktopClientID || request.CodeChallengeMethod != "S256" || err != nil || len(challenge) != 32 ||
+	if !model.IsSupportedClientID(request.ClientId) || request.CodeChallengeMethod != "S256" || err != nil || len(challenge) != 32 ||
 		len(request.State) < 32 || len(request.State) > 128 || strings.ContainsAny(request.State, "\r\n") ||
 		utf8.RuneCountInString(request.DeviceName) == 0 || utf8.RuneCountInString(request.DeviceName) > 32 {
 		writeAccessTokenError(c, 400, "DESKTOP_REQUEST_INVALID", "Invalid desktop authorization request.")
@@ -86,7 +86,18 @@ func DesktopAuthRequest(c *gin.Context) {
 		writeAccessTokenError(c, 400, "DESKTOP_FLOW_INVALID", "Invalid authorization request.")
 		return
 	}
-	common.ApiSuccess(c, gin.H{"device_name": request.DeviceName, "expires_at": flow.ExpiresAt.Unix(), "request_id": flow.Id, "scopes": model.DesktopGrantedScopes()})
+	scopes, ok := model.GrantedScopesForClient(request.ClientId)
+	if !ok {
+		writeAccessTokenError(c, 400, "DESKTOP_FLOW_INVALID", "Invalid authorization request.")
+		return
+	}
+	common.ApiSuccess(c, gin.H{
+		"client_id":   request.ClientId,
+		"device_name": request.DeviceName,
+		"expires_at":  flow.ExpiresAt.Unix(),
+		"request_id":  flow.Id,
+		"scopes":      scopes,
+	})
 }
 
 func DesktopAuthAuthorize(c *gin.Context) {
@@ -98,6 +109,7 @@ func DesktopAuthAuthorize(c *gin.Context) {
 	var input struct {
 		Flow    string `json:"flow"`
 		Approve bool   `json:"approve"`
+		Group   string `json:"group"`
 	}
 	if common.DecodeJson(c.Request.Body, &input) != nil {
 		writeAccessTokenError(c, 400, "DESKTOP_REQUEST_INVALID", "Invalid request.")
@@ -113,9 +125,27 @@ func DesktopAuthAuthorize(c *gin.Context) {
 		writeAccessTokenError(c, 400, "DESKTOP_FLOW_INVALID", "Invalid request.")
 		return
 	}
+	group := ""
+	proofGroup := ""
+	if input.Approve && request.ClientId == model.MagpieClientID {
+		proofGroup = strings.TrimSpace(input.Group)
+		group = proofGroup
+		user, err := model.GetUserById(identity.UserID, false)
+		if err != nil {
+			writeSecurityOperationError(c, err)
+			return
+		}
+		if group == "" {
+			group = user.Group
+		}
+		if len(group) > 128 || !service.IsUserSelectableGroupForUser(user.Group, user.Id, group) {
+			writeAccessTokenError(c, 400, "DESKTOP_GROUP_INVALID", "This group is not available for your account.")
+			return
+		}
+	}
 	var code string
 	if input.Approve {
-		context, err := common.Marshal(service.DesktopAuthorizeContext{RequestID: flow.Id})
+		context, err := common.Marshal(service.DesktopAuthorizeContext{RequestID: flow.Id, Group: proofGroup})
 		if err != nil {
 			writeSecurityOperationError(c, err)
 			return
@@ -123,7 +153,7 @@ func DesktopAuthAuthorize(c *gin.Context) {
 		if middleware.RequireSecurityProof(c, service.VerificationOperation{Scope: service.VerificationScopeDesktopAuthorize, Context: context}) == nil {
 			return
 		}
-		request, code, err = model.ApproveDesktopRequest(input.Flow, identity)
+		request, code, err = model.ApproveDesktopRequest(input.Flow, identity, group)
 		if err != nil {
 			writeAccessTokenError(c, 400, "DESKTOP_FLOW_INVALID", "Authorization is invalid or expired.")
 			return
@@ -140,7 +170,11 @@ func DesktopAuthAuthorize(c *gin.Context) {
 		query.Set("error", "access_denied")
 	}
 	callback.RawQuery = query.Encode()
-	recordUserSecurityAudit(c, identity.UserID, "desktop.authorize", map[string]any{"request_id": flow.Id, "approved": input.Approve})
+	audit := map[string]any{"request_id": flow.Id, "approved": input.Approve}
+	if group != "" {
+		audit["group"] = group
+	}
+	recordUserSecurityAudit(c, identity.UserID, "desktop.authorize", audit)
 	common.ApiSuccess(c, gin.H{"callback_url": callback.String()})
 }
 
@@ -155,15 +189,25 @@ func DesktopAuthExchange(c *gin.Context) {
 		writeAccessTokenError(c, 400, "DESKTOP_REQUEST_INVALID", "Invalid request.")
 		return
 	}
-	raw, token, installation, err := model.ExchangeDesktopCode(input.Code, input.Verifier, input.RedirectURI)
+	exchange, err := model.ExchangeDesktopCode(input.Code, input.Verifier, input.RedirectURI, service.IsUserSelectableGroupForUser)
 	if err != nil {
 		if errors.Is(err, model.ErrAccessTokenLimit) {
 			writeAccessTokenError(c, 409, "ACCESS_TOKEN_LIMIT", "The account's access token limit has been reached.")
 			return
 		}
+		if errors.Is(err, model.ErrDesktopKeyLimit) {
+			writeAccessTokenError(c, 409, "PLUGIN_KEY_LIMIT", "The account's API key limit has been reached.")
+			return
+		}
+		if errors.Is(err, model.ErrDesktopGroupUnavailable) {
+			writeAccessTokenError(c, 400, "DESKTOP_GROUP_INVALID", "The selected group is no longer available for your account.")
+			return
+		}
 		writeAccessTokenError(c, 400, "DESKTOP_CODE_INVALID", "This authorization code is invalid, expired, or already used.")
 		return
 	}
+	token := exchange.Token
+	installation := exchange.Installation
 	// This endpoint is anonymous; derive the audit actor from the exchanged
 	// authorization instead of a caller-controlled context or role.
 	if user, err := model.GetUserById(installation.UserId, false); err == nil {
@@ -171,8 +215,38 @@ func DesktopAuthExchange(c *gin.Context) {
 		c.Set("id", user.Id)
 		c.Set("username", user.Username)
 	}
-	recordUserSecurityAudit(c, installation.UserId, "desktop.exchange", map[string]any{"installation_id": installation.Id, "token_id": token.Id, "token_ref": token.TokenHash})
-	common.ApiSuccess(c, gin.H{"token": raw, "expires_at": token.ExpiresAt})
+	audit := map[string]any{
+		"client_id":       model.DesktopInstallationClientID(installation),
+		"installation_id": installation.Id,
+		"token_id":        token.Id,
+		"token_ref":       token.TokenHash,
+	}
+	if exchange.APIToken != nil {
+		audit["api_token_id"] = exchange.APIToken.Id
+	}
+	if exchange.Group != "" {
+		audit["group"] = exchange.Group
+	}
+	recordUserSecurityAudit(c, installation.UserId, "desktop.exchange", audit)
+	response := gin.H{
+		"access_token": exchange.AccessToken,
+		"expires_at":   token.ExpiresAt,
+		"token":        exchange.AccessToken,
+	}
+	if model.IsMagpieInstallation(installation) && exchange.APIToken != nil {
+		response["api_key"] = "sk-" + exchange.APIToken.Key
+		response["client_id"] = model.MagpieClientID
+		response["group"] = exchange.Group
+		if user, userErr := model.GetUserById(installation.UserId, false); userErr == nil {
+			response["user"] = gin.H{
+				"id":           user.Id,
+				"username":     user.Username,
+				"display_name": user.DisplayName,
+				"email":        user.Email,
+			}
+		}
+	}
+	common.ApiSuccess(c, response)
 }
 
 func DesktopAuthLogout(c *gin.Context) {

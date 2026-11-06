@@ -176,6 +176,38 @@ func DeleteUserAccessToken(userID, id int) (*UserAccessToken, error) {
 			}
 			return err
 		}
+		if token.DesktopInstallationId != 0 {
+			var installation DesktopInstallation
+			err := tx.Where("id = ? AND user_id = ?", token.DesktopInstallationId, userID).First(&installation).Error
+			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+			if err == nil && installation.AccessTokenId == token.Id && IsMagpieInstallation(&installation) {
+				var binding DesktopToolKey
+				err := tx.Where("installation_id = ? AND agent = ?", installation.Id, MagpieAPITokenAgent).First(&binding).Error
+				if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+					return err
+				}
+				if err == nil && binding.TokenId != 0 {
+					var toolToken Token
+					err := tx.Where("id = ? AND user_id = ?", binding.TokenId, userID).First(&toolToken).Error
+					if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+						return err
+					}
+					if err == nil {
+						if err := invalidateTokenCacheForMutation(toolToken.Key); err != nil {
+							return err
+						}
+						if err := tx.Delete(&toolToken).Error; err != nil {
+							return err
+						}
+					}
+					if err := tx.Delete(&binding).Error; err != nil {
+						return err
+					}
+				}
+			}
+		}
 		return tx.Where("id = ? AND user_id = ?", id, userID).Delete(&UserAccessToken{}).Error
 	})
 	if err != nil {

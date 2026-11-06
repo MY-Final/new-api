@@ -28,9 +28,16 @@ import { useAuthStore } from '@/stores/auth-store'
 import { DesktopAuthorization } from '../authorization'
 
 const request = {
+  client_id: 'kuncode-setup',
   request_id: 42,
   device_name: 'Windows 桌面',
-  scopes: ['profile:read', 'coding_tools:configure', 'desktop_keys:read', 'desktop_keys:write', 'desktop_keys:reveal'],
+  scopes: [
+    'profile:read',
+    'coding_tools:configure',
+    'desktop_keys:read',
+    'desktop_keys:write',
+    'desktop_keys:reveal',
+  ],
   expires_at: 2000000000,
 }
 const proof = {
@@ -58,22 +65,108 @@ function show(onReturn = vi.fn()) {
   )
   return onReturn
 }
-function requests() {
-  vi.spyOn(api, 'get').mockImplementation(async (url) => ({
+function requests(requestData = request) {
+  const get = vi.spyOn(api, 'get').mockImplementation(async (url) => {
+    let data: unknown
+    if (url === '/api/desktop/auth/request') {
+      data = requestData
+    } else if (url === '/api/user/self/groups') {
+      data = {
+        default: { ratio: 1, desc: 'Default group' },
+        vip: { ratio: 2, desc: 'VIP group' },
+        auto: { ratio: 'auto', desc: 'Automatic routing' },
+      }
+    } else {
+      data = {
+        scope: 'desktop.authorize',
+        methods: [{ method: 'password', available: true }],
+        oauth_providers: [],
+        password_encryption_enabled: false,
+      }
+    }
+    return { data: { success: true, data } }
+  })
+  return get
+}
+
+it('shows Magpie-specific browser authorization details', async () => {
+  const get = requests({
+    ...request,
+    client_id: 'magpie',
+    scopes: ['profile:read', 'wallet:read', 'wallet:write'],
+  })
+  show()
+  expect(
+    await screen.findByRole('heading', { name: 'Authorize Magpie' })
+  ).toBeInTheDocument()
+  expect(
+    screen.getByText(
+      'Magpie can read your profile and wallet balance, and perform your daily check-in. It cannot change your account or model keys.'
+    )
+  ).toBeInTheDocument()
+  expect(
+    await screen.findByRole('combobox', { name: 'Group' })
+  ).toHaveTextContent('default')
+  expect(get).toHaveBeenCalledWith(
+    '/api/desktop/auth/request',
+    expect.objectContaining({ disableDuplicate: true })
+  )
+  expect(get).toHaveBeenCalledWith('/api/user/self/groups', {
+    disableDuplicate: true,
+  })
+  expect(screen.queryByText('Authorize KunCode Setup')).not.toBeInTheDocument()
+})
+
+it('authorizes Magpie with the selected model group', async () => {
+  requests({
+    ...request,
+    client_id: 'magpie',
+    scopes: ['profile:read', 'wallet:read', 'wallet:write'],
+  })
+  const post = vi.spyOn(api, 'post').mockImplementation(async (url) => ({
     data: {
       success: true,
       data:
-        url === '/api/desktop/auth/request'
-          ? request
+        url === '/api/verify'
+          ? proof
           : {
-              scope: 'desktop.authorize',
-              methods: [{ method: 'password', available: true }],
-              oauth_providers: [],
-              password_encryption_enabled: false,
+              callback_url:
+                'http://127.0.0.1:31415/callback?state=state&code=code',
             },
     },
   }))
-}
+  show()
+  const user = userEvent.setup()
+  const group = await screen.findByRole('combobox', { name: 'Group' })
+  await user.click(group)
+  await user.click(await screen.findByText('VIP group'))
+  await user.click(screen.getByRole('button', { name: 'Authorize' }))
+  await user.type(
+    await screen.findByLabelText('Password', { selector: 'input' }),
+    'test-password'
+  )
+  await user.click(screen.getByRole('button', { name: 'Verify' }))
+
+  await waitFor(() =>
+    expect(post).toHaveBeenLastCalledWith(
+      '/api/desktop/auth/authorize',
+      { flow: 'f'.repeat(43), approve: true, group: 'vip' },
+      {
+        singleUseAuthorization: true,
+        headers: { 'X-Security-Proof': 'bound-test-proof' },
+      }
+    )
+  )
+  expect(post).toHaveBeenCalledWith(
+    '/api/verify',
+    expect.objectContaining({
+      scope: 'desktop.authorize',
+      context: { request_id: 42, group: 'vip' },
+      method: 'password',
+    }),
+    expect.any(Object)
+  )
+})
 
 it('shows an expired request and offers no authorization actions', async () => {
   vi.spyOn(api, 'get').mockRejectedValue(new Error('expired'))
@@ -182,4 +275,3 @@ it('rejects an external callback instead of forwarding authorization to it', asy
   expect(returned).not.toHaveBeenCalled()
   expect(screen.getByRole('button', { name: 'Authorize' })).toBeEnabled()
 })
-

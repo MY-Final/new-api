@@ -673,11 +673,11 @@ func setupAuthFlowControllerTest(t *testing.T) *authFlowTestOAuthProvider {
 	return provider
 }
 
-func TestGenerateOAuthCodeCarriesAffiliateInLoginFlow(t *testing.T) {
+func TestGenerateOAuthCodeCarriesAffiliateAndInviteCodeInLoginFlow(t *testing.T) {
 	setupAuthFlowControllerTest(t)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
-	c.Request = httptest.NewRequest(http.MethodPost, "/api/oauth/state", strings.NewReader(`{"provider":"auth-flow-test","intent":"login","aff":"invite-code"}`))
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/oauth/state", strings.NewReader(`{"provider":"auth-flow-test","intent":"login","aff":"affiliate-code","invite_code":"MAGPIE"}`))
 	c.Request.Header.Set("Content-Type", "application/json")
 
 	GenerateOAuthCode(c)
@@ -697,7 +697,8 @@ func TestGenerateOAuthCodeCarriesAffiliateInLoginFlow(t *testing.T) {
 	require.NoError(t, err)
 	var payload oauthFlowPayload
 	require.NoError(t, common.UnmarshalJsonStr(flow.Payload, &payload))
-	assert.Equal(t, "invite-code", payload.AffiliateCode)
+	assert.Equal(t, "affiliate-code", payload.AffiliateCode)
+	assert.Equal(t, "magpie", payload.InviteCode)
 	assert.Zero(t, flow.UserId)
 	assert.Empty(t, flow.SessionId)
 }

@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useQuery } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
@@ -31,6 +32,7 @@ import { Button } from '@/components/ui/button'
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -46,10 +48,19 @@ import { useAuthRedirect } from '@/features/auth/hooks/use-auth-redirect'
 import { useEmailVerification } from '@/features/auth/hooks/use-email-verification'
 import { useTurnstile } from '@/features/auth/hooks/use-turnstile'
 import {
+  isValidInviteCode,
+  normalizeInviteCode,
+} from '@/features/auth/lib/invite-code'
+import {
   getAffiliateCode,
+  getInviteCode,
   saveAffiliateCode,
+  saveInviteCode,
 } from '@/features/auth/lib/storage'
+import { getPublicInviteCode } from '@/features/invite-codes/api'
+import { useDebounce } from '@/hooks'
 import { useStatus } from '@/hooks/use-status'
+import { formatQuotaWithCurrency } from '@/lib/currency'
 import { handleServerError } from '@/lib/handle-server-error'
 import { AuthOperationError } from '@/lib/secure-verification'
 import { createServerError } from '@/lib/server-error-message'
@@ -68,6 +79,13 @@ export function SignUpForm({
   const [isWeChatSubmitting, setIsWeChatSubmitting] = useState(false)
   const [turnstileWidgetKey, setTurnstileWidgetKey] = useState(0)
   const legalConsentErrorMessage = t('Please agree to the legal terms first')
+  const initialInviteCode = useMemo(() => {
+    const urlCode =
+      typeof window === 'undefined'
+        ? ''
+        : new URLSearchParams(window.location.search).get('invite_code')
+    return normalizeInviteCode(urlCode || getInviteCode())
+  }, [])
 
   const { status } = useStatus()
   const {
@@ -95,10 +113,22 @@ export function SignUpForm({
       email: '',
       password: '',
       confirmPassword: '',
+      inviteCode: initialInviteCode,
     },
   })
 
   const emailValue = form.watch('email')
+  const inviteCodeValue = form.watch('inviteCode')
+  const normalizedInviteCode = normalizeInviteCode(inviteCodeValue)
+  const debouncedInviteCode = useDebounce(inviteCodeValue, 500)
+  const inviteCodeQuery = useQuery({
+    queryKey: ['invite-code-preview', debouncedInviteCode],
+    queryFn: () => getPublicInviteCode(debouncedInviteCode),
+    enabled: isValidInviteCode(debouncedInviteCode),
+    retry: false,
+    staleTime: 60_000,
+    meta: { errorToast: false },
+  })
   const emailVerificationRequired = !!status?.email_verification
   const hasUserAgreement = Boolean(status?.user_agreement_enabled)
   const hasPrivacyPolicy = Boolean(status?.privacy_policy_enabled)
@@ -139,6 +169,13 @@ export function SignUpForm({
     }
   }, [])
 
+  useEffect(() => {
+    const inviteCode = initialInviteCode
+    if (!inviteCode) return
+    saveInviteCode(inviteCode)
+    form.setValue('inviteCode', inviteCode)
+  }, [form, initialInviteCode])
+
   async function onSubmit(data: z.infer<typeof registerFormSchema>) {
     if (requiresLegalConsent && !agreedToLegal) {
       toast.error(legalConsentErrorMessage)
@@ -167,6 +204,7 @@ export function SignUpForm({
         email: data.email || undefined,
         verification_code: verificationCode || undefined,
         aff_code: getAffiliateCode(),
+        invite_code: normalizeInviteCode(data.inviteCode) || undefined,
         turnstile: turnstileToken,
       })
 
@@ -244,6 +282,57 @@ export function SignUpForm({
     verificationCodeAction = <Loader2 className='h-4 w-4 animate-spin' />
   }
 
+  let inviteCodeStatus: string | null = null
+  if (inviteCodeValue && !isValidInviteCode(inviteCodeValue)) {
+    inviteCodeStatus = t(
+      'Invitation code must be 3–64 lowercase letters, numbers, hyphens, or underscores'
+    )
+  } else if (
+    inviteCodeQuery.isFetching ||
+    (isValidInviteCode(inviteCodeValue) &&
+      normalizedInviteCode !== debouncedInviteCode)
+  ) {
+    inviteCodeStatus = t('Checking invitation code...')
+  } else if (
+    inviteCodeQuery.data?.success &&
+    inviteCodeQuery.data.data?.code === normalizedInviteCode
+  ) {
+    const inviteCode = inviteCodeQuery.data.data
+    if (inviteCode.available) {
+      inviteCodeStatus = t('Invitation code available: {{name}}', {
+        name: inviteCode.name,
+      })
+      if (inviteCode.bonus_quota > 0) {
+        inviteCodeStatus = `${inviteCodeStatus} · ${t(
+          'Registration bonus: {{amount}}',
+          {
+            amount: formatQuotaWithCurrency(inviteCode.bonus_quota, {
+              abbreviate: false,
+            }),
+          }
+        )}`
+      }
+    } else if (inviteCode.reason === 'expired') {
+      inviteCodeStatus = t('This invitation code has expired.')
+    } else if (inviteCode.reason === 'registration_full') {
+      inviteCodeStatus = t(
+        'This invitation code has reached its registration limit.'
+      )
+    } else {
+      inviteCodeStatus = t('This invitation code is unavailable.')
+    }
+  } else if (
+    inviteCodeQuery.data &&
+    !inviteCodeQuery.data.success &&
+    debouncedInviteCode === normalizedInviteCode
+  ) {
+    inviteCodeStatus = t('This invitation code is unavailable.')
+  } else if (inviteCodeQuery.isError) {
+    inviteCodeStatus = t(
+      'Invitation code validation is temporarily unavailable.'
+    )
+  }
+
   return (
     <Form {...form}>
       <form
@@ -261,6 +350,37 @@ export function SignUpForm({
               <FormControl>
                 <Input placeholder={t('Enter your username')} {...field} />
               </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name='inviteCode'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{t('Invitation code (optional)')}</FormLabel>
+              <FormControl>
+                <Input
+                  {...field}
+                  autoCapitalize='none'
+                  autoCorrect='off'
+                  spellCheck={false}
+                  placeholder={t('Enter an invitation code')}
+                  onChange={(event) => {
+                    const value = normalizeInviteCode(event.target.value)
+                    field.onChange(value)
+                    saveInviteCode(value)
+                  }}
+                />
+              </FormControl>
+              <FormDescription>
+                {inviteCodeStatus ||
+                  t(
+                    'The invitation code applies its group and registration bonus after account creation.'
+                  )}
+              </FormDescription>
               <FormMessage />
             </FormItem>
           )}

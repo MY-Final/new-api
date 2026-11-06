@@ -22,15 +22,17 @@ import (
 const oauthAuthFlowTTL = 10 * time.Minute
 
 type oauthStateRequest struct {
-	Provider string          `json:"provider"`
-	Intent   string          `json:"intent"`
-	Aff      string          `json:"aff,omitempty"`
-	Scope    string          `json:"scope,omitempty"`
-	Context  json.RawMessage `json:"context,omitempty"`
+	Provider   string          `json:"provider"`
+	Intent     string          `json:"intent"`
+	Aff        string          `json:"aff,omitempty"`
+	InviteCode string          `json:"invite_code,omitempty"`
+	Scope      string          `json:"scope,omitempty"`
+	Context    json.RawMessage `json:"context,omitempty"`
 }
 
 type oauthFlowPayload struct {
 	AffiliateCode   string                         `json:"affiliate_code,omitempty"`
+	InviteCode      string                         `json:"invite_code,omitempty"`
 	Verification    *service.OAuthVerificationFlow `json:"verification,omitempty"`
 	Telegram        *oauth.TelegramOAuthFlow       `json:"telegram,omitempty"`
 	SessionIdentity *service.AuthIdentity          `json:"session_identity,omitempty"`
@@ -52,17 +54,20 @@ func GenerateOAuthCode(c *gin.Context) {
 	request.Provider = strings.TrimSpace(request.Provider)
 	request.Intent = strings.TrimSpace(request.Intent)
 	request.Aff = strings.TrimSpace(request.Aff)
+	request.InviteCode = model.NormalizeInviteCode(request.InviteCode)
 	if oauth.GetProvider(request.Provider) == nil ||
 		(request.Intent != model.AuthFlowIntentLogin && request.Intent != model.AuthFlowIntentBind && request.Intent != model.AuthFlowIntentVerify) ||
 		len(request.Aff) > 32 ||
+		len(request.InviteCode) > 64 ||
 		(request.Intent != model.AuthFlowIntentLogin && request.Aff != "") ||
+		(request.Intent != model.AuthFlowIntentLogin && request.InviteCode != "") ||
 		(request.Intent != model.AuthFlowIntentVerify && (request.Scope != "" || len(request.Context) != 0)) {
 		common.ApiErrorT(c, "Invalid parameters")
 		return
 	}
 	userID := 0
 	sessionID := ""
-	flowPayload := oauthFlowPayload{AffiliateCode: request.Aff}
+	flowPayload := oauthFlowPayload{AffiliateCode: request.Aff, InviteCode: request.InviteCode}
 	bindingStarted := false
 	if request.Provider == "telegram" {
 		telegramFlow, err := oauth.NewTelegramOAuthFlow()
@@ -312,10 +317,18 @@ func handleOAuthLogin(c *gin.Context, provider oauth.Provider, oauthUser *oauth.
 		writeSecurityOperationError(c, err)
 		return
 	}
-	user, migration, err := findOrCreateOAuthUser(c, provider, oauthUser, token, payload.AffiliateCode)
+	user, migration, err := findOrCreateOAuthUser(c, provider, oauthUser, token, payload.AffiliateCode, payload.InviteCode)
 	if err != nil {
 		if errors.Is(err, model.ErrEmailAlreadyTaken) {
 			common.ApiErrorT(c, "Email address is already in use")
+			return
+		}
+		if errors.Is(err, model.ErrInviteCodeInvalid) ||
+			errors.Is(err, model.ErrInviteCodeDisabled) ||
+			errors.Is(err, model.ErrInviteCodeExpired) ||
+			errors.Is(err, model.ErrInviteCodeLimitReached) ||
+			errors.Is(err, model.ErrInviteCodeAlreadyClaimed) {
+			writeInviteCodeRegistrationError(c, err)
 			return
 		}
 		switch err.(type) {
@@ -396,7 +409,7 @@ func handleOAuthBind(c *gin.Context, providerName string, provider oauth.Provide
 // findOrCreateOAuthUser finds the existing user or creates a new one. For a
 // legacy GitHub binding that still waits for the login verification, it also
 // returns the rewrite to carry into the challenge.
-func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *oauth.OAuthUser, token *oauth.OAuthToken, affiliateCode string) (*model.User, *service.LegacyGitHubMigration, error) {
+func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *oauth.OAuthUser, token *oauth.OAuthToken, affiliateCode string, inviteCode string) (*model.User, *service.LegacyGitHubMigration, error) {
 	user := &model.User{}
 	if provider.ProviderUserIDColumn() == "telegram_id" {
 		err := provider.FillUserByProviderID(user, oauthUser.ProviderUserID)
@@ -516,13 +529,32 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 	if affiliateCode != "" {
 		inviterId, _ = model.GetUserIdByAffCode(affiliateCode)
 	}
+	var inviteCodeRegistration *model.InviteCodeRegistration
+	createUser := func(tx *gorm.DB) error {
+		if inviteCode == "" {
+			user.InviterId = inviterId
+			return user.InsertWithTx(tx, inviterId)
+		}
+		registration, err := model.ReserveInviteCodeRegistrationWithTx(tx, inviteCode, time.Now())
+		if err != nil {
+			return err
+		}
+		inviteCodeRegistration = registration
+		inviterId = registration.InviterId
+		user.InviterId = registration.InviterId
+		user.Group = registration.InviteCode.GroupName
+		if err := user.InsertWithTx(tx, registration.InviterId); err != nil {
+			return err
+		}
+		return model.ApplyInviteCodeRegistrationWithTx(tx, registration, user)
+	}
 
 	// Use transaction to ensure user creation and OAuth binding are atomic
 	if genericProvider, ok := provider.(*oauth.GenericOAuthProvider); ok {
 		// Custom provider: create user and binding in a transaction
 		err := model.DB.Transaction(func(tx *gorm.DB) error {
 			// Create user
-			if err := user.InsertWithTx(tx, inviterId); err != nil {
+			if err := createUser(tx); err != nil {
 				return err
 			}
 
@@ -544,11 +576,14 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 
 		// Perform post-transaction tasks (logs, sidebar config, inviter rewards)
 		user.FinalizeOAuthUserCreation(inviterId)
+		if inviteCodeRegistration != nil {
+			model.RecordInviteCodeBonus(user.Id, inviteCodeRegistration.InviteCode.BonusQuota)
+		}
 	} else {
 		// Built-in provider: create user and update provider ID in a transaction
 		err := model.DB.Transaction(func(tx *gorm.DB) error {
 			// Create user
-			if err := user.InsertWithTx(tx, inviterId); err != nil {
+			if err := createUser(tx); err != nil {
 				return err
 			}
 
@@ -573,6 +608,9 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 
 		// Perform post-transaction tasks
 		user.FinalizeOAuthUserCreation(inviterId)
+		if inviteCodeRegistration != nil {
+			model.RecordInviteCodeBonus(user.Id, inviteCodeRegistration.InviteCode.BonusQuota)
+		}
 	}
 
 	return user, nil, nil

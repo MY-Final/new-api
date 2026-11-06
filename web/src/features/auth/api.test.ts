@@ -23,11 +23,32 @@ import { afterEach, describe, expect, test, vi } from 'vitest'
 import { api, type RefreshOutcome } from '@/lib/api'
 import type { AuthBundle } from '@/stores/auth-store'
 
-import { executeLogout } from './api'
+import { createOAuthAuthorization, executeLogout } from './api'
 import { useOAuthLogin } from './hooks/use-oauth-login'
 import { consumeOAuthLoginRedirect } from './lib/oauth-callback-mode'
+import { saveInviteCode } from './lib/storage'
 
 afterEach(() => vi.restoreAllMocks())
+
+test('includes the pending invitation code when starting OAuth registration', async () => {
+  window.localStorage.clear()
+  saveInviteCode('Magpie')
+  const post = vi.spyOn(api, 'post').mockResolvedValue({
+    data: { success: true, data: { flow_token: 'oauth-state' } },
+  })
+
+  await createOAuthAuthorization('github', 'login')
+
+  expect(post).toHaveBeenCalledWith(
+    '/api/oauth/state',
+    expect.objectContaining({
+      provider: 'github',
+      intent: 'login',
+      invite_code: 'magpie',
+    }),
+    expect.anything()
+  )
+})
 
 test.each([true, false])(
   'starts Telegram OAuth only when configuration is ready: %s',

@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { z } from 'zod'
 
+import { isValidInviteCode } from '@/features/auth/lib/invite-code'
 import { accountPasswordSchema } from '@/lib/password-policy'
 
 // ============================================================================
@@ -35,6 +36,14 @@ export const registerFormSchema = z
     email: z.string().optional(),
     password: accountPasswordSchema,
     confirmPassword: z.string().min(1, 'Please confirm your password'),
+    inviteCode: z
+      .string()
+      .trim()
+      .max(64, 'Invitation code must be at most 64 characters')
+      .refine(
+        (value) => value === '' || isValidInviteCode(value),
+        'Invitation code must be 3–64 lowercase letters, numbers, hyphens, or underscores'
+      ),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords don't match.",

@@ -30,6 +30,7 @@ import {
 import {
   STATUS_QUERY_KEY,
   ensureStatus,
+  mapStatusDataToConfig,
   statusQueryOptions,
 } from '@/lib/status-query'
 import { useSystemConfigStore } from '@/stores/system-config-store'
@@ -87,6 +88,26 @@ afterEach(() => {
   apiClient.get = originalGet
   window.localStorage.clear()
   useSystemConfigStore.setState(useSystemConfigStore.getInitialState(), true)
+})
+
+describe('system currency mapping', () => {
+  test('uses the custom currency defaults when the backend value is blank', () => {
+    const config = mapStatusDataToConfig({
+      quota_display_type: '',
+      quota_per_unit: 500000,
+      custom_currency_symbol: '🥚',
+      custom_currency_exchange_rate: 1,
+    })
+
+    expect(config.currency).toEqual(
+      expect.objectContaining({
+        quotaDisplayType: 'CUSTOM',
+        quotaPerUnit: 500000,
+        customCurrencySymbol: '🥚',
+        customCurrencyExchangeRate: 1,
+      })
+    )
+  })
 })
 
 describe('shared status query deduplication', () => {

@@ -14,7 +14,7 @@ type turnstileCheckResponse struct {
 
 func TurnstileCheck() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if common.TurnstileCheckEnabled {
+		if common.TurnstileCheckEnabled && !c.GetBool(magpieAccessTokenContextKey) {
 			response := c.Query("turnstile")
 			if response == "" {
 				common.ApiErrorT(c, "Turnstile token is empty")

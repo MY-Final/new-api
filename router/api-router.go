@@ -57,6 +57,7 @@ func SetApiRouter(router *gin.Engine) {
 		//apiRouter.GET("/midjourney", controller.GetMidjourney)
 		apiRouter.GET("/home_page_content", controller.GetHomePageContent)
 		apiRouter.GET("/free_group/usage", controller.GetFreeGroupUsage)
+		apiRouter.GET("/invite_codes/public/:code", middleware.CriticalRateLimit(), controller.GetPublicInviteCode)
 		apiRouter.GET("/pricing", middleware.HeaderNavModuleAuth("pricing"), controller.GetPricing)
 		perfMetricsRoute := apiRouter.Group("/perf-metrics")
 		perfMetricsRoute.Use(middleware.HeaderNavModulePublicOrUserAuth("pricing"))
@@ -202,6 +203,17 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.GET("/2fa/stats", controller.Admin2FAStats)
 				adminRoute.DELETE("/:id/2fa", controller.AdminDisable2FA)
 			}
+		}
+
+		inviteCodeRoute := apiRouter.Group("/invite_codes")
+		inviteCodeRoute.Use(middleware.AdminAuth(), middleware.DisableCache())
+		{
+			inviteCodeRoute.GET("", controller.ListInviteCodes)
+			inviteCodeRoute.POST("", middleware.CriticalRateLimit(), controller.CreateInviteCode)
+			inviteCodeRoute.GET("/:id", controller.GetInviteCode)
+			inviteCodeRoute.PUT("/:id", middleware.CriticalRateLimit(), controller.UpdateInviteCode)
+			inviteCodeRoute.DELETE("/:id", middleware.CriticalRateLimit(), controller.DeleteInviteCode)
+			inviteCodeRoute.GET("/:id/claims", controller.GetInviteCodeClaims)
 		}
 
 		affiliateRoute := apiRouter.Group("/affiliate")

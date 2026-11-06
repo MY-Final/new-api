@@ -257,6 +257,12 @@ export function useSidebarData(badges: SidebarBadges = {}): SidebarData {
           icon: Ticket,
         },
         {
+          title: t('Invitation Codes'),
+          url: '/invite-codes',
+          icon: Ticket,
+          requiredRole: ROLE.ADMIN,
+        },
+        {
           title: t('Subscriptions'),
           url: '/subscriptions',
           icon: CreditCard,
