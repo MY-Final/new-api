@@ -68,8 +68,9 @@ import { cn } from '@/lib/utils'
 
 export function SignUpForm({
   className,
+  redirectTo,
   ...props
-}: React.HTMLAttributes<HTMLFormElement>) {
+}: React.HTMLAttributes<HTMLFormElement> & { redirectTo?: string }) {
   const { t } = useTranslation()
   const [isLoading, setIsLoading] = useState(false)
   const [verificationCode, setVerificationCode] = useState('')
@@ -210,7 +211,7 @@ export function SignUpForm({
 
       if (res?.success) {
         toast.success(t('Account created! Please sign in'))
-        redirectToLogin()
+        redirectToLogin(redirectTo)
       } else {
         handleServerError(createServerError(res, t('Failed to create account')))
       }
@@ -258,7 +259,7 @@ export function SignUpForm({
       const res = await wechatLoginByCode(wechatCode)
       if (res?.success) {
         handleWeChatDialogChange(false)
-        if (await handleLoginResult(res.data)) {
+        if (await handleLoginResult(res.data, redirectTo)) {
           toast.success(t('Signed in via WeChat'))
         }
       } else {
@@ -508,6 +509,7 @@ export function SignUpForm({
             disabled={isLoading || (requiresLegalConsent && !agreedToLegal)}
             onWeChatLogin={hasWeChatLogin ? handleOpenWeChatDialog : undefined}
             isWeChatLoading={isWeChatSubmitting}
+            redirectTo={redirectTo}
             className='pt-2'
           />
         )}

@@ -20,17 +20,36 @@ import { createFileRoute, redirect } from '@tanstack/react-router'
 import { z } from 'zod'
 
 import { DesktopAuthorization } from '@/features/auth/desktop/authorization'
+import { sanitizeAuthRedirect } from '@/features/auth/lib/auth-redirect'
 import { resolveAuthentication } from '@/lib/auth-session'
 import { useAuthStore } from '@/stores/auth-store'
 
+const searchSchema = z.object({
+  flow: z.string().min(43).max(128),
+  mode: z.literal('register').optional(),
+  invite_code: z.string().trim().max(64).optional(),
+})
+
 export const Route = createFileRoute('/(auth)/desktop/authorize')({
-  validateSearch: z.object({ flow: z.string().min(43).max(128) }),
-  beforeLoad: async ({ location }) => {
+  validateSearch: searchSchema,
+  beforeLoad: async ({ location, search }) => {
     await resolveAuthentication()
     if (!useAuthStore.getState().auth.user) {
+      const redirectTarget =
+        sanitizeAuthRedirect(location.href, window.location.origin) ?? undefined
+      if (search.mode === 'register') {
+        throw redirect({
+          to: '/sign-up',
+          search: {
+            invite_code: search.invite_code,
+            redirect: redirectTarget,
+          },
+          replace: true,
+        })
+      }
       throw redirect({
         to: '/sign-in',
-        search: { redirect: location.href },
+        search: { redirect: redirectTarget },
         replace: true,
       })
     }
