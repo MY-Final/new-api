@@ -49,10 +49,15 @@ vi.mock('@tanstack/react-router', () => ({
   },
 }))
 
-function renderGroup(items: NavGroupProps['items']) {
+function renderGroup(
+  items: NavGroupProps['items'],
+  props: Pick<NavGroupProps, 'id' | 'title'> = {
+    title: 'Personal',
+  }
+) {
   return render(
     <SidebarProvider>
-      <NavGroup title='Personal' items={items} />
+      <NavGroup {...props} items={items} />
     </SidebarProvider>
   )
 }
@@ -70,5 +75,27 @@ describe('NavGroup highlighted item', () => {
     expect(screen.getByRole('link', { name: 'Profile' })).not.toHaveClass(
       'text-amber-700'
     )
+  })
+
+  test('renders every group immediately so all destinations stay discoverable', () => {
+    renderGroup(
+      [
+        { title: 'Playground', url: '/playground', icon: User },
+        { title: 'Wallet', url: '/wallet', icon: Wallet },
+      ],
+      { id: 'tools', title: 'Tools' }
+    )
+
+    expect(screen.getByRole('link', { name: 'Playground' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Wallet' })).toBeVisible()
+  })
+
+  test('keeps the active route visible inside its group', () => {
+    renderGroup([{ title: 'Dashboard', url: '/dashboard', icon: User }], {
+      id: 'general',
+      title: 'Console',
+    })
+
+    expect(screen.getByRole('link', { name: 'Dashboard' })).toBeVisible()
   })
 })

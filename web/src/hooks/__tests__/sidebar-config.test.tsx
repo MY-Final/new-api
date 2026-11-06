@@ -298,7 +298,7 @@ describe('finance sidebar entries', () => {
   it('legacy configurations include manual credit in the finance group', () => {
     const { result } = sidebarFor({ admin: { enabled: true, finance: true } })
     const finance = result.current.find((group) => group.id === 'finance')
-    expect(finance?.title).toBe('Finance Management')
+    expect(finance?.title).toBe('Finance')
     expect(
       finance?.items.map((item) => ({ title: item.title, url: item.url }))
     ).toEqual([

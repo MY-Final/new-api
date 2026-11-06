@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { Link, useLocation } from '@tanstack/react-router'
 import { ChevronRight } from 'lucide-react'
-import { type ReactNode, useState, useEffect } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import {
@@ -72,48 +72,96 @@ const highlightColors = {
  * Sidebar navigation group component
  * Renders a group of navigation items, supporting regular links and collapsible submenus
  */
-export function NavGroup({ title, items }: NavGroupProps) {
+export function NavGroup({
+  id,
+  title,
+  items,
+  isFirst = false,
+}: NavGroupProps & { isFirst?: boolean }) {
   const { state, isMobile } = useSidebar()
   const href = useLocation({ select: (location) => location.href })
 
   return (
-    <SidebarGroup className='px-2 py-1'>
-      <SidebarGroupLabel className='text-muted-foreground/70 px-2 text-[11px] font-medium tracking-wider uppercase'>
-        {title}
+    <GroupSection
+      id={id}
+      isFirst={isFirst}
+      title={title}
+      items={items}
+      href={href}
+      state={state}
+      isMobile={isMobile}
+    />
+  )
+}
+
+function GroupSection(props: {
+  id?: string
+  isFirst: boolean
+  title: string
+  items: NavGroupProps['items']
+  href: string
+  state: 'expanded' | 'collapsed'
+  isMobile: boolean
+}) {
+  const normalizedHref = props.href.split('?')[0]
+  const groupIsActive = props.items.some((item) => {
+    if (item.type === 'chat-presets') {
+      return normalizedHref.startsWith('/chat')
+    }
+    return checkIsActive(props.href, item)
+  })
+  const iconCollapsed = props.state === 'collapsed' && !props.isMobile
+
+  return (
+    <SidebarGroup
+      className={cn(
+        'px-2 py-0.5',
+        iconCollapsed &&
+          !props.isFirst &&
+          'border-sidebar-border/70 mt-1.5 border-t pt-2'
+      )}
+    >
+      <SidebarGroupLabel
+        className={cn(
+          'text-muted-foreground/70 px-2 text-[11px] font-medium tracking-wider uppercase',
+          groupIsActive && 'text-sidebar-foreground'
+        )}
+      >
+        {props.title}
       </SidebarGroupLabel>
       <SidebarMenu>
-        {items.map((item) => {
+        {props.items.map((item) => {
           const key = `${item.title}-${item.url || item.type}`
 
-          // Special handling: dynamic chat presets list
           if (item.type === 'chat-presets') {
             return <ChatPresetsItem key={key} item={item as NavChatPresets} />
           }
 
-          // If no sub-items, render regular link
           if (!item.items) {
             return (
-              <SidebarMenuLink key={key} item={item as NavLink} href={href} />
-            )
-          }
-
-          // In collapsed state on non-mobile, render dropdown menu
-          if (state === 'collapsed' && !isMobile) {
-            return (
-              <SidebarMenuCollapsedDropdown
+              <SidebarMenuLink
                 key={key}
-                item={item as NavCollapsible}
-                href={href}
+                item={item as NavLink}
+                href={props.href}
               />
             )
           }
 
-          // Render collapsible menu
+          if (iconCollapsed) {
+            return (
+              <SidebarMenuCollapsedDropdown
+                key={key}
+                item={item as NavCollapsible}
+                href={props.href}
+              />
+            )
+          }
+
           return (
             <SidebarMenuCollapsible
               key={key}
               item={item as NavCollapsible}
-              href={href}
+              href={props.href}
             />
           )
         })}

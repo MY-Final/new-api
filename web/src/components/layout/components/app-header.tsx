@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useRouterState } from '@tanstack/react-router'
+
 import { ConfigDrawer } from '@/components/config-drawer'
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { NotificationPopover } from '@/components/notification-popover'
@@ -28,8 +30,8 @@ import { useTopNavLinks } from '@/hooks/use-top-nav-links'
 import { defaultTopNavLinks } from '../config/top-nav.config'
 import type { TopNavLink } from '../types'
 import { Header } from './header'
+import { PublicNavigation } from './public-navigation'
 import { SystemBrand } from './system-brand'
-import { TopNav } from './top-nav'
 
 /**
  * General application Header component
@@ -107,6 +109,9 @@ export function AppHeader({
   // Prioritize dynamically generated links from backend
   const dynamicLinks = useTopNavLinks()
   const links = dynamicLinks.length > 0 ? dynamicLinks : navLinks
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  })
 
   // Notifications hook
   const notifications = useNotifications()
@@ -126,7 +131,11 @@ export function AppHeader({
         <div className='ms-auto flex shrink-0 items-center gap-1 sm:gap-2'>
           {showTopNav && (
             <div className='me-1 hidden lg:block'>
-              <TopNav links={links} />
+              <PublicNavigation
+                links={links}
+                pathname={pathname}
+                className='lg:flex'
+              />
             </div>
           )}
           {showSearch && (

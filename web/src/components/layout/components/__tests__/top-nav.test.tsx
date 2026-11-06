@@ -25,6 +25,7 @@ import { describe, expect, test, vi } from 'vitest'
 
 import { useTopNavLinks } from '@/hooks/use-top-nav-links'
 
+import { isTopNavLinkActive } from '../../lib/url-utils'
 import { TopNav } from '../top-nav'
 
 vi.mock('@tanstack/react-router', () => ({
@@ -125,9 +126,7 @@ describe('top navigation contact action', () => {
       'href',
       'https://help.example.com'
     )
-    expect(
-      screen.queryByRole('link', { name: 'Bad' })
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Bad' })).not.toBeInTheDocument()
   })
 
   test('uses the administrator-defined setup download URL', () => {
@@ -176,5 +175,19 @@ describe('top navigation contact action', () => {
     })
 
     expect(screen.getByText('Contact Us')).toBeInTheDocument()
+  })
+})
+
+describe('top navigation section activity', () => {
+  test('keeps the console entry active throughout authenticated console pages', () => {
+    expect(
+      isTopNavLinkActive('/system-settings/site/system-info', '/dashboard')
+    ).toBe(true)
+    expect(isTopNavLinkActive('/keys', '/dashboard')).toBe(true)
+  })
+
+  test('does not mark console active on public pages or product routes', () => {
+    expect(isTopNavLinkActive('/about', '/dashboard')).toBe(false)
+    expect(isTopNavLinkActive('/pricing', '/dashboard')).toBe(false)
   })
 })

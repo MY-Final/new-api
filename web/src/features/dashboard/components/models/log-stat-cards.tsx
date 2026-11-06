@@ -24,7 +24,11 @@ import { formatCompactNumber, formatNumber, formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useSystemConfigStore } from '@/stores/system-config-store'
 
-import type { DashboardAnalytics, DashboardMetricStats } from '../../types'
+import type {
+  DashboardAnalytics,
+  DashboardMetric,
+  DashboardMetricStats,
+} from '../../types'
 import { StatDelta } from '../stat-delta'
 import { StatCard } from '../ui/stat-card'
 
@@ -35,6 +39,7 @@ interface LogStatCardsProps {
   error: boolean
   personal?: boolean
   compact?: boolean
+  metricKeys?: readonly DashboardMetric[]
 }
 
 export function LogStatCards(props: LogStatCardsProps) {
@@ -70,7 +75,7 @@ export function LogStatCards(props: LogStatCardsProps) {
       tone: 'accent-3' as const,
       iconTone: 'chart-3' as const,
     },
-  ]
+  ].filter((item) => !props.metricKeys || props.metricKeys.includes(item.key))
 
   return items.map((item) => {
     const value = props.data.summary[item.key]

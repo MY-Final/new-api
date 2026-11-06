@@ -16,7 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import { PublicHeader } from '../public-header'
@@ -96,8 +97,17 @@ vi.mock('@/hooks/use-system-config', () => ({
 
 vi.mock('@/hooks/use-top-nav-links', () => ({
   useTopNavLinks: () => [
-    { href: '/dashboard', title: 'Dashboard' },
-    { href: '/pricing', title: 'Model Square' },
+    { href: '/', title: 'Home', section: 'primary' },
+    { href: '/dashboard', title: 'Dashboard', section: 'primary' },
+    { href: '/pricing', title: 'Model Square', section: 'product' },
+    { href: '/rankings', title: 'Rankings', section: 'product' },
+    { href: '/about', title: 'About', section: 'resources' },
+    {
+      href: 'https://help.example.com',
+      title: 'Help',
+      external: true,
+      section: 'custom',
+    },
   ],
 }))
 
@@ -109,20 +119,55 @@ describe('PublicHeader', () => {
   it('keeps desktop navigation labels intact and exposes a compact menu toggle', () => {
     render(<PublicHeader />)
 
-    const desktopLink = screen.getAllByRole('link', {
+    const desktopLink = screen.getByRole('link', {
       name: 'Dashboard',
-    })[0]
+    })
     expect(desktopLink).toHaveClass('whitespace-nowrap')
     expect(desktopLink).not.toHaveClass('truncate')
+    expect(screen.getByRole('button', { name: 'Product' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Resources' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'More' })).toBeVisible()
+    expect(
+      screen.queryByRole('link', { name: 'Model Square' })
+    ).not.toBeInTheDocument()
 
     const toggle = screen.getByRole('button', {
       name: 'Toggle navigation menu',
     })
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
     expect(toggle).toHaveAttribute('aria-controls', 'public-navigation-menu')
+    expect(document.querySelector('#public-navigation-menu')).toHaveAttribute(
+      'aria-hidden',
+      'true'
+    )
 
     fireEvent.click(toggle)
 
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    const mobileNavigation = document.querySelector('#public-navigation-menu')
+    expect(mobileNavigation).toHaveAttribute('aria-hidden', 'false')
+    expect(
+      within(mobileNavigation as HTMLElement).getByRole('link', {
+        name: 'Model Square',
+      })
+    ).toBeVisible()
+    expect(
+      within(mobileNavigation as HTMLElement).getByText('Product')
+    ).toBeVisible()
+    expect(
+      within(mobileNavigation as HTMLElement).getByText('Resources')
+    ).toBeVisible()
+  })
+
+  it('opens grouped desktop navigation without flattening the primary links', async () => {
+    const user = userEvent.setup()
+    render(<PublicHeader />)
+
+    await user.click(screen.getByRole('button', { name: 'Product' }))
+
+    expect(
+      await screen.findByRole('menuitem', { name: 'Model Square' })
+    ).toBeVisible()
+    expect(screen.getByRole('menuitem', { name: 'Rankings' })).toBeVisible()
   })
 })

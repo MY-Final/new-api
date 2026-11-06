@@ -22,12 +22,12 @@ import { requireServerSuccess } from '@/lib/server-error-message'
 
 import { getFreeGroupUsage } from '../api'
 
-export function useFreeGroupUsage() {
+export function useFreeGroupUsage(refetchInterval: number | false = 60 * 1000) {
   return useQuery({
     queryKey: ['free-group-usage'],
     queryFn: async () => requireServerSuccess(await getFreeGroupUsage()).data,
     staleTime: 30 * 1000,
-    refetchInterval: 60 * 1000,
+    refetchInterval,
     refetchIntervalInBackground: false,
     retry: false,
     meta: { errorToast: false },

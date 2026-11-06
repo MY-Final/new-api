@@ -48,6 +48,60 @@ export function normalizeHref(href: string): string {
     : withoutQuery
 }
 
+export function isNavLinkActive(pathname: string, href: string): boolean {
+  const currentPath = normalizeHref(pathname)
+  const targetPath = normalizeHref(href)
+  return (
+    currentPath === targetPath ||
+    (targetPath !== '/' && currentPath.startsWith(`${targetPath}/`))
+  )
+}
+
+const consoleRouteSegments = new Set([
+  'affiliate-rebates',
+  'canvas',
+  'canvas-history',
+  'channels',
+  'chat',
+  'chat2link',
+  'dashboard',
+  'embed',
+  'error-requests',
+  'finance',
+  'intelligence-test',
+  'keys',
+  'ledger',
+  'models',
+  'monitoring',
+  'playground',
+  'profile',
+  'redemption-codes',
+  'security',
+  'subscription-plans',
+  'subscriptions',
+  'system-info',
+  'system-settings',
+  'task-plugins',
+  'ticket-management',
+  'tickets',
+  'usage',
+  'usage-logs',
+  'users',
+  'wallet',
+])
+
+export function isTopNavLinkActive(pathname: string, href: string): boolean {
+  if (isNavLinkActive(pathname, href)) {
+    return true
+  }
+  if (normalizeHref(href) !== '/dashboard') {
+    return false
+  }
+
+  const pathSegment = normalizeHref(pathname).split('/').find(Boolean)
+  return pathSegment ? consoleRouteSegments.has(pathSegment) : false
+}
+
 /**
  * Check if a navigation item is active
  * @param href - Current URL
@@ -87,8 +141,9 @@ export function checkIsActive(
         }
         return false
       })
-    )
+    ) {
       return true
+    }
   }
 
   // For regular link items, check the item's URL

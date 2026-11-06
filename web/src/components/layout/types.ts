@@ -106,6 +106,7 @@ export type TopNavLink = {
   disabled?: boolean
   requiresAuth?: boolean
   external?: boolean
+  section?: 'primary' | 'product' | 'resources' | 'custom'
 }
 
 /**

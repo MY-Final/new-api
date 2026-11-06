@@ -31,7 +31,10 @@ export const TOP_SPENDER_COUNT = 6
  * active users share this query instead of requesting the same aggregation
  * twice.
  */
-export function useTopSpenders(range: { start: Date; end: Date }) {
+export function useTopSpenders(
+  range: { start: Date; end: Date },
+  refetchInterval?: number | false
+) {
   const { t } = useTranslation()
   const start = dateToUnixTimestamp(range.start)
   const end = dateToUnixTimestamp(range.end)
@@ -51,6 +54,7 @@ export function useTopSpenders(range: { start: Date; end: Date }) {
       return result.data
     },
     staleTime: 30_000,
+    refetchInterval,
     retry: false,
   })
 

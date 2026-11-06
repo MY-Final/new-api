@@ -42,6 +42,7 @@ import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/com
 import { buildLogsDrilldownSearch } from '@/lib/logs-drilldown'
 import { requireServerSuccess } from '@/lib/server-error-message'
 import { getRollingDateRange } from '@/lib/time'
+import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { getUserQuotaDates } from '../../api'
@@ -49,6 +50,7 @@ import { buildQueryParams } from '../../lib/filters'
 import { buildDashboardAnalytics } from '../../lib/operations'
 import type { DashboardChartPreferences, DashboardFilters } from '../../types'
 import { DateRangePresets } from '../date-range-presets'
+import { AdminDailyOperations } from './admin-daily-operations'
 import { ConsumptionDistributionChart } from './consumption-distribution-chart'
 import { LogStatCards } from './log-stat-cards'
 import { ModelCharts } from './model-charts'
@@ -151,7 +153,6 @@ export function ModelDashboard(props: ModelDashboardProps) {
           loading={query.isPending}
           defaultChartType={props.preferences.consumptionDistributionChart}
           timeGranularity={granularity}
-          requireMultipleBuckets
         />
         <Collapsible>
           <CollapsibleTrigger
@@ -272,6 +273,12 @@ export function ModelDashboard(props: ModelDashboardProps) {
   }
   return (
     <div className='flex min-w-0 flex-col gap-4'>
+      {props.isAdmin && (
+        <AdminDailyOperations
+          range={range}
+          refetchInterval={props.refetchInterval}
+        />
+      )}
       <section
         aria-label={t('Period Summary')}
         className='bg-card overflow-hidden rounded-2xl border'
@@ -301,7 +308,14 @@ export function ModelDashboard(props: ModelDashboardProps) {
             className='h-7 max-w-full min-w-0 text-xs sm:w-auto'
           />
         </div>
-        <div className='bg-border grid min-w-0 grid-cols-2 gap-px lg:grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,1fr))]'>
+        <div
+          className={cn(
+            'bg-border grid min-w-0 gap-px',
+            props.isAdmin
+              ? 'grid-cols-1 sm:grid-cols-3'
+              : 'grid-cols-2 lg:grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,1fr))]'
+          )}
+        >
           {!props.isAdmin && <PersonalBalanceCard compact />}
           <LogStatCards
             data={analytics}
@@ -309,6 +323,7 @@ export function ModelDashboard(props: ModelDashboardProps) {
             error={query.isError}
             personal={!props.isAdmin}
             compact
+            metricKeys={props.isAdmin ? ['quota', 'count'] : undefined}
           />
           {props.isAdmin && (
             <PerformanceSuccessCard

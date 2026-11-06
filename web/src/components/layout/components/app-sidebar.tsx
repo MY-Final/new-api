@@ -64,8 +64,12 @@ export function AppSidebar() {
             transition={MOTION_TRANSITION.fast}
             className='flex flex-col'
           >
-            {navGroups.map((props) => (
-              <NavGroup key={props.id || props.title} {...props} />
+            {navGroups.map((props, index) => (
+              <NavGroup
+                key={props.id || props.title}
+                {...props}
+                isFirst={index === 0}
+              />
             ))}
           </motion.div>
         </AnimatePresence>

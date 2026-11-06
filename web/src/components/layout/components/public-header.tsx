@@ -35,8 +35,10 @@ import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { defaultTopNavLinks } from '../config/top-nav.config'
+import { isTopNavLinkActive } from '../lib/url-utils'
 import type { TopNavLink } from '../types'
 import { HeaderLogo } from './header-logo'
+import { PublicNavigation } from './public-navigation'
 
 const AUTH_PROMPT_SECONDS = 5
 
@@ -60,6 +62,63 @@ export interface PublicHeaderProps {
   showAuthButtons?: boolean
   showNotifications?: boolean
   className?: string
+}
+
+function MobileNavigationLink(props: {
+  link: TopNavLink
+  pathname: string
+  mobileOpen: boolean
+  index: number
+  onLinkClick: (
+    event: React.MouseEvent<HTMLElement>,
+    link: TopNavLink,
+    closeMobile?: boolean
+  ) => void
+}) {
+  const { t } = useTranslation()
+  const active =
+    !props.link.external && isTopNavLinkActive(props.pathname, props.link.href)
+  const className = cn(
+    'flex items-center gap-3 rounded-lg px-3 py-2.5 text-base font-medium tracking-tight transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]',
+    props.mobileOpen ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0',
+    active
+      ? 'bg-muted text-foreground'
+      : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+    props.link.disabled && 'pointer-events-none opacity-50'
+  )
+  const style = {
+    transitionDelay: props.mobileOpen ? `${100 + props.index * 45}ms` : '0ms',
+  }
+
+  if (props.link.external) {
+    return (
+      <a
+        href={props.link.href}
+        target='_blank'
+        rel='noopener noreferrer'
+        aria-disabled={props.link.disabled}
+        tabIndex={props.link.disabled ? -1 : undefined}
+        onClick={(event) => props.onLinkClick(event, props.link, true)}
+        className={className}
+        style={style}
+      >
+        {t(props.link.title)}
+      </a>
+    )
+  }
+
+  return (
+    <Link
+      to={props.link.href}
+      disabled={props.link.disabled}
+      aria-current={active ? 'page' : undefined}
+      onClick={(event) => props.onLinkClick(event, props.link, true)}
+      className={className}
+      style={style}
+    >
+      {t(props.link.title)}
+    </Link>
+  )
 }
 
 export function PublicHeader(props: PublicHeaderProps) {
@@ -168,7 +227,7 @@ export function PublicHeader(props: PublicHeaderProps) {
 
   const handleNavLinkClick = useCallback(
     (
-      event: React.MouseEvent<HTMLAnchorElement>,
+      event: React.MouseEvent<HTMLElement>,
       link: TopNavLink,
       closeMobile = false
     ) => {
@@ -239,49 +298,12 @@ export function PublicHeader(props: PublicHeaderProps) {
               <SystemUpdateAction presentation='version' />
             </div>
 
-            {/* Desktop nav */}
             <div className='hidden min-w-0 items-center gap-0.5 xl:flex'>
-              {links.map((link) => {
-                const isActive = pathname === link.href
-                if (link.external) {
-                  return (
-                    <a
-                      key={`${link.title}:${link.href}`}
-                      href={link.href}
-                      title={t(link.title)}
-                      target='_blank'
-                      rel='noopener noreferrer'
-                      aria-disabled={link.disabled}
-                      tabIndex={link.disabled ? -1 : undefined}
-                      onClick={(event) => handleNavLinkClick(event, link)}
-                      className={cn(
-                        'text-muted-foreground hover:text-foreground shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors duration-200',
-                        link.disabled && 'pointer-events-none opacity-50'
-                      )}
-                    >
-                      {t(link.title)}
-                    </a>
-                  )
-                }
-                return (
-                  <Link
-                    key={`${link.title}:${link.href}`}
-                    to={link.href}
-                    title={t(link.title)}
-                    disabled={link.disabled}
-                    onClick={(event) => handleNavLinkClick(event, link)}
-                    className={cn(
-                      'shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors duration-200',
-                      isActive
-                        ? 'text-foreground'
-                        : 'text-muted-foreground hover:text-foreground',
-                      link.disabled && 'pointer-events-none opacity-50'
-                    )}
-                  >
-                    {t(link.title)}
-                  </Link>
-                )
-              })}
+              <PublicNavigation
+                links={links}
+                pathname={pathname}
+                onLinkClick={handleNavLinkClick}
+              />
 
               {(showLanguageSwitcher ||
                 showThemeSwitch ||
@@ -371,6 +393,8 @@ export function PublicHeader(props: PublicHeaderProps) {
       {/* Mobile full-screen overlay */}
       <div
         id='public-navigation-menu'
+        aria-hidden={!mobileOpen}
+        inert={!mobileOpen}
         className={cn(
           'bg-background/98 fixed inset-0 z-40 backdrop-blur-2xl transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] xl:pointer-events-none xl:hidden',
           mobileOpen
@@ -379,48 +403,50 @@ export function PublicHeader(props: PublicHeaderProps) {
         )}
       >
         <div className='flex h-full flex-col justify-between px-8 pt-20 pb-10'>
-          <nav className='flex flex-col gap-1'>
-            {links.map((link, i) => {
-              const isActive = pathname === link.href
-              const linkClassName = cn(
-                'flex items-center gap-3 py-3 text-base font-medium tracking-tight transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]',
-                mobileOpen
-                  ? 'translate-y-0 opacity-100'
-                  : 'translate-y-4 opacity-0',
-                isActive ? 'text-foreground' : 'text-muted-foreground',
-                link.disabled && 'pointer-events-none opacity-50'
-              )
-              const transitionStyle = {
-                transitionDelay: mobileOpen ? `${100 + i * 50}ms` : '0ms',
-              }
-              if (link.external) {
-                return (
-                  <a
+          <nav
+            aria-label={t('Header navigation')}
+            className='flex flex-col gap-6'
+          >
+            <div className='flex flex-col gap-1'>
+              {links
+                .filter((link) => !link.section || link.section === 'primary')
+                .map((link, i) => (
+                  <MobileNavigationLink
                     key={`${link.title}:${link.href}`}
-                    href={link.href}
-                    target='_blank'
-                    rel='noopener noreferrer'
-                    aria-disabled={link.disabled}
-                    tabIndex={link.disabled ? -1 : undefined}
-                    onClick={(event) => handleNavLinkClick(event, link, true)}
-                    className={linkClassName}
-                    style={transitionStyle}
-                  >
-                    {t(link.title)}
-                  </a>
-                )
-              }
+                    link={link}
+                    pathname={pathname}
+                    mobileOpen={mobileOpen}
+                    index={i}
+                    onLinkClick={handleNavLinkClick}
+                  />
+                ))}
+            </div>
+
+            {[
+              { id: 'product', label: t('Product') },
+              { id: 'resources', label: t('Resources') },
+              { id: 'custom', label: t('More') },
+            ].map((section, sectionIndex) => {
+              const sectionLinks = links.filter(
+                (link) => link.section === section.id
+              )
+              if (sectionLinks.length === 0) return null
               return (
-                <Link
-                  key={`${link.title}:${link.href}`}
-                  to={link.href}
-                  disabled={link.disabled}
-                  onClick={(event) => handleNavLinkClick(event, link, true)}
-                  className={linkClassName}
-                  style={transitionStyle}
-                >
-                  {t(link.title)}
-                </Link>
+                <section key={section.id} className='flex flex-col gap-1'>
+                  <div className='text-muted-foreground px-0.5 text-xs font-medium tracking-[0.16em] uppercase'>
+                    {section.label}
+                  </div>
+                  {sectionLinks.map((link, i) => (
+                    <MobileNavigationLink
+                      key={`${link.title}:${link.href}`}
+                      link={link}
+                      pathname={pathname}
+                      mobileOpen={mobileOpen}
+                      index={sectionIndex * 3 + i + 2}
+                      onLinkClick={handleNavLinkClick}
+                    />
+                  ))}
+                </section>
               )
             })}
           </nav>

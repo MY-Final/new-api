@@ -31,6 +31,7 @@ export type TopNavLink = {
   disabled?: boolean
   requiresAuth?: boolean
   external?: boolean
+  section?: 'primary' | 'product' | 'resources' | 'custom'
 }
 
 /**
@@ -67,34 +68,57 @@ export function useTopNavLinks(): TopNavLink[] {
 
   // Home
   if (modules?.home !== false) {
-    links.push({ title: t('Home'), href: '/' })
+    links.push({ title: t('Home'), href: '/', section: 'primary' })
   }
 
   // Console -> /dashboard (new console path)
   if (modules?.console !== false) {
-    links.push({ title: t('Console'), href: '/dashboard' })
+    links.push({
+      title: t('Console'),
+      href: '/dashboard',
+      section: 'primary',
+    })
   }
 
   // Pricing
   const pricing = modules?.pricing
   if (pricing && typeof pricing === 'object' && pricing.enabled) {
     const requiresAuth = pricing.requireAuth && !isAuthed
-    links.push({ title: t('Model Square'), href: '/pricing', requiresAuth })
+    links.push({
+      title: t('Model Square'),
+      href: '/pricing',
+      requiresAuth,
+      section: 'product',
+    })
   }
 
   // Rankings
   const rankings = modules?.rankings
   if (rankings && typeof rankings === 'object' && rankings.enabled) {
     const requiresAuth = rankings.requireAuth && !isAuthed
-    links.push({ title: t('Rankings'), href: '/rankings', requiresAuth })
+    links.push({
+      title: t('Rankings'),
+      href: '/rankings',
+      requiresAuth,
+      section: 'product',
+    })
   }
 
   // Docs (supports external links)
   if (modules?.docs !== false) {
     if (docsLink) {
-      links.push({ title: t('Docs'), href: docsLink, external: true })
+      links.push({
+        title: t('Docs'),
+        href: docsLink,
+        external: true,
+        section: 'resources',
+      })
     } else {
-      links.push({ title: t('Docs'), href: '/docs' })
+      links.push({
+        title: t('Docs'),
+        href: '/docs',
+        section: 'resources',
+      })
     }
   }
 
@@ -103,23 +127,37 @@ export function useTopNavLinks(): TopNavLink[] {
       title: t('Download Setup'),
       href: resolveSetupDownloadUrl(modules?.setupDownloadUrl),
       external: true,
+      section: 'resources',
     })
   }
 
   // About
   if (modules?.about !== false) {
-    links.push({ title: t('About'), href: '/about' })
+    links.push({
+      title: t('About'),
+      href: '/about',
+      section: 'resources',
+    })
   }
 
   // Contact Us (hidden until an administrator configures contact details)
   if (modules?.contact !== false && contactConfigured) {
-    links.push({ title: t('Contact Us'), href: '/contact' })
+    links.push({
+      title: t('Contact Us'),
+      href: '/contact',
+      section: 'resources',
+    })
   }
 
   // Administrator-defined links: names display exactly as typed, every visitor
   // sees them, and they open in a new tab instead of being embedded.
   for (const link of modules?.links ?? []) {
-    links.push({ title: link.name, href: link.url, external: true })
+    links.push({
+      title: link.name,
+      href: link.url,
+      external: true,
+      section: 'custom',
+    })
   }
 
   return links

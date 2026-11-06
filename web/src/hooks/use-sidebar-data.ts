@@ -74,266 +74,282 @@ export function useSidebarData(badges: SidebarBadges = {}): SidebarData {
     (page) => !page.inWallet
   )
 
+  const navGroups: SidebarData['navGroups'] = [
+    {
+      id: 'chat',
+      title: t('Tools'),
+      items: [
+        {
+          title: t('Playground'),
+          url: '/playground',
+          icon: FlaskConical,
+        },
+        {
+          title: t('Intelligence Test'),
+          url: '/intelligence-test',
+          icon: Brain,
+        },
+        {
+          title: t('Canvas'),
+          url: '/canvas',
+          icon: ImageIcon,
+        },
+        {
+          title: t('Drawing Records'),
+          url: '/canvas-history',
+          icon: History,
+        },
+        {
+          title: t('Chat'),
+          icon: MessageSquare,
+          type: 'chat-presets',
+        },
+      ],
+    },
+    {
+      id: 'general',
+      title: t('Console'),
+      items: [
+        {
+          title: t('Overview'),
+          url: '/dashboard/overview',
+          icon: Activity,
+        },
+        {
+          title: t('Dashboard'),
+          url: '/dashboard/models',
+          icon: LayoutDashboard,
+        },
+        {
+          title: t('API Keys'),
+          url: '/keys',
+          icon: Key,
+        },
+        {
+          title: t('Usage Logs'),
+          url: '/usage-logs/common',
+          icon: FileText,
+        },
+        {
+          title: t('Audit Logs'),
+          url: '/usage-logs/audit',
+          icon: ClipboardList,
+        },
+        {
+          title: t('Error Requests'),
+          url: '/error-requests',
+          icon: AlertTriangle,
+          requiredRole: ROLE.ADMIN,
+        },
+        {
+          title: t('Task Logs'),
+          url: '/usage-logs/task',
+          activeUrls: ['/usage-logs/drawing'],
+          configUrls: ['/usage-logs/drawing', '/usage-logs/task'],
+          icon: ListTodo,
+        },
+      ],
+    },
+    {
+      id: 'personal',
+      title: t('Account'),
+      items: [
+        {
+          title: t('My tickets'),
+          url: '/tickets',
+          icon: MessageSquare,
+          badge:
+            tickets.personal > 0
+              ? formatNumber(Math.min(tickets.personal, 99), locale)
+              : undefined,
+        },
+        {
+          title: t('Subscription Plans'),
+          url: '/subscription-plans',
+          icon: Crown,
+        },
+        {
+          title: t('Wallet'),
+          url: '/wallet',
+          icon: Wallet,
+          highlight: true,
+        },
+        {
+          title: t('Usage Statistics'),
+          url: '/usage',
+          icon: BarChart3,
+        },
+        {
+          title: t('Affiliate Rebates'),
+          url: '/affiliate-rebates',
+          icon: CircleDollarSign,
+        },
+        {
+          title: t('Profile'),
+          url: '/profile',
+          icon: User,
+        },
+        {
+          title: t('Security & Access'),
+          url: '/security',
+          icon: ShieldCheck,
+        },
+      ],
+    },
+    ...(sidebarCustomPageLinks.length > 0
+      ? [
+          {
+            id: 'custom-pages',
+            title: t('Custom Pages'),
+            items: sidebarCustomPageLinks.map((page) => ({
+              title: t(page.name),
+              url: page.href,
+              icon: PanelsTopLeft,
+              highlight: page.highlight,
+              highlightColor: page.highlightColor,
+              // The API already hides admin-only pages from other roles;
+              // requiredRole keeps a stale cache from leaking the entry.
+              ...(page.adminOnly ? { requiredRole: ROLE.ADMIN } : {}),
+            })),
+          },
+        ]
+      : []),
+    {
+      id: 'admin',
+      title: t('Admin'),
+      items: [
+        ...(tickets.canRead
+          ? [
+              {
+                title: t('Ticket Management'),
+                url: '/ticket-management',
+                icon: ClipboardList,
+                badge:
+                  tickets.staff > 0
+                    ? formatNumber(Math.min(tickets.staff, 99), locale)
+                    : undefined,
+              },
+            ]
+          : []),
+        {
+          title: t('Channels'),
+          url: '/channels',
+          icon: Radio,
+        },
+        {
+          title: t('Operations Monitoring'),
+          url: '/monitoring',
+          icon: HeartPulse,
+        },
+        {
+          title: t('Models'),
+          url: '/models/metadata',
+          icon: Box,
+        },
+        {
+          title: t('Users'),
+          url: '/users',
+          icon: Users,
+        },
+        {
+          title: t('Redemption Codes'),
+          url: '/redemption-codes',
+          icon: Ticket,
+        },
+        {
+          title: t('Subscriptions'),
+          url: '/subscriptions',
+          icon: CreditCard,
+        },
+        {
+          title: t('System Info'),
+          url: '/system-info',
+          icon: ServerCog,
+          requiredRole: ROLE.SUPER_ADMIN,
+        },
+        {
+          title: t('Task Plugins'),
+          url: '/task-plugins',
+          icon: PlugZap,
+          requiredRole: ROLE.SUPER_ADMIN,
+        },
+        {
+          title: t('System Settings'),
+          url: '/system-settings/site',
+          activeUrls: ['/system-settings'],
+          icon: Settings,
+          requiredRole: ROLE.SUPER_ADMIN,
+          // Model pricing lives in System Settings.
+          badge: badges.modelPricing,
+        },
+      ],
+    },
+    {
+      id: 'finance',
+      title: t('Finance'),
+      items: [
+        {
+          title: t('Manual credit'),
+          url: '/finance/credits',
+          configUrls: ['/finance'],
+          icon: Wallet,
+        },
+        {
+          title: t('Top-up Orders'),
+          url: '/finance/topups',
+          configUrls: ['/finance'],
+          icon: CreditCard,
+        },
+        {
+          title: t('Redemption Ledger'),
+          url: '/finance/redemptions',
+          configUrls: ['/finance'],
+          icon: Ticket,
+        },
+        {
+          title: t('Rebate Ledger'),
+          url: '/finance/rebates',
+          configUrls: ['/finance'],
+          icon: CircleDollarSign,
+        },
+        {
+          title: t('Financial Operations'),
+          url: '/finance/operations',
+          configUrls: ['/finance'],
+          icon: ClipboardList,
+        },
+        {
+          title: t('Refund center'),
+          url: '/finance/refunds',
+          activeUrls: ['/finance/refunds', '/finance/cash-refunds'],
+          configUrls: ['/finance'],
+          icon: RotateCcw,
+        },
+        {
+          title: t('General Ledger'),
+          url: '/ledger',
+          configUrls: ['/finance'],
+          icon: BookOpen,
+        },
+      ],
+    },
+  ]
+
+  const groupOrder = new Map([
+    ['general', 0],
+    ['chat', 1],
+    ['personal', 2],
+    ['custom-pages', 3],
+    ['admin', 4],
+    ['finance', 5],
+  ])
+  navGroups.sort(
+    (a, b) =>
+      (groupOrder.get(a.id ?? '') ?? Number.MAX_SAFE_INTEGER) -
+      (groupOrder.get(b.id ?? '') ?? Number.MAX_SAFE_INTEGER)
+  )
+
   return {
-    navGroups: [
-      {
-        id: 'chat',
-        title: t('Chat'),
-        items: [
-          {
-            title: t('Playground'),
-            url: '/playground',
-            icon: FlaskConical,
-          },
-          {
-            title: t('Intelligence Test'),
-            url: '/intelligence-test',
-            icon: Brain,
-          },
-          {
-            title: t('Canvas'),
-            url: '/canvas',
-            icon: ImageIcon,
-          },
-          {
-            title: t('Drawing Records'),
-            url: '/canvas-history',
-            icon: History,
-          },
-          {
-            title: t('Chat'),
-            icon: MessageSquare,
-            type: 'chat-presets',
-          },
-        ],
-      },
-      {
-        id: 'general',
-        title: t('General'),
-        items: [
-          {
-            title: t('Overview'),
-            url: '/dashboard/overview',
-            icon: Activity,
-          },
-          {
-            title: t('Dashboard'),
-            url: '/dashboard/models',
-            icon: LayoutDashboard,
-          },
-          {
-            title: t('API Keys'),
-            url: '/keys',
-            icon: Key,
-          },
-          {
-            title: t('Usage Logs'),
-            url: '/usage-logs/common',
-            icon: FileText,
-          },
-          {
-            title: t('Audit Logs'),
-            url: '/usage-logs/audit',
-            icon: ClipboardList,
-          },
-          {
-            title: t('Error Requests'),
-            url: '/error-requests',
-            icon: AlertTriangle,
-            requiredRole: ROLE.ADMIN,
-          },
-          {
-            title: t('Task Logs'),
-            url: '/usage-logs/task',
-            activeUrls: ['/usage-logs/drawing'],
-            configUrls: ['/usage-logs/drawing', '/usage-logs/task'],
-            icon: ListTodo,
-          },
-        ],
-      },
-      {
-        id: 'personal',
-        title: t('Personal'),
-        items: [
-          {
-            title: t('My tickets'),
-            url: '/tickets',
-            icon: MessageSquare,
-            badge:
-              tickets.personal > 0
-                ? formatNumber(Math.min(tickets.personal, 99), locale)
-                : undefined,
-          },
-          {
-            title: t('Subscription Plans'),
-            url: '/subscription-plans',
-            icon: Crown,
-          },
-          {
-            title: t('Wallet'),
-            url: '/wallet',
-            icon: Wallet,
-            highlight: true,
-          },
-          {
-            title: t('Usage Statistics'),
-            url: '/usage',
-            icon: BarChart3,
-          },
-          {
-            title: t('Affiliate Rebates'),
-            url: '/affiliate-rebates',
-            icon: CircleDollarSign,
-          },
-          {
-            title: t('Profile'),
-            url: '/profile',
-            icon: User,
-          },
-          {
-            title: t('Security & Access'),
-            url: '/security',
-            icon: ShieldCheck,
-          },
-        ],
-      },
-      ...(sidebarCustomPageLinks.length > 0
-        ? [
-            {
-              id: 'custom-pages',
-              title: t('Custom Pages'),
-              items: sidebarCustomPageLinks.map((page) => ({
-                title: t(page.name),
-                url: page.href,
-                icon: PanelsTopLeft,
-                highlight: page.highlight,
-                highlightColor: page.highlightColor,
-                // The API already hides admin-only pages from other roles;
-                // requiredRole keeps a stale cache from leaking the entry.
-                ...(page.adminOnly ? { requiredRole: ROLE.ADMIN } : {}),
-              })),
-            },
-          ]
-        : []),
-      {
-        id: 'admin',
-        title: t('Admin'),
-        items: [
-          ...(tickets.canRead
-            ? [
-                {
-                  title: t('Ticket Management'),
-                  url: '/ticket-management',
-                  icon: ClipboardList,
-                  badge:
-                    tickets.staff > 0
-                      ? formatNumber(Math.min(tickets.staff, 99), locale)
-                      : undefined,
-                },
-              ]
-            : []),
-          {
-            title: t('Channels'),
-            url: '/channels',
-            icon: Radio,
-          },
-          {
-            title: t('Operations Monitoring'),
-            url: '/monitoring',
-            icon: HeartPulse,
-          },
-          {
-            title: t('Models'),
-            url: '/models/metadata',
-            icon: Box,
-          },
-          {
-            title: t('Users'),
-            url: '/users',
-            icon: Users,
-          },
-          {
-            title: t('Redemption Codes'),
-            url: '/redemption-codes',
-            icon: Ticket,
-          },
-          {
-            title: t('Subscriptions'),
-            url: '/subscriptions',
-            icon: CreditCard,
-          },
-          {
-            title: t('System Info'),
-            url: '/system-info',
-            icon: ServerCog,
-            requiredRole: ROLE.SUPER_ADMIN,
-          },
-          {
-            title: t('Task Plugins'),
-            url: '/task-plugins',
-            icon: PlugZap,
-            requiredRole: ROLE.SUPER_ADMIN,
-          },
-          {
-            title: t('System Settings'),
-            url: '/system-settings/site',
-            activeUrls: ['/system-settings'],
-            icon: Settings,
-            requiredRole: ROLE.SUPER_ADMIN,
-            // Model pricing lives in System Settings.
-            badge: badges.modelPricing,
-          },
-        ],
-      },
-      {
-        id: 'finance',
-        title: t('Finance Management'),
-        items: [
-          {
-            title: t('Manual credit'),
-            url: '/finance/credits',
-            configUrls: ['/finance'],
-            icon: Wallet,
-          },
-          {
-            title: t('Top-up Orders'),
-            url: '/finance/topups',
-            configUrls: ['/finance'],
-            icon: CreditCard,
-          },
-          {
-            title: t('Redemption Ledger'),
-            url: '/finance/redemptions',
-            configUrls: ['/finance'],
-            icon: Ticket,
-          },
-          {
-            title: t('Rebate Ledger'),
-            url: '/finance/rebates',
-            configUrls: ['/finance'],
-            icon: CircleDollarSign,
-          },
-          {
-            title: t('Financial Operations'),
-            url: '/finance/operations',
-            configUrls: ['/finance'],
-            icon: ClipboardList,
-          },
-          {
-            title: t('Refund center'),
-            url: '/finance/refunds',
-            activeUrls: ['/finance/refunds', '/finance/cash-refunds'],
-            configUrls: ['/finance'],
-            icon: RotateCcw,
-          },
-          {
-            title: t('General Ledger'),
-            url: '/ledger',
-            configUrls: ['/finance'],
-            icon: BookOpen,
-          },
-        ],
-      },
-    ],
+    navGroups,
   }
 }

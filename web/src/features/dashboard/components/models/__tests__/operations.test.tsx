@@ -33,6 +33,7 @@ import { getPerfMetricsSummary } from '@/features/performance-metrics/api'
 import { getUserLogs } from '@/features/usage-logs/api'
 import { usageLogSchema } from '@/features/usage-logs/data/schema'
 import type { GetLogsParams } from '@/features/usage-logs/types'
+import { getAdminUserUsageRanking } from '@/features/usage-statistics/api'
 import { useAuthStore } from '@/stores/auth-store'
 import {
   DEFAULT_CURRENCY_CONFIG,
@@ -45,8 +46,24 @@ import type { DashboardFilters } from '../../../types'
 import { ModelDashboard } from '../model-dashboard'
 
 vi.mock('../../../api', () => ({ getUserQuotaDates: vi.fn() }))
+vi.mock('@/features/home/hooks/use-free-group-usage', () => ({
+  useFreeGroupUsage: () => ({
+    data: {
+      enabled: true,
+      group: 'free',
+      daily_limit: 10000,
+      used: 1234,
+      remaining: 8766,
+    },
+    isLoading: false,
+    isError: false,
+  }),
+}))
 vi.mock('@/features/performance-metrics/api', () => ({
   getPerfMetricsSummary: vi.fn(),
+}))
+vi.mock('@/features/usage-statistics/api', () => ({
+  getAdminUserUsageRanking: vi.fn(),
 }))
 vi.mock('@/features/usage-logs/api', () => ({
   getUserLogs: vi.fn(),
@@ -105,6 +122,31 @@ beforeEach(() => {
           avg_tps: 10,
         },
       ],
+    },
+  })
+  vi.mocked(getAdminUserUsageRanking).mockResolvedValue({
+    success: true,
+    data: {
+      summary: {
+        request_count: 5,
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        input_tokens: 200,
+        output_tokens: 253,
+        cache_read_tokens: 0,
+        cache_write_tokens: 0,
+        reasoning_tokens: 0,
+        total_tokens: 453,
+        consumed_quota: 700,
+        refunded_quota: 0,
+        net_quota: 700,
+        user_cost: 700,
+      },
+      activity: { dau: 12, wau: 34, mau: 56 },
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 6,
     },
   })
   const fetchLogs = async (params: GetLogsParams = {}) => ({
@@ -201,8 +243,26 @@ const errorLog = {
 }
 
 describe('operations dashboard', () => {
-  test('keeps the period metrics and site performance in one summary register', async () => {
+  test('leads with free calls and current activity before period operations', async () => {
     renderDashboard()
+    const operations = await screen.findByRole('region', {
+      name: 'Operations Overview',
+    })
+    const freeCalls = within(operations).getByRole('region', {
+      name: 'Free group calls today',
+    })
+    expect(within(freeCalls).getByText('1,234 / 10,000')).toBeVisible()
+    expect(within(freeCalls).getByText('Remaining today: 8,766')).toBeVisible()
+    expect(
+      within(operations).getByRole('progressbar', {
+        name: 'Progress for free group calls',
+      })
+    ).toBeVisible()
+    const activeUsers = within(operations).getByRole('region', {
+      name: 'Active users',
+    })
+    expect(await within(activeUsers).findAllByText('12')).toHaveLength(2)
+
     const summary = await screen.findByRole('region', {
       name: 'Period Summary',
     })
@@ -213,8 +273,8 @@ describe('operations dashboard', () => {
       within(summary).getByRole('region', { name: 'Requests' })
     ).toBeVisible()
     expect(
-      within(summary).getByRole('region', { name: 'Total Tokens' })
-    ).toBeVisible()
+      within(summary).queryByRole('region', { name: 'Total Tokens' })
+    ).not.toBeInTheDocument()
     expect(
       within(summary).getByRole('region', { name: 'Success rate' })
     ).toBeVisible()
@@ -298,7 +358,7 @@ describe('operations dashboard', () => {
     expect(await within(panel).findByText('stream-model')).toBeVisible()
   })
 
-  test('does not draw a trend when usage appears in only one time bucket', async () => {
+  test('draws the trend when usage appears in only one time bucket', async () => {
     vi.mocked(getUserQuotaDates).mockResolvedValue({
       success: true,
       data: [{ created_at: 1791626400, model_name: 'single', count: 1 }],
@@ -308,8 +368,8 @@ describe('operations dashboard', () => {
       name: 'Consumption Trend',
     })
     expect(
-      await within(trend).findByText('Not enough data to show a trend')
-    ).toBeVisible()
+      within(trend).queryByText('Not enough data to show a trend')
+    ).not.toBeInTheDocument()
   })
   test('shows live personal balance independently of the selected usage range', async () => {
     const user = userEvent.setup()
