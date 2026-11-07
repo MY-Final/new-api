@@ -81,6 +81,12 @@ const LazyFlowCharts = lazy(() =>
   }))
 )
 
+const LazyFreeGroupUsage = lazy(() =>
+  import('./components/free-group/free-group-usage').then((m) => ({
+    default: m.FreeGroupUsage,
+  }))
+)
+
 function ModelChartsFallback() {
   return (
     <div className='overflow-hidden rounded-lg border'>
@@ -107,6 +113,9 @@ const SECTION_META: Record<DashboardSectionId, { titleKey: string }> = {
   },
   users: {
     titleKey: 'Users & Revenue',
+  },
+  'free-group': {
+    titleKey: 'Free group usage',
   },
 }
 
@@ -188,7 +197,9 @@ export function Dashboard() {
   const visibleSections = useMemo(
     () =>
       DASHBOARD_SECTION_IDS.filter(
-        (section) => section !== 'overview' && (section !== 'users' || isAdmin)
+        (section) =>
+          section !== 'overview' &&
+          (isAdmin || (section !== 'users' && section !== 'free-group'))
       ),
     [isAdmin]
   )
@@ -229,7 +240,7 @@ export function Dashboard() {
       </>
     ) : null
   const userActions =
-    activeSection === 'users' ? (
+    activeSection === 'users' || activeSection === 'free-group' ? (
       <AutoRefreshControl
         autoRefreshInterval={autoRefreshInterval}
         onAutoRefreshIntervalChange={setAutoRefreshInterval}
@@ -352,6 +363,13 @@ export function Dashboard() {
                   sensitiveVisible={flowSensitiveVisible}
                   refetchInterval={refetchInterval}
                 />
+              </Suspense>
+            </FadeIn>
+          )}
+          {activeSection === 'free-group' && isAdmin && (
+            <FadeIn>
+              <Suspense fallback={<ModelChartsFallback />}>
+                <LazyFreeGroupUsage refetchInterval={refetchInterval} />
               </Suspense>
             </FadeIn>
           )}

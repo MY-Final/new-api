@@ -441,6 +441,9 @@ func TestUserAuthAppliesAccessTokenRouteRules(t *testing.T) {
 	admin := createMiddlewarePATUser(t, "route-rule-admin", legacy)
 	require.NoError(t, model.DB.Model(admin).Update("role", common.RoleAdminUser).Error)
 	profile, _ := createMiddlewareScopedToken(t, admin.Id, 0, "profile:read")
+	users, _ := createMiddlewareScopedToken(t, admin.Id, 0, "user:read")
+	ordinary := createMiddlewarePATUser(t, "free-group-ordinary", "free-group-ordinary-legacy")
+	ordinaryUsers, _ := createMiddlewareScopedToken(t, ordinary.Id, 0, "user:read")
 	channel, _ := createMiddlewareScopedToken(t, admin.Id, time.Now().Unix()+3600, "channel:read")
 	expired, _ := createMiddlewareScopedToken(t, admin.Id, time.Now().Unix()-1, "profile:read")
 
@@ -450,6 +453,7 @@ func TestUserAuthAppliesAccessTokenRouteRules(t *testing.T) {
 	router.GET("/api/user/access_tokens", UserAuth(), ok)
 	router.GET("/api/undeclared", UserAuth(), ok)
 	router.GET("/api/channel/", AdminAuth(), RequirePermission(authz.ChannelRead), ok)
+	router.GET("/api/free_group/users", AdminAuth(), ok)
 	router.GET("/api/pricing", TryUserAuth(), ok)
 
 	for _, test := range []struct {
@@ -458,6 +462,9 @@ func TestUserAuthAppliesAccessTokenRouteRules(t *testing.T) {
 	}{
 		{name: "granted scope on a never expiring token", path: "/api/user/self", token: profile, status: http.StatusOK},
 		{name: "missing scope", path: "/api/user/self", token: channel, status: http.StatusForbidden, code: "ACCESS_TOKEN_SCOPE_DENIED", reason: "scope_denied"},
+		{name: "free group users with admin scope", path: "/api/free_group/users", token: users, status: http.StatusOK},
+		{name: "free group users without scope", path: "/api/free_group/users", token: profile, status: http.StatusForbidden, code: "ACCESS_TOKEN_SCOPE_DENIED", reason: "scope_denied"},
+		{name: "free group users reject ordinary user", path: "/api/free_group/users", token: ordinaryUsers, status: http.StatusForbidden, code: "AUTH_INSUFFICIENT_PRIVILEGE"},
 		{name: "undeclared route", path: "/api/undeclared", token: profile, status: http.StatusForbidden, code: "ACCESS_TOKEN_ROUTE_UNDECLARED", reason: "route_undeclared"},
 		{name: "session route", path: "/api/user/access_tokens", token: profile, status: http.StatusForbidden, code: "AUTH_SESSION_REQUIRED", reason: "session_required"},
 		{name: "permission route with its scope", path: "/api/channel/", token: channel, status: http.StatusOK},

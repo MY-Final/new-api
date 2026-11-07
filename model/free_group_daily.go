@@ -70,6 +70,31 @@ func FreeGroupDailyCount(now time.Time) (int64, error) {
 	return usage.Count, err
 }
 
+type FreeGroupUserUsage struct {
+	UserID   int    `json:"user_id"`
+	Username string `json:"username"`
+	Count    int64  `json:"count"`
+}
+
+// ListFreeGroupUserUsage returns the same reserved calls used by the limiter.
+func ListFreeGroupUserUsage(day, username string, page *common.PageInfo) ([]FreeGroupUserUsage, int64, error) {
+	query := DB.Table("free_group_daily_usages AS f").
+		Joins("LEFT JOIN users AS u ON u.id = f.user_id").
+		Where("f.day = ? AND f.user_id > ?", day, 0)
+	if username != "" {
+		query = query.Where("u.username LIKE ?", "%"+username+"%")
+	}
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	items := make([]FreeGroupUserUsage, 0)
+	err := query.Select("f.user_id, COALESCE(u.username, '') AS username, f.count").
+		Order("f.count DESC, f.user_id ASC").
+		Offset(page.GetStartIdx()).Limit(page.GetPageSize()).Scan(&items).Error
+	return items, total, err
+}
+
 // ReserveFreeGroupDailyCall atomically reserves one call from both limits.
 // A zero user limit disables the individual limit.
 func ReserveFreeGroupDailyCall(now time.Time, userID int, globalLimit, userLimit int64) (bool, error) {

@@ -4,6 +4,8 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -36,6 +38,7 @@ var accessTokenExemptRoutes = []string{
 	"GET /api/privacy-policy",
 	"GET /api/about",
 	"GET /api/home_page_content",
+	"GET /api/free_group/usage",
 	"GET /api/ratio_config",
 	"GET /api/user/groups",
 
@@ -98,6 +101,16 @@ func newAccessTokenScopeTestEngine(t *testing.T) *gin.Engine {
 		SetTaskRouter(engine)
 	})
 	return engine
+}
+
+func TestFreeGroupUserUsageRequiresAdministrator(t *testing.T) {
+	engine := newAccessTokenScopeTestEngine(t)
+	response := httptest.NewRecorder()
+	engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/free_group/users", nil))
+	assert.Equal(t, http.StatusUnauthorized, response.Code)
+	rule, ok := middleware.AccessTokenRouteRule("GET /api/free_group/users")
+	require.True(t, ok)
+	assert.Equal(t, "user:read", rule.Scope())
 }
 
 func TestAccessTokenRouteRulesCoverEveryDashboardRoute(t *testing.T) {
