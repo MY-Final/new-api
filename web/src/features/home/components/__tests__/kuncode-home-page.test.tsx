@@ -23,10 +23,28 @@ import {
   RouterProvider,
 } from '@tanstack/react-router'
 import { render, screen, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import userEvent from '@testing-library/user-event'
+import type { ReactNode } from 'react'
+import { describe, expect, it, vi } from 'vitest'
 
+import { Home } from '../../index'
 import type { FreeGroupUsageState } from '../../types'
 import { KunCodeHomePage } from '../kuncode-home-page'
+
+vi.mock('@/hooks/use-status', () => ({
+  useStatus: () => ({
+    status: { server_address: 'https://configured.example.com' },
+  }),
+}))
+vi.mock('../../hooks', () => ({
+  useFreeGroupUsage: () => ({ isLoading: false, isError: false }),
+}))
+vi.mock('@/components/layout', () => ({
+  PublicLayout: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
+}))
+vi.mock('@/components/layout/components/footer', () => ({ Footer: () => null }))
 
 const freeGroupUsage: FreeGroupUsageState = {
   usage: {
@@ -124,5 +142,30 @@ describe('KunCode home page', () => {
     expect(screen.getByText('https://gateway.example.com/v1')).toBeVisible()
     expect(screen.getByText('"https://gateway.example.com/v1"')).toBeVisible()
     expect(screen.getByText('Copy API')).toBeVisible()
+    const example = screen.getByRole('region', { name: 'API call example' })
+    expect(
+      within(example).getByText('Replace the API key and model with your own.')
+    ).toBeVisible()
+    expect(
+      within(example).getByText('"https://gateway.example.com/v1"')
+    ).toBeVisible()
+  })
+
+  it('shows and copies the visiting origin even when a different server address is configured', async () => {
+    const user = userEvent.setup()
+    const root = createRootRoute({ component: Home })
+    const router = createRouter({
+      routeTree: root,
+      history: createMemoryHistory({ initialEntries: ['/'] }),
+    })
+    await router.load()
+    render(<RouterProvider router={router} />)
+
+    const expected = `${window.location.origin}/v1`
+    expect(screen.getByText(expected)).toBeVisible()
+    const example = screen.getByRole('region', { name: 'API call example' })
+    expect(within(example).getByText(`"${expected}"`)).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Copy to clipboard' }))
+    expect(await navigator.clipboard.readText()).toBe(expected)
   })
 })

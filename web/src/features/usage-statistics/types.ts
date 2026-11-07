@@ -50,6 +50,9 @@ export interface UserUsageRanking {
   total: number
   page: number
   page_size: number
+  daily_activity?: { day: string; users: number }[]
+  server_start_day?: string
+  server_end_day?: string
 }
 
 export interface UserUsageRequests {

@@ -24,7 +24,14 @@ import {
   createRouter,
   RouterProvider,
 } from '@tanstack/react-router'
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import i18next from 'i18next'
 import { useState } from 'react'
@@ -41,6 +48,10 @@ import { AdminUsageAnalytics } from '../admin-usage-analytics'
 
 vi.mock('../../api', () => ({
   getAdminUserUsageRanking: vi.fn(),
+}))
+
+vi.mock('@/features/dashboard/components/users/user-business-overview', () => ({
+  UserBusinessOverview: () => null,
 }))
 
 const getRankingMock = vi.mocked(getAdminUserUsageRanking)
@@ -130,7 +141,7 @@ function Harness() {
   return <AdminUsageAnalytics filters={filters} onFiltersChange={setFilters} />
 }
 
-function renderAnalytics() {
+async function renderAnalytics(expandDetails = true) {
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
@@ -160,13 +171,37 @@ function renderAnalytics() {
       <RouterProvider router={router} />
     </QueryClientProvider>
   )
+  if (expandDetails) {
+    for (const name of [
+      'Advanced analysis',
+      'Advanced filters',
+      'Period Summary',
+      'Detailed user ranking',
+    ]) {
+      fireEvent.click(await screen.findByRole('button', { name }))
+    }
+  }
   return router
 }
 
 describe('AdminUsageAnalytics', () => {
+  test('keeps detailed analysis collapsed until requested', async () => {
+    await renderAnalytics(false)
+    expect(
+      screen.queryByRole('tab', { name: 'Token breakdown' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('textbox', { name: 'Filter users' })
+    ).not.toBeInTheDocument()
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Advanced analysis' })
+    )
+    expect(screen.getByRole('tab', { name: 'Token breakdown' })).toBeVisible()
+  })
+
   test('queries with the parent range and exposes matching quick ranges', async () => {
     getRankingMock.mockResolvedValue({ success: true, data: ranking })
-    renderAnalytics()
+    await renderAnalytics()
 
     expect(await screen.findByText('alice')).toBeInTheDocument()
     expect(getRankingMock).toHaveBeenCalledWith(
@@ -200,7 +235,7 @@ describe('AdminUsageAnalytics', () => {
       data: { ...ranking, total: 25 },
     })
     const user = userEvent.setup()
-    renderAnalytics()
+    await renderAnalytics()
     await screen.findByText('alice')
     await user.type(
       screen.getByRole('textbox', { name: 'Filter models' }),
@@ -265,7 +300,7 @@ describe('AdminUsageAnalytics', () => {
       }
       return { success: true, data: ranking }
     })
-    renderAnalytics()
+    await renderAnalytics()
 
     expect(await screen.findByText('alice')).toBeInTheDocument()
     await waitFor(() => {
@@ -291,7 +326,7 @@ describe('AdminUsageAnalytics', () => {
 
   test('re-queries when the parent applies a new range', async () => {
     getRankingMock.mockResolvedValue({ success: true, data: ranking })
-    renderAnalytics()
+    await renderAnalytics()
     await screen.findByText('alice')
 
     const nextRange = {
@@ -314,7 +349,7 @@ describe('AdminUsageAnalytics', () => {
 
 describe('user analytics dashboard presentation', () => {
   test('a single matching user has no comparison bar or percentage', async () => {
-    renderAnalytics()
+    await renderAnalytics()
     await screen.findByText('alice')
     const list = screen.getByRole('region', { name: 'User Usage Ranking' })
     expect(within(list).queryByRole('progressbar')).not.toBeInTheDocument()
@@ -328,7 +363,7 @@ describe('user analytics dashboard presentation', () => {
 
   test('global activity has its own scope and fetches without the selected filters', async () => {
     const user = userEvent.setup()
-    renderAnalytics()
+    await renderAnalytics()
     await screen.findByText('alice')
     await user.type(
       screen.getByRole('textbox', { name: 'Filter users' }),
@@ -369,7 +404,7 @@ describe('user analytics dashboard presentation', () => {
 
   test('metric definitions explain refund-only users, log counts, cache charges and refund timing', async () => {
     const user = userEvent.setup()
-    renderAnalytics()
+    await renderAnalytics()
     await screen.findByText('alice')
     const help = screen.getByRole('button', {
       name: 'Metric definition: Users in period',
@@ -406,7 +441,7 @@ describe('user analytics dashboard presentation', () => {
         },
       },
     })
-    renderAnalytics()
+    await renderAnalytics()
     await screen.findByText('alice')
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
     expect(
@@ -446,7 +481,7 @@ describe('user analytics dashboard presentation', () => {
       },
     }))
     const user = userEvent.setup()
-    renderAnalytics()
+    await renderAnalytics()
     await screen.findByText('alice')
     await user.click(screen.getByRole('tab', { name: 'Tokens' }))
     await waitFor(() => {
@@ -480,7 +515,7 @@ describe('user analytics dashboard presentation', () => {
       },
     }))
     const user = userEvent.setup()
-    renderAnalytics()
+    await renderAnalytics()
     await screen.findByText('alice')
     await user.click(screen.getByRole('button', { name: 'Go to next page' }))
     await screen.findByText('beta')
@@ -513,7 +548,7 @@ describe('user analytics dashboard presentation', () => {
       data: { ...ranking, total: 25 },
     })
     const user = userEvent.setup()
-    renderAnalytics()
+    await renderAnalytics()
     await screen.findByText('alice')
     await user.click(screen.getByRole('button', { name: 'Go to next page' }))
     await waitFor(() =>
@@ -547,7 +582,7 @@ describe('user analytics dashboard presentation', () => {
         ? { success: false, message: 'comparison unavailable' }
         : { success: true, data: ranking }
     )
-    renderAnalytics()
+    await renderAnalytics()
     await screen.findByText('alice')
     expect(
       screen.queryByText('Failed to load usage details')
@@ -574,7 +609,7 @@ describe('user analytics dashboard presentation', () => {
         },
       },
     })
-    renderAnalytics()
+    await renderAnalytics()
     await screen.findByText('No usage data')
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
     expect(
@@ -603,7 +638,7 @@ describe('user analytics dashboard presentation', () => {
         items: [{ ...ranking.items[0], user_cost: -500000 }],
       },
     })
-    renderAnalytics()
+    await renderAnalytics()
     await screen.findByText('alice')
     expect(
       within(
@@ -621,7 +656,7 @@ describe('user analytics dashboard presentation', () => {
       message: 'stats unavailable',
     })
     const user = userEvent.setup()
-    renderAnalytics()
+    await renderAnalytics()
     await screen.findByText('Failed to load usage details')
     expect(
       within(screen.getByRole('region', { name: 'User Cost' })).getByText('--')
@@ -632,7 +667,7 @@ describe('user analytics dashboard presentation', () => {
   })
 
   test('a new range does not show the old values while its request is pending', async () => {
-    renderAnalytics()
+    await renderAnalytics()
     await screen.findByText('alice')
     getRankingMock.mockImplementation(() => new Promise(() => undefined))
     act(() =>
@@ -675,7 +710,7 @@ test.each([
         items: [{ ...ranking.items[0], total_tokens: 12345 }],
       },
     })
-    renderAnalytics()
+    await renderAnalytics()
     await screen.findByText('alice')
     i18next.addResourceBundle(language, 'translation', {
       'Total Tokens': 'Total Tokens',
@@ -693,7 +728,7 @@ test.each([
 
 test('ranking controls retain focus and the selected metric while the new ranking is loading', async () => {
   const user = userEvent.setup()
-  renderAnalytics()
+  await renderAnalytics()
   await screen.findByText('alice')
   getRankingMock.mockImplementation(() => new Promise(() => undefined))
   await user.click(screen.getByRole('tab', { name: 'Tokens' }))

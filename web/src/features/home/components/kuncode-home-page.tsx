@@ -132,22 +132,30 @@ export function KunCodeHomePage(props: KunCodeHomePageProps) {
             </div>
           </section>
 
-          <section className='relative w-full max-w-xl flex-1 xl:max-w-[40rem]'>
+          <section
+            aria-label={t('API call example')}
+            className='relative w-full max-w-xl flex-1 xl:max-w-[40rem]'
+          >
             <span
               aria-hidden='true'
               className='absolute -right-3 -bottom-8 z-20 text-6xl drop-shadow-[0_15px_20px_rgba(0,0,0,0.3)] motion-safe:animate-spin motion-safe:[animation-duration:8s] md:-right-8 md:-bottom-10 md:text-8xl'
             >
               🏀
             </span>
-            <div
-              aria-hidden='true'
-              className='relative overflow-hidden rounded-3xl border border-white/10 bg-[#171717] p-6 text-[#e5e7eb] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.6)] md:p-9'
-            >
-              <div className='mb-7 flex gap-2'>
-                <span className='size-3 rounded-full bg-[#ff5f56]' />
-                <span className='size-3 rounded-full bg-[#ffbd2e]' />
-                <span className='size-3 rounded-full bg-[#27c93f]' />
+            <div className='relative overflow-hidden rounded-3xl border border-white/10 bg-[#171717] p-6 text-[#e5e7eb] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.6)] md:p-9'>
+              <div className='mb-5 flex items-center gap-4'>
+                <div className='flex gap-2' aria-hidden='true'>
+                  <span className='size-3 rounded-full bg-[#ff5f56]' />
+                  <span className='size-3 rounded-full bg-[#ffbd2e]' />
+                  <span className='size-3 rounded-full bg-[#27c93f]' />
+                </div>
+                <h2 className='text-sm font-semibold text-white'>
+                  {t('API call example')}
+                </h2>
               </div>
+              <p className='mb-5 text-xs text-gray-400'>
+                {t('Replace the API key and model with your own.')}
+              </p>
               <pre className='overflow-x-auto font-mono text-[12px] leading-7 md:text-[13px]'>
                 <code>
                   <span className='text-[#6b7280]'>

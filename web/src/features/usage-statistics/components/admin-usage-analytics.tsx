@@ -17,14 +17,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
-import { Coins, Hash, Info, Layers, Users } from 'lucide-react'
+import { ChevronDown, Coins, Hash, Info, Layers, Users } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { ErrorState } from '@/components/error-state'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -36,6 +40,7 @@ import { DateRangePresets } from '@/features/dashboard/components/date-range-pre
 import { StatDelta } from '@/features/dashboard/components/stat-delta'
 import { PanelWrapper } from '@/features/dashboard/components/ui/panel-wrapper'
 import { StatCard } from '@/features/dashboard/components/ui/stat-card'
+import { UserBusinessOverview } from '@/features/dashboard/components/users/user-business-overview'
 import type { UserChartsFilters } from '@/features/dashboard/types'
 import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
 import { UserUsageDialog } from '@/features/users/components/dialogs/user-usage-dialog'
@@ -247,42 +252,57 @@ export function AdminUsageAnalytics(props: AdminUsageAnalyticsProps) {
       onValueChange={(value) => setView(String(value))}
       className='min-w-0 gap-4'
     >
-      <TabsList
-        variant='line'
-        className='grid w-full max-w-full grid-cols-2 gap-1 group-data-horizontal/tabs:h-auto sm:flex sm:w-fit sm:flex-wrap'
-        aria-label={t('User analytics views')}
-      >
-        <TabsTrigger
-          value='ranking'
-          className='whitespace-normal sm:flex-none sm:px-3 sm:whitespace-nowrap'
+      <Collapsible>
+        <CollapsibleTrigger
+          render={
+            <Button
+              variant='outline'
+              className='group w-full justify-between'
+            />
+          }
         >
-          {t('User ranking')}
-        </TabsTrigger>
-        <TabsTrigger
-          value='tokens'
-          className='whitespace-normal sm:flex-none sm:px-3 sm:whitespace-nowrap'
-        >
-          {t('Token breakdown')}
-        </TabsTrigger>
-        <TabsTrigger
-          value='activity'
-          className='whitespace-normal sm:flex-none sm:px-3 sm:whitespace-nowrap'
-        >
-          {t('All-site activity')}
-        </TabsTrigger>
-        <TabsTrigger
-          value='definitions'
-          className='whitespace-normal sm:flex-none sm:px-3 sm:whitespace-nowrap'
-        >
-          {t('Metric definitions')}
-        </TabsTrigger>
-      </TabsList>
+          {t('Advanced analysis')}
+          <ChevronDown
+            className='size-4 transition-transform group-aria-expanded:rotate-180'
+            aria-hidden='true'
+          />
+        </CollapsibleTrigger>
+        <CollapsibleContent className='pt-2'>
+          <TabsList
+            variant='line'
+            className='grid w-full max-w-full grid-cols-2 gap-1 group-data-horizontal/tabs:h-auto sm:flex sm:w-fit sm:flex-wrap'
+            aria-label={t('User analytics views')}
+          >
+            <TabsTrigger
+              value='ranking'
+              className='whitespace-normal sm:flex-none sm:px-3 sm:whitespace-nowrap'
+            >
+              {t('User ranking')}
+            </TabsTrigger>
+            <TabsTrigger
+              value='tokens'
+              className='whitespace-normal sm:flex-none sm:px-3 sm:whitespace-nowrap'
+            >
+              {t('Token breakdown')}
+            </TabsTrigger>
+            <TabsTrigger
+              value='activity'
+              className='whitespace-normal sm:flex-none sm:px-3 sm:whitespace-nowrap'
+            >
+              {t('All-site activity')}
+            </TabsTrigger>
+            <TabsTrigger
+              value='definitions'
+              className='whitespace-normal sm:flex-none sm:px-3 sm:whitespace-nowrap'
+            >
+              {t('Metric definitions')}
+            </TabsTrigger>
+          </TabsList>
+        </CollapsibleContent>
+      </Collapsible>
       {isPeriodView && (
         <>
           <div className='bg-card flex min-w-0 flex-wrap items-center gap-2 rounded-xl border px-2.5 py-2'>
-            <Badge variant='outline' className='max-w-full break-all'>
-              {username || t('All users')}
-            </Badge>
             <DateRangePresets range={range} onChange={handleRangeChange} />
             <CompactDateTimeRangePicker
               start={range.start}
@@ -291,27 +311,40 @@ export function AdminUsageAnalytics(props: AdminUsageAnalyticsProps) {
               maxRangeDays={31}
               className='w-full sm:w-auto'
             />
-            <div
-              className='bg-border hidden h-5 w-px sm:block'
-              aria-hidden='true'
-            />
-            <div className='flex min-w-0 flex-1 flex-wrap gap-1.5 sm:flex-nowrap'>
+          </div>
+          <Collapsible defaultOpen={Boolean(username || modelName || channel)}>
+            <CollapsibleTrigger
+              render={<Button variant='ghost' size='sm' className='group' />}
+            >
+              {t('Advanced filters')}
+              {(username || modelName || channel) && (
+                <span aria-hidden='true'> •</span>
+              )}
+              <ChevronDown
+                className='size-4 transition-transform group-aria-expanded:rotate-180'
+                aria-hidden='true'
+              />
+            </CollapsibleTrigger>
+            <CollapsibleContent className='flex flex-wrap gap-2 pt-2'>
+              <p className='text-muted-foreground w-full text-xs'>
+                {t('These filters apply only to detailed analysis.')}
+              </p>
               <Input
-                className='bg-muted/40 focus-visible:ring-ring/40 h-8 min-w-36 flex-1 rounded-lg border-0 px-2.5 focus-visible:ring-2'
+                className='w-full sm:w-64'
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
                 placeholder={t('Filter users')}
                 aria-label={t('Filter users')}
               />
               <Input
-                className='bg-muted/40 focus-visible:ring-ring/40 h-8 min-w-36 flex-1 rounded-lg border-0 px-2.5 focus-visible:ring-2'
+                className='w-full sm:w-64'
                 value={modelName}
                 onChange={(event) => setModelName(event.target.value)}
                 placeholder={t('Filter models')}
                 aria-label={t('Filter models')}
               />
               <Input
-                className='bg-muted/40 focus-visible:ring-ring/40 h-8 min-w-36 flex-1 rounded-lg border-0 px-2.5 focus-visible:ring-2'
+                className='w-full sm:w-64'
                 value={channel}
                 onChange={(event) =>
                   setChannel(event.target.value.replaceAll(/\D/g, ''))
@@ -320,103 +353,145 @@ export function AdminUsageAnalytics(props: AdminUsageAnalyticsProps) {
                 aria-label={t('Channel ID')}
                 inputMode='numeric'
               />
-            </div>
-          </div>
-          <section
-            className='bg-card divide-border grid min-w-0 grid-cols-1 divide-y overflow-hidden rounded-xl border sm:grid-cols-2 xl:grid-cols-4 xl:divide-x xl:divide-y-0'
-            aria-label={t('Period Summary')}
-          >
-            {metrics.map((metric) => (
-              <section
-                key={metric.title}
-                aria-label={metric.title}
-                className='min-w-0 p-3 sm:p-4'
-              >
-                <StatCard
-                  title={metric.title}
-                  value={
-                    metric.money
-                      ? formatQuota(metric.value)
-                      : formatCompactNumber(metric.value, locale)
-                  }
-                  description={metric.description}
-                  descriptionClassName='line-clamp-none'
-                  icon={metric.icon}
-                  iconTone='info'
-                  titleAction={
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <Button
-                            variant='ghost'
-                            size='icon-xs'
-                            aria-label={t('Metric definition: {{metric}}', {
-                              metric: metric.title,
-                            })}
-                          />
-                        }
-                      >
-                        <Info aria-hidden='true' />
-                      </TooltipTrigger>
-                      <TooltipContent className='max-w-[min(24rem,calc(100vw-2rem))] leading-relaxed'>
-                        {metric.definition}
-                      </TooltipContent>
-                    </Tooltip>
-                  }
-                  loading={rankingQuery.isLoading}
-                  error={rankingQuery.isError}
-                  action={
-                    !rankingQuery.isLoading &&
-                    !rankingQuery.isError &&
-                    metric.previous !== undefined ? (
-                      <StatDelta
-                        current={metric.value}
-                        previous={metric.previous}
-                      />
-                    ) : undefined
-                  }
-                  visualization={
-                    !metric.money &&
-                    metric.value >= 1000 &&
-                    !rankingQuery.isLoading &&
-                    !rankingQuery.isError && (
-                      <div className='text-muted-foreground text-xs tabular-nums'>
-                        {formatNumber(metric.value, locale)}
-                      </div>
-                    )
-                  }
+            </CollapsibleContent>
+          </Collapsible>
+          {view === 'ranking' && (
+            <UserBusinessOverview
+              range={range}
+              refetchInterval={props.refetchInterval}
+            />
+          )}
+          <Collapsible>
+            <CollapsibleTrigger
+              render={
+                <Button
+                  variant='outline'
+                  className='group w-full justify-between'
                 />
+              }
+            >
+              {t('Period Summary')}
+              <ChevronDown
+                className='size-4 transition-transform group-aria-expanded:rotate-180'
+                aria-hidden='true'
+              />
+            </CollapsibleTrigger>
+            <CollapsibleContent className='pt-2'>
+              <section
+                className='bg-card divide-border grid min-w-0 grid-cols-1 divide-y overflow-hidden rounded-xl border sm:grid-cols-2 xl:grid-cols-4 xl:divide-x xl:divide-y-0'
+                aria-label={t('Period Summary')}
+              >
+                {metrics.map((metric) => (
+                  <section
+                    key={metric.title}
+                    aria-label={metric.title}
+                    className='min-w-0 p-3 sm:p-4'
+                  >
+                    <StatCard
+                      title={metric.title}
+                      value={
+                        metric.money
+                          ? formatQuota(metric.value)
+                          : formatCompactNumber(metric.value, locale)
+                      }
+                      description={metric.description}
+                      descriptionClassName='line-clamp-none'
+                      icon={metric.icon}
+                      iconTone='info'
+                      titleAction={
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <Button
+                                variant='ghost'
+                                size='icon-xs'
+                                aria-label={t('Metric definition: {{metric}}', {
+                                  metric: metric.title,
+                                })}
+                              />
+                            }
+                          >
+                            <Info aria-hidden='true' />
+                          </TooltipTrigger>
+                          <TooltipContent className='max-w-[min(24rem,calc(100vw-2rem))] leading-relaxed'>
+                            {metric.definition}
+                          </TooltipContent>
+                        </Tooltip>
+                      }
+                      loading={rankingQuery.isLoading}
+                      error={rankingQuery.isError}
+                      action={
+                        !rankingQuery.isLoading &&
+                        !rankingQuery.isError &&
+                        metric.previous !== undefined ? (
+                          <StatDelta
+                            current={metric.value}
+                            previous={metric.previous}
+                          />
+                        ) : undefined
+                      }
+                      visualization={
+                        !metric.money &&
+                        metric.value >= 1000 &&
+                        !rankingQuery.isLoading &&
+                        !rankingQuery.isError && (
+                          <div className='text-muted-foreground text-xs tabular-nums'>
+                            {formatNumber(metric.value, locale)}
+                          </div>
+                        )
+                      }
+                    />
+                  </section>
+                ))}
               </section>
-            ))}
-          </section>
+            </CollapsibleContent>
+          </Collapsible>
         </>
       )}
       <TabsContent value='ranking'>
-        {periodError ?? (
-          <UserUsageRanking
-            data={data}
-            loading={rankingQuery.isLoading}
-            sortBy={sortBy}
-            onSortChange={setSortBy}
-            page={page}
-            pageSize={props.filters.topUserLimit}
-            onPageChange={(nextPage) =>
-              setPagination({ scope, page: nextPage })
+        <Collapsible>
+          <CollapsibleTrigger
+            render={
+              <Button
+                variant='outline'
+                className='group w-full justify-between'
+              />
             }
-            onPageSizeChange={(pageSize) =>
-              props.onFiltersChange({
-                ...props.filters,
-                topUserLimit: pageSize,
-              })
-            }
-            range={range}
-            modelName={modelName || undefined}
-            channel={queryParams.channel}
-            onUserSelect={(item) =>
-              setSelectedUser({ id: item.user_id, username: item.username })
-            }
-          />
-        )}
+          >
+            {t('Detailed user ranking')}
+            <ChevronDown
+              className='size-4 transition-transform group-aria-expanded:rotate-180'
+              aria-hidden='true'
+            />
+          </CollapsibleTrigger>
+          <CollapsibleContent className='pt-2'>
+            {periodError ?? (
+              <UserUsageRanking
+                data={data}
+                loading={rankingQuery.isLoading}
+                sortBy={sortBy}
+                onSortChange={setSortBy}
+                page={page}
+                pageSize={props.filters.topUserLimit}
+                onPageChange={(nextPage) =>
+                  setPagination({ scope, page: nextPage })
+                }
+                onPageSizeChange={(pageSize) =>
+                  props.onFiltersChange({
+                    ...props.filters,
+                    topUserLimit: pageSize,
+                  })
+                }
+                range={range}
+                modelName={modelName || undefined}
+                channel={queryParams.channel}
+                onUserSelect={(item) =>
+                  setSelectedUser({ id: item.user_id, username: item.username })
+                }
+              />
+            )}
+          </CollapsibleContent>
+        </Collapsible>
       </TabsContent>
       <TabsContent value='tokens'>
         {periodError ?? (

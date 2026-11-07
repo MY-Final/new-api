@@ -267,7 +267,7 @@ describe('overview usage and content', () => {
     const operations = await screen.findByRole('region', {
       name: 'Operations Overview',
     })
-    expect(within(operations).getByText('Top-up')).toBeVisible()
+    expect(within(operations).getByText('Paid used')).toBeVisible()
     expect(within(operations).getByText('Active users')).toBeVisible()
     expect(within(operations).getByText('Debt users')).toBeVisible()
     expect(

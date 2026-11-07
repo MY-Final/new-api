@@ -71,7 +71,8 @@ export async function getQuotaLedgerDaily(
 }
 
 export async function getQuotaLedgerSummary(
-  filters: LedgerFilters
+  filters: LedgerFilters,
+  includeUsers = false
 ): Promise<QuotaLedgerSummary> {
   const response = await api.get<ApiResponse<QuotaLedgerSummary>>(
     '/api/ledger/summary',
@@ -79,6 +80,7 @@ export async function getQuotaLedgerSummary(
       params: {
         start_date: filters.startDate,
         end_date: filters.endDate,
+        include_users: includeUsers || undefined,
       },
     }
   )

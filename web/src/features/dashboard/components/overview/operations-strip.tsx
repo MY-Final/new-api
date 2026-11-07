@@ -92,7 +92,7 @@ export function OperationsStrip(props: OperationsStripProps) {
   const metrics: OperationsMetric[] = [
     {
       key: 'topup',
-      label: t('Top-up'),
+      label: t('Paid used'),
       value: metricValue(
         ledgerQuery.isLoading,
         ledgerQuery.isError,

@@ -32,9 +32,9 @@ export function Home() {
     isLoading: freeGroupUsage.isLoading,
     isError: freeGroupUsage.isError,
   }
-  const fallbackOrigin =
+  const currentOrigin =
     typeof window === 'undefined' ? '' : window.location.origin
-  const apiBaseUrl = resolveApiBaseUrl(status?.server_address, fallbackOrigin)
+  const apiBaseUrl = resolveApiBaseUrl(status?.server_address, currentOrigin)
 
   return (
     <PublicLayout showMainContainer={false}>

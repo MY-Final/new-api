@@ -49,6 +49,20 @@ export interface QuotaLedgerSummary {
   debt_quota: number
   today_checkin_bonus: number
   today_checkin_users: number
+  daily_paid_usage?: { date: string; paid_quota: number }[]
+  paid_users?:
+    | { user_id: number; username: string; paid_quota: number }[]
+    | null
+  credits?: {
+    manual_paid: number
+    manual_bonus: number
+    redemption_paid: number
+    redemption_bonus: number
+    redemption_incomplete: number
+    redemption_deleted: number
+    online_paid: number
+    online_incomplete: number
+  }
 }
 
 export interface LedgerFilters {

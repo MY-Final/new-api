@@ -38,17 +38,97 @@ type QuotaUsageDailyItem struct {
 // QuotaLedgerSummary 总账汇总卡片数据。累计消耗来自 users.used_quota，
 // 剩余额度来自 users 分桶余额，区间消耗来自每日账单表。
 type QuotaLedgerSummary struct {
-	TotalConsumedQuota  int64 `json:"total_consumed_quota"`
-	RemainingQuota      int64 `json:"remaining_quota"`
-	RemainingBonusQuota int64 `json:"remaining_bonus_quota"`
-	RemainingPaidQuota  int64 `json:"remaining_paid_quota"`
-	RangeQuota          int64 `json:"range_quota"`
-	RangeBonusQuota     int64 `json:"range_bonus_quota"`
-	RangePaidQuota      int64 `json:"range_paid_quota"`
-	DebtUsers           int64 `json:"debt_users"`
-	DebtQuota           int64 `json:"debt_quota"`
-	TodayCheckinBonus   int64 `json:"today_checkin_bonus"`
-	TodayCheckinUsers   int64 `json:"today_checkin_users"`
+	TotalConsumedQuota  int64                       `json:"total_consumed_quota"`
+	RemainingQuota      int64                       `json:"remaining_quota"`
+	RemainingBonusQuota int64                       `json:"remaining_bonus_quota"`
+	RemainingPaidQuota  int64                       `json:"remaining_paid_quota"`
+	RangeQuota          int64                       `json:"range_quota"`
+	RangeBonusQuota     int64                       `json:"range_bonus_quota"`
+	RangePaidQuota      int64                       `json:"range_paid_quota"`
+	DebtUsers           int64                       `json:"debt_users"`
+	DebtQuota           int64                       `json:"debt_quota"`
+	TodayCheckinBonus   int64                       `json:"today_checkin_bonus"`
+	TodayCheckinUsers   int64                       `json:"today_checkin_users"`
+	DailyPaidUsage      []QuotaLedgerDailyPaidUsage `json:"daily_paid_usage"`
+	PaidUsers           []QuotaLedgerPaidUser       `json:"paid_users"`
+	Credits             *QuotaLedgerCredits         `json:"credits,omitempty"`
+}
+
+// QuotaLedgerCredits reports gross credited quota, not cash received. Refunds
+// do not erase the original credit; each source remains separate.
+type QuotaLedgerCredits struct {
+	ManualPaid           int64 `json:"manual_paid"`
+	ManualBonus          int64 `json:"manual_bonus"`
+	RedemptionPaid       int64 `json:"redemption_paid"`
+	RedemptionBonus      int64 `json:"redemption_bonus"`
+	RedemptionIncomplete int64 `json:"redemption_incomplete"`
+	RedemptionDeleted    int64 `json:"redemption_deleted"`
+	OnlinePaid           int64 `json:"online_paid"`
+	OnlineIncomplete     int64 `json:"online_incomplete"`
+}
+
+func GetQuotaLedgerCredits(start, end time.Time) (*QuotaLedgerCredits, error) {
+	credits := &QuotaLedgerCredits{}
+	var manual struct {
+		Paid  int64
+		Bonus int64
+	}
+	if err := DB.Model(&FinancialOperation{}).
+		Select("COALESCE(SUM(target_paid_delta), 0) AS paid, COALESCE(SUM(target_bonus_delta), 0) AS bonus").
+		Where("operation_type = ? AND created_at >= ? AND created_at < ?", FinancialOperationManualCredit, start.Unix(), end.Unix()).
+		Scan(&manual).Error; err != nil {
+		return nil, err
+	}
+	credits.ManualPaid, credits.ManualBonus = manual.Paid, manual.Bonus
+	var redemption struct {
+		Paid       int64
+		Bonus      int64
+		Incomplete int64
+		Deleted    int64
+	}
+	if err := DB.Unscoped().Model(&Redemption{}).
+		Select("COALESCE(SUM(paid_quota), 0) AS paid, COALESCE(SUM(bonus_quota), 0) AS bonus, COALESCE(SUM(CASE WHEN quota IS NULL OR paid_quota IS NULL OR bonus_quota IS NULL OR paid_quota + bonus_quota <> quota THEN 1 ELSE 0 END), 0) AS incomplete, COALESCE(SUM(CASE WHEN deleted_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS deleted").
+		Where("redeemed_time >= ? AND redeemed_time < ? AND used_user_id > ? AND status IN ?", start.Unix(), end.Unix(), 0, []int{common.RedemptionCodeStatusUsed, common.RedemptionCodeStatusRefunded}).
+		Scan(&redemption).Error; err != nil {
+		return nil, err
+	}
+	credits.RedemptionPaid, credits.RedemptionBonus, credits.RedemptionIncomplete = redemption.Paid, redemption.Bonus, redemption.Incomplete
+	credits.RedemptionDeleted = redemption.Deleted
+	var online struct {
+		Paid       int64
+		Incomplete int64
+	}
+	if err := DB.Model(&TopUp{}).
+		Select("COALESCE(SUM(CASE WHEN source = ? AND credited_quota > 0 THEN credited_quota ELSE 0 END), 0) AS paid, COALESCE(SUM(CASE WHEN source IS NULL OR source <> ? OR credited_quota IS NULL OR credited_quota <= 0 THEN 1 ELSE 0 END), 0) AS incomplete", TopUpSourceTopup, TopUpSourceTopup).
+		Where("complete_time >= ? AND complete_time < ? AND status IN ? AND (source = ? OR source = ? OR source IS NULL)", start.Unix(), end.Unix(), []string{common.TopUpStatusSuccess, common.TopUpStatusRefunded}, TopUpSourceTopup, "").
+		Scan(&online).Error; err != nil {
+		return nil, err
+	}
+	credits.OnlinePaid, credits.OnlineIncomplete = online.Paid, online.Incomplete
+	return credits, nil
+}
+
+type QuotaLedgerDailyPaidUsage struct {
+	Date      string `json:"date"`
+	PaidQuota int64  `json:"paid_quota"`
+}
+
+type QuotaLedgerPaidUser struct {
+	UserId    int    `json:"user_id"`
+	Username  string `json:"username"`
+	PaidQuota int64  `json:"paid_quota"`
+}
+
+func GetQuotaLedgerPaidUsers(startDate, endDate string) ([]QuotaLedgerPaidUser, error) {
+	users := make([]QuotaLedgerPaidUser, 0)
+	err := DB.Table("quota_usage_daily AS q").
+		Joins("LEFT JOIN users AS u ON u.id = q.user_id").
+		Select("q.user_id, COALESCE(u.username, '') AS username, SUM(q.paid_quota) AS paid_quota").
+		Where("q.date >= ? AND q.date <= ?", startDate, endDate).
+		Group("q.user_id, u.username").
+		Having("SUM(q.paid_quota) <> 0").
+		Order("paid_quota DESC, q.user_id ASC").Limit(10).Scan(&users).Error
+	return users, err
 }
 
 var (
@@ -217,6 +297,13 @@ func GetQuotaLedgerSummary(startDate, endDate string) (*QuotaLedgerSummary, erro
 	summary.RangeBonusQuota = bonus
 	summary.RangePaidQuota = paid
 	summary.RangeQuota = bonus + paid
+	summary.DailyPaidUsage = make([]QuotaLedgerDailyPaidUsage, 0)
+	if err := DB.Model(&QuotaUsageDaily{}).
+		Select("date, COALESCE(SUM(paid_quota), 0) AS paid_quota").
+		Where("date >= ? AND date <= ?", startDate, endDate).
+		Group("date").Order("date ASC").Scan(&summary.DailyPaidUsage).Error; err != nil {
+		return nil, err
+	}
 	row = DB.Table("checkins").
 		Select("COALESCE(SUM(quota_awarded), 0), COUNT(*)").
 		Where("checkin_date = ?", time.Now().Format("2006-01-02")).

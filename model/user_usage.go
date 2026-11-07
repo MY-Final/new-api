@@ -143,12 +143,20 @@ type UserUsageActivity struct {
 }
 
 type UserUsageRanking struct {
-	Summary  UserUsageAggregate `json:"summary"`
-	Activity UserUsageActivity  `json:"activity"`
-	Items    []UserUsageRank    `json:"items"`
-	Total    int64              `json:"total"`
-	Page     int                `json:"page"`
-	PageSize int                `json:"page_size"`
+	Summary        UserUsageAggregate       `json:"summary"`
+	Activity       UserUsageActivity        `json:"activity"`
+	Items          []UserUsageRank          `json:"items"`
+	Total          int64                    `json:"total"`
+	Page           int                      `json:"page"`
+	PageSize       int                      `json:"page_size"`
+	DailyActivity  []UserUsageDailyActivity `json:"daily_activity"`
+	ServerStartDay string                   `json:"server_start_day"`
+	ServerEndDay   string                   `json:"server_end_day"`
+}
+
+type UserUsageDailyActivity struct {
+	Day   string `json:"day"`
+	Users int    `json:"users"`
 }
 
 type UserUsageFilter struct {
@@ -553,11 +561,19 @@ func GetUserUsageRanking(filter UserUsageFilter, page, pageSize int, sortBy stri
 	totalMetrics := usageMetrics{}
 	byUser := make(map[int]usageMetrics)
 	usernames := make(map[int]string)
+	dailyUsers := make(map[string]map[int]struct{})
 	err := forEachUsageLog(filter, func(log Log) {
 		metrics := usageLogMetrics(&log)
 		addUsageMetrics(&totalMetrics, metrics)
 		if log.UserId <= 0 {
 			return
+		}
+		if log.Type == LogTypeConsume {
+			day := time.Unix(log.CreatedAt, 0).In(time.Local).Format("2006-01-02")
+			if dailyUsers[day] == nil {
+				dailyUsers[day] = make(map[int]struct{})
+			}
+			dailyUsers[day][log.UserId] = struct{}{}
 		}
 		userMetrics := byUser[log.UserId]
 		addUsageMetrics(&userMetrics, metrics)
@@ -618,12 +634,20 @@ func GetUserUsageRanking(filter UserUsageFilter, page, pageSize int, sortBy stri
 	if err != nil {
 		return nil, err
 	}
+	dailyActivity := make([]UserUsageDailyActivity, 0, len(dailyUsers))
+	for day, users := range dailyUsers {
+		dailyActivity = append(dailyActivity, UserUsageDailyActivity{Day: day, Users: len(users)})
+	}
+	sort.Slice(dailyActivity, func(i, j int) bool { return dailyActivity[i].Day < dailyActivity[j].Day })
 	return &UserUsageRanking{
-		Summary:  usageAggregateFromMetrics(totalMetrics),
-		Activity: activity,
-		Items:    items[start:end],
-		Total:    total,
-		Page:     page,
-		PageSize: pageSize,
+		Summary:        usageAggregateFromMetrics(totalMetrics),
+		Activity:       activity,
+		Items:          items[start:end],
+		Total:          total,
+		Page:           page,
+		PageSize:       pageSize,
+		DailyActivity:  dailyActivity,
+		ServerStartDay: time.Unix(filter.Start, 0).In(time.Local).Format("2006-01-02"),
+		ServerEndDay:   time.Unix(filter.End, 0).In(time.Local).Format("2006-01-02"),
 	}, nil
 }

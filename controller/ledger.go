@@ -101,5 +101,19 @@ func GetQuotaLedgerSummary(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	if c.Query("include_users") == "true" {
+		summary.PaidUsers, err = model.GetQuotaLedgerPaidUsers(query.StartDate, query.EndDate)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		start, _ := time.ParseInLocation("2006-01-02", query.StartDate, time.Local)
+		end, _ := time.ParseInLocation("2006-01-02", query.EndDate, time.Local)
+		summary.Credits, err = model.GetQuotaLedgerCredits(start, end.AddDate(0, 0, 1))
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	}
 	common.ApiSuccess(c, summary)
 }

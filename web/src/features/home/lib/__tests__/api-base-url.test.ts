@@ -22,19 +22,31 @@ import { resolveApiBaseUrl } from '../api-base-url'
 
 describe('resolveApiBaseUrl', () => {
   it.each([
-    ['https://api.example.com', 'https://api.example.com/v1'],
+    ['https://first.example.com', 'https://first.example.com/v1'],
+    ['https://second.example.com:8443', 'https://second.example.com:8443/v1'],
+    ['http://localhost:3000', 'http://localhost:3000/v1'],
+  ])(
+    'uses the current origin %s even when another address is configured',
+    (origin, expected) => {
+      expect(resolveApiBaseUrl('https://configured.example.com', origin)).toBe(
+        expected
+      )
+    }
+  )
+
+  it.each([
     ['https://api.example.com/', 'https://api.example.com/v1'],
     ['https://api.example.com/v1/', 'https://api.example.com/v1'],
     ['  https://api.example.com/proxy  ', 'https://api.example.com/proxy/v1'],
-  ])('normalizes the configured address %s', (configured, expected) => {
-    expect(resolveApiBaseUrl(configured, 'https://fallback.example.com')).toBe(
-      expected
-    )
-  })
+  ])(
+    'falls back to the configured address if the origin is unavailable',
+    (configured, expected) => {
+      expect(resolveApiBaseUrl(configured, '')).toBe(expected)
+      expect(resolveApiBaseUrl(configured, 'null')).toBe(expected)
+    }
+  )
 
-  it('uses the current origin with /v1 when no configured address is available', () => {
-    expect(resolveApiBaseUrl(undefined, 'https://console.example.com')).toBe(
-      'https://console.example.com/v1'
-    )
+  it('uses a relative API path when neither address is available', () => {
+    expect(resolveApiBaseUrl(undefined, '')).toBe('/v1')
   })
 })

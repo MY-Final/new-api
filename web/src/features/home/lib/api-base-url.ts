@@ -18,14 +18,14 @@ For commercial licensing, please contact support@quantumnous.com
 */
 export function resolveApiBaseUrl(
   configuredAddress: unknown,
-  fallbackOrigin: string
+  currentOrigin: string
 ): string {
   const normalizedAddress =
     typeof configuredAddress === 'string' ? configuredAddress.trim() : ''
-  const normalizedBase = (normalizedAddress || fallbackOrigin).replace(
-    /\/+$/,
-    ''
-  )
+  const origin = currentOrigin.trim()
+  const normalizedBase = (
+    (origin && origin !== 'null' ? origin : '') || normalizedAddress
+  ).replace(/\/+$/, '')
 
   return /\/v1$/i.test(normalizedBase) ? normalizedBase : `${normalizedBase}/v1`
 }
