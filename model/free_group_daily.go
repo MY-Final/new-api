@@ -14,10 +14,25 @@ import (
 const FreeGroupSettingOption = "FreeGroupSetting"
 
 type FreeGroupSetting struct {
-	Enabled    bool   `json:"enabled"`
-	Group      string `json:"group"`
-	DailyLimit int64  `json:"daily_limit"`
-	UserLimit  int64  `json:"user_limit"`
+	Enabled    bool                    `json:"enabled"`
+	Group      string                  `json:"group"`
+	DailyLimit int64                   `json:"daily_limit"`
+	UserLimit  int64                   `json:"user_limit"`
+	Weekly     []FreeGroupWeeklySlot   `json:"weekly,omitempty"`
+	Schedule   []FreeGroupScheduleSlot `json:"schedule,omitempty"`
+}
+
+// FreeGroupWeeklySlot assigns a recurring weekday to a group. Weekday follows
+// time.Weekday, where Sunday is 0.
+type FreeGroupWeeklySlot struct {
+	Weekday int    `json:"weekday"`
+	Group   string `json:"group"`
+}
+
+// FreeGroupScheduleSlot overrides one calendar day and wins over Weekly.
+type FreeGroupScheduleSlot struct {
+	Date  string `json:"date"`
+	Group string `json:"group"`
 }
 
 func ParseFreeGroupSetting(value string) (FreeGroupSetting, error) {
@@ -31,7 +46,49 @@ func ParseFreeGroupSetting(value string) (FreeGroupSetting, error) {
 			strings.TrimSpace(setting.Group) != setting.Group || setting.DailyLimit == 0) {
 		return setting, fmt.Errorf("invalid free group settings")
 	}
+	if len(setting.Weekly) > 7 || len(setting.Schedule) > 366 {
+		return setting, fmt.Errorf("invalid free group settings")
+	}
+	weekdays := make(map[int]struct{}, len(setting.Weekly))
+	for _, slot := range setting.Weekly {
+		if slot.Weekday < 0 || slot.Weekday > 6 ||
+			slot.Group == "" || slot.Group == "auto" || strings.TrimSpace(slot.Group) != slot.Group {
+			return setting, fmt.Errorf("invalid free group settings")
+		}
+		if _, ok := weekdays[slot.Weekday]; ok {
+			return setting, fmt.Errorf("invalid free group settings")
+		}
+		weekdays[slot.Weekday] = struct{}{}
+	}
+	dates := make(map[string]struct{}, len(setting.Schedule))
+	for _, slot := range setting.Schedule {
+		date, err := time.Parse("2006-01-02", slot.Date)
+		if err != nil || date.Format("2006-01-02") != slot.Date ||
+			slot.Group == "" || slot.Group == "auto" || strings.TrimSpace(slot.Group) != slot.Group {
+			return setting, fmt.Errorf("invalid free group settings")
+		}
+		if _, ok := dates[slot.Date]; ok {
+			return setting, fmt.Errorf("invalid free group settings")
+		}
+		dates[slot.Date] = struct{}{}
+	}
 	return setting, nil
+}
+
+// Groups lists every group referenced by the default and the schedule so the
+// option validator can reject groups that no longer exist.
+func (setting FreeGroupSetting) Groups() []string {
+	groups := make([]string, 0, 1+len(setting.Weekly)+len(setting.Schedule))
+	if setting.Group != "" {
+		groups = append(groups, setting.Group)
+	}
+	for _, slot := range setting.Weekly {
+		groups = append(groups, slot.Group)
+	}
+	for _, slot := range setting.Schedule {
+		groups = append(groups, slot.Group)
+	}
+	return groups
 }
 
 // LoadFreeGroupSetting reads the database so every node sees the same rules.
@@ -57,8 +114,63 @@ type FreeGroupDailyUsage struct {
 
 var errFreeGroupDailyLimit = errors.New("free group daily limit reached")
 
+var freeGroupZone = time.FixedZone("UTC+8", 8*60*60)
+
 func freeGroupDay(now time.Time) string {
-	return now.In(time.FixedZone("UTC+8", 8*60*60)).Format("2006-01-02")
+	return now.In(freeGroupZone).Format("2006-01-02")
+}
+
+func freeGroupAssignment(setting FreeGroupSetting, now time.Time) (string, string) {
+	if !setting.Enabled {
+		return setting.Group, "default"
+	}
+	local := now.In(freeGroupZone)
+	day := local.Format("2006-01-02")
+	for _, slot := range setting.Schedule {
+		if slot.Date == day {
+			return slot.Group, "date"
+		}
+	}
+	for _, slot := range setting.Weekly {
+		if slot.Weekday == int(local.Weekday()) {
+			return slot.Group, "weekly"
+		}
+	}
+	return setting.Group, "default"
+}
+
+// ResolveFreeGroupSetting returns the group that is free on the given day.
+// Date overrides win over weekly slots, and both win over the default group.
+func ResolveFreeGroupSetting(setting FreeGroupSetting, now time.Time) FreeGroupSetting {
+	setting.Group, _ = freeGroupAssignment(setting, now)
+	return setting
+}
+
+type FreeGroupScheduleDay struct {
+	Date       string `json:"date"`
+	Group      string `json:"group"`
+	Source     string `json:"source"`
+	Enabled    bool   `json:"enabled"`
+	DailyLimit int64  `json:"daily_limit"`
+	UserLimit  int64  `json:"user_limit"`
+}
+
+// FreeGroupSchedule resolves every day in the inclusive range so clients can
+// render the roster without duplicating the override rules.
+func FreeGroupSchedule(setting FreeGroupSetting, from, to time.Time) []FreeGroupScheduleDay {
+	days := make([]FreeGroupScheduleDay, 0, int(to.Sub(from).Hours()/24)+1)
+	for day := from; !day.After(to); day = day.AddDate(0, 0, 1) {
+		group, source := freeGroupAssignment(setting, day)
+		days = append(days, FreeGroupScheduleDay{
+			Date:       day.In(freeGroupZone).Format("2006-01-02"),
+			Group:      group,
+			Source:     source,
+			Enabled:    setting.Enabled,
+			DailyLimit: setting.DailyLimit,
+			UserLimit:  setting.UserLimit,
+		})
+	}
+	return days
 }
 
 func FreeGroupDailyCount(now time.Time) (int64, error) {

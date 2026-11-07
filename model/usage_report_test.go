@@ -47,7 +47,7 @@ func consumeLogOther(billingSource string) string {
 	return fmt.Sprintf(`{"billing_source":%q}`, billingSource)
 }
 
-// The snapshot must cover [00:00, 22:00) Beijing time, add up group rows and
+// The snapshot must cover [00:00, 22:00) UTC+8, add up group rows and
 // the summary identically, and split the quota by funding source without
 // double counting.
 func TestUsageReportSnapshotWindowGroupsAndFundingSource(t *testing.T) {
@@ -177,7 +177,7 @@ func TestUsageReportRecipientSelectionAndDeduplication(t *testing.T) {
 	assert.Equal(t, "owner@example.com", recipients[0].Email)
 }
 
-// The prompt state is persisted per user, boundaries use Beijing time, and a
+// The prompt state is persisted per user, boundaries use UTC+8, and a
 // later verified address clears any stored suppression.
 func TestEmailReminderPolicyPersistsAndExpires(t *testing.T) {
 	cleanUsageReportTables(t)

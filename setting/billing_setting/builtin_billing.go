@@ -3,7 +3,7 @@ package billing_setting
 import "github.com/QuantumNous/new-api/constant"
 
 // deepSeekPeak is DeepSeek's peak window: Monday to Friday, 09:00-12:00 and
-// 14:00-18:00 Beijing time. The Chinese public holidays DeepSeek bills
+// 14:00-18:00 UTC+8. The Chinese public holidays DeepSeek bills
 // off-peak are not known in advance and bill at peak here.
 const deepSeekPeak = `weekday("Asia/Shanghai") >= 1 && weekday("Asia/Shanghai") <= 5 && ((hour("Asia/Shanghai") >= 9 && hour("Asia/Shanghai") < 12) || (hour("Asia/Shanghai") >= 14 && hour("Asia/Shanghai") < 18))`
 

@@ -57,3 +57,28 @@ export interface FreeGroupUsageResponse {
   message?: string
   data?: FreeGroupUsage
 }
+
+export interface FreeGroupScheduleDay {
+  date: string
+  group: string
+  source: 'default' | 'weekly' | 'date'
+  enabled: boolean
+  daily_limit: number
+  user_limit: number
+}
+
+export interface FreeGroupScheduleData {
+  today: string
+  tomorrow: string
+  enabled: boolean
+  default_group: string
+  today_group: string
+  tomorrow_group: string
+  days: FreeGroupScheduleDay[]
+}
+
+export interface FreeGroupScheduleResponse {
+  success: boolean
+  message?: string
+  data?: FreeGroupScheduleData
+}

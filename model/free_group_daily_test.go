@@ -111,3 +111,15 @@ func TestFreeGroupDailyLimitDatabaseMatrix(t *testing.T) {
 		})
 	}
 }
+
+func TestParseFreeGroupSettingRejectsConflictingScheduleSlots(t *testing.T) {
+	_, err := ParseFreeGroupSetting(`{"enabled":true,"group":"free","daily_limit":10,` +
+		`"weekly":[{"weekday":1,"group":"a"},{"weekday":1,"group":"b"}],` +
+		`"schedule":[{"date":"2026-11-02","group":"a"},{"date":"2026-11-02","group":"b"}]}`)
+	require.Error(t, err)
+
+	setting, err := ParseFreeGroupSetting(`{"enabled":true,"group":"free","daily_limit":10,` +
+		`"weekly":[{"weekday":1,"group":"a"}],"schedule":[{"date":"2026-11-02","group":"b"}]}`)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"free", "a", "b"}, setting.Groups())
+}

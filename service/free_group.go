@@ -23,7 +23,7 @@ func LoadFreeGroupSetting(c *gin.Context) *types.NewAPIError {
 	if err != nil {
 		return types.NewErrorWithStatusCode(err, types.ErrorCodeQueryDataError, http.StatusServiceUnavailable, types.ErrOptionWithSkipRetry())
 	}
-	c.Set(freeGroupSettingContextKey, setting)
+	c.Set(freeGroupSettingContextKey, model.ResolveFreeGroupSetting(setting, time.Now()))
 	return nil
 }
 

@@ -174,13 +174,13 @@ func TestRenderEmailTemplateRendersOnlyDeclaredHTMLVariables(t *testing.T) {
 	stubEmailTemplates(t, "")
 	vars := map[string]string{
 		"Greeting":     "alice，这是你 2026-10-21 的用量日报。",
-		"DateRange":    "统计范围：2026-10-21 00:00–22:00（北京时间）",
+		"DateRange":    "统计范围：2026-10-21 00:00–22:00（UTC+8）",
 		"RequestCount": "12",
 		"Quota":        "$0.25",
 		"TotalTokens":  "3,456",
 		"QuotaNote":    "余额扣费 $0.25",
 		"GroupTitle":   "分组明细",
-		"Footer":       "统计截止北京时间 22:00",
+		"Footer":       "统计截止 UTC+8 22:00",
 	}
 	htmlVars := map[string]string{
 		"GroupTable": `<table><tr><td>vip</td></tr></table>`,

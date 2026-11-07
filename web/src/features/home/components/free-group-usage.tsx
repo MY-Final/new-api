@@ -28,6 +28,7 @@ import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 import type { FreeGroupUsageState } from '../types'
+import { FreeGroupScheduleDialog } from './free-group-schedule'
 
 type FreeGroupUsageProps = FreeGroupUsageState
 
@@ -98,16 +99,19 @@ export function FreeGroupUsage(props: FreeGroupUsageProps) {
                 {t('Free group calls today')}
               </h3>
               {props.usage?.enabled && props.usage.group && (
-                <Badge
-                  variant='outline'
-                  className='border-orange-500/30 bg-orange-500/10 text-orange-800 dark:text-orange-200'
-                >
-                  {props.usage.group}
-                </Badge>
+                <>
+                  <Badge
+                    variant='outline'
+                    className='border-orange-500/30 bg-orange-500/10 text-orange-800 dark:text-orange-200'
+                  >
+                    {props.usage.group}
+                  </Badge>
+                  <FreeGroupScheduleDialog />
+                </>
               )}
             </div>
             <p className='mt-2 text-xs leading-5 text-[#6b6259] dark:text-[#c9c0b5]'>
-              {t('The daily limit resets at midnight Beijing time.')}
+              {t('The daily limit resets at midnight UTC+8.')}
             </p>
           </div>
         </div>

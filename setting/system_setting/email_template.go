@@ -160,7 +160,7 @@ func EmailTemplateSpecs() []EmailTemplateSpec {
 			HTMLVariables: []string{"GroupTable"},
 			Sample: map[string]string{
 				"Greeting":     "alice，这是你 2026-10-21 的用量日报。",
-				"DateRange":    "统计范围：2026-10-21 00:00–22:00（北京时间）",
+				"DateRange":    "统计范围：2026-10-21 00:00–22:00（UTC+8）",
 				"RequestCount": "128",
 				"Quota":        "$1.23",
 				"TotalTokens":  "1,204,880",
@@ -169,7 +169,7 @@ func EmailTemplateSpecs() []EmailTemplateSpec {
 				"GroupTable": "<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse:collapse;font-size:13px;\">" +
 					"<tr style=\"color:#6b7280;font-size:12px;text-align:left;\"><th style=\"padding:6px 4px;border-bottom:1px solid #e5e7eb;font-weight:500;\">分组</th><th style=\"padding:6px 4px;border-bottom:1px solid #e5e7eb;font-weight:500;\">请求数</th><th style=\"padding:6px 4px;border-bottom:1px solid #e5e7eb;font-weight:500;\">额度</th><th style=\"padding:6px 4px;border-bottom:1px solid #e5e7eb;font-weight:500;\">Tokens</th></tr>" +
 					"<tr style=\"border-bottom:1px solid #f3f4f6;\"><td style=\"padding:8px 4px;\">default</td><td style=\"padding:8px 4px;\">128</td><td style=\"padding:8px 4px;\">$1.23</td><td style=\"padding:8px 4px;\">1,204,880</td></tr></table>",
-				"Footer": "统计截止北京时间 22:00，完整数据请前往平台查看。",
+				"Footer": "统计截止 UTC+8 22:00，完整数据请前往平台查看。",
 			},
 		},
 	}

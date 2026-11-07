@@ -87,7 +87,7 @@ describe('daily usage summary card', () => {
     expect(toggle).toBeChecked()
     expect(
       screen.getByText(
-        'Beijing time 22:00 · Today 00:00–22:00 · Grouped by group'
+        'UTC+8 22:00 · Today 00:00–22:00 · Grouped by group'
       )
     ).toBeInTheDocument()
     expect(

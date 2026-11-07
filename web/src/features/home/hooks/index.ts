@@ -18,3 +18,4 @@ For commercial licensing, please contact support@quantumnous.com
 */
 export { useHomePageContent } from './use-home-page-content'
 export { useFreeGroupUsage } from './use-free-group-usage'
+export { useFreeGroupSchedule } from './use-free-group-schedule'

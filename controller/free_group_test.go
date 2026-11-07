@@ -52,6 +52,72 @@ func TestGetFreeGroupUsageReturnsPublicDailyTotals(t *testing.T) {
 	assert.NotContains(t, recorder.Body.String(), "user_limit")
 }
 
+func TestGetFreeGroupScheduleResolvesDateOverridesOverWeeklySlots(t *testing.T) {
+	db := modelManagementDB(t, "sqlite", "")
+	require.NoError(t, db.AutoMigrate(&model.FreeGroupDailyUsage{}))
+	require.NoError(t, db.Create(&model.Option{
+		Key: model.FreeGroupSettingOption,
+		Value: `{"enabled":true,"group":"default","daily_limit":10,"user_limit":2,` +
+			`"weekly":[{"weekday":1,"group":"monday"}],` +
+			`"schedule":[{"date":"2026-11-03","group":"special"}]}`,
+	}).Error)
+
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = httptest.NewRequest(http.MethodGet, "/api/free_group/schedule?from=2026-11-02&to=2026-11-04", nil)
+
+	GetFreeGroupSchedule(context)
+
+	var response struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Today string                       `json:"today"`
+			Days  []model.FreeGroupScheduleDay `json:"days"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.True(t, response.Success)
+	require.Len(t, response.Data.Days, 3)
+	assert.Equal(t, model.FreeGroupScheduleDay{
+		Date: "2026-11-02", Group: "monday", Source: "weekly",
+		Enabled: true, DailyLimit: 10, UserLimit: 2,
+	}, response.Data.Days[0])
+	assert.Equal(t, model.FreeGroupScheduleDay{
+		Date: "2026-11-03", Group: "special", Source: "date",
+		Enabled: true, DailyLimit: 10, UserLimit: 2,
+	}, response.Data.Days[1])
+	assert.Equal(t, model.FreeGroupScheduleDay{
+		Date: "2026-11-04", Group: "default", Source: "default",
+		Enabled: true, DailyLimit: 10, UserLimit: 2,
+	}, response.Data.Days[2])
+}
+
+func TestGetFreeGroupUsageUsesTodaysScheduledGroup(t *testing.T) {
+	db := modelManagementDB(t, "sqlite", "")
+	require.NoError(t, db.AutoMigrate(&model.FreeGroupDailyUsage{}))
+	day := time.Now().In(time.FixedZone("UTC+8", 8*60*60)).Format("2006-01-02")
+	require.NoError(t, db.Create(&model.Option{
+		Key:   model.FreeGroupSettingOption,
+		Value: `{"enabled":true,"group":"default","daily_limit":10,"schedule":[{"date":"` + day + `","group":"today-only"}]}`,
+	}).Error)
+	require.NoError(t, db.Create(&model.FreeGroupDailyUsage{Day: day, UserID: 0, Count: 1}).Error)
+
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = httptest.NewRequest(http.MethodGet, "/api/free_group/usage", nil)
+
+	GetFreeGroupUsage(context)
+
+	var response struct {
+		Success bool                   `json:"success"`
+		Data    freeGroupUsageResponse `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	assert.True(t, response.Success)
+	assert.Equal(t, "today-only", response.Data.Group)
+}
+
 func TestFreeGroupUserUsageDatabaseMatrix(t *testing.T) {
 	for _, tc := range []struct{ kind, env string }{{"sqlite", ""}, {"mysql", "TEST_MYSQL_DSN"}, {"postgres", "TEST_POSTGRES_DSN"}} {
 		t.Run(tc.kind, func(t *testing.T) {

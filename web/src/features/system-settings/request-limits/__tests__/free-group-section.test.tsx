@@ -17,12 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { expect, test, vi } from 'vitest'
 
 import { api } from '@/lib/api'
+import dayjs from '@/lib/dayjs'
 
 import { SettingsPageProvider } from '../../components/settings-page-context'
 import { FreeGroupSection } from '../free-group-section'
@@ -69,7 +70,11 @@ test('saves the free group limits and displays today’s usage', async () => {
   expect(group.closest('[data-slot="form-item"]')?.parentElement).toHaveClass(
     'items-start'
   )
-  await user.click(screen.getByRole('button', { name: 'Open' }))
+  const groupField = group.closest('[data-slot="form-item"]')
+  expect(groupField).not.toBeNull()
+  await user.click(
+    within(groupField as HTMLElement).getByRole('button', { name: 'Open' })
+  )
   expect(await screen.findByRole('option', { name: 'premium' })).toBeVisible()
   expect(screen.queryByRole('option', { name: 'auto' })).not.toBeInTheDocument()
   await user.type(group, 'fre')
@@ -201,6 +206,49 @@ test('a deleted saved group must be replaced before saving an enabled configurat
       key: 'FreeGroupSetting',
       value:
         '{"enabled":true,"group":"free","daily_limit":10000,"user_limit":0}',
+    })
+  )
+})
+
+test('saves weekly group assignments and date overrides', async () => {
+  const put = vi
+    .spyOn(api, 'put')
+    .mockResolvedValue({ data: { success: true } })
+  const client = new QueryClient({
+    defaultOptions: { mutations: { retry: false } },
+  })
+  render(
+    <QueryClientProvider client={client}>
+      <Fixture
+        setting='{"enabled":true,"group":"free","daily_limit":10000,"user_limit":0}'
+        groupRatio='{"free":1,"premium":2}'
+      />
+    </QueryClientProvider>
+  )
+  const user = userEvent.setup()
+  const monday = screen.getByRole('combobox', { name: 'Monday' })
+  const mondayField = monday.closest('[data-slot="form-item"]')
+  expect(mondayField).not.toBeNull()
+  await user.click(
+    within(mondayField as HTMLElement).getByRole('button', { name: 'Open' })
+  )
+  await user.click(await screen.findByRole('option', { name: 'premium' }))
+  await user.click(screen.getByRole('button', { name: 'Add date override' }))
+  await user.click(
+    screen.getByRole('button', { name: 'Save free group settings' })
+  )
+
+  await waitFor(() =>
+    expect(put).toHaveBeenCalledWith('/api/option/', {
+      key: 'FreeGroupSetting',
+      value: JSON.stringify({
+        enabled: true,
+        group: 'free',
+        daily_limit: 10000,
+        user_limit: 0,
+        weekly: [{ weekday: 1, group: 'premium' }],
+        schedule: [{ date: dayjs().format('YYYY-MM-DD'), group: 'free' }],
+      }),
     })
   )
 })

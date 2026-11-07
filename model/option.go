@@ -255,8 +255,12 @@ func validateOptionValue(key string, value string) error {
 		if err != nil {
 			return err
 		}
-		if setting.Enabled && !ratio_setting.ContainsGroupRatio(setting.Group) {
-			return common.NewMessage("The selected group does not exist")
+		if setting.Enabled {
+			for _, group := range setting.Groups() {
+				if !ratio_setting.ContainsGroupRatio(group) {
+					return common.NewMessage("The selected group does not exist")
+				}
+			}
 		}
 		return nil
 	}

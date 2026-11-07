@@ -115,7 +115,7 @@ export function DailyUsageReportCard() {
         controlId='dailyUsageReport'
         label={t('Daily usage summary')}
         description={t(
-          'Beijing time 22:00 · Today 00:00–22:00 · Grouped by group'
+          'UTC+8 22:00 · Today 00:00–22:00 · Grouped by group'
         )}
         checked={enabled}
         disabled={mutation.isPending}

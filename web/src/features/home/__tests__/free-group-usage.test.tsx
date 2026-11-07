@@ -16,7 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, within } from '@testing-library/react'
+import type { ReactElement } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
@@ -26,9 +28,20 @@ import {
 
 afterEach(cleanup)
 
+function renderWithQueryClient(ui: ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  return render(ui, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  })
+}
+
 describe('free group usage', () => {
   it('shows the public daily count, group, and remaining calls when enabled', () => {
-    render(
+    renderWithQueryClient(
       <FreeGroupUsage
         usage={{
           enabled: true,
@@ -56,7 +69,7 @@ describe('free group usage', () => {
   })
 
   it('renders nothing when the free group is off', () => {
-    render(
+    renderWithQueryClient(
       <FreeGroupUsage
         usage={{
           enabled: false,
@@ -78,14 +91,16 @@ describe('free group usage', () => {
   })
 
   it('shows an unavailable state when the public usage request fails', () => {
-    render(<FreeGroupUsage usage={undefined} isLoading={false} isError />)
+    renderWithQueryClient(
+      <FreeGroupUsage usage={undefined} isLoading={false} isError />
+    )
 
     expect(screen.getByText('Unavailable')).toBeVisible()
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
   })
 
   it('shows the public daily count in the compact header indicator', () => {
-    render(
+    renderWithQueryClient(
       <FreeGroupUsageIndicator
         usage={{
           enabled: true,
@@ -107,7 +122,7 @@ describe('free group usage', () => {
   })
 
   it('renders no compact indicator when the free group is off', () => {
-    render(
+    renderWithQueryClient(
       <FreeGroupUsageIndicator
         usage={{
           enabled: false,

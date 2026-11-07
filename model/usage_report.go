@@ -13,14 +13,14 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// The daily usage report is defined in Beijing time so the schedule and the
+// The daily usage report is defined in UTC+8 so the schedule and the
 // statistics window stay identical on servers running in any time zone.
-// Asia/Shanghai has no daylight saving transitions, so a fixed zone is exact
+// UTC+8 has no daylight saving transitions, so a fixed zone is exact
 // and does not depend on tzdata being present in the container image.
-var usageReportLocation = time.FixedZone("Asia/Shanghai", 8*60*60)
+var usageReportLocation = time.FixedZone("UTC+8", 8*60*60)
 
 const (
-	// UsageReportWindowEndHour is the Beijing hour that closes a report window.
+	// UsageReportWindowEndHour is the UTC+8 hour that closes a report window.
 	UsageReportWindowEndHour = 22
 	// UsageReportMaxAttempts bounds automatic delivery retries: the scheduled
 	// run plus two retries, never more.
@@ -116,17 +116,17 @@ type UsageReportRun struct {
 	LastError  string `json:"last_error" gorm:"type:varchar(255)"`
 }
 
-// UsageReportNow returns the current time in Beijing time.
+// UsageReportNow returns the current time in UTC+8.
 func UsageReportNow() time.Time {
 	return time.Now().In(usageReportLocation)
 }
 
-// UsageReportDate formats a time as the Beijing calendar date.
+// UsageReportDate formats a time as the UTC+8 calendar date.
 func UsageReportDate(t time.Time) string {
 	return t.In(usageReportLocation).Format("2006-01-02")
 }
 
-// UsageReportWindow returns the [00:00, 22:00) Beijing window of date.
+// UsageReportWindow returns the [00:00, 22:00) UTC+8 window of date.
 func UsageReportWindow(date string) (start int64, end int64, err error) {
 	day, err := time.ParseInLocation("2006-01-02", date, usageReportLocation)
 	if err != nil {
@@ -135,12 +135,12 @@ func UsageReportWindow(date string) (start int64, end int64, err error) {
 	return day.Unix(), day.Add(UsageReportWindowEndHour * time.Hour).Unix(), nil
 }
 
-// UsageReportTimeLabel formats a Unix second in Beijing time for report copy.
+// UsageReportTimeLabel formats a Unix second in UTC+8 for report copy.
 func UsageReportTimeLabel(timestamp int64) string {
 	return time.Unix(timestamp, 0).In(usageReportLocation).Format("2006-01-02 15:04")
 }
 
-// UsageReportRangeLabel renders [start, end) in Beijing time. The repeated date
+// UsageReportRangeLabel renders [start, end) in UTC+8. The repeated date
 // is omitted when both ends stay on the same day.
 func UsageReportRangeLabel(start int64, end int64) string {
 	startTime := time.Unix(start, 0).In(usageReportLocation)

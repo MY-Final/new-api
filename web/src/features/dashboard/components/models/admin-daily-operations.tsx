@@ -74,7 +74,7 @@ export function AdminDailyOperations(props: AdminDailyOperationsProps) {
         <StatCard
           title={t('Free group calls today')}
           value={freeCalls}
-          description={t('The daily limit resets at midnight Beijing time.')}
+          description={t('The daily limit resets at midnight UTC+8.')}
           icon={Activity}
           tone='accent-1'
           iconTone='chart-1'
