@@ -374,6 +374,8 @@ func migrateDB() error {
 		&TwoFA{},
 		&TwoFABackupCode{},
 		&Checkin{},
+		&DailyEggDraw{},
+		&DailyEggInventory{},
 		&SubscriptionOrder{},
 		&UserSubscription{},
 		&SubscriptionPlanQuotaWindow{},

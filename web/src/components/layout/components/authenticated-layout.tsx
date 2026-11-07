@@ -23,7 +23,6 @@ import { SkipToMain } from '@/components/skip-to-main'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { LayoutProvider } from '@/context/layout-provider'
 import { SearchProvider } from '@/context/search-provider'
-import { CheckinFloatingWindow } from '@/features/profile/components/checkin-floating-window'
 import { EmailBindingPrompt } from '@/features/profile/components/email-binding-prompt'
 import { useNotificationStream } from '@/hooks/use-notification-stream'
 import { useStatus } from '@/hooks/use-status'
@@ -76,7 +75,6 @@ function AuthenticatedLayoutContent(props: AuthenticatedLayoutProps) {
           </div>
         </SidebarProvider>
         <AnnouncementPopup />
-        <CheckinFloatingWindow />
         <EmailBindingPrompt />
         <CommandMenu />
       </SearchProvider>

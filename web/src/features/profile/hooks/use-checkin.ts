@@ -17,7 +17,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
-import dayjs from 'dayjs'
 import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -42,6 +41,8 @@ export type CheckinTurnstileState = {
 type CheckinController = {
   data: CheckinStatusResponse | undefined
   isLoading: boolean
+  isError: boolean
+  refetch: () => void
   checkedToday: boolean
   todayAward: number | undefined
   todayString: string
@@ -73,7 +74,7 @@ export function useCheckin(options: UseCheckinOptions): CheckinController {
   const [turnstileWidgetKey, setTurnstileWidgetKey] = useState(0)
 
   /* eslint-disable @tanstack/query/exhaustive-deps */
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['checkin-status', options.month],
     queryFn: async () => {
       const res = await getCheckinStatus(options.month)
@@ -104,7 +105,9 @@ export function useCheckin(options: UseCheckinOptions): CheckinController {
     [data?.stats?.records]
   )
 
-  const todayString = useMemo(() => dayjs().format('YYYY-MM-DD'), [])
+  const todayString =
+    data?.stats?.today ??
+    new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const checkedToday = data?.stats?.checked_in_today === true
   const todayAward = recordsMap[todayString]
 
@@ -191,6 +194,8 @@ export function useCheckin(options: UseCheckinOptions): CheckinController {
   return {
     data,
     isLoading,
+    isError,
+    refetch,
     checkedToday,
     todayAward,
     todayString,

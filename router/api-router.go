@@ -175,6 +175,8 @@ func SetApiRouter(router *gin.Engine) {
 				// Check-in routes
 				selfRoute.GET("/checkin", controller.GetCheckinStatus)
 				selfRoute.POST("/checkin", middleware.TurnstileCheck(), controller.DoCheckin)
+				selfRoute.GET("/daily_egg", controller.GetDailyEgg)
+				selfRoute.POST("/daily_egg", middleware.UserCriticalRateLimit("daily-egg"), controller.OpenDailyEgg)
 
 				// Custom OAuth bindings
 				selfRoute.GET("/oauth/bindings", controller.GetUserOAuthBindings)

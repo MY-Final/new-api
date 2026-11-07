@@ -40,6 +40,7 @@ func InitOptionMap() {
 	// 添加原有的系统配置
 	common.OptionMap["SupportTicketsEnabled"] = "true"
 	common.OptionMap[FreeGroupSettingOption] = `{"enabled":false,"group":"","daily_limit":10000,"user_limit":0}`
+	common.OptionMap[DailyEggSettingOption] = DefaultDailyEggSetting
 	common.OptionMap["FileUploadPermission"] = strconv.Itoa(common.FileUploadPermission)
 	common.OptionMap["FileDownloadPermission"] = strconv.Itoa(common.FileDownloadPermission)
 	common.OptionMap["ImageUploadPermission"] = strconv.Itoa(common.ImageUploadPermission)
@@ -250,6 +251,10 @@ func SyncOptions(frequency int) {
 }
 
 func validateOptionValue(key string, value string) error {
+	if key == DailyEggSettingOption {
+		_, err := ParseDailyEggSetting(value)
+		return err
+	}
 	if key == FreeGroupSettingOption {
 		setting, err := ParseFreeGroupSetting(value)
 		if err != nil {
@@ -361,6 +366,9 @@ func validateOptionValue(key string, value string) error {
 }
 
 func UpdateOption(key string, value string) error {
+	if key == DailyEggSettingOption {
+		return UpdateOptionsBulk(map[string]string{key: value})
+	}
 	if key == FreeGroupSettingOption {
 		return UpdateOptionsBulk(map[string]string{key: value})
 	}

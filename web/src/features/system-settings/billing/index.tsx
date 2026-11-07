@@ -25,6 +25,8 @@ import {
 } from './section-registry.tsx'
 
 const defaultBillingSettings: BillingSettings = {
+  DailyEggSetting:
+    '{"enabled":false,"min_spend_cny":2.5,"egg_count":3,"prizes":[]}',
   QuotaForNewUser: 0,
   QuotaForInviter: 0,
   QuotaForInvitee: 0,

@@ -23,12 +23,14 @@ import {
   BookOpen,
   Box,
   Brain,
+  CalendarDays,
   ClipboardList,
   CreditCard,
   CircleDollarSign,
   Crown,
   FileText,
   FlaskConical,
+  Egg,
   HeartPulse,
   History,
   Image as ImageIcon,
@@ -147,6 +149,22 @@ export function useSidebarData(badges: SidebarBadges = {}): SidebarData {
           activeUrls: ['/usage-logs/drawing'],
           configUrls: ['/usage-logs/drawing', '/usage-logs/task'],
           icon: ListTodo,
+        },
+      ],
+    },
+    {
+      id: 'entertainment',
+      title: t('Entertainment'),
+      items: [
+        {
+          title: t('Daily Check-in'),
+          url: '/entertainment/checkin',
+          icon: CalendarDays,
+        },
+        {
+          title: t('Daily egg'),
+          url: '/entertainment',
+          icon: Egg,
         },
       ],
     },
@@ -344,10 +362,11 @@ export function useSidebarData(badges: SidebarBadges = {}): SidebarData {
   const groupOrder = new Map([
     ['general', 0],
     ['chat', 1],
-    ['personal', 2],
-    ['custom-pages', 3],
-    ['admin', 4],
-    ['finance', 5],
+    ['entertainment', 2],
+    ['personal', 3],
+    ['custom-pages', 4],
+    ['admin', 5],
+    ['finance', 6],
   ])
   navGroups.sort(
     (a, b) =>

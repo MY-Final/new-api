@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { parseCurrencyDisplayType } from '@/lib/currency'
 
 import { CheckinSettingsSection } from '../general/checkin-settings-section'
+import { DailyEggSettingsSection } from '../general/daily-egg-settings-section'
 import { PricingSection } from '../general/pricing-section'
 import { QuotaSettingsSection } from '../general/quota-settings-section'
 import { PaymentSettingsSection } from '../integrations/payment-settings-section'
@@ -201,6 +202,13 @@ const BILLING_SECTIONS = [
           maxQuota: settings['checkin_setting.max_quota'],
         }}
       />
+    ),
+  },
+  {
+    id: 'daily-egg',
+    titleKey: 'Daily egg settings',
+    build: (settings: BillingSettings) => (
+      <DailyEggSettingsSection setting={settings.DailyEggSetting} />
     ),
   },
 ] as const

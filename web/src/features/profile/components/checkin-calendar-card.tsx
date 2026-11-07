@@ -17,16 +17,20 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import {
+  CalendarCheck,
   CalendarDays,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ChevronUp,
+  Check,
+  Flame,
+  Gift,
+  History,
   Sparkles,
 } from 'lucide-react'
-import { useEffect, useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { ErrorState } from '@/components/error-state'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { IconBadge } from '@/components/ui/icon-badge'
@@ -37,8 +41,10 @@ import {
   TooltipTrigger,
   TooltipProvider,
 } from '@/components/ui/tooltip'
+import { toIntlLocale } from '@/i18n/languages'
 import { formatQuotaWithCurrency, getCurrencyDisplay } from '@/lib/currency'
 import dayjs from '@/lib/dayjs'
+import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useSystemConfigStore } from '@/stores/system-config-store'
 
@@ -56,13 +62,16 @@ export function CheckinCalendarCard({
   turnstileEnabled,
   turnstileSiteKey,
 }: CheckinCalendarCardProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const [currentMonth, setCurrentMonth] = useState(() => {
-    const now = new Date()
-    return new Date(now.getFullYear(), now.getMonth(), 1)
+    const now = new Date(Date.now() + 8 * 60 * 60 * 1000)
+    return new Date(now.getUTCFullYear(), now.getUTCMonth(), 1)
   })
-  const [initialLoaded, setInitialLoaded] = useState(false)
-  const [collapsed, setCollapsed] = useState<boolean>(false)
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const todayMonth = new Date(Date.now() + 8 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 7)
 
   const currentMonthStr = useMemo(() => {
     return dayjs(currentMonth).format('YYYY-MM')
@@ -70,15 +79,10 @@ export function CheckinCalendarCard({
 
   const {
     data: checkinData,
-    isLoading,
+    isLoading: monthLoading,
+    isError: monthError,
+    refetch: refetchMonth,
     recordsMap: checkinRecordsMap,
-    monthlyQuota,
-    todayString,
-    checkedToday,
-    todayAward,
-    checkinLoading,
-    startCheckin,
-    turnstile,
   } = useCheckin({
     enabled: checkinEnabled,
     turnstileEnabled,
@@ -86,7 +90,40 @@ export function CheckinCalendarCard({
     month: currentMonthStr,
   })
 
-  const todayMonthString = todayString.slice(0, 7)
+  const current = useCheckin({
+    enabled: checkinEnabled,
+    turnstileEnabled,
+    turnstileSiteKey,
+    month: todayMonth,
+  })
+  const {
+    todayString,
+    checkedToday,
+    todayAward,
+    checkinLoading,
+    startCheckin,
+    turnstile,
+  } = current
+  const todayDate = new Date(`${todayString}T00:00:00Z`)
+  const monday = new Date(todayDate)
+  monday.setUTCDate(todayDate.getUTCDate() - ((todayDate.getUTCDay() + 6) % 7))
+  const previousMonth = monday.toISOString().slice(0, 7)
+  const previous = useCheckin({
+    enabled: checkinEnabled && previousMonth !== todayMonth,
+    turnstileEnabled,
+    turnstileSiteKey,
+    month: previousMonth,
+  })
+  const weekDates = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(monday)
+    date.setUTCDate(monday.getUTCDate() + index)
+    return date
+  })
+  const weekRecords = { ...previous.recordsMap, ...current.recordsMap }
+  const weekdayFormatter = new Intl.DateTimeFormat(locale, {
+    weekday: 'short',
+    timeZone: 'UTC',
+  })
 
   // Subscribe so both the amounts and the unit follow currency setting changes.
   useSystemConfigStore((state) => state.config.currency)
@@ -99,41 +136,46 @@ export function CheckinCalendarCard({
     currencyMeta.kind === 'tokens' ? t('Tokens') : currencyMeta.symbol
   const statCells = [
     {
-      key: 'total-checkins',
-      value: checkinData?.stats?.total_checkins || 0,
-      label: t('Total check-ins'),
+      key: 'monthly-checkins',
+      value: formatNumber(current.data?.stats?.checkin_count || 0, locale),
+      label: t("This month's check-ins"),
       unit: '',
+      icon: CalendarCheck,
+      tone: 'info' as const,
+    },
+    {
+      key: 'streak',
+      value: formatNumber(current.data?.stats?.current_streak || 0, locale),
+      label: t('Current streak'),
+      unit: '',
+      icon: Flame,
+      tone: 'warning' as const,
     },
     {
       key: 'monthly-quota',
       // The queried month drives the calendar, so label the amount with that
       // month instead of claiming "this month" while browsing another one.
-      value: formatQuotaWithCurrency(monthlyQuota, {
+      value: formatQuotaWithCurrency(current.monthlyQuota, {
         digitsLarge: 0,
         showSymbol: false,
       }),
-      label:
-        currentMonthStr === todayMonthString ? t('This month') : currentMonthStr,
+      label: t("This month's rewards"),
       unit: quotaUnit,
+      icon: Gift,
+      tone: 'success' as const,
     },
     {
       key: 'total-quota',
-      value: formatQuotaWithCurrency(checkinData?.stats?.total_quota || 0, {
+      value: formatQuotaWithCurrency(current.data?.stats?.total_quota || 0, {
         digitsLarge: 0,
         showSymbol: false,
       }),
       label: t('Total earned'),
       unit: quotaUnit,
+      icon: Sparkles,
+      tone: 'primary' as const,
     },
   ]
-
-  useEffect(() => {
-    if (initialLoaded) return
-    if (isLoading) return
-    if (!checkinData) return
-    setCollapsed(checkedToday)
-    setInitialLoaded(true)
-  }, [checkinData, checkedToday, initialLoaded, isLoading])
 
   const handlePrevMonth = () => {
     setCurrentMonth(
@@ -154,7 +196,7 @@ export function CheckinCalendarCard({
     const firstDay = new Date(year, month, 1)
     const lastDay = new Date(year, month + 1, 0)
     const daysInMonth = lastDay.getDate()
-    const startDayOfWeek = firstDay.getDay() // 0 = Sunday
+    const startDayOfWeek = (firstDay.getDay() + 6) % 7
 
     const days: Array<{ date: Date; isCurrentMonth: boolean }> = []
 
@@ -180,13 +222,13 @@ export function CheckinCalendarCard({
     return days
   }, [currentMonth])
 
-  const weekDays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
+  const weekDays = weekDates.map((date) => weekdayFormatter.format(date))
 
   if (!checkinEnabled) {
     return null
   }
 
-  if (isLoading) {
+  if (current.isLoading) {
     return (
       <Card data-card-hover='false' className='gap-0 overflow-hidden py-0'>
         <div className='p-6'>
@@ -204,6 +246,14 @@ export function CheckinCalendarCard({
       </Card>
     )
   }
+  if (current.isError) {
+    return (
+      <ErrorState
+        title={t('Failed to fetch checkin status')}
+        onRetry={() => current.refetch()}
+      />
+    )
+  }
 
   let checkinButtonLabel = t('Check in now')
   if (checkinLoading) {
@@ -216,117 +266,204 @@ export function CheckinCalendarCard({
     <TooltipProvider delay={100}>
       <CheckinTurnstileDialog siteKey={turnstileSiteKey} state={turnstile} />
 
-      <Card data-card-hover='false' className='gap-0 overflow-hidden py-0'>
-        {/* Header */}
-        <div className='border-b p-4 sm:p-6'>
-          <div className='flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4'>
-            <button
-              type='button'
-              className='flex min-w-0 flex-1 items-start gap-3 rounded-lg text-left whitespace-normal outline-none'
-              onClick={() => setCollapsed((v) => !v)}
-            >
-              <IconBadge tone='neutral' size='lg' className='sm:size-11'>
-                <CalendarDays
-                  className='h-4 w-4 sm:h-5 sm:w-5'
-                  strokeWidth={2}
-                />
-              </IconBadge>
-              <div className='min-w-0 flex-1'>
-                <div className='flex flex-wrap items-center gap-1.5 sm:gap-2'>
-                  <h3 className='text-base font-semibold tracking-tight sm:text-lg'>
-                    {t('Daily Check-in')}
-                  </h3>
-                  {checkedToday && (
-                    <div className='inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-600 sm:gap-1.5 sm:px-2.5 sm:text-xs dark:text-emerald-400'>
-                      <Sparkles className='h-2.5 w-2.5 sm:h-3 sm:w-3' />
-                      {t('Checked in')}
-                    </div>
-                  )}
-                  <span className='text-muted-foreground inline-flex items-center'>
-                    {collapsed ? (
-                      <ChevronDown className='h-4 w-4' />
-                    ) : (
-                      <ChevronUp className='h-4 w-4' />
-                    )}
-                  </span>
-                </div>
-                <p className='text-muted-foreground mt-1 line-clamp-2 text-xs sm:text-sm'>
-                  {checkedToday && todayAward !== undefined
-                    ? `${t('Today')} +${formatQuotaWithCurrency(todayAward)}`
-                    : t('Check in daily to receive random quota rewards')}
+      <div className='space-y-6 sm:space-y-8'>
+        <header className='flex flex-wrap items-end justify-between gap-3'>
+          <div>
+            <p className='text-primary text-xs font-semibold tracking-widest uppercase'>
+              {t('Entertainment')}
+            </p>
+            <h1 className='mt-2 text-2xl font-bold tracking-tight sm:text-3xl'>
+              {t('Daily Check-in')}
+            </h1>
+            <p className='text-muted-foreground mt-2 text-sm'>
+              {t('Check in daily to receive random quota rewards')}
+            </p>
+          </div>
+          <p className='text-muted-foreground flex items-center gap-2 text-xs tabular-nums'>
+            <CalendarDays className='size-4' /> {todayString}
+          </p>
+        </header>
+
+        <section className='overflow-hidden rounded-2xl bg-slate-900 text-white shadow-sm dark:bg-slate-800'>
+          <div className='flex flex-col justify-between gap-8 p-6 sm:p-8 md:flex-row md:items-center'>
+            <div className='max-w-xl'>
+              <span className='inline-flex items-center gap-1.5 rounded-full border border-emerald-300/25 bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-200'>
+                <Sparkles className='size-3.5' />
+                {checkedToday ? t('Checked in') : t('Daily Check-in')}
+              </span>
+              <h2 className='mt-4 text-xl font-bold tracking-tight sm:text-2xl'>
+                {checkedToday
+                  ? t('See you tomorrow')
+                  : t('Your daily reward awaits')}
+              </h2>
+              <p className='mt-3 text-sm leading-6 text-slate-300'>
+                {t('Rewards will be added directly to your balance')}
+              </p>
+              <div className='mt-5 flex flex-wrap items-center gap-3'>
+                <Button
+                  onClick={startCheckin}
+                  disabled={checkinLoading || checkedToday}
+                  className='bg-emerald-300 text-slate-950 hover:bg-emerald-200 disabled:bg-slate-600 disabled:text-slate-200'
+                >
+                  <CalendarCheck className='size-4' /> {checkinButtonLabel}
+                </Button>
+                <span className='text-xs text-slate-400'>
+                  {t('Do not repeat check-in; only once per day')}
+                </span>
+              </div>
+            </div>
+            <div className='w-full rounded-xl border border-white/10 bg-white/5 p-5 sm:max-w-56'>
+              <p className='text-xs text-slate-300'>{t('Reward range')}</p>
+              <p className='mt-2 text-lg font-semibold tabular-nums'>
+                {current.data?.min_quota === undefined ||
+                current.data?.max_quota === undefined
+                  ? '—'
+                  : `${formatQuotaWithCurrency(current.data.min_quota)} – ${formatQuotaWithCurrency(current.data.max_quota)}`}
+              </p>
+              <div className='mt-4 border-t border-white/10 pt-4'>
+                <p className='text-xs text-slate-300'>{t("Today's reward")}</p>
+                <p className='mt-1 font-semibold text-emerald-200 tabular-nums'>
+                  {todayAward === undefined
+                    ? '—'
+                    : `+${formatQuotaWithCurrency(todayAward)}`}
                 </p>
               </div>
-            </button>
-            <Button
-              onClick={startCheckin}
-              disabled={checkinLoading || checkedToday}
-              size='sm'
-              className='w-full shrink-0 sm:w-auto'
-            >
-              {checkinButtonLabel}
-            </Button>
-          </div>
-        </div>
-
-        {!collapsed ? (
-          <>
-            {/* Stats */}
-            <div className='grid grid-cols-3 gap-px border-b'>
-              {statCells.map((stat) => (
-                <div
-                  key={stat.key}
-                  className='bg-card flex min-w-0 flex-col items-center justify-center gap-1 px-2 py-3 text-center sm:py-4'
-                >
-                  <div
-                    data-slot='checkin-stat-value'
-                    className='text-xl leading-none font-semibold tracking-tight tabular-nums sm:text-2xl'
-                  >
-                    {stat.value}
-                  </div>
-                  <div
-                    data-slot='checkin-stat-label'
-                    className='text-muted-foreground flex min-w-0 max-w-full items-center gap-1 text-[10px] font-medium sm:text-xs'
-                  >
-                    <span className='truncate'>{stat.label}</span>
-                    {stat.unit ? (
-                      <span className='shrink-0'>{stat.unit}</span>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
             </div>
+          </div>
+        </section>
 
-            {/* Calendar */}
-            <div className='p-4 sm:p-6'>
-              <div className='space-y-3 sm:space-y-4'>
-                {/* Month navigation */}
-                <div className='flex items-center justify-between'>
-                  <h4 className='text-xs font-semibold sm:text-sm'>
-                    {dayjs(currentMonth).format('YYYY-MM')}
-                  </h4>
-                  <div className='flex items-center gap-0.5 sm:gap-1'>
-                    <Button
-                      variant='ghost'
-                      size='icon'
-                      className='h-7 w-7 sm:h-8 sm:w-8'
-                      aria-label={t('Previous month')}
-                      onClick={handlePrevMonth}
-                    >
-                      <ChevronLeft className='h-3.5 w-3.5 sm:h-4 sm:w-4' />
-                    </Button>
-                    <Button
-                      variant='ghost'
-                      size='icon'
-                      className='h-7 w-7 sm:h-8 sm:w-8'
-                      aria-label={t('Next month')}
-                      onClick={handleNextMonth}
-                    >
-                      <ChevronRight className='h-3.5 w-3.5 sm:h-4 sm:w-4' />
-                    </Button>
-                  </div>
+        <section className='grid grid-cols-2 gap-4 border-b pb-6 sm:grid-cols-4 sm:gap-6'>
+          {statCells.map((stat) => (
+            <div key={stat.key} className='flex min-w-0 items-center gap-3'>
+              <IconBadge tone={stat.tone} size='lg'>
+                <stat.icon />
+              </IconBadge>
+              <div className='min-w-0'>
+                <div
+                  data-slot='checkin-stat-label'
+                  className='text-muted-foreground flex min-w-0 items-center gap-1 text-xs'
+                >
+                  <span className='truncate'>{stat.label}</span>
+                  {stat.unit ? (
+                    <span className='shrink-0'>{stat.unit}</span>
+                  ) : null}
                 </div>
+                <div
+                  data-slot='checkin-stat-value'
+                  className='mt-1 text-lg font-semibold tracking-tight tabular-nums'
+                >
+                  {stat.value}
+                </div>
+              </div>
+            </div>
+          ))}
+        </section>
 
-                {/* Calendar grid */}
+        <section className='space-y-4 border-b pb-6'>
+          <div className='flex flex-wrap items-center justify-between gap-2'>
+            <h2 className='text-base font-semibold'>{t('This week')}</h2>
+            <span className='text-muted-foreground text-xs tabular-nums'>
+              {weekDates[0].toISOString().slice(5, 10)} –{' '}
+              {weekDates[6].toISOString().slice(5, 10)}
+            </span>
+          </div>
+          <div className='grid grid-cols-7 gap-1 sm:gap-3'>
+            {weekDates.map((date, index) => {
+              const key = date.toISOString().slice(0, 10)
+              const award = weekRecords[key]
+              const unavailable =
+                key.slice(0, 7) === previousMonth &&
+                previousMonth !== todayMonth &&
+                (previous.isLoading || previous.isError)
+              let reward = '—'
+              if (award !== undefined) {
+                reward = `+${formatQuotaWithCurrency(award)}`
+              }
+              if (unavailable) {
+                reward = '…'
+              }
+              return (
+                <div
+                  key={key}
+                  className='flex min-w-0 flex-col items-center gap-2 text-center'
+                >
+                  <span className='text-muted-foreground text-xs'>
+                    {weekDays[index]}
+                  </span>
+                  <span
+                    className={cn(
+                      'flex size-9 items-center justify-center rounded-lg border text-xs sm:size-10',
+                      award !== undefined &&
+                        'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+                      key === todayString && 'ring-2 ring-primary/40'
+                    )}
+                  >
+                    {award !== undefined ? (
+                      <Check className='size-4' />
+                    ) : (
+                      date.getUTCDate()
+                    )}
+                  </span>
+                  <span className='text-muted-foreground max-w-full truncate text-[10px] tabular-nums sm:text-xs'>
+                    {reward}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+          {previousMonth !== todayMonth && previous.isError && (
+            <Button
+              variant='outline'
+              size='sm'
+              onClick={() => previous.refetch()}
+            >
+              {t('Retry')}
+            </Button>
+          )}
+        </section>
+
+        <div className='grid gap-6 lg:grid-cols-2 lg:gap-8'>
+          <Card data-card-hover='false' className='gap-0 p-4 sm:p-6'>
+            <div className='space-y-3 sm:space-y-4'>
+              <div className='flex items-center justify-between'>
+                <div>
+                  <h2 className='text-base font-semibold'>
+                    {t('Check-in calendar')}
+                  </h2>
+                  <p className='text-muted-foreground mt-1 text-xs tabular-nums'>
+                    {currentMonthStr}
+                  </p>
+                </div>
+                <div className='flex items-center gap-0.5 sm:gap-1'>
+                  <Button
+                    variant='ghost'
+                    size='icon'
+                    className='h-7 w-7 sm:h-8 sm:w-8'
+                    aria-label={t('Previous month')}
+                    onClick={handlePrevMonth}
+                  >
+                    <ChevronLeft className='h-3.5 w-3.5 sm:h-4 sm:w-4' />
+                  </Button>
+                  <Button
+                    variant='ghost'
+                    size='icon'
+                    className='h-7 w-7 sm:h-8 sm:w-8'
+                    aria-label={t('Next month')}
+                    onClick={handleNextMonth}
+                  >
+                    <ChevronRight className='h-3.5 w-3.5 sm:h-4 sm:w-4' />
+                  </Button>
+                </div>
+              </div>
+
+              {monthLoading && <Skeleton className='h-64 w-full' />}
+              {monthError && (
+                <ErrorState
+                  title={t('Failed to fetch checkin status')}
+                  onRetry={() => refetchMonth()}
+                />
+              )}
+              {!monthLoading && !monthError && (
                 <div className='grid grid-cols-7 gap-0.5 sm:gap-1'>
                   {/* Week day headers */}
                   {weekDays.map((day) => (
@@ -355,6 +492,12 @@ export function CheckinCalendarCard({
                         key={dateStr}
                         variant={isToday ? 'default' : 'ghost'}
                         disabled={!dayObj.isCurrentMonth}
+                        onClick={() => setSelectedDate(dateStr)}
+                        aria-label={
+                          isCheckedIn
+                            ? `${dateStr}: +${formatQuotaWithCurrency(quotaAwarded)}`
+                            : dateStr
+                        }
                         className={cn(
                           'relative flex h-9 w-full flex-col items-center justify-center rounded-lg px-0 text-xs font-medium sm:h-10 sm:text-sm',
                           !dayObj.isCurrentMonth &&
@@ -390,24 +533,73 @@ export function CheckinCalendarCard({
                     return dayButton
                   })}
                 </div>
+              )}
 
-                {/* Rules */}
-                <div className='bg-muted/30 text-muted-foreground rounded-lg border p-3 text-xs'>
-                  <ul className='list-disc space-y-1 pl-5'>
-                    <li>
-                      {t('Check in daily to receive random quota rewards')}
-                    </li>
-                    <li>
-                      {t('Rewards will be added directly to your balance')}
-                    </li>
-                    <li>{t('Do not repeat check-in; only once per day')}</li>
-                  </ul>
-                </div>
-              </div>
+              {selectedDate &&
+                checkinRecordsMap[selectedDate] !== undefined && (
+                  <p
+                    className='text-muted-foreground text-sm'
+                    aria-live='polite'
+                  >
+                    {selectedDate}: +
+                    {formatQuotaWithCurrency(checkinRecordsMap[selectedDate])}
+                  </p>
+                )}
             </div>
-          </>
-        ) : null}
-      </Card>
+          </Card>
+          <Card data-card-hover='false' className='gap-0 p-4 sm:p-6'>
+            <div className='flex items-start justify-between gap-4'>
+              <div>
+                <h2 className='text-base font-semibold'>
+                  {t('Check-in records')}
+                </h2>
+                <p className='text-muted-foreground mt-1 text-xs tabular-nums'>
+                  {currentMonthStr}
+                </p>
+              </div>
+              <History className='text-muted-foreground size-4' />
+            </div>
+            {monthLoading && <Skeleton className='mt-6 h-32 w-full' />}
+            {monthError && (
+              <ErrorState
+                title={t('Failed to fetch checkin status')}
+                onRetry={() => refetchMonth()}
+              />
+            )}
+            {!monthLoading &&
+              !monthError &&
+              !!checkinData?.stats?.records?.length && (
+                <ul className='mt-4 divide-y'>
+                  {checkinData.stats.records.map((record) => (
+                    <li
+                      key={record.checkin_date}
+                      className='flex items-center justify-between gap-3 py-3 text-sm'
+                    >
+                      <span className='flex items-center gap-3'>
+                        <IconBadge tone='success' size='sm'>
+                          <Check />
+                        </IconBadge>
+                        <span className='tabular-nums'>
+                          {record.checkin_date}
+                        </span>
+                      </span>
+                      <span className='font-medium text-emerald-600 tabular-nums dark:text-emerald-400'>
+                        +{formatQuotaWithCurrency(record.quota_awarded)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            {!monthLoading &&
+              !monthError &&
+              !checkinData?.stats?.records?.length && (
+                <p className='text-muted-foreground py-12 text-center text-sm'>
+                  {t('No records')}
+                </p>
+              )}
+          </Card>
+        </div>
+      </div>
     </TooltipProvider>
   )
 }

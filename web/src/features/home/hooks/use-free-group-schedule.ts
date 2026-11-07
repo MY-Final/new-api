@@ -22,12 +22,18 @@ import { requireServerSuccess } from '@/lib/server-error-message'
 
 import { getFreeGroupSchedule } from '../api'
 
-export function useFreeGroupSchedule(from: string, to: string, enabled = true) {
+export function useFreeGroupSchedule(
+  from: string,
+  to: string,
+  enabled = true,
+  refetchInterval: number | false = false
+) {
   return useQuery({
     queryKey: ['free-group-schedule', from, to],
     queryFn: async () =>
       requireServerSuccess(await getFreeGroupSchedule(from, to)).data,
     enabled,
+    refetchInterval,
     staleTime: 60 * 1000,
     retry: false,
     meta: { errorToast: false },

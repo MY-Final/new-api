@@ -334,6 +334,7 @@ export type ModelSettings = {
 }
 
 export type BillingSettings = {
+  DailyEggSetting: string
   QuotaForNewUser: number
   QuotaForInviter: number
   QuotaForInvitee: number

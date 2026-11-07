@@ -45,6 +45,8 @@ import { Route as AuthenticatedChatChatIdRouteImport } from './routes/_authentic
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard/index'
 import { Route as AuthenticatedDashboardSectionRouteImport } from './routes/_authenticated/dashboard/$section'
 import { Route as AuthenticatedEmbedSlugRouteImport } from './routes/_authenticated/embed/$slug'
+import { Route as AuthenticatedEntertainmentIndexRouteImport } from './routes/_authenticated/entertainment/index'
+import { Route as AuthenticatedEntertainmentCheckinRouteImport } from './routes/_authenticated/entertainment/checkin'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedFinanceSectionRouteImport } from './routes/_authenticated/finance/$section'
 import { Route as AuthenticatedIntelligenceTestIndexRouteImport } from './routes/_authenticated/intelligence-test/index'
@@ -275,6 +277,18 @@ const AuthenticatedEmbedSlugRoute = AuthenticatedEmbedSlugRouteImport.update({
   path: '/embed/$slug',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedEntertainmentIndexRoute =
+  AuthenticatedEntertainmentIndexRouteImport.update({
+    id: '/entertainment/',
+    path: '/entertainment/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedEntertainmentCheckinRoute =
+  AuthenticatedEntertainmentCheckinRouteImport.update({
+    id: '/entertainment/checkin',
+    path: '/entertainment/checkin',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedErrorsErrorRoute =
   AuthenticatedErrorsErrorRouteImport.update({
     id: '/errors/$error',
@@ -560,6 +574,7 @@ export interface FileRoutesByFullPath {
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/embed/$slug': typeof AuthenticatedEmbedSlugRoute
+  '/entertainment/checkin': typeof AuthenticatedEntertainmentCheckinRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/finance/$section': typeof AuthenticatedFinanceSectionRoute
   '/models/$section': typeof AuthenticatedModelsSectionRoute
@@ -570,6 +585,7 @@ export interface FileRoutesByFullPath {
   '/canvas/': typeof AuthenticatedCanvasIndexRoute
   '/channels/': typeof AuthenticatedChannelsIndexRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
+  '/entertainment/': typeof AuthenticatedEntertainmentIndexRoute
   '/intelligence-test/': typeof AuthenticatedIntelligenceTestIndexRoute
   '/invite-codes/': typeof AuthenticatedInviteCodesIndexRoute
   '/keys/': typeof AuthenticatedKeysIndexRoute
@@ -638,6 +654,7 @@ export interface FileRoutesByTo {
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/embed/$slug': typeof AuthenticatedEmbedSlugRoute
+  '/entertainment/checkin': typeof AuthenticatedEntertainmentCheckinRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/finance/$section': typeof AuthenticatedFinanceSectionRoute
   '/models/$section': typeof AuthenticatedModelsSectionRoute
@@ -648,6 +665,7 @@ export interface FileRoutesByTo {
   '/canvas': typeof AuthenticatedCanvasIndexRoute
   '/channels': typeof AuthenticatedChannelsIndexRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
+  '/entertainment': typeof AuthenticatedEntertainmentIndexRoute
   '/intelligence-test': typeof AuthenticatedIntelligenceTestIndexRoute
   '/invite-codes': typeof AuthenticatedInviteCodesIndexRoute
   '/keys': typeof AuthenticatedKeysIndexRoute
@@ -720,6 +738,7 @@ export interface FileRoutesById {
   '/_authenticated/chat/$chatId': typeof AuthenticatedChatChatIdRoute
   '/_authenticated/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/_authenticated/embed/$slug': typeof AuthenticatedEmbedSlugRoute
+  '/_authenticated/entertainment/checkin': typeof AuthenticatedEntertainmentCheckinRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/finance/$section': typeof AuthenticatedFinanceSectionRoute
   '/_authenticated/models/$section': typeof AuthenticatedModelsSectionRoute
@@ -730,6 +749,7 @@ export interface FileRoutesById {
   '/_authenticated/canvas/': typeof AuthenticatedCanvasIndexRoute
   '/_authenticated/channels/': typeof AuthenticatedChannelsIndexRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
+  '/_authenticated/entertainment/': typeof AuthenticatedEntertainmentIndexRoute
   '/_authenticated/intelligence-test/': typeof AuthenticatedIntelligenceTestIndexRoute
   '/_authenticated/invite-codes/': typeof AuthenticatedInviteCodesIndexRoute
   '/_authenticated/keys/': typeof AuthenticatedKeysIndexRoute
@@ -801,6 +821,7 @@ export interface FileRouteTypes {
     | '/chat/$chatId'
     | '/dashboard/$section'
     | '/embed/$slug'
+    | '/entertainment/checkin'
     | '/errors/$error'
     | '/finance/$section'
     | '/models/$section'
@@ -811,6 +832,7 @@ export interface FileRouteTypes {
     | '/canvas/'
     | '/channels/'
     | '/dashboard/'
+    | '/entertainment/'
     | '/intelligence-test/'
     | '/invite-codes/'
     | '/keys/'
@@ -879,6 +901,7 @@ export interface FileRouteTypes {
     | '/chat/$chatId'
     | '/dashboard/$section'
     | '/embed/$slug'
+    | '/entertainment/checkin'
     | '/errors/$error'
     | '/finance/$section'
     | '/models/$section'
@@ -889,6 +912,7 @@ export interface FileRouteTypes {
     | '/canvas'
     | '/channels'
     | '/dashboard'
+    | '/entertainment'
     | '/intelligence-test'
     | '/invite-codes'
     | '/keys'
@@ -960,6 +984,7 @@ export interface FileRouteTypes {
     | '/_authenticated/chat/$chatId'
     | '/_authenticated/dashboard/$section'
     | '/_authenticated/embed/$slug'
+    | '/_authenticated/entertainment/checkin'
     | '/_authenticated/errors/$error'
     | '/_authenticated/finance/$section'
     | '/_authenticated/models/$section'
@@ -970,6 +995,7 @@ export interface FileRouteTypes {
     | '/_authenticated/canvas/'
     | '/_authenticated/channels/'
     | '/_authenticated/dashboard/'
+    | '/_authenticated/entertainment/'
     | '/_authenticated/intelligence-test/'
     | '/_authenticated/invite-codes/'
     | '/_authenticated/keys/'
@@ -1282,6 +1308,20 @@ declare module '@tanstack/react-router' {
       path: '/embed/$slug'
       fullPath: '/embed/$slug'
       preLoaderRoute: typeof AuthenticatedEmbedSlugRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/entertainment/': {
+      id: '/_authenticated/entertainment/'
+      path: '/entertainment'
+      fullPath: '/entertainment/'
+      preLoaderRoute: typeof AuthenticatedEntertainmentIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/entertainment/checkin': {
+      id: '/_authenticated/entertainment/checkin'
+      path: '/entertainment/checkin'
+      fullPath: '/entertainment/checkin'
+      preLoaderRoute: typeof AuthenticatedEntertainmentCheckinRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/errors/$error': {
@@ -1686,6 +1726,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedChatChatIdRoute: typeof AuthenticatedChatChatIdRoute
   AuthenticatedDashboardSectionRoute: typeof AuthenticatedDashboardSectionRoute
   AuthenticatedEmbedSlugRoute: typeof AuthenticatedEmbedSlugRoute
+  AuthenticatedEntertainmentCheckinRoute: typeof AuthenticatedEntertainmentCheckinRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
   AuthenticatedFinanceSectionRoute: typeof AuthenticatedFinanceSectionRoute
   AuthenticatedModelsSectionRoute: typeof AuthenticatedModelsSectionRoute
@@ -1696,6 +1737,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCanvasIndexRoute: typeof AuthenticatedCanvasIndexRoute
   AuthenticatedChannelsIndexRoute: typeof AuthenticatedChannelsIndexRoute
   AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
+  AuthenticatedEntertainmentIndexRoute: typeof AuthenticatedEntertainmentIndexRoute
   AuthenticatedIntelligenceTestIndexRoute: typeof AuthenticatedIntelligenceTestIndexRoute
   AuthenticatedInviteCodesIndexRoute: typeof AuthenticatedInviteCodesIndexRoute
   AuthenticatedKeysIndexRoute: typeof AuthenticatedKeysIndexRoute
@@ -1726,6 +1768,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedChatChatIdRoute: AuthenticatedChatChatIdRoute,
   AuthenticatedDashboardSectionRoute: AuthenticatedDashboardSectionRoute,
   AuthenticatedEmbedSlugRoute: AuthenticatedEmbedSlugRoute,
+  AuthenticatedEntertainmentCheckinRoute:
+    AuthenticatedEntertainmentCheckinRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
   AuthenticatedFinanceSectionRoute: AuthenticatedFinanceSectionRoute,
   AuthenticatedModelsSectionRoute: AuthenticatedModelsSectionRoute,
@@ -1737,6 +1781,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCanvasIndexRoute: AuthenticatedCanvasIndexRoute,
   AuthenticatedChannelsIndexRoute: AuthenticatedChannelsIndexRoute,
   AuthenticatedDashboardIndexRoute: AuthenticatedDashboardIndexRoute,
+  AuthenticatedEntertainmentIndexRoute: AuthenticatedEntertainmentIndexRoute,
   AuthenticatedIntelligenceTestIndexRoute:
     AuthenticatedIntelligenceTestIndexRoute,
   AuthenticatedInviteCodesIndexRoute: AuthenticatedInviteCodesIndexRoute,

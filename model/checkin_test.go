@@ -1,12 +1,18 @@
 package model
 
 import (
+	"os"
 	"testing"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/glebarez/sqlite"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 func enableCheckinForTest(t *testing.T, minQuota, maxQuota int) {
@@ -17,6 +23,65 @@ func enableCheckinForTest(t *testing.T, minQuota, maxQuota int) {
 	setting.MinQuota = minQuota
 	setting.MaxQuota = maxQuota
 	t.Cleanup(func() { *setting = previous })
+}
+
+func TestCheckinStatsDatabaseMatrix(t *testing.T) {
+	for _, dialect := range []string{"sqlite", "mysql", "postgres"} {
+		t.Run(dialect, func(t *testing.T) {
+			var driver gorm.Dialector
+			switch dialect {
+			case "sqlite":
+				driver = sqlite.Open("file:checkin_stats_test?mode=memory&cache=shared")
+			case "mysql":
+				if os.Getenv("TEST_MYSQL_DSN") == "" {
+					t.Skip("TEST_MYSQL_DSN not configured")
+				}
+				driver = mysql.Open(os.Getenv("TEST_MYSQL_DSN"))
+			case "postgres":
+				if os.Getenv("TEST_POSTGRES_DSN") == "" {
+					t.Skip("TEST_POSTGRES_DSN not configured")
+				}
+				driver = postgres.Open(os.Getenv("TEST_POSTGRES_DSN"))
+			}
+			db, err := gorm.Open(driver, &gorm.Config{})
+			require.NoError(t, err)
+			sqlDB, err := db.DB()
+			require.NoError(t, err)
+			oldDB := DB
+			table := "checkin_stats_test_" + common.GetRandomString(8)
+			DB = db.Table(table).Session(&gorm.Session{})
+			t.Cleanup(func() {
+				require.NoError(t, db.Migrator().DropTable(table))
+				DB = oldDB
+				require.NoError(t, sqlDB.Close())
+			})
+			require.NoError(t, DB.AutoMigrate(&Checkin{}))
+			var version string
+			query := "SELECT version()"
+			if dialect == "sqlite" {
+				query = "SELECT sqlite_version()"
+			}
+			require.NoError(t, db.Raw(query).Scan(&version).Error)
+			t.Logf("database version: %s", version)
+
+			today := UsageReportNow()
+			for _, daysAgo := range []int{1, 2, 4} {
+				require.NoError(t, DB.Create(&Checkin{UserId: 1, CheckinDate: today.AddDate(0, 0, -daysAgo).Format("2006-01-02"), QuotaAwarded: 100}).Error)
+			}
+			stats, err := GetUserCheckinStats(1, today.Format("2006-01"))
+			require.NoError(t, err)
+			assert.False(t, stats["checked_in_today"].(bool))
+			assert.Equal(t, 2, stats["current_streak"])
+			assert.EqualValues(t, 300, stats["total_quota"])
+
+			require.NoError(t, DB.Create(&Checkin{UserId: 1, CheckinDate: today.Format("2006-01-02"), QuotaAwarded: 50}).Error)
+			stats, err = GetUserCheckinStats(1, today.Format("2006-01"))
+			require.NoError(t, err)
+			assert.True(t, stats["checked_in_today"].(bool))
+			assert.Equal(t, 3, stats["current_streak"])
+			assert.Equal(t, today.Format("2006-01-02"), stats["today"])
+		})
+	}
 }
 
 func TestUserCheckinAwardsBonusQuota(t *testing.T) {

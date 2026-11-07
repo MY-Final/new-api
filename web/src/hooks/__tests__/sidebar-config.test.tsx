@@ -110,6 +110,19 @@ function sidebarFor(
 }
 
 describe('security sidebar visibility', () => {
+  it('shows check-in and daily egg in the entertainment group', () => {
+    const { result } = sidebarFor()
+    expect(
+      result.current.find((group) => group.id === 'entertainment')
+    ).toMatchObject({
+      title: 'Entertainment',
+      items: [
+        { title: 'Daily Check-in', url: '/entertainment/checkin' },
+        { title: 'Daily egg', url: '/entertainment' },
+      ],
+    })
+  })
+
   it('old configurations show Security & Access immediately after Profile and keep API Keys', () => {
     const { result } = sidebarFor(
       { personal: { enabled: true, personal: true, topup: true } },

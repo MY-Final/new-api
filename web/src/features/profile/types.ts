@@ -261,6 +261,8 @@ export interface CheckinRecord {
  * Checkin statistics
  */
 export interface CheckinStats {
+  today?: string
+  current_streak?: number
   /** Whether user has checked in today */
   checked_in_today: boolean
   /** Total number of check-ins */

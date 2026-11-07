@@ -23,6 +23,7 @@ import { createInstance } from 'i18next'
 import { I18nextProvider } from 'react-i18next'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
+import { formatQuotaWithCurrency } from '@/lib/currency'
 import { api } from '@/lib/http-client'
 import {
   DEFAULT_CURRENCY_CONFIG,
@@ -51,32 +52,42 @@ function eggCurrency() {
 }
 
 function currentMonthKey(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  return new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 7)
 }
 
 function previousMonthLabel(): string {
-  const now = new Date()
-  const previous = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-  return `${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, '0')}`
+  const now = new Date(Date.now() + 8 * 60 * 60 * 1000)
+  const previous = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)
+  )
+  return previous.toISOString().slice(0, 7)
 }
 
-function mockCheckin(records: { checkin_date: string; quota_awarded: number }[]) {
-  vi.spyOn(api, 'get').mockResolvedValue({
-    data: {
-      success: true,
+function mockCheckin(
+  records: { checkin_date: string; quota_awarded: number }[]
+) {
+  vi.spyOn(api, 'get').mockImplementation(async (url) => {
+    const month = String(url).split('month=')[1]
+    const monthRecords = records.filter((record) =>
+      record.checkin_date.startsWith(month)
+    )
+    return {
       data: {
-        enabled: true,
-        stats: {
-          checked_in_today: false,
-          total_checkins: 2,
-          total_quota: 39550,
-          checkin_count: records.length,
-          records,
+        success: true,
+        data: {
+          enabled: true,
+          stats: {
+            checked_in_today: false,
+            total_checkins: 2,
+            total_quota: 39550,
+            current_streak: 3,
+            checkin_count: monthRecords.length,
+            records: monthRecords,
+          },
         },
       },
-    },
-  } as never)
+    } as never
+  })
 }
 
 function renderCard() {
@@ -108,19 +119,20 @@ afterEach(() => {
   cleanup()
   clients.splice(0).forEach((client) => client.clear())
   vi.restoreAllMocks()
+  vi.useRealTimers()
   useSystemConfigStore.getState().setConfig({ currency: eggCurrency() })
 })
 
 function statValues(): (string | null)[] {
-  return [
-    ...document.querySelectorAll("[data-slot='checkin-stat-value']"),
-  ].map((el) => el.textContent)
+  return [...document.querySelectorAll("[data-slot='checkin-stat-value']")].map(
+    (el) => el.textContent
+  )
 }
 
 function statLabels(): (string | null)[] {
-  return [
-    ...document.querySelectorAll("[data-slot='checkin-stat-label']"),
-  ].map((el) => el.textContent)
+  return [...document.querySelectorAll("[data-slot='checkin-stat-label']")].map(
+    (el) => el.textContent
+  )
 }
 
 it('keeps the reward unit out of the stat values', async () => {
@@ -129,28 +141,50 @@ it('keeps the reward unit out of the stat values', async () => {
   // A wide custom symbol inside the value wraps these narrow cells, so the
   // amounts stay symbol-free and the unit sits next to the label instead.
   await waitFor(() => {
-    expect(statValues()).toEqual(['2', '0.0791', '0.0791'])
+    expect(statValues()).toEqual(['1', '3', '0.0791', '0.0791'])
   })
   expect(statLabels()).toEqual([
-    'Total check-ins',
-    'This month🥚',
+    "This month's check-ins",
+    'Current streak',
+    "This month's rewards🥚",
     'Total earned🥚',
   ])
 })
 
-it('labels the amount with the browsed month instead of claiming this month', async () => {
+it('keeps current-month statistics while browsing earlier records', async () => {
   renderCard()
 
   await waitFor(() => {
-    expect(statLabels()[1]).toBe('This month🥚')
+    expect(statLabels()[2]).toBe("This month's rewards🥚")
   })
 
-  await userEvent.click(
-    screen.getByRole('button', { name: 'Previous month' })
-  )
+  await userEvent.click(screen.getByRole('button', { name: 'Previous month' }))
 
   await waitFor(() => {
-    expect(statLabels()[1]).toBe(`${previousMonthLabel()}🥚`)
+    expect(screen.getByText('No records')).toBeInTheDocument()
   })
-  expect(screen.queryByText('This month')).not.toBeInTheDocument()
+  expect(screen.getAllByText(previousMonthLabel())).toHaveLength(2)
+  expect(statValues()).toEqual(['1', '3', '0.0791', '0.0791'])
+})
+
+it('shows this week’s rewards across month boundaries', async () => {
+  vi.setSystemTime(new Date('2026-11-01T12:00:00Z'))
+  vi.restoreAllMocks()
+  mockCheckin([{ checkin_date: '2026-10-31', quota_awarded: 39550 }])
+  renderCard()
+
+  expect(
+    await screen.findByText(`+${formatQuotaWithCurrency(39550)}`)
+  ).toBeInTheDocument()
+  expect(screen.getByText('10-26 – 11-01')).toBeInTheDocument()
+})
+
+it('shows a selected check-in reward without requiring hover', async () => {
+  renderCard()
+  const date = `${currentMonthKey()}-05`
+  const reward = formatQuotaWithCurrency(39550)
+  await userEvent.click(
+    await screen.findByRole('button', { name: `${date}: +${reward}` })
+  )
+  expect(screen.getByText(`${date}: +${reward}`)).toBeInTheDocument()
 })

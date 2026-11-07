@@ -40,7 +40,7 @@ func GetUserCheckinRecords(userId int, startDate, endDate string) ([]Checkin, er
 
 // HasCheckedInToday 检查用户今天是否已签到
 func HasCheckedInToday(userId int) (bool, error) {
-	today := time.Now().Format("2006-01-02")
+	today := UsageReportNow().Format("2006-01-02")
 	var count int64
 	err := DB.Model(&Checkin{}).
 		Where("user_id = ? AND checkin_date = ?", userId, today).
@@ -58,11 +58,13 @@ func UserCheckin(userId int) (*Checkin, error) {
 	}
 
 	// 检查今天是否已签到
-	hasChecked, err := HasCheckedInToday(userId)
+	today := UsageReportNow().Format("2006-01-02")
+	var count int64
+	err := DB.Model(&Checkin{}).Where("user_id = ? AND checkin_date = ?", userId, today).Count(&count).Error
 	if err != nil {
 		return nil, err
 	}
-	if hasChecked {
+	if count > 0 {
 		return nil, common.NewMessage("Already checked in today")
 	}
 
@@ -72,7 +74,6 @@ func UserCheckin(userId int) (*Checkin, error) {
 		quotaAwarded = setting.MinQuota + rand.Intn(setting.MaxQuota-setting.MinQuota+1)
 	}
 
-	today := time.Now().Format("2006-01-02")
 	checkin := &Checkin{
 		UserId:       userId,
 		CheckinDate:  today,
@@ -168,19 +169,43 @@ func GetUserCheckinStats(userId int, month string) (map[string]any, error) {
 	}
 
 	// 检查今天是否已签到
-	hasCheckedToday, _ := HasCheckedInToday(userId)
+	today := UsageReportNow()
+	var dates []string
+	if err := DB.Model(&Checkin{}).Where("user_id = ? AND checkin_date <= ?", userId, today.Format("2006-01-02")).
+		Order("checkin_date DESC").Pluck("checkin_date", &dates).Error; err != nil {
+		return nil, err
+	}
+	hasCheckedToday := len(dates) > 0 && dates[0] == today.Format("2006-01-02")
+	expected := today
+	if !hasCheckedToday {
+		expected = expected.AddDate(0, 0, -1)
+	}
+	streak := 0
+	for _, date := range dates {
+		if date != expected.Format("2006-01-02") {
+			break
+		}
+		streak++
+		expected = expected.AddDate(0, 0, -1)
+	}
 
 	// 获取用户所有时间的签到统计
 	var totalCheckins int64
 	var totalQuota int64
-	DB.Model(&Checkin{}).Where("user_id = ?", userId).Count(&totalCheckins)
-	DB.Model(&Checkin{}).Where("user_id = ?", userId).Select("COALESCE(SUM(quota_awarded), 0)").Scan(&totalQuota)
+	if err := DB.Model(&Checkin{}).Where("user_id = ?", userId).Count(&totalCheckins).Error; err != nil {
+		return nil, err
+	}
+	if err := DB.Model(&Checkin{}).Where("user_id = ?", userId).Select("COALESCE(SUM(quota_awarded), 0)").Scan(&totalQuota).Error; err != nil {
+		return nil, err
+	}
 
 	return map[string]any{
 		"total_quota":      totalQuota,      // 所有时间累计获得的额度
 		"total_checkins":   totalCheckins,   // 所有时间累计签到次数
 		"checkin_count":    len(records),    // 本月签到次数
 		"checked_in_today": hasCheckedToday, // 今天是否已签到
-		"records":          checkinRecords,  // 本月签到记录详情（不含id和user_id）
+		"today":            today.Format("2006-01-02"),
+		"current_streak":   streak,
+		"records":          checkinRecords, // 本月签到记录详情（不含id和user_id）
 	}, nil
 }
