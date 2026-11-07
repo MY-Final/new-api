@@ -92,8 +92,19 @@ func TestFreeGroupPricingAndDailyLimit(t *testing.T) {
 		} else {
 			require.NotNil(t, apiErr)
 			assert.Equal(t, tc.status, apiErr.StatusCode)
+			assert.Equal(t, service.FreeGroupDailyLimitError, apiErr.GetErrorCode())
+			assert.False(t, types.IsRecordErrorLog(apiErr))
+			assert.NotEmpty(t, ctx.Writer.Header().Get("Retry-After"))
+			taskErr := service.TaskErrorFromAPIError(apiErr)
+			assert.True(t, taskErr.LocalError)
+			assert.True(t, taskErr.NoRetry)
+			assert.Equal(t, string(service.FreeGroupDailyLimitError), taskErr.Code)
 		}
 	}
+	upstream := types.NewOpenAIError(fmt.Errorf("upstream limit"), service.FreeGroupDailyLimitError, http.StatusTooManyRequests)
+	upstreamTask := service.TaskErrorFromAPIError(upstream)
+	assert.False(t, upstreamTask.LocalError)
+	assert.False(t, upstreamTask.NoRetry)
 }
 
 func TestModelPriceHelperTieredUsesPreloadedRequestInput(t *testing.T) {

@@ -38,7 +38,13 @@ import {
   requireServerSuccess,
 } from '@/lib/server-error-message'
 
-type UserUsage = { user_id: number; username: string; count: number }
+type UserUsage = {
+  user_id: number
+  username: string
+  count: number
+  rejected_count: number
+  last_rejected_at: number
+}
 type Usage = {
   day: string
   today: string
@@ -100,6 +106,23 @@ export function FreeGroupUsage(props: { refetchInterval?: number | false }) {
       id: 'count',
       header: t('Calls used'),
       cell: (row: UserUsage) => number(row.count),
+    },
+    {
+      id: 'rejected_count',
+      header: t('Limit rejections'),
+      cell: (row: UserUsage) => number(row.rejected_count),
+    },
+    {
+      id: 'last_rejected_at',
+      header: t('Last limit rejection'),
+      cell: (row: UserUsage) =>
+        row.last_rejected_at
+          ? new Intl.DateTimeFormat(locale, {
+              dateStyle: 'short',
+              timeStyle: 'medium',
+              timeZone: 'Asia/Shanghai',
+            }).format(row.last_rejected_at * 1000)
+          : '—',
     },
     ...(isToday && usage?.enabled
       ? [

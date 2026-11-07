@@ -132,7 +132,7 @@ func TestFreeGroupUserUsageDatabaseMatrix(t *testing.T) {
 			require.NoError(t, db.Create(&users).Error)
 			for _, entry := range []model.FreeGroupDailyUsage{
 				{Day: "2026-11-06", UserID: 0, Count: 8},
-				{Day: "2026-11-06", UserID: users[0].Id, Count: 3},
+				{Day: "2026-11-06", UserID: users[0].Id, Count: 3, RejectedCount: 4, LastRejectedAt: 1793980740},
 				{Day: "2026-11-06", UserID: users[1].Id, Count: 5},
 				{Day: "2026-11-07", UserID: users[0].Id, Count: 1},
 			} {
@@ -177,6 +177,8 @@ func TestFreeGroupUserUsageDatabaseMatrix(t *testing.T) {
 			assert.EqualValues(t, 1, filtered.Data.Total)
 			require.Len(t, filtered.Data.Items, 1)
 			assert.EqualValues(t, 3, filtered.Data.Items[0].Count)
+			assert.EqualValues(t, 4, filtered.Data.Items[0].RejectedCount)
+			assert.EqualValues(t, 1793980740, filtered.Data.Items[0].LastRejectedAt)
 			assert.False(t, request("day=invalid").Success)
 		})
 	}

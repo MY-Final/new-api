@@ -99,7 +99,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			// request id suffix, so the stored message stays searchable.
 			service.CaptureRequestErrorLog(c, newAPIError)
 			service.RecordRequestPolicyTermination(c, newAPIError)
-			logger.LogError(c, common.LogText("relay error: %s", common.LocalLogPreview(newAPIError.Error())))
+			if newAPIError.GetErrorType() != types.ErrorTypeNewAPIError || newAPIError.GetErrorCode() != service.FreeGroupDailyLimitError {
+				logger.LogError(c, common.LogText("relay error: %s", common.LocalLogPreview(newAPIError.Error())))
+			}
 			newAPIError.SetMessage(common.MessageWithRequestId(newAPIError.Error(), requestId))
 			upstreamURLs := common.UpstreamAddresses(c)
 			if relayFormat != types.RelayFormatOpenAIRealtime && c.Writer.Written() &&
@@ -399,23 +401,31 @@ func RelayMidjourney(c *gin.Context) {
 		mjErr = relay.RelayMidjourneySubmit(c, relayInfo)
 	}
 	//err = relayMidjourneySubmit(c, relayMode)
-	log.Println(mjErr)
+	if c.GetInt("free_group_error_status") != http.StatusTooManyRequests {
+		log.Println(mjErr)
+	}
 	if mjErr != nil {
 		policy.Successful = false
 		statusCode := http.StatusBadRequest
+		errorType := "upstream_error"
 		if freeGroupStatus := c.GetInt("free_group_error_status"); freeGroupStatus != 0 {
 			statusCode = freeGroupStatus
+			if freeGroupStatus == http.StatusTooManyRequests {
+				errorType = string(service.FreeGroupDailyLimitError)
+			}
 		} else if mjErr.Code == 30 {
 			mjErr.Result = i18n.T(c, i18n.MsgRelayGroupSaturated)
 			statusCode = http.StatusTooManyRequests
 		}
 		c.JSON(statusCode, gin.H{
 			"description": fmt.Sprintf("%s %s", mjErr.Description, mjErr.Result),
-			"type":        "upstream_error",
+			"type":        errorType,
 			"code":        mjErr.Code,
 		})
 		channelId := c.GetInt("channel_id")
-		logger.LogError(c, common.LogText("relay error (channel #%d, status code %d): %s", channelId, statusCode, fmt.Sprintf("%s %s", mjErr.Description, mjErr.Result)))
+		if c.GetInt("free_group_error_status") != http.StatusTooManyRequests {
+			logger.LogError(c, common.LogText("relay error (channel #%d, status code %d): %s", channelId, statusCode, fmt.Sprintf("%s %s", mjErr.Description, mjErr.Result)))
+		}
 	}
 }
 
@@ -912,7 +922,7 @@ func respondTaskSubmissionError(c *gin.Context, taskErr *taskdto.TaskError) {
 
 // respondTaskError 统一输出 Task 错误响应（含 429 限流提示改写）
 func respondTaskError(c *gin.Context, taskErr *taskdto.TaskError) {
-	if taskErr.StatusCode == http.StatusTooManyRequests {
+	if taskErr.StatusCode == http.StatusTooManyRequests && !(taskErr.LocalError && taskErr.Code == string(service.FreeGroupDailyLimitError)) {
 		taskErr.Message = i18n.T(c, i18n.MsgRelayGroupUpstreamSaturated)
 	}
 	c.JSON(taskErr.StatusCode, taskErr)
@@ -924,6 +934,9 @@ func taskSubmissionAPIError(taskErr *taskdto.TaskError) *types.NewAPIError {
 	err := taskErr.Error
 	if err == nil {
 		err = errors.New(taskErr.Message)
+	}
+	if taskErr.LocalError && taskErr.Code == string(service.FreeGroupDailyLimitError) {
+		return types.NewErrorWithStatusCode(err, service.FreeGroupDailyLimitError, taskErr.StatusCode, types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
 	}
 	return types.NewOpenAIError(err, types.ErrorCodeBadResponseStatusCode, taskErr.StatusCode)
 }

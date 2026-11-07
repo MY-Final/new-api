@@ -223,10 +223,15 @@ func TaskErrorFromAPIError(apiErr *types.NewAPIError) *taskdto.TaskError {
 	if apiErr == nil {
 		return nil
 	}
-	return &taskdto.TaskError{
+	taskErr := &taskdto.TaskError{
 		Code:       string(apiErr.GetErrorCode()),
 		Message:    apiErr.Err.Error(),
 		StatusCode: apiErr.StatusCode,
 		Error:      apiErr.Err,
 	}
+	if apiErr.GetErrorType() == types.ErrorTypeNewAPIError && apiErr.GetErrorCode() == FreeGroupDailyLimitError {
+		taskErr.LocalError = true
+		taskErr.NoRetry = true
+	}
+	return taskErr
 }

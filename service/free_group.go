@@ -3,8 +3,10 @@ package service
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -13,6 +15,7 @@ import (
 
 const freeGroupSettingContextKey = "free_group_setting"
 const freeGroupReservedContextKey = "free_group_reserved"
+const FreeGroupDailyLimitError types.ErrorCode = "free_group_daily_limit_reached"
 
 // LoadFreeGroupSetting snapshots the authoritative settings for one request.
 func LoadFreeGroupSetting(c *gin.Context) *types.NewAPIError {
@@ -43,12 +46,21 @@ func ReserveFreeGroupCall(c *gin.Context, group string, userID int) *types.NewAP
 	}
 	value, _ := c.Get(freeGroupSettingContextKey)
 	setting := value.(model.FreeGroupSetting)
-	allowed, err := model.ReserveFreeGroupDailyCall(time.Now(), userID, setting.DailyLimit, setting.UserLimit)
+	now := time.Now()
+	allowed, err := model.ReserveFreeGroupDailyCall(now, userID, setting.DailyLimit, setting.UserLimit)
 	if err != nil {
 		return types.NewErrorWithStatusCode(err, types.ErrorCodeQueryDataError, http.StatusServiceUnavailable, types.ErrOptionWithSkipRetry())
 	}
 	if !allowed {
-		return types.NewErrorWithStatusCode(errors.New(i18n.T(c, i18n.MsgFreeGroupLimitReached)), types.ErrorCodeAccessDenied, http.StatusTooManyRequests, types.ErrOptionWithSkipRetry())
+		if err := model.RecordFreeGroupRejection(now, userID); err != nil {
+			common.SysError("failed to record free group rejection: " + err.Error())
+		}
+		local := now.In(time.FixedZone("UTC+8", 8*60*60))
+		reset := time.Date(local.Year(), local.Month(), local.Day()+1, 0, 0, 0, 0, local.Location())
+		seconds := int64((reset.Sub(now) + time.Second - 1) / time.Second)
+		c.Header("Retry-After", strconv.FormatInt(seconds, 10))
+		message := i18n.T(c, i18n.MsgFreeGroupLimitReached, map[string]any{"Reset": reset.Format(time.RFC3339)})
+		return types.NewErrorWithStatusCode(errors.New(message), FreeGroupDailyLimitError, http.StatusTooManyRequests, types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
 	}
 	c.Set(freeGroupReservedContextKey, true)
 	return nil

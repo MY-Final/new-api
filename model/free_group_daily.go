@@ -107,9 +107,11 @@ func LoadFreeGroupSetting() (FreeGroupSetting, error) {
 // FreeGroupDailyUsage stores the shared counter under user ID zero and
 // individual counters under the corresponding user ID.
 type FreeGroupDailyUsage struct {
-	Day    string `gorm:"primaryKey;size:10"`
-	UserID int    `gorm:"primaryKey;autoIncrement:false"`
-	Count  int64  `gorm:"not null"`
+	Day            string `gorm:"primaryKey;size:10"`
+	UserID         int    `gorm:"primaryKey;autoIncrement:false"`
+	Count          int64  `gorm:"not null"`
+	RejectedCount  int64  `gorm:"not null;default:0"`
+	LastRejectedAt int64  `gorm:"not null;default:0"`
 }
 
 var errFreeGroupDailyLimit = errors.New("free group daily limit reached")
@@ -183,9 +185,11 @@ func FreeGroupDailyCount(now time.Time) (int64, error) {
 }
 
 type FreeGroupUserUsage struct {
-	UserID   int    `json:"user_id"`
-	Username string `json:"username"`
-	Count    int64  `json:"count"`
+	UserID         int    `json:"user_id"`
+	Username       string `json:"username"`
+	Count          int64  `json:"count"`
+	RejectedCount  int64  `json:"rejected_count"`
+	LastRejectedAt int64  `json:"last_rejected_at"`
 }
 
 // ListFreeGroupUserUsage returns the same reserved calls used by the limiter.
@@ -201,10 +205,25 @@ func ListFreeGroupUserUsage(day, username string, page *common.PageInfo) ([]Free
 		return nil, 0, err
 	}
 	items := make([]FreeGroupUserUsage, 0)
-	err := query.Select("f.user_id, COALESCE(u.username, '') AS username, f.count").
+	err := query.Select("f.user_id, COALESCE(u.username, '') AS username, f.count, f.rejected_count, f.last_rejected_at").
 		Order("f.count DESC, f.user_id ASC").
 		Offset(page.GetStartIdx()).Limit(page.GetPageSize()).Scan(&items).Error
 	return items, total, err
+}
+
+func RecordFreeGroupRejection(now time.Time, userID int) error {
+	usage := FreeGroupDailyUsage{
+		Day: freeGroupDay(now), UserID: userID, RejectedCount: 1, LastRejectedAt: now.Unix(),
+	}
+	rejectedCount := clause.Column{Table: clause.CurrentTable, Name: "rejected_count"}
+	lastRejectedAt := clause.Column{Table: clause.CurrentTable, Name: "last_rejected_at"}
+	return DB.Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "day"}, {Name: "user_id"}},
+		DoUpdates: clause.Assignments(map[string]any{
+			"rejected_count":   gorm.Expr("? + 1", rejectedCount),
+			"last_rejected_at": gorm.Expr("CASE WHEN ? < ? THEN ? ELSE ? END", lastRejectedAt, now.Unix(), now.Unix(), lastRejectedAt),
+		}),
+	}).Create(&usage).Error
 }
 
 // ReserveFreeGroupDailyCall atomically reserves one call from both limits.

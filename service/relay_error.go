@@ -76,7 +76,7 @@ func isRelayRequestCancelled(c *gin.Context, err *types.NewAPIError) bool {
 }
 
 func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *types.NewAPIError, relayInfo *relaycommon.RelayInfo) {
-	if err == nil || isRelayRequestCancelled(c, err) {
+	if err == nil || err.GetErrorType() == types.ErrorTypeNewAPIError && err.GetErrorCode() == FreeGroupDailyLimitError || isRelayRequestCancelled(c, err) {
 		return
 	}
 	upstreamURLs := common.UpstreamAddresses(c)

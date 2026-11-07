@@ -72,6 +72,27 @@ func TestFreeGroupDailyLimitDatabaseMatrix(t *testing.T) {
 			allowed, err = ReserveFreeGroupDailyCall(now, 3, 2, 1)
 			require.NoError(t, err)
 			assert.False(t, allowed)
+			require.NoError(t, RecordFreeGroupRejection(now, 3))
+			require.NoError(t, RecordFreeGroupRejection(now.Add(-time.Second), 3))
+			var rejected FreeGroupDailyUsage
+			require.NoError(t, db.Where("day = ? AND user_id = ?", freeGroupDay(now), 3).First(&rejected).Error)
+			assert.Zero(t, rejected.Count)
+			assert.EqualValues(t, 2, rejected.RejectedCount)
+			assert.Equal(t, now.Unix(), rejected.LastRejectedAt)
+			var rejectionGroup sync.WaitGroup
+			rejectionErrors := make(chan error, 8)
+			for range 8 {
+				rejectionGroup.Go(func() {
+					rejectionErrors <- RecordFreeGroupRejection(now, 3)
+				})
+			}
+			rejectionGroup.Wait()
+			close(rejectionErrors)
+			for err := range rejectionErrors {
+				require.NoError(t, err)
+			}
+			require.NoError(t, db.Where("day = ? AND user_id = ?", freeGroupDay(now), 3).First(&rejected).Error)
+			assert.EqualValues(t, 10, rejected.RejectedCount)
 			allowed, err = ReserveFreeGroupDailyCall(now.Add(time.Minute), 1, 2, 1)
 			require.NoError(t, err)
 			assert.True(t, allowed, "the limit resets at midnight UTC+8")

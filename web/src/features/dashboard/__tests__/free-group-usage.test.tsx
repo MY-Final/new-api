@@ -69,6 +69,8 @@ describe('free group usage', () => {
                 user_id: 8,
                 username: config?.params?.username || 'alice',
                 count: 4,
+                rejected_count: 3,
+                last_rejected_at: 1794009600,
               },
             ],
           },
@@ -80,6 +82,10 @@ describe('free group usage', () => {
     expect(
       within(screen.getByRole('row', { name: /alice/ })).getByText('4')
     ).toBeVisible()
+    expect(
+      within(screen.getByRole('row', { name: /alice/ })).getByText('3')
+    ).toBeVisible()
+    expect(screen.getByText('Last limit rejection')).toBeVisible()
     fireEvent.change(screen.getByRole('textbox', { name: 'Username' }), {
       target: { value: 'bob' },
     })
