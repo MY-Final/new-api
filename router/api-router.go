@@ -59,6 +59,7 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/free_group/usage", controller.GetFreeGroupUsage)
 		apiRouter.GET("/free_group/schedule", controller.GetFreeGroupSchedule)
 		apiRouter.GET("/free_group/users", middleware.AdminAuth(), controller.GetFreeGroupUserUsage)
+		apiRouter.GET("/daily_egg/records", middleware.AdminAuth(), controller.GetDailyEggRecords)
 		apiRouter.GET("/invite_codes/public/:code", middleware.CriticalRateLimit(), controller.GetPublicInviteCode)
 		apiRouter.GET("/pricing", middleware.HeaderNavModuleAuth("pricing"), controller.GetPricing)
 		perfMetricsRoute := apiRouter.Group("/perf-metrics")

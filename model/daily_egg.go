@@ -61,6 +61,70 @@ type DailyEggStatus struct {
 	Draw        *DailyEggDraw   `json:"draw"`
 }
 
+type DailyEggAdminDraw struct {
+	ID        int    `json:"id"`
+	UserID    int    `json:"user_id"`
+	Username  string `json:"username"`
+	Day       string `json:"day"`
+	Egg       int    `json:"egg"`
+	PrizeName string `json:"prize_name"`
+	Quota     int    `json:"quota"`
+	CreatedAt int64  `json:"created_at"`
+}
+
+type DailyEggAdminPrize struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Quantity  int    `json:"quantity"`
+	Issued    int    `json:"issued"`
+	Remaining int    `json:"remaining"`
+}
+
+func ListDailyEggDraws(day, username, prize string, page *common.PageInfo) ([]DailyEggAdminDraw, int64, error) {
+	query := DB.Table("daily_egg_draws AS d").
+		Joins("LEFT JOIN users AS u ON u.id = d.user_id").
+		Where("d.day = ?", day)
+	if username != "" {
+		query = query.Where("u.username LIKE ?", "%"+username+"%")
+	}
+	if prize != "" {
+		query = query.Where("d.prize_name LIKE ?", "%"+prize+"%")
+	}
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	items := make([]DailyEggAdminDraw, 0)
+	err := query.Select("d.id, d.user_id, COALESCE(u.username, '') AS username, d.day, d.egg, d.prize_name, d.quota, d.created_at").
+		Order("d.created_at DESC, d.id DESC").
+		Offset(page.GetStartIdx()).Limit(page.GetPageSize()).Scan(&items).Error
+	return items, total, err
+}
+
+func DailyEggPrizeInventory(day string) ([]DailyEggAdminPrize, error) {
+	setting, err := loadDailyEggSetting(DB)
+	if err != nil {
+		return nil, err
+	}
+	var inventory []DailyEggInventory
+	if err := DB.Where("day = ?", day).Find(&inventory).Error; err != nil {
+		return nil, err
+	}
+	counts := make(map[string]int, len(inventory))
+	for _, item := range inventory {
+		counts[item.PrizeID] = item.Count
+	}
+	prizes := make([]DailyEggAdminPrize, 0, len(setting.Prizes))
+	for _, prize := range setting.Prizes {
+		issued := counts[prize.ID]
+		prizes = append(prizes, DailyEggAdminPrize{
+			ID: prize.ID, Name: prize.Name, Quantity: prize.Quantity,
+			Issued: issued, Remaining: max(prize.Quantity-issued, 0),
+		})
+	}
+	return prizes, nil
+}
+
 var (
 	errDailyEggSetting  = common.NewMessage("Invalid daily egg settings")
 	errDailyEggDisabled = common.NewMessage("Daily egg is not enabled")

@@ -86,6 +86,12 @@ const LazyFreeGroupUsage = lazy(() =>
   }))
 )
 
+const LazyDailyEggRecords = lazy(() =>
+  import('./components/daily-egg/daily-egg-records').then((m) => ({
+    default: m.DailyEggRecords,
+  }))
+)
+
 function ModelChartsFallback() {
   return (
     <div className='overflow-hidden rounded-lg border'>
@@ -115,6 +121,9 @@ const SECTION_META: Record<DashboardSectionId, { titleKey: string }> = {
   },
   'free-group': {
     titleKey: 'Free group usage',
+  },
+  'daily-egg': {
+    titleKey: 'Daily egg records',
   },
 }
 
@@ -182,7 +191,10 @@ export function Dashboard() {
       DASHBOARD_SECTION_IDS.filter(
         (section) =>
           section !== 'overview' &&
-          (isAdmin || (section !== 'users' && section !== 'free-group'))
+          (isAdmin ||
+            (section !== 'users' &&
+              section !== 'free-group' &&
+              section !== 'daily-egg'))
       ),
     [isAdmin]
   )
@@ -223,7 +235,9 @@ export function Dashboard() {
       </>
     ) : null
   const userActions =
-    activeSection === 'users' || activeSection === 'free-group' ? (
+    activeSection === 'users' ||
+    activeSection === 'free-group' ||
+    activeSection === 'daily-egg' ? (
       <AutoRefreshControl
         autoRefreshInterval={autoRefreshInterval}
         onAutoRefreshIntervalChange={setAutoRefreshInterval}
@@ -352,6 +366,13 @@ export function Dashboard() {
             <FadeIn>
               <Suspense fallback={<ModelChartsFallback />}>
                 <LazyFreeGroupUsage refetchInterval={refetchInterval} />
+              </Suspense>
+            </FadeIn>
+          )}
+          {activeSection === 'daily-egg' && isAdmin && (
+            <FadeIn>
+              <Suspense fallback={<ModelChartsFallback />}>
+                <LazyDailyEggRecords refetchInterval={refetchInterval} />
               </Suspense>
             </FadeIn>
           )}

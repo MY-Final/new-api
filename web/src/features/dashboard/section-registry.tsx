@@ -51,11 +51,21 @@ const DASHBOARD_SECTIONS = [
     adminOnly: true,
     build: () => null,
   },
+  {
+    id: 'daily-egg',
+    titleKey: 'Daily egg records',
+    adminOnly: true,
+    build: () => null,
+  },
 ] as const
 
 export type DashboardSectionId = (typeof DASHBOARD_SECTIONS)[number]['id']
 
-const ADMIN_ONLY_SECTIONS = new Set<string>(['users', 'free-group'])
+const ADMIN_ONLY_SECTIONS = new Set<string>([
+  'users',
+  'free-group',
+  'daily-egg',
+])
 
 const dashboardRegistry = createSectionRegistry<
   DashboardSectionId,

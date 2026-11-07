@@ -183,3 +183,71 @@ func TestFreeGroupUserUsageDatabaseMatrix(t *testing.T) {
 		})
 	}
 }
+
+func TestDailyEggRecordsDatabaseMatrix(t *testing.T) {
+	for _, tc := range []struct{ kind, env string }{{"sqlite", ""}, {"mysql", "TEST_MYSQL_DSN"}, {"postgres", "TEST_POSTGRES_DSN"}} {
+		t.Run(tc.kind, func(t *testing.T) {
+			dsn := os.Getenv(tc.env)
+			if tc.env != "" && dsn == "" {
+				t.Skip(tc.env + " not configured")
+			}
+			db := modelManagementDB(t, tc.kind, dsn)
+			require.NoError(t, db.AutoMigrate(&model.DailyEggDraw{}, &model.DailyEggInventory{}))
+			require.NoError(t, db.Create(&model.Option{
+				Key: model.DailyEggSettingOption, Value: `{"enabled":true,"min_spend_cny":2.5,"egg_count":3,"prizes":[{"id":"first","name":"First","quota":100,"quantity":3,"probability":10000}]}`,
+			}).Error)
+			users := []model.User{{Username: "alice", AffCode: "egg-alice"}, {Username: "bob", AffCode: "egg-bob"}}
+			require.NoError(t, db.Create(&users).Error)
+			today := time.Now().In(time.FixedZone("UTC+8", 8*60*60)).Format("2006-01-02")
+			require.NoError(t, db.Create(&[]model.DailyEggDraw{
+				{UserID: users[0].Id, Day: today, Egg: 2, PrizeID: "first", PrizeName: "First", Quota: 100, CreatedAt: 100},
+				{UserID: users[1].Id, Day: today, Egg: 1, CreatedAt: 200},
+				{UserID: users[0].Id, Day: "2026-01-01", Egg: 3, PrizeID: "first", PrizeName: "First", Quota: 100, CreatedAt: 50},
+			}).Error)
+			require.NoError(t, db.Create(&model.DailyEggInventory{Day: today, PrizeID: "first", Count: 1}).Error)
+			request := func(query string) struct {
+				Success bool `json:"success"`
+				Data    struct {
+					Day    string                     `json:"day"`
+					Total  int64                      `json:"total"`
+					Items  []model.DailyEggAdminDraw  `json:"items"`
+					Prizes []model.DailyEggAdminPrize `json:"prizes"`
+				} `json:"data"`
+			} {
+				recorder := httptest.NewRecorder()
+				context, _ := gin.CreateTestContext(recorder)
+				context.Request = httptest.NewRequest(http.MethodGet, "/api/daily_egg/records?"+query, nil)
+				GetDailyEggRecords(context)
+				var response struct {
+					Success bool `json:"success"`
+					Data    struct {
+						Day    string                     `json:"day"`
+						Total  int64                      `json:"total"`
+						Items  []model.DailyEggAdminDraw  `json:"items"`
+						Prizes []model.DailyEggAdminPrize `json:"prizes"`
+					} `json:"data"`
+				}
+				require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+				return response
+			}
+			first := request("p=1&page_size=1")
+			assert.True(t, first.Success)
+			assert.EqualValues(t, 2, first.Data.Total)
+			require.Len(t, first.Data.Items, 1)
+			assert.Equal(t, "bob", first.Data.Items[0].Username)
+			require.Len(t, first.Data.Prizes, 1)
+			assert.EqualValues(t, 1, first.Data.Prizes[0].Issued)
+			assert.EqualValues(t, 2, first.Data.Prizes[0].Remaining)
+			filtered := request("username=alice&prize=First")
+			require.Len(t, filtered.Data.Items, 1)
+			assert.EqualValues(t, 2, filtered.Data.Items[0].Egg)
+			assert.EqualValues(t, 100, filtered.Data.Items[0].Quota)
+			history := request("day=2026-01-01&prize=First")
+			require.Len(t, history.Data.Items, 1)
+			assert.EqualValues(t, 3, history.Data.Items[0].Egg)
+			assert.Empty(t, history.Data.Prizes)
+			assert.False(t, request("day=invalid").Success)
+			assert.False(t, request("page_size=-1").Success)
+		})
+	}
+}
