@@ -217,24 +217,36 @@ func UpdateSubscriptionPriceBudget(info *relaycommon.RelayInfo) error {
 	if info.SubscriptionOutputLimit <= 0 {
 		return nil
 	}
+	// Reserve against the output bound the client actually asked for, never
+	// more than the plan cap. Reserving the full plan cap for a request that
+	// only allows a few hundred output tokens would exhaust a small quota
+	// window before any real usage is measured, so a client max_tokens below
+	// the cap must shrink the reservation. With no client bound, the plan cap
+	// stays the worst-case reservation.
+	output := info.SubscriptionOutputLimit
+	if info.Request != nil {
+		if limit, err := subscriptionRequestLimit(info.Request, info.SubscriptionOutputLimit); err == nil {
+			output = int(limit)
+		}
+	}
 	input := max(info.SubscriptionInputBudget, info.GetEstimatePromptTokens())
 	groupRatio := info.PriceData.GroupRatioInfo.GroupRatio
 	var beforeGroup float64
 	if snapshot := info.TieredBillingSnapshot; snapshot != nil {
-		bound, err := billingexpr.SubscriptionCostUpperBound(snapshot.ExprString, input, info.SubscriptionOutputLimit)
+		bound, err := billingexpr.SubscriptionCostUpperBound(snapshot.ExprString, input, output)
 		if err != nil {
 			return err
 		}
 		beforeGroup = bound / 1_000_000 * snapshot.QuotaPerUnit
 		snapshot.EstimatedPromptTokens = input
-		snapshot.EstimatedCompletionTokens = info.SubscriptionOutputLimit
+		snapshot.EstimatedCompletionTokens = output
 		snapshot.EstimatedQuotaBeforeGroup = beforeGroup
 	} else if info.PriceData.UsePrice {
 		beforeGroup = info.PriceData.ModelPrice * common.QuotaPerUnit
 	} else {
 		inputRatio := max(1.0, info.PriceData.CacheRatio, info.PriceData.CacheCreationRatio,
 			info.PriceData.CacheCreation5mRatio, info.PriceData.CacheCreation1hRatio, info.PriceData.CacheCreation12hRatio)
-		beforeGroup = (float64(input)*inputRatio + float64(info.SubscriptionOutputLimit)*info.PriceData.CompletionRatio) * info.PriceData.ModelRatio
+		beforeGroup = (float64(input)*inputRatio + float64(output)*info.PriceData.CompletionRatio) * info.PriceData.ModelRatio
 	}
 	// OtherRatios are applied again during settlement. Reserve their upward
 	// multiplier as well, but never let a discount make the reservation smaller.

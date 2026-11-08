@@ -156,16 +156,26 @@ func reserveRequestBilling(c *gin.Context, info *relaycommon.RelayInfo, tokens i
 
 		if source == service.BillingSourceSubscription && info.SubscriptionOutputLimit > 0 {
 			if err := helper.ValidateSubscriptionRequestLimits(info.Request, info.SubscriptionOutputLimit); err != nil {
-				lastErr = types.NewErrorWithStatusCode(
+				// A request whose output limit exceeds the package cap is invalid
+				// for the subscription itself; reject it instead of silently
+				// shifting the charge to the wallet. Only an exhausted quota
+				// window (insufficient quota) may fall back to the wallet.
+				return types.NewErrorWithStatusCode(
 					err,
 					types.ErrorCodeInvalidRequest,
 					http.StatusBadRequest,
 					types.ErrOptionWithSkipRetry(),
 				)
-				if index == len(candidates)-1 {
-					return lastErr
+			}
+			// Reserve against the same input budget the final request body will
+			// use. EstimateRequestToken counts prompt tokens, which is smaller
+			// than the byte length the finalizer meters, so without this the
+			// initial hold can squeak under a quota window and only the larger
+			// finalize reservation fails, which cannot fall back to the wallet.
+			if info.SubscriptionInputBudget == 0 && info.Request != nil {
+				if raw, marshalErr := common.Marshal(info.Request); marshalErr == nil {
+					info.SubscriptionInputBudget = len(raw)
 				}
-				continue
 			}
 		}
 		priceData, err := helper.ModelPriceHelper(c, info, tokens, meta)
