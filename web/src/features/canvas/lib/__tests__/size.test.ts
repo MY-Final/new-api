@@ -19,9 +19,20 @@ For commercial licensing, please contact support@quantumnous.com
 import { describe, expect, test } from 'vitest'
 
 import { ASPECT_RATIO_VALUES, RESOLUTIONS } from '../../constants'
-import { getImageSize, parseImageSize } from '../size'
+import { getImageSize, getRecommendedImageSizes, parseImageSize } from '../size'
 
 describe('canvas size mapping', () => {
+  test('recommends known sizes without restricting unknown models', () => {
+    expect(getRecommendedImageSizes('dall-e-3')).toEqual([
+      '1024x1024',
+      '1024x1792',
+      '1792x1024',
+    ])
+    expect(getRecommendedImageSizes('gpt-image-1.5')).toContain('1536x1024')
+    expect(getRecommendedImageSizes('gpt-image-2')).toContain('1024x1536')
+    expect(getRecommendedImageSizes('custom-image-model')).toEqual([])
+  })
+
   test('sets the long edge from the resolution tier', () => {
     expect(getImageSize('1:1', '1024P')).toBe('1024x1024')
     expect(getImageSize('4:3', '1024P')).toBe('1024x768')

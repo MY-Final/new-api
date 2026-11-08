@@ -260,6 +260,99 @@ describe('Canvas restore flow', () => {
       )
     )
   })
+
+  test('offers valid sizes for a known model and sends the selected size', async () => {
+    sessionStorage.setItem(
+      getCanvasStorageKey(STORAGE_KEYS.API_KEY, 7),
+      'canvas-key'
+    )
+    sessionStorage.setItem(
+      getCanvasStorageKey(STORAGE_KEYS.RESTORE, 7),
+      JSON.stringify({ userId: 7, model: 'dall-e-3', prompt: 'cats' })
+    )
+    mocks.generateImages.mockResolvedValue({ data: [] })
+    mocks.saveHistoryEntries.mockResolvedValue({ success: true })
+    render(<Canvas />)
+
+    await screen.findByText('Recommended sizes for this model')
+    fireEvent.click(screen.getByRole('button', { name: '1792 × 1024' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }))
+
+    await waitFor(() =>
+      expect(mocks.generateImages).toHaveBeenCalledWith(
+        expect.objectContaining({ size: '1792x1024' }),
+        'canvas-key',
+        expect.anything()
+      )
+    )
+  })
+
+  test('warns when a legacy model has an unsupported size', async () => {
+    sessionStorage.setItem(
+      getCanvasStorageKey(STORAGE_KEYS.API_KEY, 7),
+      'canvas-key'
+    )
+    sessionStorage.setItem(
+      getCanvasStorageKey(STORAGE_KEYS.RESTORE, 7),
+      JSON.stringify({ userId: 7, model: 'dall-e-3', prompt: 'cats' })
+    )
+    render(<Canvas />)
+
+    await screen.findByText('Recommended sizes for this model')
+    fireEvent.click(screen.getByRole('button', { name: '16:9' }))
+    expect(
+      screen.getByText(
+        'This size is not supported by this model. Choose a recommended size.'
+      )
+    ).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: '1024 × 1792' }))
+    expect(
+      screen.queryByText(
+        'This size is not supported by this model. Choose a recommended size.'
+      )
+    ).not.toBeInTheDocument()
+  })
+
+  test('allows a custom size for an unrecognized model', async () => {
+    sessionStorage.setItem(
+      getCanvasStorageKey(STORAGE_KEYS.API_KEY, 7),
+      'canvas-key'
+    )
+    sessionStorage.setItem(
+      getCanvasStorageKey(STORAGE_KEYS.RESTORE, 7),
+      JSON.stringify({ userId: 7, model: 'custom-model', prompt: 'cats' })
+    )
+    mocks.generateImages.mockResolvedValue({ data: [] })
+    mocks.saveHistoryEntries.mockResolvedValue({ success: true })
+    render(<Canvas />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Custom size' }))
+    fireEvent.change(screen.getByPlaceholderText('Select a size'), {
+      target: { value: '1350x900' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }))
+
+    await waitFor(() =>
+      expect(mocks.generateImages).toHaveBeenCalledWith(
+        expect.objectContaining({ model: 'custom-model', size: '1350x900' }),
+        'canvas-key',
+        expect.anything()
+      )
+    )
+  })
+
+  test('stacks the workspace on narrow screens', async () => {
+    sessionStorage.setItem(
+      getCanvasStorageKey(STORAGE_KEYS.API_KEY, 7),
+      'canvas-key'
+    )
+    render(<Canvas />)
+
+    const workspace = (await screen.findByText('Generate Image')).closest(
+      '[data-canvas-workspace]'
+    )
+    expect(workspace).toHaveClass('flex-col', 'lg:flex-row')
+  })
 })
 
 describe('Canvas workspace persistence', () => {
@@ -371,6 +464,20 @@ describe('Canvas workspace persistence', () => {
 })
 
 describe('Canvas generation loop', () => {
+  test('opens a generated image preview using the keyboard', async () => {
+    sessionStorage.setItem(
+      getCanvasStorageKey(STORAGE_KEYS.API_KEY, 7),
+      'canvas-key'
+    )
+    seedLastBatch(['entry-1'])
+    render(<Canvas />)
+
+    const preview = await screen.findByRole('button', { name: 'Preview image' })
+    preview.focus()
+    await userEvent.keyboard('{Enter}')
+    expect(await screen.findByRole('dialog')).toBeVisible()
+  })
+
   test('generates with Ctrl+Enter', async () => {
     sessionStorage.setItem(
       getCanvasStorageKey(STORAGE_KEYS.API_KEY, 7),
@@ -431,7 +538,7 @@ describe('Canvas generation loop', () => {
 
     expect(
       await screen.findByText(
-        '1 image(s) selected. The first image is used as a reference.'
+        '1 image(s) selected. All selected images are sent; support varies by model.'
       )
     ).toBeInTheDocument()
   })

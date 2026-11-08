@@ -87,7 +87,11 @@ import {
   persistImageSource,
   saveHistoryEntries,
 } from './lib/history'
-import { getImageSize, parseImageSize } from './lib/size'
+import {
+  getImageSize,
+  getRecommendedImageSizes,
+  parseImageSize,
+} from './lib/size'
 import type { GroupOption, ImageResponse, ModelOption } from './types'
 
 const MAX_REFERENCE_IMAGES = 4
@@ -137,35 +141,39 @@ function CanvasResults({
   }
 
   const renderActions = (src: string, index: number) => (
-    <div className='absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100'>
-      <button
+    <div className='absolute top-2 right-2 flex gap-1 transition-opacity group-hover:opacity-100 focus-within:opacity-100 [@media(hover:hover)]:opacity-0'>
+      <Button
         type='button'
+        variant='secondary'
+        size='icon-sm'
         onClick={() => onUseAsReference(src)}
         disabled={referenceLoadingSrc !== null}
         aria-label={t('Use as reference image')}
-        className='bg-background/80 rounded-md p-1.5'
+        className='bg-background/80'
       >
         {referenceLoadingSrc === src ? (
           <Loader2 className='h-4 w-4 animate-spin' />
         ) : (
           <ImagePlus className='h-4 w-4' />
         )}
-      </button>
-      <button
+      </Button>
+      <Button
         type='button'
+        variant='secondary'
+        size='icon-sm'
         onClick={() =>
           void handleDownload(src, `canvas-${Date.now()}-${index + 1}.png`)
         }
         disabled={downloadingSrc !== null}
         aria-label={t('Download')}
-        className='bg-background/80 rounded-md p-1.5'
+        className='bg-background/80'
       >
         {downloadingSrc === src ? (
           <Loader2 className='h-4 w-4 animate-spin' />
         ) : (
           <Download className='h-4 w-4' />
         )}
-      </button>
+      </Button>
     </div>
   )
 
@@ -187,12 +195,19 @@ function CanvasResults({
     return (
       <div className='flex h-full min-h-40 items-center justify-center overflow-auto'>
         <div className='group relative h-full w-full'>
-          <img
-            src={results[0]}
-            alt={t('Generated image')}
+          <Button
+            type='button'
+            variant='ghost'
+            aria-label={t('Preview image')}
             onClick={() => onPreview(results[0])}
-            className='h-full w-full cursor-zoom-in object-contain'
-          />
+            className='h-full w-full cursor-zoom-in p-0'
+          >
+            <img
+              src={results[0]}
+              alt={t('Generated image')}
+              className='h-full w-full object-contain'
+            />
+          </Button>
           {renderActions(results[0], 0)}
         </div>
       </div>
@@ -205,12 +220,21 @@ function CanvasResults({
           key={src}
           className='group border-border relative overflow-hidden rounded-xl border'
         >
-          <img
-            src={src}
-            alt={`${t('Generated image')} ${index + 1}`}
+          <Button
+            type='button'
+            variant='ghost'
+            aria-label={t('Preview {{name}}', {
+              name: `${t('Generated image')} ${index + 1}`,
+            })}
             onClick={() => onPreview(src)}
-            className='h-full w-full cursor-zoom-in object-contain'
-          />
+            className='h-full w-full cursor-zoom-in p-0'
+          >
+            <img
+              src={src}
+              alt={`${t('Generated image')} ${index + 1}`}
+              className='h-full w-full object-contain'
+            />
+          </Button>
           {renderActions(src, index)}
         </div>
       ))}
@@ -497,6 +521,9 @@ export function Canvas() {
 
   const addFiles = (incoming: File[]) => {
     if (incoming.length === 0) return
+    if (incoming.length + files.length > MAX_REFERENCE_IMAGES) {
+      toast.warning(t('Reference image limit reached.'))
+    }
     setFiles((prev) => [...prev, ...incoming].slice(0, MAX_REFERENCE_IMAGES))
   }
 
@@ -629,6 +656,7 @@ export function Canvas() {
     customSize.trim() !== ''
       ? customSize.trim()
       : getImageSize(aspectRatio, resolution)
+  const recommendedSizes = getRecommendedImageSizes(model.trim())
 
   const handleGenerate = async () => {
     if (!apiKey || !userId || sessionUserId !== userId) {
@@ -752,7 +780,7 @@ export function Canvas() {
         className='flex h-full flex-col overflow-hidden'
         onKeyDown={handleShortcutKeyDown}
       >
-        <div className='border-border flex items-center justify-between border-b px-6 py-4'>
+        <div className='border-border flex flex-wrap items-center justify-between gap-2 border-b px-4 py-4 sm:px-6'>
           <div className='flex items-center gap-2'>
             <ImageIcon className='text-primary h-5 w-5' />
             <h1 className='text-lg font-semibold'>{t('Canvas')}</h1>
@@ -772,8 +800,11 @@ export function Canvas() {
           </div>
         </div>
 
-        <div className='flex min-h-0 flex-1 gap-6 overflow-auto p-6'>
-          <Card className='w-full max-w-md shrink-0 self-start'>
+        <div
+          data-canvas-workspace
+          className='flex min-h-0 flex-1 flex-col gap-6 overflow-auto p-4 sm:p-6 lg:flex-row'
+        >
+          <Card className='w-full shrink-0 self-start lg:max-w-md'>
             <CardHeader>
               <CardTitle>{t('Generate Image')}</CardTitle>
               <CardDescription>
@@ -821,9 +852,12 @@ export function Canvas() {
                   {t('Aspect Ratio')}
                 </label>
                 <ToggleGroup
-                  value={[aspectRatio]}
+                  value={customSize ? [] : [aspectRatio]}
                   onValueChange={(values) => {
-                    if (values.length > 0) setAspectRatio(values[0])
+                    if (values.length > 0) {
+                      setAspectRatio(values[0])
+                      setCustomSize('')
+                    }
                   }}
                   variant='outline'
                   size='sm'
@@ -841,13 +875,16 @@ export function Canvas() {
               <div className='space-y-2'>
                 <label className='text-sm font-medium'>{t('Resolution')}</label>
                 <ToggleGroup
-                  value={[resolution]}
+                  value={customSize ? [] : [resolution]}
                   onValueChange={(values) => {
-                    if (values.length > 0) setResolution(values[0])
+                    if (values.length > 0) {
+                      setResolution(values[0])
+                      setCustomSize('')
+                    }
                   }}
                   variant='outline'
                   size='sm'
-                  disabled={aspectRatio === 'auto'}
+                  disabled={aspectRatio === 'auto' && !customSize}
                   className='flex-wrap'
                   aria-label={t('Resolution')}
                 >
@@ -863,6 +900,44 @@ export function Canvas() {
                     ? effectiveSize.replace('x', ' × ')
                     : t('Determined by model')}
                 </p>
+                <p className='text-muted-foreground text-xs'>
+                  {t('Supported sizes vary by model. Use Auto if unsure.')}
+                </p>
+                {recommendedSizes.length > 0 && (
+                  <div className='space-y-2'>
+                    <p className='text-muted-foreground text-xs'>
+                      {t('Recommended sizes for this model')}
+                    </p>
+                    <div className='flex flex-wrap gap-2'>
+                      {recommendedSizes.map((size) => (
+                        <Button
+                          key={size}
+                          type='button'
+                          size='sm'
+                          variant={
+                            effectiveSize === size ? 'secondary' : 'outline'
+                          }
+                          onClick={() => {
+                            setCustomSize(size)
+                            setCustomSizeOpen(true)
+                          }}
+                        >
+                          {size.replace('x', ' × ')}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {files.length === 0 &&
+                  effectiveSize &&
+                  ['dall-e', 'dall-e-2', 'dall-e-3'].includes(model.trim()) &&
+                  !recommendedSizes.includes(effectiveSize) && (
+                    <p className='text-destructive text-xs'>
+                      {t(
+                        'This size is not supported by this model. Choose a recommended size.'
+                      )}
+                    </p>
+                  )}
               </div>
 
               <Collapsible
@@ -898,6 +973,7 @@ export function Canvas() {
                     options={sizeOptions}
                     value={customSize}
                     onValueChange={(value) => setCustomSize(value)}
+                    allowCustomValue
                     placeholder={t('Select a size')}
                     emptyText={t('No size found.')}
                   />
@@ -1003,14 +1079,16 @@ export function Canvas() {
                             alt={file?.name ?? t('Reference Image')}
                             className='h-full w-full object-cover'
                           />
-                          <button
+                          <Button
                             type='button'
+                            variant='secondary'
+                            size='icon-xs'
                             onClick={() => removeFile(file)}
                             aria-label={t('Remove')}
-                            className='bg-background/80 absolute top-1 right-1 rounded p-0.5 opacity-0 transition-opacity group-hover:opacity-100'
+                            className='bg-background/80 absolute top-1 right-1 rounded p-0.5 transition-opacity group-hover:opacity-100 focus:opacity-100 [@media(hover:hover)]:opacity-0'
                           >
                             <X className='h-3 w-3' />
-                          </button>
+                          </Button>
                         </div>
                       )
                     })}
@@ -1019,7 +1097,7 @@ export function Canvas() {
                 {files.length > 0 && (
                   <p className='text-muted-foreground text-xs'>
                     {t(
-                      '{{count}} image(s) selected. The first image is used as a reference.',
+                      '{{count}} image(s) selected. All selected images are sent; support varies by model.',
                       { count: files.length }
                     )}
                   </p>
@@ -1068,8 +1146,8 @@ export function Canvas() {
             </CardContent>
           </Card>
 
-          <div className='flex min-h-0 flex-1 flex-col'>
-            <div className='mb-4 flex items-center gap-2'>
+          <div className='flex min-h-64 min-w-0 flex-1 flex-col'>
+            <div className='mb-4 flex flex-wrap items-center gap-2'>
               <ImagePlus className='text-muted-foreground h-5 w-5' />
               <h2 className='text-base font-semibold'>{t('Result')}</h2>
               <div className='ml-auto flex items-center gap-2'>

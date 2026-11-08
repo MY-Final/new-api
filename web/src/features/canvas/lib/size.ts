@@ -32,6 +32,25 @@ const RATIO_DIMENSIONS: Record<string, { width: number; height: number }> = {
 const SIDE_MULTIPLE = 16
 const MIN_SIDE = 64
 
+export function getRecommendedImageSizes(model: string): readonly string[] {
+  switch (model) {
+    case 'dall-e':
+    case 'dall-e-2':
+      return ['256x256', '512x512', '1024x1024']
+    case 'dall-e-3':
+      return ['1024x1024', '1024x1792', '1792x1024']
+    case 'gpt-image-1':
+    case 'gpt-image-1-mini':
+    case 'gpt-image-1.5':
+    case 'gpt-image-2':
+    case 'gpt-image-2.5-sunburst':
+    case 'gpt-image-2.5-flare':
+      return ['1024x1024', '1024x1536', '1536x1024']
+    default:
+      return []
+  }
+}
+
 function snapSide(value: number): number {
   const rounded = Math.round(value / SIDE_MULTIPLE) * SIDE_MULTIPLE
   return Math.max(MIN_SIDE, rounded)

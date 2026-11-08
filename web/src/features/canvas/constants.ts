@@ -56,6 +56,7 @@ export const DEFAULT_ASPECT_RATIO = '1:1'
 export const DEFAULT_RESOLUTION = '1024P'
 export const DEFAULT_COUNT = 1
 export const COUNT_MAX = 10
+export const HISTORY_MAX_ENTRIES = 50
 
 export const STORAGE_KEYS = {
   API_KEY: 'canvas_api_key',

@@ -37,7 +37,11 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import { STORAGE_KEYS, getCanvasStorageKey } from '@/features/canvas/constants'
+import {
+  HISTORY_MAX_ENTRIES,
+  STORAGE_KEYS,
+  getCanvasStorageKey,
+} from '@/features/canvas/constants'
 import {
   clearHistory,
   discardLegacyHistory,
@@ -138,6 +142,26 @@ export function CanvasHistory() {
       const success = await downloadImage(entry.image, `canvas-${entry.id}.png`)
       if (!success) {
         toast.error(t('Download failed. Try opening the original image.'))
+      }
+    } finally {
+      setBusyActionValue(null)
+    }
+  }
+
+  const handleDownloadSelected = async () => {
+    if (busyActionRef.current || selectedIds.size === 0) return
+    setBusyActionValue('batch-download')
+    try {
+      for (const entry of entries) {
+        if (!selectedIds.has(entry.id)) continue
+        const success = await downloadImage(
+          entry.image,
+          `canvas-${entry.id}.png`
+        )
+        if (!success) {
+          toast.error(t('Download failed. Try opening the original image.'))
+          break
+        }
       }
     } finally {
       setBusyActionValue(null)
@@ -341,6 +365,12 @@ export function CanvasHistory() {
             <p className='text-muted-foreground text-sm'>
               {t('Images and prompts generated in Canvas are saved here.')}
             </p>
+            <p className='text-muted-foreground mt-1 max-w-2xl text-xs'>
+              {t(
+                'Records are stored in this browser, up to {{count}} per account. Clearing browser data or running low on storage may remove them. Download images you want to keep.',
+                { count: HISTORY_MAX_ENTRIES }
+              )}
+            </p>
           </div>
           {entries.length > 0 && (
             <div className='flex flex-wrap items-center gap-2'>
@@ -362,6 +392,18 @@ export function CanvasHistory() {
                     disabled={busyAction !== null}
                   >
                     {t('Cancel')}
+                  </Button>
+                  <Button
+                    variant='outline'
+                    onClick={() => void handleDownloadSelected()}
+                    disabled={selectedIds.size === 0 || busyAction !== null}
+                  >
+                    {busyAction === 'batch-download' ? (
+                      <Loader2 className='h-4 w-4 animate-spin' />
+                    ) : (
+                      <Download className='h-4 w-4' />
+                    )}
+                    {t('Download selected')}
                   </Button>
                   <Button
                     variant='destructive'

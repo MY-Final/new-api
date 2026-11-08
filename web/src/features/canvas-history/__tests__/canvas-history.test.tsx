@@ -216,6 +216,51 @@ describe('CanvasHistory', () => {
     expect(screen.getByText('Selected 1 item(s)')).toBeInTheDocument()
   })
 
+  test('explains local retention and downloads selected records', async () => {
+    const secondEntry = { ...entry, id: 'entry-2', prompt: 'a red boat' }
+    mocks.loadHistory.mockResolvedValueOnce([entry, secondEntry])
+    render(<CanvasHistory />)
+
+    expect(
+      await screen.findByText(
+        'Records are stored in this browser, up to 50 per account. Clearing browser data or running low on storage may remove them. Download images you want to keep.'
+      )
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Select' }))
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: `Select ${entry.prompt}` })
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Download selected' }))
+    await waitFor(() =>
+      expect(mocks.downloadImage).toHaveBeenCalledWith(
+        entry.image,
+        `canvas-${entry.id}.png`
+      )
+    )
+    expect(mocks.downloadImage).toHaveBeenCalledTimes(1)
+  })
+
+  test('stops a batch download and reports a failed image', async () => {
+    const secondEntry = { ...entry, id: 'entry-2', prompt: 'a red boat' }
+    mocks.loadHistory.mockResolvedValueOnce([entry, secondEntry])
+    mocks.downloadImage.mockResolvedValueOnce(false)
+    render(<CanvasHistory />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Select' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Download selected' }))
+
+    await waitFor(() =>
+      expect(mocks.toast.error).toHaveBeenCalledWith(
+        'Download failed. Try opening the original image.'
+      )
+    )
+    expect(mocks.downloadImage).toHaveBeenCalledTimes(1)
+    expect(
+      screen.getByRole('button', { name: 'Download selected' })
+    ).toBeEnabled()
+  })
+
   test('selects all records and deletes them in one batch', async () => {
     const secondEntry = { ...entry, id: 'entry-2', prompt: 'a red boat' }
     mocks.loadHistory.mockResolvedValueOnce([entry, secondEntry])

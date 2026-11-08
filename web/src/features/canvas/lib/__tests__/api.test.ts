@@ -18,13 +18,31 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
-import { generateImages } from '../../api'
+import { editImage, generateImages } from '../../api'
 
 afterEach(() => {
   vi.restoreAllMocks()
 })
 
 describe('Canvas image requests', () => {
+  test('sends all selected reference images in an edit request', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: [] }),
+    } as Response)
+    const first = new File(['first'], 'first.png', { type: 'image/png' })
+    const second = new File(['second'], 'second.png', { type: 'image/png' })
+
+    await editImage(
+      { model: 'image-model', prompt: 'edit', images: [first, second] },
+      'api-key'
+    )
+
+    const form = fetchMock.mock.calls[0][1]?.body as FormData
+    expect(form.getAll('image')).toEqual([first, second])
+  })
+
   test('retries once without response_format when the upstream rejects it', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch')
     fetchMock

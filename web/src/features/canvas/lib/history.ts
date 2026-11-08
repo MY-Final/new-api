@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { HISTORY_MAX_ENTRIES } from '../constants'
+
 export interface CanvasHistoryEntry {
   id: string
   image: string
@@ -62,7 +64,6 @@ const HISTORY_KEY = 'canvas_history'
 const MIGRATION_PROMPT_KEY = 'canvas_history_migration_prompted'
 const HISTORY_SYNC_CHANNEL = 'new-api-canvas-history-sync'
 const HISTORY_SYNC_STORAGE_KEY = 'canvas_history_sync'
-const MAX_ENTRIES = 50
 
 type HistorySyncEvent = {
   kind: 'updated' | 'removed' | 'cleared'
@@ -363,7 +364,7 @@ export async function loadHistory(
   try {
     return (await readUserEntries(database, userId)).entries.slice(
       0,
-      MAX_ENTRIES
+      HISTORY_MAX_ENTRIES
     )
   } catch (cause) {
     throw new HistoryStorageError('failed', cause)
@@ -402,7 +403,7 @@ export async function saveHistoryEntries(
       const retained = current.entries.slice(dropCount)
       const next = [...validEntries, ...retained]
         .sort((left, right) => right.createdAt - left.createdAt)
-        .slice(0, MAX_ENTRIES)
+        .slice(0, HISTORY_MAX_ENTRIES)
       try {
         await writeUserEntries(database, userId, current.rawIds, next)
         publishHistoryEvent('updated', userId)
