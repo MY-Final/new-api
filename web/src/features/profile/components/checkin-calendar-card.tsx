@@ -284,10 +284,10 @@ export function CheckinCalendarCard({
           </p>
         </header>
 
-        <section className='overflow-hidden rounded-2xl bg-slate-900 text-white shadow-sm dark:bg-slate-800'>
+        <section className='from-primary/10 via-card to-card text-card-foreground overflow-hidden rounded-2xl border bg-gradient-to-br shadow-sm'>
           <div className='flex flex-col justify-between gap-8 p-6 sm:p-8 md:flex-row md:items-center'>
             <div className='max-w-xl'>
-              <span className='inline-flex items-center gap-1.5 rounded-full border border-emerald-300/25 bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-200'>
+              <span className='border-primary/20 bg-primary/10 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium'>
                 <Sparkles className='size-3.5' />
                 {checkedToday ? t('Checked in') : t('Daily Check-in')}
               </span>
@@ -296,33 +296,37 @@ export function CheckinCalendarCard({
                   ? t('See you tomorrow')
                   : t('Your daily reward awaits')}
               </h2>
-              <p className='mt-3 text-sm leading-6 text-slate-300'>
+              <p className='text-muted-foreground mt-3 text-sm leading-6'>
                 {t('Rewards will be added directly to your balance')}
               </p>
               <div className='mt-5 flex flex-wrap items-center gap-3'>
                 <Button
                   onClick={startCheckin}
                   disabled={checkinLoading || checkedToday}
-                  className='bg-emerald-300 text-slate-950 hover:bg-emerald-200 disabled:bg-slate-600 disabled:text-slate-200'
+                  className='hover:bg-primary/90'
                 >
                   <CalendarCheck className='size-4' /> {checkinButtonLabel}
                 </Button>
-                <span className='text-xs text-slate-400'>
+                <span className='text-muted-foreground text-xs'>
                   {t('Do not repeat check-in; only once per day')}
                 </span>
               </div>
             </div>
-            <div className='w-full rounded-xl border border-white/10 bg-white/5 p-5 sm:max-w-56'>
-              <p className='text-xs text-slate-300'>{t('Reward range')}</p>
+            <div className='bg-background/70 w-full rounded-xl border p-5 sm:max-w-56'>
+              <p className='text-muted-foreground text-xs'>
+                {t('Reward range')}
+              </p>
               <p className='mt-2 text-lg font-semibold tabular-nums'>
                 {current.data?.min_quota === undefined ||
                 current.data?.max_quota === undefined
                   ? '—'
                   : `${formatQuotaWithCurrency(current.data.min_quota)} – ${formatQuotaWithCurrency(current.data.max_quota)}`}
               </p>
-              <div className='mt-4 border-t border-white/10 pt-4'>
-                <p className='text-xs text-slate-300'>{t("Today's reward")}</p>
-                <p className='mt-1 font-semibold text-emerald-200 tabular-nums'>
+              <div className='mt-4 border-t pt-4'>
+                <p className='text-muted-foreground text-xs'>
+                  {t("Today's reward")}
+                </p>
+                <p className='mt-1 font-semibold tabular-nums'>
                   {todayAward === undefined
                     ? '—'
                     : `+${formatQuotaWithCurrency(todayAward)}`}
