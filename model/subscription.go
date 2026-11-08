@@ -11,6 +11,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/cachex"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/samber/hot"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
@@ -645,7 +646,13 @@ func UpsertUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *Subscriptio
 			return nil, err
 		}
 		current.EndTime = endUnix
-		if err := tx.Save(current).Error; err != nil {
+		// Renewing starts a fresh quota period. Marking the previous period's
+		// pre-consume rows as refunded clears the rolling windows exactly, while
+		// resetting AmountUsed clears the legacy single-pool quota.
+		if err := LoadSubscriptionPlanQuotaWindowsTx(tx, plan); err != nil {
+			return nil, err
+		}
+		if err := resetUserSubscriptionTx(tx, current, plan, nowUnix, true); err != nil {
 			return nil, err
 		}
 		routeGroups, err := LoadUserSubscriptionRouteGroupsTx(tx, current.Id)
@@ -964,7 +971,15 @@ func calcSubscriptionBalanceQuota(priceAmount float64) (int, error) {
 	if common.QuotaPerUnit <= 0 {
 		return 0, common.NewMessage("Quota unit is misconfigured")
 	}
+	// Plan prices are denominated in the configured display currency, while
+	// wallet quota is stored as USD units. Convert the price to USD first so a
+	// ¥30 plan costs the same as topping up ¥30, not USD 30.
+	rate := operation_setting.GetUsdToCurrencyRate(operation_setting.USDExchangeRate)
+	if rate <= 0 {
+		rate = 1
+	}
 	quota := decimal.NewFromFloat(priceAmount).
+		Div(decimal.NewFromFloat(rate)).
 		Mul(decimal.NewFromFloat(common.QuotaPerUnit)).
 		Ceil()
 	return common.WalletQuotaFromDecimalStrict(quota)

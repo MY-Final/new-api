@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -464,6 +465,39 @@ func TestSubscriptionRenewalAndDifferentPlanConflict(t *testing.T) {
 	require.ErrorIs(t, err, ErrActiveSubscriptionConflict)
 }
 
+func TestSubscriptionRenewalResetsRollingWindowUsage(t *testing.T) {
+	plan := &SubscriptionPlan{
+		Id:            11107,
+		Title:         "Monthly renewal",
+		DurationUnit:  SubscriptionDurationMonth,
+		DurationValue: 1,
+		UpgradeGroup:  "vip",
+		Enabled:       true,
+		QuotaWindows: []SubscriptionQuotaWindow{
+			{WindowSeconds: 5 * 60 * 60, QuotaLimit: 300},
+		},
+	}
+	user, subscription := seedQuotaWindowSubscription(t, plan)
+
+	_, err := PreConsumeUserSubscription("renew-window-1", user.Id, "deepseek-chat", 0, "vip", 200)
+	require.NoError(t, err)
+	assert.Equal(t, map[int64]int64{5 * 60 * 60: 200}, quotaWindowUsed(t, subscription.Id))
+
+	renewed, err := UpsertUserSubscriptionFromPlanTx(DB, user.Id, plan, "test")
+	require.NoError(t, err)
+	require.True(t, renewed.Renewed)
+	assert.Zero(t, renewed.Subscription.AmountUsed)
+	assert.Equal(t, map[int64]int64{5 * 60 * 60: 0}, quotaWindowUsed(t, subscription.Id))
+
+	var previous SubscriptionPreConsumeRecord
+	require.NoError(t, DB.Where("request_id = ?", "renew-window-1").First(&previous).Error)
+	assert.Equal(t, SubscriptionUsageStatusRefunded, previous.Status)
+
+	_, err = PreConsumeUserSubscription("renew-window-2", user.Id, "deepseek-chat", 0, "vip", 300)
+	require.NoError(t, err)
+	assert.Equal(t, map[int64]int64{5 * 60 * 60: 300}, quotaWindowUsed(t, subscription.Id))
+}
+
 func TestSubscriptionConcurrencyRequiresAnAllowedRouteGroup(t *testing.T) {
 	truncateTables(t)
 	user := User{
@@ -550,6 +584,26 @@ func TestConcurrentDifferentPlanPurchaseHasOneWinner(t *testing.T) {
 	var subscriptions int64
 	require.NoError(t, DB.Model(&UserSubscription{}).Where("user_id = ?", user.Id).Count(&subscriptions).Error)
 	assert.EqualValues(t, 1, subscriptions)
+}
+
+func TestCalcSubscriptionBalanceQuotaConvertsCNYPriceToUSD(t *testing.T) {
+	originalType := operation_setting.GetGeneralSetting().QuotaDisplayType
+	originalRate := operation_setting.USDExchangeRate
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		operation_setting.GetGeneralSetting().QuotaDisplayType = originalType
+		operation_setting.USDExchangeRate = originalRate
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+	operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeCNY
+	operation_setting.USDExchangeRate = 7.3
+	common.QuotaPerUnit = 500000
+
+	quota, err := calcSubscriptionBalanceQuota(30)
+	require.NoError(t, err)
+	// ¥30 / 7.3 * 500000 = 2054794.52..., rounded up. Charging USD 30 (15,000,000)
+	// would overcharge a CNY plan by the exchange rate.
+	assert.EqualValues(t, 2054795, quota)
 }
 
 func TestBalancePurchaseRejectsNonCNYPlan(t *testing.T) {
