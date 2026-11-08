@@ -6,7 +6,6 @@ import { useTranslation } from 'react-i18next'
 import { EmptyState } from '@/components/empty-state'
 import { ErrorState } from '@/components/error-state'
 import { Main } from '@/components/layout'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -86,13 +85,15 @@ export function Entertainment() {
 
   return (
     <Main className='overflow-y-auto'>
-      <div className='mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 sm:py-12'>
+      <div className='mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10'>
         <header className='mb-8'>
-          <Badge variant='outline'>{t('Entertainment')}</Badge>
-          <h1 className='mt-4 text-3xl font-black tracking-tight sm:text-4xl'>
+          <p className='text-primary text-xs font-semibold tracking-widest uppercase'>
+            {t('Entertainment')}
+          </p>
+          <h1 className='mt-2 text-2xl font-bold tracking-tight sm:text-3xl'>
             {t('Daily egg')}
           </h1>
-          <p className='text-muted-foreground mt-3 leading-7'>
+          <p className='text-muted-foreground mt-2 text-sm'>
             {t('Open one egg each day for a chance to win quota.')}
           </p>
         </header>
@@ -108,9 +109,9 @@ export function Entertainment() {
           <EmptyState icon={Egg} title={t('Daily egg is not enabled')} />
         )}
         {data?.enabled && (
-          <div className='grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(240px,0.38fr)]'>
-            <Card className='dark:to-card border-orange-500/20 bg-gradient-to-br from-orange-50 via-amber-50 to-white dark:from-orange-950/50 dark:via-amber-950/30'>
-              <CardContent className='px-4 py-8 text-center sm:px-8 sm:py-10'>
+          <div className='grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(240px,0.38fr)] lg:items-start'>
+            <Card className='from-primary/10 via-card to-card rounded-2xl bg-gradient-to-br shadow-sm'>
+              <CardContent className='px-4 py-6 text-center sm:px-8 sm:py-8'>
                 <p className='text-muted-foreground text-sm tabular-nums'>
                   {t('Today')} · {data.day}
                 </p>
@@ -138,7 +139,7 @@ export function Entertainment() {
                   )}
                 </p>
                 {!data.eligible && !result && (
-                  <p className='mt-2 text-sm text-amber-700 dark:text-amber-300'>
+                  <p className='text-muted-foreground mt-2 text-sm'>
                     {t('Reach the daily minimum spend to open an egg.')}
                   </p>
                 )}
@@ -159,17 +160,17 @@ export function Entertainment() {
                         draw.isPending || !data.eligible || Boolean(result)
                       }
                       onClick={() => draw.mutate(egg)}
-                      className='bg-background/80 h-28 min-w-0 flex-col gap-2 rounded-2xl border-orange-500/25 sm:h-36'
+                      className='border-primary/20 bg-background/70 hover:border-primary/40 h-28 min-w-0 flex-col gap-2 rounded-2xl sm:h-36'
                     >
                       {result?.egg === egg ? (
                         <Sparkles
                           aria-hidden='true'
-                          className='size-9 text-amber-500'
+                          className='text-primary size-9'
                         />
                       ) : (
                         <Egg
                           aria-hidden='true'
-                          className='size-9 text-orange-500'
+                          className='text-primary size-9'
                         />
                       )}
                       <span className='tabular-nums'>
@@ -178,7 +179,10 @@ export function Entertainment() {
                     </Button>
                   ))}
                 </div>
-                <div className='mt-8 min-h-20' aria-live='polite'>
+                <div
+                  className={result || draw.isPending ? 'mt-8' : undefined}
+                  aria-live='polite'
+                >
                   {result && (
                     <motion.div
                       initial={reducedMotion ? false : { opacity: 0, y: 8 }}
@@ -191,7 +195,7 @@ export function Entertainment() {
                           : t('No prize this time')}
                       </p>
                       {result.quota > 0 && (
-                        <p className='mt-2 font-semibold text-emerald-600 dark:text-emerald-400'>
+                        <p className='mt-2 font-semibold'>
                           +{formatQuotaWithCurrency(result.quota)}
                         </p>
                       )}
@@ -208,7 +212,7 @@ export function Entertainment() {
                 </div>
               </CardContent>
             </Card>
-            <Card>
+            <Card className='rounded-2xl'>
               <CardContent className='space-y-4 p-6'>
                 <h2 className='flex items-center gap-2 text-base font-semibold'>
                   <Gift className='size-4' /> {t('Prize pool')}

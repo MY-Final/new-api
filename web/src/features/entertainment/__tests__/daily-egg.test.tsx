@@ -81,6 +81,21 @@ it('shows configured eggs and prizes but prevents a draw below the spending thre
   ).toBeVisible()
 })
 
+it('keeps the prize card compact when there is no draw result', async () => {
+  vi.spyOn(api, 'get').mockResolvedValue({
+    data: { success: true, data: status },
+  })
+  renderPage()
+
+  const prizeCard = (await screen.findByText('Prize pool')).closest(
+    '[data-slot="card"]'
+  )
+  expect(prizeCard?.parentElement).toHaveClass('lg:items-start')
+  expect(
+    screen.getByRole('group', { name: 'Choose an egg' }).nextElementSibling
+  ).not.toHaveClass('mt-8')
+})
+
 it('shows the server result and prevents another draw', async () => {
   const result = {
     day: status.day,
