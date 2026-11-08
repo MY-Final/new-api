@@ -28,6 +28,19 @@ export function sleep(ms: number = 1000) {
 }
 
 /**
+ * 生成唯一标识符。
+ *
+ * `crypto.randomUUID` 仅在安全上下文（HTTPS 或 localhost）可用，通过
+ * 局域网 IP 的 HTTP 访问时会缺失，因此这里做降级处理。
+ */
+export function randomId(): string {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID()
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+}
+
+/**
  * 清理 CSS 变量名，替换特殊字符
  * 用于将模型名称（如 gpt-3.5-turbo）转换为有效的 CSS 变量名（gpt-3-5-turbo）
  * @param name - 原始名称

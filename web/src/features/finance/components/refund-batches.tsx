@@ -31,6 +31,7 @@ import { Button } from '@/components/ui/button'
 import { formatQuotaPrecise, formatTimestampToDate } from '@/lib/format'
 import { handleServerError } from '@/lib/handle-server-error'
 import { getServerErrorMessage } from '@/lib/server-error-message'
+import { randomId } from '@/lib/utils'
 
 import { getRefundBatches, retryRefundBatch } from '../api'
 import type { RefundBatch } from '../types'
@@ -266,7 +267,7 @@ export function RefundBatches() {
                         ? retry.variables
                         : {
                             taskId: detail.task_id,
-                            clientId: crypto.randomUUID(),
+                            clientId: randomId(),
                           }
                     )
                   }

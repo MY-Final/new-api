@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/form'
 import { Textarea } from '@/components/ui/textarea'
 import { handleServerError } from '@/lib/handle-server-error'
+import { randomId } from '@/lib/utils'
 
 import { replyTicket } from '../api'
 import { encodeScreenshots } from '../lib/screenshots'
@@ -55,13 +56,13 @@ export function TicketComposer(props: {
   const [files, setFiles] = useState<File[]>([])
   const [note, setNote] = useState(false)
   const [generation, setGeneration] = useState(0)
-  const attempt = useRef({ signature: '', key: crypto.randomUUID() })
+  const attempt = useRef({ signature: '', key: randomId() })
   const mutation = useMutation({
     mutationFn: async (resolve: boolean) => {
       const screenshots = await encodeScreenshots(files)
       const signature = JSON.stringify({ content, screenshots, note, resolve })
       if (signature !== attempt.current.signature) {
-        attempt.current = { signature, key: crypto.randomUUID() }
+        attempt.current = { signature, key: randomId() }
       }
       return replyTicket(
         props.staff,
@@ -71,7 +72,7 @@ export function TicketComposer(props: {
       )
     },
     onSuccess: () => {
-      attempt.current = { signature: '', key: crypto.randomUUID() }
+      attempt.current = { signature: '', key: randomId() }
       form.reset()
       setFiles([])
       setGeneration((value) => value + 1)

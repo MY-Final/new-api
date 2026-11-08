@@ -73,6 +73,7 @@ import { Switch } from '@/components/ui/switch'
 import { getPaymentErrorTranslation } from '@/features/wallet/lib/payment'
 import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
 import { handleServerError } from '@/lib/handle-server-error'
+import { randomId } from '@/lib/utils'
 
 import {
   createPlan,
@@ -184,7 +185,7 @@ export function SubscriptionsMutateDrawer({
       [
         ...current,
         {
-          _key: crypto.randomUUID(),
+          _key: randomId(),
           window_seconds: windowSeconds,
           quota_amount: 1,
         },

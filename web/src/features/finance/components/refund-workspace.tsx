@@ -32,6 +32,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatQuotaPrecise } from '@/lib/format'
 import { handleServerError } from '@/lib/handle-server-error'
 import { getServerErrorMessage } from '@/lib/server-error-message'
+import { randomId } from '@/lib/utils'
 
 import { createRefundBatch, getRefundQueue } from '../api'
 import { canRefundRequest, formatRefundReason } from '../lib/request-refund'
@@ -209,7 +210,7 @@ export function RefundWorkspace(props: { initialRequestId?: string }) {
                       mutation.reset()
                       setReason('')
                       setReasonDetails('')
-                      setPreview({ records, clientId: crypto.randomUUID() })
+                      setPreview({ records, clientId: randomId() })
                     }}
                   >
                     {t('Preview refund')} ({records.length})

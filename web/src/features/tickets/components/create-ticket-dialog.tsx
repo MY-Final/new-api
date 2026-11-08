@@ -37,6 +37,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { handleServerError } from '@/lib/handle-server-error'
+import { randomId } from '@/lib/utils'
 
 import { createTicket } from '../api'
 import { ticketCategories } from '../constants'
@@ -52,7 +53,7 @@ export function CreateTicketDialog(props: {
 }) {
   const { t } = useTranslation()
   const client = useQueryClient()
-  const attempt = useRef({ signature: '', key: crypto.randomUUID() })
+  const attempt = useRef({ signature: '', key: randomId() })
   const [files, setFiles] = useState<File[]>([])
   const [occurredAt, setOccurredAt] = useState<Date>()
   const form = useForm<TicketFormValues>({
@@ -81,7 +82,7 @@ export function CreateTicketDialog(props: {
         : 0
       const signature = JSON.stringify({ input, screenshots, occurred_at })
       if (signature !== attempt.current.signature) {
-        attempt.current = { signature, key: crypto.randomUUID() }
+        attempt.current = { signature, key: randomId() }
       }
       return createTicket({
         ...input,
