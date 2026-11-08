@@ -28,12 +28,10 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Combobox } from '@/components/ui/combobox'
 import { Separator } from '@/components/ui/separator'
-import { useSystemConfig } from '@/hooks/use-system-config'
 import { toIntlLocale } from '@/i18n/languages'
-import { formatNumber, formatQuota } from '@/lib/format'
+import { formatNumber, formatQuota, parseQuotaFromDollars } from '@/lib/format'
 import { handleServerError } from '@/lib/handle-server-error'
 import { getServerErrorStatus } from '@/lib/server-error-message'
-import { DEFAULT_CURRENCY_CONFIG } from '@/stores/system-config-store'
 
 import {
   paySubscriptionStripe,
@@ -74,7 +72,6 @@ export function SubscriptionPurchaseDialog(props: Props) {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
-  const { currency } = useSystemConfig()
   const [paying, setPaying] = useState(false)
   const [selectedEpayMethod, setSelectedEpayMethod] = useState('')
 
@@ -105,13 +102,9 @@ export function SubscriptionPurchaseDialog(props: Props) {
     plan.currency,
     locale
   )
-  const quotaPerUnit =
-    currency?.quotaPerUnit && currency.quotaPerUnit > 0
-      ? currency.quotaPerUnit
-      : DEFAULT_CURRENCY_CONFIG.quotaPerUnit
   const balanceCost = Math.max(
     0,
-    Math.ceil(Number(plan.price_amount || 0) * quotaPerUnit)
+    parseQuotaFromDollars(Number(plan.price_amount || 0))
   )
   const userQuota = Math.max(0, Number(props.userQuota || 0))
   const planCurrency = (plan.currency || 'CNY').trim().toUpperCase()

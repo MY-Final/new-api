@@ -20,6 +20,7 @@ import type { TFunction } from 'i18next'
 import { z } from 'zod'
 
 import { parseQuotaFromDollars, quotaUnitsToDollars } from '@/lib/format'
+import { randomId } from '@/lib/utils'
 
 import type { SubscriptionPlan, PlanPayload } from '../types'
 
@@ -144,11 +145,15 @@ export function planToFormValues(plan: SubscriptionPlan): PlanFormValues {
     max_purchase_per_user: Number(plan.max_purchase_per_user || 0),
     max_concurrency: Number(plan.max_concurrency || 0),
     max_output_tokens: Number(plan.max_output_tokens || 4096),
-    total_amount: quotaUnitsToDollars(Number(plan.total_amount || 0)),
+    total_amount: Number(
+      quotaUnitsToDollars(Number(plan.total_amount || 0)).toFixed(2)
+    ),
     quota_windows: (plan.quota_windows || []).map((window) => ({
-      _key: crypto.randomUUID(),
+      _key: randomId(),
       window_seconds: Number(window.window_seconds || 0),
-      quota_amount: quotaUnitsToDollars(Number(window.quota_limit || 0)),
+      quota_amount: Number(
+        quotaUnitsToDollars(Number(window.quota_limit || 0)).toFixed(2)
+      ),
     })),
     upgrade_group: plan.upgrade_group || '',
     route_groups: [...new Set(plan.route_groups || [])],
