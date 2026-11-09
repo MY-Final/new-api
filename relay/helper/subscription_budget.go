@@ -149,8 +149,8 @@ func subscriptionRequestLimit(request dto.Request, limit int) (uint, error) {
 	var limits []*uint
 	switch value := request.(type) {
 	case *dto.GeneralOpenAIRequest:
-		if value.N != nil && *value.N != 1 || value.WebSearchOptions != nil {
-			return 0, errors.New("subscription requests require one text completion and no hosted tools")
+		if value.N != nil && *value.N != 1 {
+			return 0, errors.New("subscription requests require one text completion")
 		}
 		limits = []*uint{value.MaxTokens, value.MaxCompletionTokens}
 	case *dto.ClaudeRequest:
@@ -184,7 +184,8 @@ func subscriptionRequestLimit(request dto.Request, limit int) (uint, error) {
 }
 
 // ApplySubscriptionRequestLimits sets the actual output limit on supported
-// text DTOs. Unknown-cost modalities and hosted tools are deliberately rejected.
+// text DTOs. Media inputs and provider features that change the price remain
+// rejected; hosted tools are billed by token usage or the tool surcharge.
 func ApplySubscriptionRequestLimits(request dto.Request, limit int) (int, error) {
 	cap, err := subscriptionRequestLimit(request, limit)
 	if err != nil {
@@ -488,7 +489,6 @@ func validateSubscriptionTextFields(format types.RelayFormat, fields map[string]
 		"speed",
 		"imageConfig",
 		"image_config",
-		"web_search_options",
 		"web_search",
 		"search_parameters",
 		"search_options",
@@ -531,11 +531,8 @@ func validateSubscriptionTextFields(format types.RelayFormat, fields map[string]
 				}
 			}
 			kind = strings.ToLower(strings.TrimSpace(kind))
-			clientExecuted := format == types.RelayFormatOpenAIResponses &&
-				(kind == "local_shell" || kind == "apply_patch")
-			if kind != "function" && kind != "custom" && !clientExecuted &&
-				!(format == types.RelayFormatClaude && kind == "") {
-				return errors.New("subscription requests do not support hosted tools")
+			if kind == "" && format != types.RelayFormatClaude {
+				return errors.New("subscription tool declarations require a type")
 			}
 		}
 	}
@@ -561,6 +558,7 @@ var subscriptionOpenAIFields = map[string]struct{}{
 	"enable_thinking": {}, "thinking_budget": {}, "thinking_token_budget": {},
 	"include_reasoning": {}, "separate_reasoning": {}, "stream_reasoning": {},
 	"safety_identifier": {}, "prompt_cache_key": {}, "store": {},
+	"web_search_options": {},
 }
 
 var subscriptionResponsesFields = map[string]struct{}{
@@ -745,13 +743,6 @@ func validateOpenAIResponsesInclude(fields map[string]json.RawMessage) error {
 	if err := common.Unmarshal(raw, &included); err != nil {
 		return errors.New("subscription Responses include must be an array of strings")
 	}
-	for _, value := range included {
-		switch strings.TrimSpace(value) {
-		case "reasoning.encrypted_content", "message.output_text.logprobs":
-		default:
-			return fmt.Errorf("subscription Responses do not support include %q", value)
-		}
-	}
 	return nil
 }
 
@@ -864,10 +855,8 @@ func validateOpenAISubscriptionTools(raw json.RawMessage) error {
 		if err := common.Unmarshal(tool["type"], &kind); err != nil {
 			return errors.New("subscription tool type is invalid")
 		}
-		switch strings.ToLower(strings.TrimSpace(kind)) {
-		case "function", "custom":
-		default:
-			return errors.New("subscription requests do not support hosted tools")
+		if strings.TrimSpace(kind) == "" {
+			return errors.New("subscription tool declarations require a type")
 		}
 	}
 	return nil
@@ -910,7 +899,10 @@ func validateOpenAIResponsesInput(fields map[string]json.RawMessage) error {
 			if err := validateOpenAIResponsesTextField(item["output"]); err != nil {
 				return err
 			}
-		case "local_shell_call", "local_shell_call_output", "apply_patch_call", "apply_patch_call_output":
+		case "local_shell_call", "local_shell_call_output", "apply_patch_call", "apply_patch_call_output",
+			"web_search_call", "file_search_call", "code_interpreter_call",
+			"image_generation_call", "computer_call", "computer_call_output",
+			"mcp_call", "mcp_list_tools", "mcp_approval_request", "mcp_approval_response":
 		case "reasoning":
 			for key, raw := range item {
 				if key == "type" || key == "id" || key == "summary" || key == "content" ||
@@ -920,7 +912,7 @@ func validateOpenAIResponsesInput(fields map[string]json.RawMessage) error {
 				return fmt.Errorf("subscription Responses reasoning does not support %q", key)
 			}
 		default:
-			return errors.New("subscription Responses requests support text messages and client tool replay only")
+			return errors.New("subscription Responses requests support text messages and hosted tool replay only")
 		}
 	}
 	return nil
@@ -1050,7 +1042,10 @@ func validateClaudeTextContent(raw json.RawMessage) error {
 			return errors.New("subscription Claude content block type is invalid")
 		}
 		switch strings.ToLower(strings.TrimSpace(blockType)) {
-		case "text", "thinking", "redacted_thinking", "tool_use":
+		case "text", "thinking", "redacted_thinking", "tool_use",
+			"server_tool_use", "web_search_tool_result", "web_fetch_tool_result",
+			"code_execution_tool_result", "bash_code_execution_tool_result",
+			"text_editor_code_execution_tool_result", "mcp_tool_use", "mcp_tool_result":
 			if _, ok := block["cache_control"]; ok {
 				return errors.New("subscription requests do not support Claude prompt caching controls")
 			}
@@ -1062,7 +1057,7 @@ func validateClaudeTextContent(raw json.RawMessage) error {
 				return err
 			}
 		default:
-			return errors.New("subscription Claude requests support text and client tool replay only")
+			return errors.New("subscription Claude requests support text and hosted tool replay only")
 		}
 	}
 	return nil
@@ -1074,6 +1069,12 @@ func validateClaudeSubscriptionTools(raw json.RawMessage) error {
 		return errors.New("subscription Claude tool declarations cannot be budgeted")
 	}
 	for _, tool := range tools {
+		if subscriptionJSONFieldHasValue(tool["type"]) {
+			if _, ok := tool["cache_control"]; ok {
+				return errors.New("subscription requests do not support Claude prompt caching controls")
+			}
+			continue
+		}
 		for key, value := range tool {
 			if key == "name" || key == "description" || key == "input_schema" ||
 				key == "strict" || !subscriptionJSONFieldHasValue(value) {
@@ -1103,14 +1104,8 @@ func validateGeminiSubscriptionFields(fields map[string]json.RawMessage, outputL
 			tools = []map[string]json.RawMessage{single}
 		}
 		for _, tool := range tools {
-			if !subscriptionJSONFieldHasValue(tool["functionDeclarations"]) && !subscriptionJSONFieldHasValue(tool["function_declarations"]) {
-				return errors.New("subscription requests only support client-side Gemini function declarations")
-			}
-			for key, raw := range tool {
-				if key == "functionDeclarations" || key == "function_declarations" || !subscriptionJSONFieldHasValue(raw) {
-					continue
-				}
-				return errors.New("subscription requests do not support hosted Gemini tools")
+			if len(tool) == 0 {
+				return errors.New("subscription Gemini tool declarations cannot be budgeted")
 			}
 		}
 	}

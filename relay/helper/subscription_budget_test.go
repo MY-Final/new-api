@@ -41,6 +41,13 @@ func TestValidateSubscriptionTextFieldsRejectsUnboundedProviderFeatures(t *testi
 			name:   "gemini hosted search",
 			format: types.RelayFormatGemini,
 			body:   `{"contents":[{"parts":[{"text":"hello"}]}],"tools":[{"googleSearch":{}}]}`,
+			valid:  true,
+		},
+		{
+			name:   "gemini hosted code execution",
+			format: types.RelayFormatGemini,
+			body:   `{"contents":[{"parts":[{"text":"hello"}]}],"tools":[{"codeExecution":{}}]}`,
+			valid:  true,
 		},
 		{
 			name:   "gemini image modality",
@@ -91,6 +98,13 @@ func TestValidateSubscriptionTextFieldsRejectsUnboundedProviderFeatures(t *testi
 			name:   "openai hosted search",
 			format: types.RelayFormatOpenAI,
 			body:   `{"messages":[],"web_search_options":{"search_context_size":"high"}}`,
+			valid:  true,
+		},
+		{
+			name:   "openai hosted search tool",
+			format: types.RelayFormatOpenAI,
+			body:   `{"messages":[],"tools":[{"type":"web_search_20250305","name":"web_search"}]}`,
+			valid:  true,
 		},
 		{
 			name:   "openai bounded reasoning budget",
@@ -161,6 +175,7 @@ func TestValidateSubscriptionTextFieldsRejectsUnboundedProviderFeatures(t *testi
 			name:   "responses hosted include",
 			format: types.RelayFormatOpenAIResponses,
 			body:   `{"input":"hello","include":["computer_call_output.output.image_url"]}`,
+			valid:  true,
 		},
 		{
 			name:   "responses background execution",
@@ -171,6 +186,19 @@ func TestValidateSubscriptionTextFieldsRejectsUnboundedProviderFeatures(t *testi
 			name:   "responses hosted tool",
 			format: types.RelayFormatOpenAIResponses,
 			body:   `{"input":"hello","tools":[{"type":"web_search_preview"}]}`,
+			valid:  true,
+		},
+		{
+			name:   "responses hosted search replay",
+			format: types.RelayFormatOpenAIResponses,
+			body:   `{"input":[{"type":"message","role":"user","content":"weather?"},{"type":"web_search_call","id":"ws_1","status":"completed","action":{"type":"search","query":"weather"}}],"tools":[{"type":"web_search"}]}`,
+			valid:  true,
+		},
+		{
+			name:   "responses hosted code interpreter replay",
+			format: types.RelayFormatOpenAIResponses,
+			body:   `{"input":[{"type":"message","role":"user","content":"run python"},{"type":"code_interpreter_call","id":"ci_1","status":"completed","code":"print(1)"}],"tools":[{"type":"code_interpreter","container":{"type":"auto"}}]}`,
+			valid:  true,
 		},
 		{
 			name:   "responses client function",
@@ -200,6 +228,7 @@ func TestValidateSubscriptionTextFieldsRejectsUnboundedProviderFeatures(t *testi
 			name:   "responses remote mcp replay",
 			format: types.RelayFormatOpenAIResponses,
 			body:   `{"input":[{"type":"mcp_call","call_id":"call_3","name":"lookup","server_label":"example"}],"tools":[{"type":"function","name":"lookup","parameters":{"type":"object"}}]}`,
+			valid:  true,
 		},
 		{
 			name:   "responses text input and reasoning",
@@ -239,6 +268,18 @@ func TestValidateSubscriptionTextFieldsRejectsUnboundedProviderFeatures(t *testi
 			body:   `{"messages":[{"role":"user","content":[{"type":"text","text":"hello","cache_control":{"type":"ephemeral"}}]}]}`,
 		},
 		{
+			name:   "claude hosted web search",
+			format: types.RelayFormatClaude,
+			body:   `{"messages":[{"role":"user","content":"weather?"}],"tools":[{"type":"web_search_20250305","name":"web_search","max_uses":5}]}`,
+			valid:  true,
+		},
+		{
+			name:   "claude hosted web search replay",
+			format: types.RelayFormatClaude,
+			body:   `{"messages":[{"role":"user","content":"weather?"},{"role":"assistant","content":[{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{"query":"weather"}},{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[{"type":"web_search_result","url":"https://example.com","title":"Weather"}]}]}]}`,
+			valid:  true,
+		},
+		{
 			name:   "gemini bounded thinking budget",
 			format: types.RelayFormatGemini,
 			body:   `{"contents":[{"parts":[{"text":"hello"}]}],"generationConfig":{"thinkingConfig":{"thinkingBudget":2048}}}`,
@@ -271,6 +312,15 @@ func TestValidateSubscriptionTextFieldsRejectsUnboundedProviderFeatures(t *testi
 			assert.Error(t, err)
 		})
 	}
+}
+
+func TestSubscriptionRequestLimitAllowsHostedTools(t *testing.T) {
+	limit, err := subscriptionRequestLimit(&dto.GeneralOpenAIRequest{
+		Model:            "gpt-test",
+		WebSearchOptions: &dto.WebSearchOptions{SearchContextSize: "medium"},
+	}, 4096)
+	require.NoError(t, err)
+	assert.EqualValues(t, 4096, limit)
 }
 
 func TestUpdateSubscriptionPriceBudgetIncludesOtherRatios(t *testing.T) {
