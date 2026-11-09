@@ -1144,6 +1144,13 @@ func (r *OpenAIResponsesRequest) GetTokenCountMeta() *types.TokenCountMeta {
 						Source:   types.NewFileSourceFromData(input.ImageUrl, ""),
 						Detail:   input.Detail,
 					})
+				} else if input.FileID != "" {
+					// An uploaded image reference has no local payload to measure;
+					// reserve the generic file-token estimate and settle on usage.
+					fileMeta = append(fileMeta, &types.FileMeta{
+						FileType: types.FileTypeFile,
+						Source:   types.NewFileSourceFromData(input.FileID, ""),
+					})
 				}
 			} else if input.Type == "input_file" {
 				if input.FileUrl != "" {
@@ -1234,6 +1241,7 @@ type MediaInput struct {
 	Type     string `json:"type"`
 	Text     string `json:"text,omitempty"`
 	FileUrl  string `json:"file_url,omitempty"`
+	FileID   string `json:"file_id,omitempty"`
 	ImageUrl string `json:"image_url,omitempty"`
 	Detail   string `json:"detail,omitempty"` // 仅 input_image 有效
 }
@@ -1322,9 +1330,11 @@ func (r *OpenAIResponsesRequest) ParseInput() []MediaInput {
 								imageUrl = url
 							}
 						}
-						mediaInputs = append(mediaInputs, MediaInput{Type: "input_image", ImageUrl: imageUrl})
+						fileID, _ := item["file_id"].(string)
+						mediaInputs = append(mediaInputs, MediaInput{Type: "input_image", ImageUrl: imageUrl, FileID: fileID})
 					case "input_file":
-						// file_url may be string or object with url field
+						// file_url may be string or object with url field; inline
+						// file_data and uploaded file_id are also valid sources.
 						var fileUrl string
 						switch v := item["file_url"].(type) {
 						case string:
@@ -1334,7 +1344,14 @@ func (r *OpenAIResponsesRequest) ParseInput() []MediaInput {
 								fileUrl = url
 							}
 						}
-						mediaInputs = append(mediaInputs, MediaInput{Type: "input_file", FileUrl: fileUrl})
+						fileID, _ := item["file_id"].(string)
+						if fileUrl == "" {
+							fileUrl, _ = item["file_data"].(string)
+						}
+						if fileUrl == "" {
+							fileUrl = fileID
+						}
+						mediaInputs = append(mediaInputs, MediaInput{Type: "input_file", FileUrl: fileUrl, FileID: fileID})
 					}
 				}
 			}

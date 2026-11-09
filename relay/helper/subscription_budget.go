@@ -177,15 +177,13 @@ func subscriptionRequestLimit(request dto.Request, limit int) (uint, error) {
 		}
 		cap = min(cap, *value)
 	}
-	if len(request.GetTokenCountMeta().Files) > 0 {
-		return 0, errors.New("subscription requests support text inputs only")
-	}
 	return cap, nil
 }
 
 // ApplySubscriptionRequestLimits sets the actual output limit on supported
-// text DTOs. Media inputs and provider features that change the price remain
-// rejected; hosted tools are billed by token usage or the tool surcharge.
+// text DTOs. Provider features that change the price remain rejected; media
+// inputs are counted as prompt tokens and hosted tools are billed by token
+// usage or the tool surcharge.
 func ApplySubscriptionRequestLimits(request dto.Request, limit int) (int, error) {
 	cap, err := subscriptionRequestLimit(request, limit)
 	if err != nil {
@@ -405,9 +403,19 @@ func FinalizeSubscriptionRequestBudget(c *gin.Context, info *relaycommon.RelayIn
 	if err != nil {
 		return nil, err
 	}
-	// UTF-8 bytes conservatively bound the tokens in supported text payloads,
-	// including system prompts and function schemas inserted by converters.
-	info.SubscriptionInputBudget = max(info.SubscriptionInputBudget, len(encoded))
+	// UTF-8 bytes conservatively bound text tokens, but base64 media makes the
+	// encoded byte length far larger than its prompt-token cost. Count media
+	// requests from their token metadata so a small image does not exhaust a
+	// rolling quota window during the initial reservation.
+	if meta := request.GetTokenCountMeta(); len(meta.Files) > 0 {
+		tokens, err := service.EstimateRequestToken(c, meta, info)
+		if err != nil {
+			return nil, err
+		}
+		info.SubscriptionInputBudget = max(info.GetEstimatePromptTokens(), tokens)
+	} else {
+		info.SubscriptionInputBudget = max(info.SubscriptionInputBudget, len(encoded))
+	}
 	if err := UpdateSubscriptionPriceBudget(info); err != nil {
 		return nil, err
 	}
@@ -819,8 +827,34 @@ func validateOpenAIChatMessageContent(raw json.RawMessage) error {
 				}
 				return fmt.Errorf("subscription chat content does not support %q", key)
 			}
+		case "image_url":
+			if !subscriptionJSONFieldHasValue(part["image_url"]) {
+				return errors.New("subscription image content requires image_url")
+			}
+		case "input_image":
+			if !subscriptionJSONFieldHasValue(part["image_url"]) &&
+				!subscriptionJSONFieldHasValue(part["file_id"]) &&
+				!subscriptionJSONFieldHasValue(part["file_url"]) {
+				return errors.New("subscription input image requires image_url, file_id or file_url")
+			}
+		case "input_file", "file":
+			if !subscriptionJSONFieldHasValue(part["file"]) &&
+				!subscriptionJSONFieldHasValue(part["file_id"]) &&
+				!subscriptionJSONFieldHasValue(part["file_data"]) &&
+				!subscriptionJSONFieldHasValue(part["file_url"]) {
+				return errors.New("subscription file content requires a file source")
+			}
+		case "input_audio", "audio":
+			if !subscriptionJSONFieldHasValue(part["input_audio"]) &&
+				!subscriptionJSONFieldHasValue(part["audio"]) {
+				return errors.New("subscription audio content requires an audio source")
+			}
+		case "video_url":
+			if !subscriptionJSONFieldHasValue(part["video_url"]) {
+				return errors.New("subscription video content requires video_url")
+			}
 		default:
-			return errors.New("subscription requests support text-only chat content")
+			return errors.New("subscription requests support text and media chat content only")
 		}
 	}
 	return nil
@@ -886,6 +920,27 @@ func validateOpenAIResponsesInput(fields map[string]json.RawMessage) error {
 		case "message":
 			if err := validateOpenAIChatMessageContent(item["content"]); err != nil {
 				return err
+			}
+		case "input_text", "output_text":
+			if err := validateOpenAIResponsesTextField(item["text"]); err != nil {
+				return err
+			}
+		case "input_image":
+			if !subscriptionJSONFieldHasValue(item["image_url"]) &&
+				!subscriptionJSONFieldHasValue(item["file_id"]) &&
+				!subscriptionJSONFieldHasValue(item["file_url"]) {
+				return errors.New("subscription Responses input image requires image_url, file_id or file_url")
+			}
+		case "input_file":
+			if !subscriptionJSONFieldHasValue(item["file_id"]) &&
+				!subscriptionJSONFieldHasValue(item["file_data"]) &&
+				!subscriptionJSONFieldHasValue(item["file_url"]) {
+				return errors.New("subscription Responses input file requires a file source")
+			}
+		case "input_audio":
+			if !subscriptionJSONFieldHasValue(item["input_audio"]) &&
+				!subscriptionJSONFieldHasValue(item["audio"]) {
+				return errors.New("subscription Responses input audio requires an audio source")
 			}
 		case "function_call":
 			if err := validateOpenAIResponsesTextField(item["arguments"]); err != nil {
@@ -1049,6 +1104,13 @@ func validateClaudeTextContent(raw json.RawMessage) error {
 			if _, ok := block["cache_control"]; ok {
 				return errors.New("subscription requests do not support Claude prompt caching controls")
 			}
+		case "image", "document":
+			if _, ok := block["cache_control"]; ok {
+				return errors.New("subscription requests do not support Claude prompt caching controls")
+			}
+			if !subscriptionJSONFieldHasValue(block["source"]) {
+				return fmt.Errorf("subscription Claude %s content requires a source", blockType)
+			}
 		case "tool_result":
 			if _, ok := block["cache_control"]; ok {
 				return errors.New("subscription requests do not support Claude prompt caching controls")
@@ -1146,6 +1208,7 @@ func validateGeminiSubscriptionFields(fields map[string]json.RawMessage, outputL
 			"responseLogprobs", "response_logprobs", "logprobs",
 			"enableEnhancedCivicAnswers", "enable_enhanced_civic_answers",
 			"mediaResolution", "media_resolution", "seed",
+			"mediaProcessing", "media_processing",
 			"responseModalities", "response_modalities", "thinkingConfig", "thinking_config":
 			if !subscriptionJSONFieldHasValue(raw) {
 				continue
@@ -1159,8 +1222,6 @@ func validateGeminiSubscriptionFields(fields map[string]json.RawMessage, outputL
 		"speech_config",
 		"imageConfig",
 		"image_config",
-		"mediaProcessing",
-		"media_processing",
 	} {
 		if subscriptionJSONFieldHasValue(config[key]) {
 			return fmt.Errorf("subscription Gemini text requests do not support %q", key)
@@ -1252,7 +1313,10 @@ func validateGeminiSubscriptionParts(parts []map[string]json.RawMessage) error {
 			switch key {
 			case "text", "thought", "thoughtSignature", "thought_signature",
 				"functionCall", "function_call", "functionResponse", "function_response",
-				"mediaResolution", "media_resolution":
+				"mediaResolution", "media_resolution", "mediaProcessing", "media_processing",
+				"inlineData", "inline_data", "fileData", "file_data",
+				"videoMetadata", "video_metadata", "executableCode", "executable_code",
+				"codeExecutionResult", "code_execution_result":
 				continue
 			default:
 				if !subscriptionJSONFieldHasValue(value) {

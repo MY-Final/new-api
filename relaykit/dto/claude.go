@@ -311,10 +311,14 @@ func (c *ClaudeRequest) GetTokenCountMeta() *types.TokenCountMeta {
 				switch media.Type {
 				case "text":
 					texts = append(texts, media.GetText())
-				case "image":
+				case "image", "document":
 					if source := media.ToFileSource(); source != nil {
+						fileType := types.FileTypeFile
+						if media.Type == "image" {
+							fileType = types.FileTypeImage
+						}
 						fileMeta = append(fileMeta, &types.FileMeta{
-							FileType: types.FileTypeImage,
+							FileType: fileType,
 							Source:   source,
 						})
 					}
@@ -340,10 +344,14 @@ func (c *ClaudeRequest) GetTokenCountMeta() *types.TokenCountMeta {
 			switch media.Type {
 			case "text":
 				texts = append(texts, media.GetText())
-			case "image":
+			case "image", "document":
 				if source := media.ToFileSource(); source != nil {
+					fileType := types.FileTypeFile
+					if media.Type == "image" {
+						fileType = types.FileTypeImage
+					}
 					fileMeta = append(fileMeta, &types.FileMeta{
-						FileType: types.FileTypeImage,
+						FileType: fileType,
 						Source:   source,
 					})
 				}

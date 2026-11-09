@@ -63,6 +63,13 @@ func TestValidateSubscriptionTextFieldsRejectsUnboundedProviderFeatures(t *testi
 			name:   "gemini inline media",
 			format: types.RelayFormatGemini,
 			body:   `{"contents":[{"parts":[{"inlineData":{"mimeType":"image/png","data":"AA=="}}]}]}`,
+			valid:  true,
+		},
+		{
+			name:   "gemini file media",
+			format: types.RelayFormatGemini,
+			body:   `{"contents":[{"parts":[{"fileData":{"mimeType":"application/pdf","fileUri":"https://example.com/a.pdf"}}]}]}`,
+			valid:  true,
 		},
 		{
 			name:   "claude mcp server",
@@ -137,6 +144,19 @@ func TestValidateSubscriptionTextFieldsRejectsUnboundedProviderFeatures(t *testi
 			name:   "openai image content",
 			format: types.RelayFormatOpenAI,
 			body:   `{"messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"https://example.com/image.png"}}]}]}`,
+			valid:  true,
+		},
+		{
+			name:   "openai file content",
+			format: types.RelayFormatOpenAI,
+			body:   `{"messages":[{"role":"user","content":[{"type":"file","file":{"filename":"a.pdf","file_data":"data:application/pdf;base64,AA=="}}]}]}`,
+			valid:  true,
+		},
+		{
+			name:   "openai audio content",
+			format: types.RelayFormatOpenAI,
+			body:   `{"messages":[{"role":"user","content":[{"type":"input_audio","input_audio":{"data":"AA==","format":"wav"}}]}]}`,
+			valid:  true,
 		},
 		{
 			name:   "openai top level text",
@@ -240,6 +260,19 @@ func TestValidateSubscriptionTextFieldsRejectsUnboundedProviderFeatures(t *testi
 			name:   "responses input image",
 			format: types.RelayFormatOpenAIResponses,
 			body:   `{"input":[{"type":"message","role":"user","content":[{"type":"input_image","image_url":"https://example.com/image.png"}]}]}`,
+			valid:  true,
+		},
+		{
+			name:   "responses top level input image",
+			format: types.RelayFormatOpenAIResponses,
+			body:   `{"input":[{"type":"input_image","image_url":"https://example.com/image.png"}]}`,
+			valid:  true,
+		},
+		{
+			name:   "responses input file",
+			format: types.RelayFormatOpenAIResponses,
+			body:   `{"input":[{"type":"message","role":"user","content":[{"type":"input_file","file_data":"data:application/pdf;base64,AA==","filename":"a.pdf"}]}]}`,
+			valid:  true,
 		},
 		{
 			name:   "responses unknown reasoning extension",
@@ -266,6 +299,18 @@ func TestValidateSubscriptionTextFieldsRejectsUnboundedProviderFeatures(t *testi
 			name:   "claude prompt cache control",
 			format: types.RelayFormatClaude,
 			body:   `{"messages":[{"role":"user","content":[{"type":"text","text":"hello","cache_control":{"type":"ephemeral"}}]}]}`,
+		},
+		{
+			name:   "claude image input",
+			format: types.RelayFormatClaude,
+			body:   `{"messages":[{"role":"user","content":[{"type":"image","source":{"type":"url","url":"https://example.com/image.png"}}]}]}`,
+			valid:  true,
+		},
+		{
+			name:   "claude document input",
+			format: types.RelayFormatClaude,
+			body:   `{"messages":[{"role":"user","content":[{"type":"document","source":{"type":"base64","media_type":"application/pdf","data":"AA=="}}]}]}`,
+			valid:  true,
 		},
 		{
 			name:   "claude hosted web search",
@@ -314,10 +359,17 @@ func TestValidateSubscriptionTextFieldsRejectsUnboundedProviderFeatures(t *testi
 	}
 }
 
-func TestSubscriptionRequestLimitAllowsHostedTools(t *testing.T) {
+func TestSubscriptionRequestLimitAllowsHostedToolsAndMedia(t *testing.T) {
 	limit, err := subscriptionRequestLimit(&dto.GeneralOpenAIRequest{
 		Model:            "gpt-test",
 		WebSearchOptions: &dto.WebSearchOptions{SearchContextSize: "medium"},
+	}, 4096)
+	require.NoError(t, err)
+	assert.EqualValues(t, 4096, limit)
+
+	limit, err = subscriptionRequestLimit(&dto.OpenAIResponsesRequest{
+		Model: "gpt-test",
+		Input: json.RawMessage(`[{"type":"message","role":"user","content":[{"type":"input_image","image_url":"https://example.com/image.png"}]}]`),
 	}, 4096)
 	require.NoError(t, err)
 	assert.EqualValues(t, 4096, limit)
