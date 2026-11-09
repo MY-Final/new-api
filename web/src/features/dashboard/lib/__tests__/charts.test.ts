@@ -170,6 +170,7 @@ describe('operations analytics', () => {
         quota: 20,
         count: 1,
         token_used: 40,
+        billing_source: 'subscription',
       },
       {
         created_at: first,
@@ -177,6 +178,7 @@ describe('operations analytics', () => {
         quota: 10,
         count: 2,
         token_used: 30,
+        billing_source: 'wallet',
       },
       {
         created_at: first,
@@ -184,13 +186,23 @@ describe('operations analytics', () => {
         quota: 30,
         count: 3,
         token_used: 50,
+        billing_source: 'wallet',
       },
     ]
     const analytics = buildDashboardAnalytics(data, 'hour', range)
-    expect(analytics.summary).toEqual({ quota: 60, count: 6, tokens: 120 })
+    expect(analytics.summary).toEqual({
+      quota: 60,
+      walletQuota: 40,
+      subscriptionQuota: 20,
+      count: 6,
+      tokens: 120,
+    })
+    expect(analytics.unknownQuota).toBe(0)
     expect(analytics.models.find((model) => model.model === 'b')).toEqual({
       model: 'b',
       quota: 50,
+      walletQuota: 30,
+      subscriptionQuota: 20,
       count: 4,
       tokens: 90,
     })
@@ -211,7 +223,29 @@ describe('operations analytics', () => {
       end: new Date('2026-10-11T00:00:00'),
     })
     expect(result.models).toEqual([])
-    expect(result.summary).toEqual({ quota: 0, count: 0, tokens: 0 })
+    expect(result.unknownQuota).toBe(0)
+    expect(result.summary).toEqual({
+      quota: 0,
+      walletQuota: 0,
+      subscriptionQuota: 0,
+      count: 0,
+      tokens: 0,
+    })
     expect(result.timeline.map((point) => point.quota)).toEqual([0, 0])
+  })
+
+  test('keeps historical usage without a billing source unclassified', () => {
+    const result = buildDashboardAnalytics(
+      [{ created_at: 1791590400, quota: 75 }],
+      'day',
+      {
+        start: new Date('2026-10-10T00:00:00'),
+        end: new Date('2026-10-11T00:00:00'),
+      }
+    )
+    expect(result.summary.quota).toBe(75)
+    expect(result.summary.walletQuota).toBe(0)
+    expect(result.summary.subscriptionQuota).toBe(0)
+    expect(result.unknownQuota).toBe(75)
   })
 })

@@ -27,6 +27,7 @@ export interface QuotaDataItem {
   user_id?: number
   username?: string
   model_name?: string
+  billing_source?: string
   created_at: number
   cache_read_tokens?: number
   cache_creation_tokens?: number
@@ -199,6 +200,8 @@ export type DashboardMetric = 'quota' | 'count' | 'tokens'
 
 export interface DashboardMetricStats {
   quota: number
+  walletQuota: number
+  subscriptionQuota: number
   count: number
   tokens: number
 }
@@ -213,6 +216,7 @@ export interface DashboardTimeStats extends DashboardMetricStats {
 
 export interface DashboardAnalytics {
   summary: DashboardMetricStats
+  unknownQuota: number
   models: DashboardModelStats[]
   timeline: DashboardTimeStats[]
 }

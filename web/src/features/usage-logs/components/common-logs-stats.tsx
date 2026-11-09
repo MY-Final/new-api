@@ -95,6 +95,29 @@ export function CommonLogsStats() {
         accent='bg-sky-500/70'
       />
       <StatBadge
+        label={t('Wallet')}
+        value={
+          sensitiveVisible ? formatLogQuota(stats?.wallet_quota || 0) : '••••'
+        }
+        accent='bg-emerald-500/70'
+      />
+      <StatBadge
+        label={t('Subscription')}
+        value={
+          sensitiveVisible
+            ? formatLogQuota(stats?.subscription_quota || 0)
+            : '••••'
+        }
+        accent='bg-violet-500/70'
+      />
+      <StatBadge
+        label={t('Unknown')}
+        value={
+          sensitiveVisible ? formatLogQuota(stats?.unknown_quota || 0) : '••••'
+        }
+        accent='bg-amber-500/70'
+      />
+      <StatBadge
         label={t('RPM')}
         value={stats?.rpm || 0}
         accent='bg-rose-500/65'

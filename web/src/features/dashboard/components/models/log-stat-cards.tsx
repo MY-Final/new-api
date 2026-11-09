@@ -123,6 +123,13 @@ export function LogStatCards(props: LogStatCardsProps) {
             ) : undefined
           }
         />
+        {item.key === 'quota' && !props.loading && !props.error && (
+          <div className='text-muted-foreground mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums'>
+            <span>{t('Wallet')}: {formatQuota(props.data.summary.walletQuota)}</span>
+            <span>{t('Subscription')}: {formatQuota(props.data.summary.subscriptionQuota)}</span>
+            <span>{t('Unknown')}: {formatQuota(props.data.unknownQuota)}</span>
+          </div>
+        )}
       </section>
     )
   })

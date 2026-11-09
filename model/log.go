@@ -337,6 +337,14 @@ type RecordConsumeLogParams struct {
 	Other            *LogOther         `json:"other"`
 }
 
+func logOtherBillingSource(other *LogOther) string {
+	if other == nil {
+		return ""
+	}
+	source, _ := other.public["billing_source"].(string)
+	return source
+}
+
 func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams) {
 	if value, exists := c.Get(RequestBillingContextKey); exists {
 		c.Set(RequestBillingContextKey, nil)
@@ -418,6 +426,7 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 			TokenID:             params.TokenId,
 			ChannelID:           params.ChannelId,
 			NodeName:            common.NodeName,
+			BillingSource:       logOtherBillingSource(other),
 		})
 	}
 }
@@ -472,15 +481,16 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 			nodeName = common.NodeName
 		}
 		LogQuotaData(QuotaDataLogParams{
-			UserID:    params.UserId,
-			Username:  username,
-			ModelName: params.ModelName,
-			Quota:     params.Quota,
-			CreatedAt: createdAt,
-			UseGroup:  params.Group,
-			TokenID:   params.TokenId,
-			ChannelID: params.ChannelId,
-			NodeName:  nodeName,
+			UserID:        params.UserId,
+			Username:      username,
+			ModelName:     params.ModelName,
+			Quota:         params.Quota,
+			CreatedAt:     createdAt,
+			UseGroup:      params.Group,
+			TokenID:       params.TokenId,
+			ChannelID:     params.ChannelId,
+			NodeName:      nodeName,
+			BillingSource: logOtherBillingSource(other),
 		})
 	}
 }
@@ -693,13 +703,16 @@ func streamLogs(tx *gorm.DB, order string, fn func(*Log) error) error {
 }
 
 type Stat struct {
-	Quota int `json:"quota"`
-	Rpm   int `json:"rpm"`
-	Tpm   int `json:"tpm"`
+	Quota             int `json:"quota"`
+	WalletQuota       int `json:"wallet_quota"`
+	SubscriptionQuota int `json:"subscription_quota"`
+	UnknownQuota      int `json:"unknown_quota"`
+	Rpm               int `json:"rpm"`
+	Tpm               int `json:"tpm"`
 }
 
 func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string) (stat Stat, err error) {
-	tx := LOG_DB.Table("logs").Select("COALESCE(sum(quota), 0) quota")
+	tx := LOG_DB.Table("logs").Select("quota, other")
 
 	// 为rpm和tpm创建单独的查询
 	rpmTpmQuery := LOG_DB.Table("logs").Select("count(*) rpm, COALESCE(sum(prompt_tokens), 0) + COALESCE(sum(completion_tokens), 0) tpm")
@@ -741,10 +754,39 @@ func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelNa
 	// 只统计最近60秒的rpm和tpm
 	rpmTpmQuery = rpmTpmQuery.Where("created_at >= ?", time.Now().Add(-60*time.Second).Unix())
 
-	// 执行查询
-	if err := tx.Scan(&stat).Error; err != nil {
+	rows, err := tx.Rows()
+	if err != nil {
 		common.SysError(common.LogText("failed to query log stat: %s", err.Error()))
 		return stat, common.NewMessage("Failed to query statistics")
+	}
+	for rows.Next() {
+		var row struct {
+			Quota int
+			Other string
+		}
+		if err := LOG_DB.ScanRows(rows, &row); err != nil {
+			rows.Close()
+			return stat, err
+		}
+		var meta usageReportLogMeta
+		stat.Quota += row.Quota
+		if common.UnmarshalJsonStr(row.Other, &meta) != nil {
+			stat.UnknownQuota += row.Quota
+			continue
+		}
+		switch meta.BillingSource {
+		case "wallet":
+			stat.WalletQuota += row.Quota
+		case "subscription":
+			stat.SubscriptionQuota += row.Quota
+		default:
+			stat.UnknownQuota += row.Quota
+		}
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return stat, err
 	}
 	var rateStat struct {
 		Rpm int
@@ -756,7 +798,6 @@ func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelNa
 	}
 	stat.Rpm = rateStat.Rpm
 	stat.Tpm = rateStat.Tpm
-
 	return stat, nil
 }
 

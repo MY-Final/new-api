@@ -32,9 +32,16 @@ export function buildDashboardAnalytics(
   granularity: TimeGranularity,
   range: { start: Date; end: Date }
 ): DashboardAnalytics {
-  const summary: DashboardMetricStats = { quota: 0, count: 0, tokens: 0 }
+  const summary: DashboardMetricStats = {
+    quota: 0,
+    walletQuota: 0,
+    subscriptionQuota: 0,
+    count: 0,
+    tokens: 0,
+  }
   const models = new Map<string, DashboardModelStats>()
   const timeline = new Map<number, DashboardTimeStats>()
+  let unknownQuota = 0
   const start = dayjs(range.start).startOf(granularity)
   const end = dayjs(range.end).startOf(granularity)
   // Very long custom ranges keep their existing buckets rather than expanding
@@ -46,11 +53,19 @@ export function buildDashboardAnalytics(
       bucket = bucket.add(1, granularity)
     ) {
       const timestamp = bucket.unix()
-      timeline.set(timestamp, { timestamp, quota: 0, count: 0, tokens: 0 })
+      timeline.set(timestamp, {
+        timestamp,
+        quota: 0,
+        walletQuota: 0,
+        subscriptionQuota: 0,
+        count: 0,
+        tokens: 0,
+      })
     }
   }
   for (const item of data) {
     const model = item.model_name ?? ''
+    const isSubscription = item.billing_source === 'subscription'
     const metrics = {
       quota: Number(item.quota) || 0,
       count: Number(item.count) || 0,
@@ -59,6 +74,8 @@ export function buildDashboardAnalytics(
     const modelStats = models.get(model) ?? {
       model,
       quota: 0,
+      walletQuota: 0,
+      subscriptionQuota: 0,
       count: 0,
       tokens: 0,
     }
@@ -68,6 +85,8 @@ export function buildDashboardAnalytics(
     const bucket = timeline.get(timestamp) ?? {
       timestamp,
       quota: 0,
+      walletQuota: 0,
+      subscriptionQuota: 0,
       count: 0,
       tokens: 0,
     }
@@ -76,11 +95,23 @@ export function buildDashboardAnalytics(
       modelStats[metric] += metrics[metric]
       bucket[metric] += metrics[metric]
     }
+    if (isSubscription) {
+      summary.subscriptionQuota += metrics.quota
+      modelStats.subscriptionQuota += metrics.quota
+      bucket.subscriptionQuota += metrics.quota
+    } else if (item.billing_source === 'wallet') {
+      summary.walletQuota += metrics.quota
+      modelStats.walletQuota += metrics.quota
+      bucket.walletQuota += metrics.quota
+    } else {
+      unknownQuota += metrics.quota
+    }
     models.set(model, modelStats)
     timeline.set(timestamp, bucket)
   }
   return {
     summary,
+    unknownQuota,
     models: [...models.values()],
     timeline: [...timeline.values()].sort((a, b) => a.timestamp - b.timestamp),
   }

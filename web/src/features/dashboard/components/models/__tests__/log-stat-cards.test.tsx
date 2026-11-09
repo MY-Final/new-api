@@ -91,7 +91,13 @@ describe('operations summary cards', () => {
     render(
       <LogStatCards
         data={data}
-        previous={{ count: 5, quota: 50, tokens: 500 }}
+        previous={{
+          count: 5,
+          quota: 50,
+          walletQuota: 50,
+          subscriptionQuota: 0,
+          tokens: 500,
+        }}
         loading={false}
         error={false}
       />
@@ -104,11 +110,49 @@ describe('operations summary cards', () => {
     expect(screen.queryByText('Average TPM')).not.toBeInTheDocument()
   })
 
+  test('splits the consumption card into wallet and subscription totals', () => {
+    const split = buildDashboardAnalytics(
+      [
+        {
+          created_at: 1735689600,
+          model_name: 'model-a',
+          billing_source: 'wallet',
+          count: 1,
+          quota: 500000,
+          token_used: 100,
+        },
+        {
+          created_at: 1735689600,
+          model_name: 'model-a',
+          billing_source: 'subscription',
+          count: 1,
+          quota: 1000000,
+          token_used: 100,
+        },
+      ],
+      'hour',
+      { start: new Date(1735689600000), end: new Date(1735693200000) }
+    )
+    render(<LogStatCards data={split} loading={false} error={false} />)
+    const card = screen.getByRole('region', {
+      name: 'User quota consumption',
+    })
+    expect(within(card).getByText('Wallet: $1')).toBeVisible()
+    expect(within(card).getByText('Subscription: $2')).toBeVisible()
+    expect(within(card).getByText('Unknown: $0')).toBeVisible()
+  })
+
   test('omits growth when the previous period has no usage', () => {
     render(
       <LogStatCards
         data={data}
-        previous={{ count: 0, quota: 0, tokens: 0 }}
+        previous={{
+          count: 0,
+          quota: 0,
+          walletQuota: 0,
+          subscriptionQuota: 0,
+          tokens: 0,
+        }}
         loading={false}
         error={false}
       />
@@ -135,7 +179,13 @@ test('long translated metric titles can shrink beside their comparison and keep 
     render(
       <LogStatCards
         data={data}
-        previous={{ count: 5, quota: 50, tokens: 500 }}
+        previous={{
+          count: 5,
+          quota: 50,
+          walletQuota: 50,
+          subscriptionQuota: 0,
+          tokens: 500,
+        }}
         loading={false}
         error={false}
       />
