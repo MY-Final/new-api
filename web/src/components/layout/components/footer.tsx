@@ -21,6 +21,7 @@ import { ArrowUpRight } from 'lucide-react'
 import { Fragment } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { useContactSettings } from '@/features/contact/use-contact-settings'
 import { useStatus } from '@/hooks/use-status'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { cn } from '@/lib/utils'
@@ -154,6 +155,47 @@ function ProjectSource() {
   )
 }
 
+function ContactInfo() {
+  const { t } = useTranslation()
+  const { qqGroupNumber, qqGroupURL } = useContactSettings()
+
+  return (
+    <div>
+      <p className='text-muted-foreground mb-4 text-[10px] font-black tracking-[0.2em] uppercase'>
+        {t('Contact Us')}
+      </p>
+      <ul className='space-y-3'>
+        <li>
+          <Link
+            to='/contact'
+            className='text-muted-foreground hover:text-foreground text-sm transition-colors duration-200'
+          >
+            {t('Contact Us')}
+          </Link>
+        </li>
+        {qqGroupNumber ? (
+          <li className='text-muted-foreground text-sm'>
+            {t('QQ Group Number')}:{' '}
+            <span className='text-foreground font-mono'>{qqGroupNumber}</span>
+          </li>
+        ) : null}
+        {qqGroupURL ? (
+          <li>
+            <a
+              href={qqGroupURL}
+              target='_blank'
+              rel='noopener noreferrer'
+              className='text-muted-foreground hover:text-foreground text-sm transition-colors duration-200'
+            >
+              {t('Join QQ Group')}
+            </a>
+          </li>
+        ) : null}
+      </ul>
+    </div>
+  )
+}
+
 export function Footer(props: FooterProps) {
   const { t } = useTranslation()
   const { footerHtml } = useSystemConfig()
@@ -216,6 +258,7 @@ export function Footer(props: FooterProps) {
                 className='custom-footer text-muted-foreground text-sm leading-6'
                 dangerouslySetInnerHTML={{ __html: footerHtml }}
               />
+              <ContactInfo />
               <ProjectSource />
             </div>
           ) : (
@@ -239,6 +282,7 @@ export function Footer(props: FooterProps) {
                   </div>
                 ))}
               </nav>
+              <ContactInfo />
               <ProjectSource />
             </div>
           )}

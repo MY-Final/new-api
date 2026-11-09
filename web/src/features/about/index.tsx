@@ -17,7 +17,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { PublicLayout } from '@/components/layout'
-import { Footer } from '@/components/layout/components/footer'
 
 import { KunCodeAboutPage } from './kuncode-about-page'
 
@@ -25,7 +24,6 @@ export function About() {
   return (
     <PublicLayout showMainContainer={false}>
       <KunCodeAboutPage />
-      <Footer />
     </PublicLayout>
   )
 }

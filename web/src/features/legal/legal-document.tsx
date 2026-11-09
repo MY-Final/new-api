@@ -123,7 +123,10 @@ export function LegalDocument({
   }
 
   return (
-    <PublicLayout showMainContainer={!contentIsHtml}>
+    <PublicLayout
+      showMainContainer={!contentIsHtml}
+      showFooter={!contentIsHtml}
+    >
       {contentIsHtml ? (
         <RichContent mode='html' htmlVariant='isolated' content={rawContent} />
       ) : (

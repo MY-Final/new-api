@@ -20,6 +20,7 @@ import { Link } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 
 import { Skeleton } from '@/components/ui/skeleton'
+import { useContactSettings } from '@/features/contact/use-contact-settings'
 import { useSystemConfig } from '@/hooks/use-system-config'
 
 type AuthLayoutProps = {
@@ -29,6 +30,7 @@ type AuthLayoutProps = {
 export function AuthLayout({ children }: AuthLayoutProps) {
   const { t } = useTranslation()
   const { systemName, logo, loading } = useSystemConfig()
+  const { qqGroupNumber, qqGroupURL } = useContactSettings()
 
   return (
     <div className='relative grid h-svh max-w-none'>
@@ -56,6 +58,33 @@ export function AuthLayout({ children }: AuthLayoutProps) {
       <div className='container flex items-center pt-16 sm:pt-0'>
         <div className='mx-auto flex w-full flex-col justify-center space-y-2 px-4 py-8 sm:w-[480px] sm:p-8'>
           {children}
+          <div className='text-muted-foreground flex flex-wrap items-center justify-center gap-x-2 gap-y-1 pt-2 text-center text-xs'>
+            <span>{t('Contact Us')}:</span>
+            <Link
+              to='/contact'
+              className='hover:text-foreground underline underline-offset-4'
+            >
+              {t('Contact Us')}
+            </Link>
+            {qqGroupNumber ? (
+              <span>
+                {t('QQ Group Number')}:{' '}
+                <span className='text-foreground font-mono'>
+                  {qqGroupNumber}
+                </span>
+              </span>
+            ) : null}
+            {qqGroupURL ? (
+              <a
+                href={qqGroupURL}
+                target='_blank'
+                rel='noopener noreferrer'
+                className='hover:text-foreground underline underline-offset-4'
+              >
+                {t('Join QQ Group')}
+              </a>
+            ) : null}
+          </div>
         </div>
       </div>
     </div>

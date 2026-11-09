@@ -17,7 +17,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { PublicLayout } from '@/components/layout'
-import { Footer } from '@/components/layout/components/footer'
 import { useStatus } from '@/hooks/use-status'
 
 import { KunCodeHomePage } from './components'
@@ -42,7 +41,6 @@ export function Home() {
         apiBaseUrl={apiBaseUrl}
         freeGroupUsage={freeGroupUsageState}
       />
-      <Footer />
     </PublicLayout>
   )
 }

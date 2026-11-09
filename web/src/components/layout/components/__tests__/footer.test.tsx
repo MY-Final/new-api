@@ -39,7 +39,32 @@ vi.mock('@/hooks/use-status', () => ({
   }),
 }))
 
-afterEach(cleanup)
+const contactSettings = vi.hoisted(() => ({
+  current: {
+    title: 'Contact Us',
+    description: '',
+    qqGroupNumber: '',
+    qqGroupURL: '',
+    qrcodeSrc: '',
+    configured: false,
+  },
+}))
+
+vi.mock('@/features/contact/use-contact-settings', () => ({
+  useContactSettings: () => contactSettings.current,
+}))
+
+afterEach(() => {
+  cleanup()
+  contactSettings.current = {
+    title: 'Contact Us',
+    description: '',
+    qqGroupNumber: '',
+    qqGroupURL: '',
+    qrcodeSrc: '',
+    configured: false,
+  }
+})
 
 async function renderFooter() {
   const root = createRootRoute({
@@ -88,6 +113,32 @@ describe('Footer', () => {
     expect(screen.getByRole('link', { name: 'About' })).toHaveAttribute(
       'href',
       '/about'
+    )
+  })
+
+  it('exposes a contact entry even when no contact details are configured', async () => {
+    await renderFooter()
+
+    expect(screen.getByRole('link', { name: 'Contact Us' })).toHaveAttribute(
+      'href',
+      '/contact'
+    )
+  })
+
+  it('shows the configured QQ group contact details', async () => {
+    contactSettings.current = {
+      ...contactSettings.current,
+      qqGroupNumber: '123456789',
+      qqGroupURL: 'https://example.com/qq',
+      configured: true,
+    }
+
+    await renderFooter()
+
+    expect(screen.getByText('123456789')).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Join QQ Group' })).toHaveAttribute(
+      'href',
+      'https://example.com/qq'
     )
   })
 })
