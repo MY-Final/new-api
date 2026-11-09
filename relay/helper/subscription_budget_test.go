@@ -179,6 +179,29 @@ func TestValidateSubscriptionTextFieldsRejectsUnboundedProviderFeatures(t *testi
 			valid:  true,
 		},
 		{
+			name:   "responses local shell tool",
+			format: types.RelayFormatOpenAIResponses,
+			body:   `{"input":"hello","tools":[{"type":"local_shell"}]}`,
+			valid:  true,
+		},
+		{
+			name:   "responses local shell replay",
+			format: types.RelayFormatOpenAIResponses,
+			body:   `{"input":[{"type":"message","role":"user","content":"run ls"},{"type":"local_shell_call","call_id":"call_1"},{"type":"local_shell_call_output","call_id":"call_1","output":"file.txt"}],"tools":[{"type":"local_shell"}]}`,
+			valid:  true,
+		},
+		{
+			name:   "responses apply patch replay",
+			format: types.RelayFormatOpenAIResponses,
+			body:   `{"input":[{"type":"message","role":"user","content":"patch it"},{"type":"apply_patch_call","call_id":"call_2"},{"type":"apply_patch_call_output","call_id":"call_2","output":"done"}],"tools":[{"type":"apply_patch"}]}`,
+			valid:  true,
+		},
+		{
+			name:   "responses remote mcp replay",
+			format: types.RelayFormatOpenAIResponses,
+			body:   `{"input":[{"type":"mcp_call","call_id":"call_3","name":"lookup","server_label":"example"}],"tools":[{"type":"function","name":"lookup","parameters":{"type":"object"}}]}`,
+		},
+		{
 			name:   "responses text input and reasoning",
 			format: types.RelayFormatOpenAIResponses,
 			body:   `{"input":"hello","reasoning":{"effort":"high","summary":"concise"}}`,

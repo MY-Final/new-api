@@ -531,7 +531,10 @@ func validateSubscriptionTextFields(format types.RelayFormat, fields map[string]
 				}
 			}
 			kind = strings.ToLower(strings.TrimSpace(kind))
-			if kind != "function" && kind != "custom" && !(format == types.RelayFormatClaude && kind == "") {
+			clientExecuted := format == types.RelayFormatOpenAIResponses &&
+				(kind == "local_shell" || kind == "apply_patch")
+			if kind != "function" && kind != "custom" && !clientExecuted &&
+				!(format == types.RelayFormatClaude && kind == "") {
 				return errors.New("subscription requests do not support hosted tools")
 			}
 		}
@@ -907,6 +910,7 @@ func validateOpenAIResponsesInput(fields map[string]json.RawMessage) error {
 			if err := validateOpenAIResponsesTextField(item["output"]); err != nil {
 				return err
 			}
+		case "local_shell_call", "local_shell_call_output", "apply_patch_call", "apply_patch_call_output":
 		case "reasoning":
 			for key, raw := range item {
 				if key == "type" || key == "id" || key == "summary" || key == "content" ||
