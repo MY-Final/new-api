@@ -16,17 +16,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import {
-  Loader2,
-  Link2,
-  UserRound,
-  UserRoundPlus,
-  WalletCards,
-} from 'lucide-react'
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Link2, UserRound, UserRoundPlus, WalletCards } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Dialog } from '@/components/dialog'
+import { ErrorState } from '@/components/error-state'
+import { LoadingState } from '@/components/loading-state'
 import { StatusBadge, type StatusVariant } from '@/components/status-badge'
 import { TableId } from '@/components/table-id'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -36,11 +33,14 @@ import {
   formatQuota,
   formatTimestampToDate,
 } from '@/lib/format'
-import { handleServerError } from '@/lib/handle-server-error'
 import { getRoleLabelKey } from '@/lib/roles'
+import {
+  getServerErrorMessage,
+  requireServerSuccess,
+} from '@/lib/server-error-message'
 
 import { getUserInfo } from '../../api'
-import type { UserInfo } from '../../types'
+import { UserInfoSubscriptions } from './user-info-subscriptions'
 
 interface UserInfoDialogProps {
   userId: number | null
@@ -83,34 +83,21 @@ export function UserInfoDialog({
   onOpenChange,
 }: UserInfoDialogProps) {
   const { t } = useTranslation()
-  const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-
-  const fetchUserInfo = useCallback(
-    async (id: number) => {
-      setIsLoading(true)
-      try {
-        const result = await getUserInfo(id)
-        if (result.success) {
-          setUserInfo(result.data || null)
-        } else {
-          handleServerError(result, t('Failed to fetch user information'))
-        }
-      } catch (error) {
-        handleServerError(error, t('Failed to fetch user information'))
-      } finally {
-        setIsLoading(false)
-      }
+  const userInfoQuery = useQuery({
+    queryKey: ['usage-logs', 'user-info', userId],
+    queryFn: async () => {
+      if (!userId) return null
+      return requireServerSuccess(await getUserInfo(userId)).data ?? null
     },
-    [t]
-  )
-
-  useEffect(() => {
-    if (open && userId) {
-      setUserInfo(null)
-      fetchUserInfo(userId)
-    }
-  }, [open, userId, fetchUserInfo])
+    enabled: open && userId != null && userId > 0,
+    refetchOnWindowFocus: false,
+    meta: { errorToast: false },
+  })
+  const isLoading = open && userInfoQuery.isFetching
+  const userInfo =
+    !isLoading && userInfoQuery.isSuccess && userInfoQuery.data?.id === userId
+      ? userInfoQuery.data
+      : null
 
   const inviterId = userInfo?.inviter_id ?? 0
   let statusLabel = t('Enabled')
@@ -145,11 +132,7 @@ export function UserInfoDialog({
       contentHeight='min(78dvh, 760px)'
       bodyClassName='space-y-4'
     >
-      {isLoading && (
-        <div className='flex items-center justify-center py-8'>
-          <Loader2 className='text-muted-foreground size-6 animate-spin' />
-        </div>
-      )}
+      {isLoading && <LoadingState className='min-h-0 py-8' size='md' />}
       {!isLoading && userInfo && (
         <div className='space-y-4'>
           <div className='bg-muted/40 flex flex-col items-start gap-3 rounded-xl border p-4 sm:flex-row sm:justify-between'>
@@ -191,6 +174,12 @@ export function UserInfoDialog({
                 <InfoItem label={t('Last Login')}>
                   {formatTimestampToDate(userInfo.last_login_at)}
                 </InfoItem>
+                <InfoItem label={t('Total Usage')}>
+                  {formatQuota(userInfo.used_quota)}
+                </InfoItem>
+                <InfoItem label={t('Request Count')}>
+                  {formatCompactNumber(userInfo.request_count)}
+                </InfoItem>
               </dl>
             </InfoCard>
 
@@ -202,9 +191,6 @@ export function UserInfoDialog({
                 <InfoItem label={t('Balance')}>
                   {formatQuota(userInfo.quota)}
                 </InfoItem>
-                <InfoItem label={t('Used Quota')}>
-                  {formatQuota(userInfo.used_quota)}
-                </InfoItem>
                 {userInfo.bonus_quota !== undefined && (
                   <InfoItem label={t('Bonus Balance')}>
                     {formatQuota(userInfo.bonus_quota)}
@@ -215,9 +201,6 @@ export function UserInfoDialog({
                     {formatQuota(userInfo.paid_quota)}
                   </InfoItem>
                 )}
-                <InfoItem label={t('Request Count')}>
-                  {formatCompactNumber(userInfo.request_count)}
-                </InfoItem>
                 <InfoItem label={t('User Group')}>
                   {userInfo.group || '-'}
                 </InfoItem>
@@ -231,6 +214,8 @@ export function UserInfoDialog({
               </dl>
             </InfoCard>
           </div>
+
+          <UserInfoSubscriptions user={userInfo} />
 
           <div className='grid gap-4 lg:grid-cols-2'>
             <InfoCard
@@ -297,7 +282,15 @@ export function UserInfoDialog({
           )}
         </div>
       )}
-      {!isLoading && !userInfo && (
+      {!isLoading && userInfoQuery.isError && (
+        <ErrorState
+          title={t('Failed to fetch user information')}
+          description={getServerErrorMessage(userInfoQuery.error)}
+          onRetry={() => void userInfoQuery.refetch()}
+          className='min-h-0 py-8'
+        />
+      )}
+      {!isLoading && !userInfo && !userInfoQuery.isError && (
         <div className='text-muted-foreground py-8 text-center text-sm'>
           {t('No user information available')}
         </div>
