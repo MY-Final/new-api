@@ -328,7 +328,9 @@ func enforceAccessTokenRoute(c *gin.Context, lookup *accessTokenLookup, abort bo
 	if lookup.token != nil && lookup.token.DesktopInstallationId != 0 {
 		if model.IsMagpieInstallation(lookup.installation) {
 			switch key {
-			case "GET /api/user/self", "GET /api/user/checkin", "POST /api/user/checkin", "POST /api/desktop/auth/logout":
+			case "GET /api/user/self", "GET /api/user/checkin", "POST /api/user/checkin",
+				"GET /api/subscription/self", "GET /api/subscription/plans",
+				"POST /api/desktop/auth/logout":
 				c.Set(magpieAccessTokenContextKey, true)
 			default:
 				if abort {

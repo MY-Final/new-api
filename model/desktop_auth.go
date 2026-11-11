@@ -48,7 +48,8 @@ func DesktopGrantedScopes() []string {
 }
 
 // MagpieGrantedScopes is intentionally narrower than the desktop grant. The
-// plugin only needs the account profile, wallet balance and daily check-in.
+// plugin only needs the account profile, wallet and subscription usage, and
+// daily check-in.
 func MagpieGrantedScopes() []string {
 	return []string{
 		"profile:read",

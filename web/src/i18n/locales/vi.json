@@ -4228,6 +4228,7 @@
     "m": "m",
     "Magpie authorization failed. Please try again.": "Ủy quyền Magpie thất bại. Vui lòng thử lại.",
     "Magpie can read your profile and wallet balance, and perform your daily check-in. It cannot change your account or model keys.": "Magpie có thể đọc hồ sơ và số dư ví của bạn, đồng thời thực hiện điểm danh hằng ngày. Nó không thể thay đổi tài khoản hoặc khóa mô hình.",
+    "Magpie can read your profile, wallet balance, and subscription usage, and perform your daily check-in. It cannot change your account or model keys.": "Magpie có thể đọc hồ sơ, số dư ví và mức sử dụng gói đăng ký của bạn, đồng thời thực hiện điểm danh hằng ngày. Nó không thể thay đổi tài khoản hoặc khóa mô hình.",
     "Main balance": "Số dư chính",
     "Maintenance": "Bảo trì",
     "Make extra groups visible to, or hide default groups from, users of a specific group.": "Hiển thị thêm nhóm cho người dùng của một nhóm cụ thể, hoặc ẩn các nhóm mặc định khỏi họ.",

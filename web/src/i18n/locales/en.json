@@ -4228,6 +4228,7 @@
     "m": "m",
     "Magpie authorization failed. Please try again.": "Magpie authorization failed. Please try again.",
     "Magpie can read your profile and wallet balance, and perform your daily check-in. It cannot change your account or model keys.": "Magpie can read your profile and wallet balance, and perform your daily check-in. It cannot change your account or model keys.",
+    "Magpie can read your profile, wallet balance, and subscription usage, and perform your daily check-in. It cannot change your account or model keys.": "Magpie can read your profile, wallet balance, and subscription usage, and perform your daily check-in. It cannot change your account or model keys.",
     "Main balance": "Main balance",
     "Maintenance": "Maintenance",
     "Make extra groups visible to, or hide default groups from, users of a specific group.": "Make extra groups visible to, or hide default groups from, users of a specific group.",

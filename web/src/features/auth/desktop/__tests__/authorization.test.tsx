@@ -101,7 +101,7 @@ it('shows Magpie-specific browser authorization details', async () => {
   ).toBeInTheDocument()
   expect(
     screen.getByText(
-      'Magpie can read your profile and wallet balance, and perform your daily check-in. It cannot change your account or model keys.'
+      'Magpie can read your profile, wallet balance, and subscription usage, and perform your daily check-in. It cannot change your account or model keys.'
     )
   ).toBeInTheDocument()
   expect(

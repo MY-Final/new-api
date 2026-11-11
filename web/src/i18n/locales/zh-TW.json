@@ -4228,6 +4228,7 @@
     "m": "分鐘",
     "Magpie authorization failed. Please try again.": "Magpie 授權失敗，請重試。",
     "Magpie can read your profile and wallet balance, and perform your daily check-in. It cannot change your account or model keys.": "Magpie 可讀取你的個人資料與錢包餘額，並執行每日簽到；無法修改帳戶或模型金鑰。",
+    "Magpie can read your profile, wallet balance, and subscription usage, and perform your daily check-in. It cannot change your account or model keys.": "Magpie 可讀取你的個人資料、錢包餘額與訂閱用量，並執行每日簽到；無法修改帳戶或模型金鑰。",
     "Main balance": "主餘額",
     "Maintenance": "維護",
     "Make extra groups visible to, or hide default groups from, users of a specific group.": "讓特定分組的用戶額外看到某些分組，或對其屏蔽預設可選的分組。",

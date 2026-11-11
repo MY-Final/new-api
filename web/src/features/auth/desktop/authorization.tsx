@@ -298,7 +298,7 @@ export function DesktopAuthorization(props: {
           <p className='text-muted-foreground text-sm'>
             {isMagpie
               ? t(
-                  'Magpie can read your profile and wallet balance, and perform your daily check-in. It cannot change your account or model keys.'
+                  'Magpie can read your profile, wallet balance, and subscription usage, and perform your daily check-in. It cannot change your account or model keys.'
                 )
               : t(
                   'Setup can read your profile and available models, manage your API keys, and configure only this desktop installation’s coding tools.'
