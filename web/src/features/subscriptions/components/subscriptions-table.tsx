@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { DataTablePage, useDataTable } from '@/components/data-table'
@@ -32,14 +32,21 @@ export function SubscriptionsTable() {
   const columns = useSubscriptionsColumns()
   const { refreshTrigger } = useSubscriptions()
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['admin-subscription-plans', refreshTrigger],
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['admin-subscription-plans'],
     queryFn: async () => {
       const result = requireServerSuccess(await getAdminPlans())
       return result.data || []
     },
-    placeholderData: (prev) => prev,
+    gcTime: 0,
+    refetchOnMount: 'always',
   })
+
+  useEffect(() => {
+    if (refreshTrigger > 0) {
+      void refetch()
+    }
+  }, [refreshTrigger, refetch])
 
   const plans = useMemo(() => data || [], [data])
 
