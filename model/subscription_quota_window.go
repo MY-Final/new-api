@@ -29,7 +29,10 @@ type SubscriptionQuotaWindow struct {
 type SubscriptionQuotaWindowUsage struct {
 	WindowSeconds int64 `json:"window_seconds"`
 	QuotaLimit    int64 `json:"quota_limit"`
+	// Used is settled usage. Reserved is held by requests still in progress,
+	// and Remaining is the quota left after settled usage.
 	Used          int64 `json:"used"`
+	Reserved      int64 `json:"reserved"`
 	Remaining     int64 `json:"remaining"`
 	NextReleaseAt int64 `json:"next_release_at"`
 	SortOrder     int   `json:"sort_order"`
@@ -316,19 +319,25 @@ func PopulateSubscriptionQuotaWindowUsage(subscription *UserSubscription, now in
 	usage := make([]SubscriptionQuotaWindowUsage, 0, len(rows))
 	for _, row := range rows {
 		cutoff := now - row.WindowSeconds
-		used, oldestAt, err := subscriptionUsageSinceTx(nil, subscription.Id, cutoff)
+		totalUsed, oldestAt, err := subscriptionUsageSinceTx(nil, subscription.Id, cutoff)
 		if err != nil {
 			return err
 		}
-		remaining := max(row.QuotaLimit-used, 0)
+		reserved, err := subscriptionReservedQuota(subscription.Id, cutoff)
+		if err != nil {
+			return err
+		}
+		settled := max(totalUsed-reserved, 0)
+		remaining := max(row.QuotaLimit-settled, 0)
 		nextReleaseAt := int64(0)
-		if used > 0 && oldestAt > 0 {
+		if totalUsed > 0 && oldestAt > 0 {
 			nextReleaseAt = oldestAt + row.WindowSeconds
 		}
 		usage = append(usage, SubscriptionQuotaWindowUsage{
 			WindowSeconds: row.WindowSeconds,
 			QuotaLimit:    row.QuotaLimit,
-			Used:          used,
+			Used:          settled,
+			Reserved:      reserved,
 			Remaining:     remaining,
 			NextReleaseAt: nextReleaseAt,
 			SortOrder:     row.SortOrder,

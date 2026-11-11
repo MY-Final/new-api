@@ -33,7 +33,7 @@ func TestGetSubscriptionOverviewAggregatesOrdersUsageAndActiveCapacity(t *testin
 		UpdateColumn("enabled", false).Error)
 
 	subscriptions := []UserSubscription{
-		{Id: 401, UserId: user.Id, PlanId: 301, AmountTotal: 0, AmountUsed: 76059, Status: "active", EndTime: now + 86400},
+		{Id: 401, UserId: user.Id, PlanId: 301, AmountTotal: 0, AmountUsed: 5060000, Status: "active", EndTime: now + 86400},
 		{Id: 402, UserId: user.Id, PlanId: 301, AmountTotal: 0, AmountUsed: 0, Status: "active", EndTime: now + 86400},
 		{Id: 403, UserId: user.Id, PlanId: 302, AmountTotal: 170000000, AmountUsed: 500000, Status: "expired", EndTime: now - 86400},
 	}
@@ -58,11 +58,12 @@ func TestGetSubscriptionOverviewAggregatesOrdersUsageAndActiveCapacity(t *testin
 	require.NoError(t, DB.Create(&orders).Error)
 
 	usage := []SubscriptionPreConsumeRecord{
-		{RequestId: "usage-1", UserId: user.Id, UserSubscriptionId: 401, UsageQuota: 10000},
-		{RequestId: "usage-2", UserId: user.Id, UserSubscriptionId: 401, UsageQuota: 20000},
-		{RequestId: "usage-3", UserId: user.Id, UserSubscriptionId: 401, UsageQuota: 30000},
-		{RequestId: "usage-refunded", UserId: user.Id, UserSubscriptionId: 401, UsageQuota: 99999, Status: SubscriptionUsageStatusRefunded},
-		{RequestId: "usage-old", UserId: user.Id, UserSubscriptionId: 401, UsageQuota: 40000},
+		{RequestId: "usage-1", UserId: user.Id, UserSubscriptionId: 401, UsageQuota: 10000, FinalizedAt: now - 50},
+		{RequestId: "usage-2", UserId: user.Id, UserSubscriptionId: 401, UsageQuota: 20000, FinalizedAt: now - 50},
+		{RequestId: "usage-3", UserId: user.Id, UserSubscriptionId: 401, UsageQuota: 30000, FinalizedAt: now - 50},
+		{RequestId: "usage-refunded", UserId: user.Id, UserSubscriptionId: 401, UsageQuota: 99999, Status: SubscriptionUsageStatusRefunded, FinalizedAt: now - 50},
+		{RequestId: "usage-old", UserId: user.Id, UserSubscriptionId: 401, UsageQuota: 40000, FinalizedAt: now - 50},
+		{RequestId: "usage-pending", UserId: user.Id, UserSubscriptionId: 401, UsageQuota: 5000000},
 	}
 	require.NoError(t, DB.Create(&usage).Error)
 	for i := range usage {
@@ -85,9 +86,10 @@ func TestGetSubscriptionOverviewAggregatesOrdersUsageAndActiveCapacity(t *testin
 	assert.InDelta(t, 59.982, overview.Summary.GrossProfit, 0.000001)
 	assert.Equal(t, int64(2), overview.Summary.ActiveSubscriptions)
 	assert.Equal(t, int64(150000000), overview.Summary.CapacityQuota)
-	assert.Equal(t, int64(76059), overview.Summary.UsedQuota)
-	assert.Equal(t, int64(149923941), overview.Summary.RemainingQuota)
-	assert.InDelta(t, 44.9771823, overview.Summary.RemainingCost, 0.0000001)
+	assert.Equal(t, int64(60000), overview.Summary.UsedQuota)
+	assert.Equal(t, int64(5000000), overview.Summary.ReservedQuota)
+	assert.Equal(t, int64(144940000), overview.Summary.RemainingQuota)
+	assert.InDelta(t, 43.482, overview.Summary.RemainingCost, 0.000001)
 
 	require.Len(t, overview.Plans, 2)
 	lite := overview.Plans[0]

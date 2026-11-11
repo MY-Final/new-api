@@ -43,14 +43,32 @@ func seedQuotaWindowSubscription(t *testing.T, plan *SubscriptionPlan) (*User, *
 	return user, mutation.Subscription
 }
 
-func quotaWindowUsed(t *testing.T, subscriptionID int) map[int64]int64 {
+func quotaWindowUsage(t *testing.T, subscriptionID int) map[int64]SubscriptionQuotaWindowUsage {
 	t.Helper()
 	var subscription UserSubscription
 	subscription.Id = subscriptionID
 	require.NoError(t, PopulateSubscriptionQuotaWindowUsage(&subscription, GetDBTimestamp()))
-	result := make(map[int64]int64, len(subscription.QuotaWindows))
+	result := make(map[int64]SubscriptionQuotaWindowUsage, len(subscription.QuotaWindows))
 	for _, window := range subscription.QuotaWindows {
-		result[window.WindowSeconds] = window.Used
+		result[window.WindowSeconds] = window
+	}
+	return result
+}
+
+func quotaWindowTotalUsed(t *testing.T, subscriptionID int) map[int64]int64 {
+	t.Helper()
+	result := make(map[int64]int64)
+	for windowSeconds, window := range quotaWindowUsage(t, subscriptionID) {
+		result[windowSeconds] = window.Used + window.Reserved
+	}
+	return result
+}
+
+func quotaWindowSettled(t *testing.T, subscriptionID int) map[int64]int64 {
+	t.Helper()
+	result := make(map[int64]int64)
+	for windowSeconds, window := range quotaWindowUsage(t, subscriptionID) {
+		result[windowSeconds] = window.Used
 	}
 	return result
 }
@@ -91,21 +109,32 @@ func TestSubscriptionQuotaWindowsShareUsageAndSettlement(t *testing.T) {
 		5 * 60 * 60:       100,
 		7 * 24 * 60 * 60:  100,
 		30 * 24 * 60 * 60: 100,
-	}, quotaWindowUsed(t, subscription.Id))
+	}, quotaWindowTotalUsed(t, subscription.Id))
+	assert.Equal(t, map[int64]int64{
+		5 * 60 * 60:       0,
+		7 * 24 * 60 * 60:  0,
+		30 * 24 * 60 * 60: 0,
+	}, quotaWindowSettled(t, subscription.Id))
+	var reservedSubscription UserSubscription
+	require.NoError(t, DB.Where("id = ?", subscription.Id).First(&reservedSubscription).Error)
+	require.NoError(t, PopulateUserSubscriptionUsageForResponse(&reservedSubscription, GetDBTimestamp()))
+	assert.EqualValues(t, 100, reservedSubscription.AmountReserved)
+	assert.EqualValues(t, 100, reservedSubscription.AmountUsedWithReserved)
+	assert.Zero(t, reservedSubscription.AmountUsed)
 
 	require.NoError(t, AdjustSubscriptionUsage("rolling-request-1", 25))
 	assert.Equal(t, map[int64]int64{
 		5 * 60 * 60:       125,
 		7 * 24 * 60 * 60:  125,
 		30 * 24 * 60 * 60: 125,
-	}, quotaWindowUsed(t, subscription.Id))
+	}, quotaWindowTotalUsed(t, subscription.Id))
 
 	require.NoError(t, RefundSubscriptionPreConsume("rolling-request-1"))
 	assert.Equal(t, map[int64]int64{
 		5 * 60 * 60:       0,
 		7 * 24 * 60 * 60:  0,
 		30 * 24 * 60 * 60: 0,
-	}, quotaWindowUsed(t, subscription.Id))
+	}, quotaWindowTotalUsed(t, subscription.Id))
 
 	_, err = PreConsumeUserSubscription("rolling-request-2", subscription.UserId, "deepseek-chat", 0, "vip", 80)
 	require.NoError(t, err)
@@ -120,7 +149,12 @@ func TestSubscriptionQuotaWindowsShareUsageAndSettlement(t *testing.T) {
 		5 * 60 * 60:       60,
 		7 * 24 * 60 * 60:  60,
 		30 * 24 * 60 * 60: 60,
-	}, quotaWindowUsed(t, subscription.Id))
+	}, quotaWindowSettled(t, subscription.Id))
+	var settledSubscription UserSubscription
+	require.NoError(t, DB.Where("id = ?", subscription.Id).First(&settledSubscription).Error)
+	require.NoError(t, PopulateUserSubscriptionUsageForResponse(&settledSubscription, GetDBTimestamp()))
+	assert.Zero(t, settledSubscription.AmountReserved)
+	assert.EqualValues(t, 60, settledSubscription.AmountUsed)
 
 	// Editing a plan must not rewrite an already purchased snapshot.
 	require.NoError(t, ReplaceSubscriptionPlanQuotaWindowsTx(DB, plan.Id, []SubscriptionQuotaWindow{
@@ -254,7 +288,12 @@ func TestSubscriptionQuotaWindowRejectsAndExpiresOldUsage(t *testing.T) {
 		5 * 60 * 60:       100,
 		7 * 24 * 60 * 60:  1000,
 		30 * 24 * 60 * 60: 1000,
-	}, quotaWindowUsed(t, subscription.Id))
+	}, quotaWindowTotalUsed(t, subscription.Id))
+	assert.Equal(t, map[int64]int64{
+		5 * 60 * 60:       0,
+		7 * 24 * 60 * 60:  900,
+		30 * 24 * 60 * 60: 900,
+	}, quotaWindowSettled(t, subscription.Id))
 
 	_, err = PreConsumeUserSubscription("blocked-window-request", subscription.UserId, "deepseek-chat", 0, "vip", 101)
 	require.Error(t, err)
@@ -481,13 +520,13 @@ func TestSubscriptionRenewalResetsRollingWindowUsage(t *testing.T) {
 
 	_, err := PreConsumeUserSubscription("renew-window-1", user.Id, "deepseek-chat", 0, "vip", 200)
 	require.NoError(t, err)
-	assert.Equal(t, map[int64]int64{5 * 60 * 60: 200}, quotaWindowUsed(t, subscription.Id))
+	assert.Equal(t, map[int64]int64{5 * 60 * 60: 200}, quotaWindowTotalUsed(t, subscription.Id))
 
 	renewed, err := UpsertUserSubscriptionFromPlanTx(DB, user.Id, plan, "test")
 	require.NoError(t, err)
 	require.True(t, renewed.Renewed)
 	assert.Zero(t, renewed.Subscription.AmountUsed)
-	assert.Equal(t, map[int64]int64{5 * 60 * 60: 0}, quotaWindowUsed(t, subscription.Id))
+	assert.Equal(t, map[int64]int64{5 * 60 * 60: 0}, quotaWindowTotalUsed(t, subscription.Id))
 
 	var previous SubscriptionPreConsumeRecord
 	require.NoError(t, DB.Where("request_id = ?", "renew-window-1").First(&previous).Error)
@@ -495,7 +534,7 @@ func TestSubscriptionRenewalResetsRollingWindowUsage(t *testing.T) {
 
 	_, err = PreConsumeUserSubscription("renew-window-2", user.Id, "deepseek-chat", 0, "vip", 300)
 	require.NoError(t, err)
-	assert.Equal(t, map[int64]int64{5 * 60 * 60: 300}, quotaWindowUsed(t, subscription.Id))
+	assert.Equal(t, map[int64]int64{5 * 60 * 60: 300}, quotaWindowTotalUsed(t, subscription.Id))
 }
 
 func TestSubscriptionConcurrencyRequiresAnAllowedRouteGroup(t *testing.T) {

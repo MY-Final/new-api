@@ -95,6 +95,18 @@ export function SubscriptionOverviewCards(
         loading={props.loading}
         details={[
           {
+            label: t('Used of capacity'),
+            value: formatQuota(summary?.used_quota ?? 0),
+          },
+          ...((summary?.reserved_quota ?? 0) > 0
+            ? [
+                {
+                  label: t('In progress'),
+                  value: formatQuota(summary?.reserved_quota ?? 0),
+                },
+              ]
+            : []),
+          {
             label: t('Remaining quota'),
             value: formatQuota(summary?.remaining_quota ?? 0),
           },

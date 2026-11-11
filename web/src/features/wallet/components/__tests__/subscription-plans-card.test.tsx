@@ -191,6 +191,30 @@ test('lets a single subscription and its long name use the available width', asy
   )
 })
 
+test('shows settled usage instead of in-flight reservations', async () => {
+  const inFlight = {
+    subscription: {
+      ...active.subscription,
+      amount_used: 200_000,
+      amount_reserved: 700_000,
+      amount_used_with_reserved: 900_000,
+    },
+  }
+  await renderPlans({
+    responses: [
+      {
+        billing_preference: 'subscription_first',
+        subscriptions: [inFlight],
+        all_subscriptions: [inFlight],
+      },
+    ],
+  })
+
+  const area = await screen.findByRole('region', { name: 'My Subscriptions' })
+  expect(within(area).getByText(/Used 20%/)).toBeVisible()
+  expect(within(area).queryByText(/Used 90%/)).not.toBeInTheDocument()
+})
+
 test('keeps billing preferences editable when no plans or subscriptions exist', async () => {
   const user = userEvent.setup()
   const preference = vi.spyOn(api, 'put').mockResolvedValue({

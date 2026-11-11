@@ -36,6 +36,7 @@ export type SubscriptionQuotaWindow = z.infer<
 export const subscriptionQuotaWindowUsageSchema =
   subscriptionQuotaWindowSchema.extend({
     used: z.number(),
+    reserved: z.number().optional(),
     remaining: z.number(),
     next_release_at: z.number(),
   })
@@ -93,6 +94,8 @@ export const userSubscriptionSchema = z.object({
   end_time: z.number(),
   amount_total: z.number(),
   amount_used: z.number(),
+  amount_reserved: z.number().optional(),
+  amount_used_with_reserved: z.number().optional(),
   next_reset_time: z.number().optional(),
   upgrade_group: z.string().optional(),
   route_groups: z.array(z.string()).optional(),

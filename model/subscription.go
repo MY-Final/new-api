@@ -341,6 +341,10 @@ type UserSubscription struct {
 
 	AmountTotal int64 `json:"amount_total" gorm:"type:bigint;not null;default:0"`
 	AmountUsed  int64 `json:"amount_used" gorm:"type:bigint;not null;default:0"`
+	// API responses replace AmountUsed with settled usage. These response-only
+	// fields expose the in-flight reservation and the persisted total.
+	AmountReserved         int64 `json:"amount_reserved" gorm:"-:all"`
+	AmountUsedWithReserved int64 `json:"amount_used_with_reserved,omitempty" gorm:"-:all"`
 
 	StartTime int64  `json:"start_time" gorm:"bigint"`
 	EndTime   int64  `json:"end_time" gorm:"bigint;index;index:idx_user_sub_active,priority:3"`
@@ -1093,8 +1097,8 @@ func PurchaseSubscriptionWithBalance(userId int, planId int) (*UserSubscriptionM
 		refreshSubscriptionUserGroupCache(userId, common.LogText("subscription balance purchase"))
 	}
 	if mutation != nil && mutation.Subscription != nil {
-		if err := PopulateSubscriptionQuotaWindowUsage(mutation.Subscription, common.GetTimestamp()); err != nil {
-			common.SysError(common.LogText("failed to load purchased subscription quota windows: %s", err.Error()))
+		if err := PopulateUserSubscriptionUsageForResponse(mutation.Subscription, common.GetTimestamp()); err != nil {
+			common.SysError(common.LogText("failed to load purchased subscription usage: %s", err.Error()))
 		}
 	}
 	RecordLog(userId, LogTypeTopup, common.NewMessage("Subscription purchased with balance, plan: {{plan}}, payment amount: {{amount}}, quota deducted: {{quota}}", map[string]any{
@@ -1234,8 +1238,8 @@ func buildSubscriptionSummaries(subs []UserSubscription) []SubscriptionSummary {
 	now := common.GetTimestamp()
 	for _, sub := range subs {
 		subCopy := sub
-		if err := PopulateSubscriptionQuotaWindowUsage(&subCopy, now); err != nil {
-			common.SysError(common.LogText("failed to load subscription quota windows for %d: %s", subCopy.Id, err.Error()))
+		if err := PopulateUserSubscriptionUsageForResponse(&subCopy, now); err != nil {
+			common.SysError(common.LogText("failed to load subscription usage for %d: %s", subCopy.Id, err.Error()))
 		}
 		if err := HydrateUserSubscriptionRouteGroups(&subCopy); err != nil {
 			common.SysError(common.LogText("failed to load subscription route groups for %d: %s", subCopy.Id, err.Error()))
@@ -1245,6 +1249,49 @@ func buildSubscriptionSummaries(subs []UserSubscription) []SubscriptionSummary {
 		})
 	}
 	return result
+}
+
+// subscriptionReservedQuota returns quota held by requests that have not
+// reached a terminal billing state. Reservations older than the current reset
+// cycle do not belong to the subscription's displayed usage.
+func subscriptionReservedQuota(subscriptionId int, since int64) (int64, error) {
+	if subscriptionId <= 0 {
+		return 0, errors.New("invalid userSubscriptionId")
+	}
+	query := DB.Model(&SubscriptionPreConsumeRecord{}).
+		Select("COALESCE(SUM(usage_quota), 0)").
+		Where("user_subscription_id = ? AND status <> ? AND finalized_at = 0",
+			subscriptionId, SubscriptionUsageStatusRefunded)
+	if since > 0 {
+		query = query.Where("created_at >= ?", since)
+	}
+	var reserved int64
+	if err := query.Scan(&reserved).Error; err != nil {
+		return 0, err
+	}
+	return max(reserved, 0), nil
+}
+
+// PopulateUserSubscriptionUsageForResponse fills the computed usage state
+// returned by subscription APIs. It rewrites AmountUsed on the response copy,
+// so callers must not persist the result.
+func PopulateUserSubscriptionUsageForResponse(subscription *UserSubscription, now int64) error {
+	if subscription == nil || subscription.Id <= 0 {
+		return errors.New("invalid user subscription")
+	}
+	if err := PopulateSubscriptionQuotaWindowUsage(subscription, now); err != nil {
+		return err
+	}
+	if subscription.AmountUsedWithReserved == 0 {
+		subscription.AmountUsedWithReserved = subscription.AmountUsed
+	}
+	reserved, err := subscriptionReservedQuota(subscription.Id, subscription.LastResetTime)
+	if err != nil {
+		return err
+	}
+	subscription.AmountReserved = reserved
+	subscription.AmountUsed = max(subscription.AmountUsedWithReserved-reserved, 0)
+	return nil
 }
 
 // AdminInvalidateUserSubscription marks a user subscription as cancelled and ends it immediately.

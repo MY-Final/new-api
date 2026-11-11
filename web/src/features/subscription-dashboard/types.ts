@@ -8,6 +8,7 @@ export interface SubscriptionOverviewTotals {
   active_subscriptions: number
   capacity_quota: number
   used_quota: number
+  reserved_quota: number
   remaining_quota: number
   remaining_cost: number
 }

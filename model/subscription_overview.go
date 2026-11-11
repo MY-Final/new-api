@@ -30,6 +30,7 @@ type SubscriptionOverviewTotals struct {
 	ActiveSubscriptions int64   `json:"active_subscriptions"`
 	CapacityQuota       int64   `json:"capacity_quota"`
 	UsedQuota           int64   `json:"used_quota"`
+	ReservedQuota       int64   `json:"reserved_quota"`
 	RemainingQuota      int64   `json:"remaining_quota"`
 	RemainingCost       float64 `json:"remaining_cost"`
 }
@@ -49,6 +50,7 @@ type SubscriptionOverviewPlan struct {
 	ActiveSubscriptions int64   `json:"active_subscriptions"`
 	CapacityQuota       int64   `json:"capacity_quota"`
 	UsedQuota           int64   `json:"used_quota"`
+	ReservedQuota       int64   `json:"reserved_quota"`
 	RemainingQuota      int64   `json:"remaining_quota"`
 	RemainingCost       float64 `json:"remaining_cost"`
 }
@@ -100,7 +102,7 @@ func GetSubscriptionOverview(start, end int64, upstreamRatio float64) (*Subscrip
 	if err := DB.Model(&SubscriptionPreConsumeRecord{}).
 		Select("user_subscriptions.plan_id AS plan_id, COALESCE(SUM(subscription_pre_consume_records.usage_quota), 0) AS consumed_quota").
 		Joins("JOIN user_subscriptions ON user_subscriptions.id = subscription_pre_consume_records.user_subscription_id").
-		Where("subscription_pre_consume_records.created_at >= ? AND subscription_pre_consume_records.created_at <= ? AND subscription_pre_consume_records.status <> ?",
+		Where("subscription_pre_consume_records.created_at >= ? AND subscription_pre_consume_records.created_at <= ? AND subscription_pre_consume_records.status <> ? AND subscription_pre_consume_records.finalized_at > 0",
 			start, end, SubscriptionUsageStatusRefunded).
 		Group("user_subscriptions.plan_id").
 		Scan(&usageRows).Error; err != nil {
@@ -123,6 +125,21 @@ func GetSubscriptionOverview(start, end int64, upstreamRatio float64) (*Subscrip
 	windowCapacity := make(map[int]int64, len(windows))
 	for _, window := range windows {
 		windowCapacity[window.UserSubscriptionId] = max(windowCapacity[window.UserSubscriptionId], window.QuotaLimit)
+	}
+	reservedRows := make([]struct {
+		UserSubscriptionId int   `gorm:"column:user_subscription_id"`
+		ReservedQuota      int64 `gorm:"column:reserved_quota"`
+	}, 0)
+	if err := DB.Model(&SubscriptionPreConsumeRecord{}).
+		Select("user_subscription_id, COALESCE(SUM(usage_quota), 0) AS reserved_quota").
+		Where("status <> ? AND finalized_at = 0", SubscriptionUsageStatusRefunded).
+		Group("user_subscription_id").
+		Scan(&reservedRows).Error; err != nil {
+		return nil, err
+	}
+	reservedBySubscription := make(map[int]int64, len(reservedRows))
+	for _, row := range reservedRows {
+		reservedBySubscription[row.UserSubscriptionId] = max(row.ReservedQuota, 0)
 	}
 
 	rows := make(map[int]*SubscriptionOverviewPlan, len(plans))
@@ -167,12 +184,14 @@ func GetSubscriptionOverview(start, end int64, upstreamRatio float64) (*Subscrip
 		if capacity <= 0 {
 			capacity = windowCapacity[subscription.Id]
 		}
-		used := max(subscription.AmountUsed, 0)
-		remaining := max(capacity-used, 0)
+		reserved := reservedBySubscription[subscription.Id]
+		used := max(subscription.AmountUsed-reserved, 0)
+		remaining := max(capacity-subscription.AmountUsed, 0)
 		row := planRow(subscription.PlanId)
 		row.ActiveSubscriptions++
 		row.CapacityQuota += capacity
 		row.UsedQuota += used
+		row.ReservedQuota += reserved
 		row.RemainingQuota += remaining
 	}
 
@@ -200,6 +219,7 @@ func GetSubscriptionOverview(start, end int64, upstreamRatio float64) (*Subscrip
 		overview.Summary.ActiveSubscriptions += row.ActiveSubscriptions
 		overview.Summary.CapacityQuota += row.CapacityQuota
 		overview.Summary.UsedQuota += row.UsedQuota
+		overview.Summary.ReservedQuota += row.ReservedQuota
 		overview.Summary.RemainingQuota += row.RemainingQuota
 		overview.Summary.RemainingCost += row.RemainingCost
 		overview.Plans = append(overview.Plans, row)
