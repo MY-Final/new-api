@@ -56,7 +56,7 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/custom-pages", middleware.UserAuth(), controller.GetCustomPages)
 		//apiRouter.GET("/midjourney", controller.GetMidjourney)
 		apiRouter.GET("/home_page_content", controller.GetHomePageContent)
-		apiRouter.GET("/free_group/usage", controller.GetFreeGroupUsage)
+		apiRouter.GET("/free_group/usage", middleware.DisableCache(), middleware.TryUserAuth(), controller.GetFreeGroupUsage)
 		apiRouter.GET("/free_group/schedule", controller.GetFreeGroupSchedule)
 		apiRouter.GET("/free_group/users", middleware.AdminAuth(), controller.GetFreeGroupUserUsage)
 		apiRouter.GET("/daily_egg/records", middleware.AdminAuth(), controller.GetDailyEggRecords)

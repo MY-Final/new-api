@@ -68,6 +68,37 @@ describe('free group usage', () => {
     ).toBeVisible()
   })
 
+  it('shows the signed-in user count alongside the site total', () => {
+    renderWithQueryClient(
+      <FreeGroupUsage
+        usage={{
+          enabled: true,
+          group: '免费鸡蛋',
+          daily_limit: 100000,
+          used: 624,
+          remaining: 99376,
+          user: {
+            limit: 300,
+            used: 12,
+            remaining: 288,
+          },
+        }}
+        isLoading={false}
+        isError={false}
+      />
+    )
+
+    const usage = screen.getByRole('region', {
+      name: 'Free group calls today',
+    })
+    const personal = within(usage).getByText('Your calls today').parentElement
+    expect(personal).toHaveTextContent('12 / 300')
+    expect(personal).toHaveTextContent('Remaining today: 288')
+    expect(personal).toHaveTextContent(
+      'Site total: 624 / 100,000 · Remaining today: 99,376'
+    )
+  })
+
   it('renders nothing when the free group is off', () => {
     renderWithQueryClient(
       <FreeGroupUsage
@@ -117,6 +148,33 @@ describe('free group usage', () => {
     expect(
       screen.getByLabelText(
         'Free group calls today: free-eggs, 1,234 / 10,000, Remaining today: 8,766'
+      )
+    ).toBeVisible()
+  })
+
+  it('shows the signed-in user count in the compact header indicator', () => {
+    renderWithQueryClient(
+      <FreeGroupUsageIndicator
+        usage={{
+          enabled: true,
+          group: '免费鸡蛋',
+          daily_limit: 100000,
+          used: 624,
+          remaining: 99376,
+          user: {
+            limit: 300,
+            used: 12,
+            remaining: 288,
+          },
+        }}
+        isLoading={false}
+        isError={false}
+      />
+    )
+
+    expect(
+      screen.getByLabelText(
+        'Your calls today: 免费鸡蛋, 12 / 300, Remaining today: 288'
       )
     ).toBeVisible()
   })

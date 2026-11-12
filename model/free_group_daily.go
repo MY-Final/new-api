@@ -176,8 +176,19 @@ func FreeGroupSchedule(setting FreeGroupSetting, from, to time.Time) []FreeGroup
 }
 
 func FreeGroupDailyCount(now time.Time) (int64, error) {
+	return freeGroupDailyCount(now, 0)
+}
+
+func FreeGroupUserDailyCount(now time.Time, userID int) (int64, error) {
+	if userID <= 0 {
+		return 0, nil
+	}
+	return freeGroupDailyCount(now, userID)
+}
+
+func freeGroupDailyCount(now time.Time, userID int) (int64, error) {
 	var usage FreeGroupDailyUsage
-	err := DB.Where("day = ? AND user_id = ?", freeGroupDay(now), 0).First(&usage).Error
+	err := DB.Where("day = ? AND user_id = ?", freeGroupDay(now), userID).First(&usage).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return 0, nil
 	}

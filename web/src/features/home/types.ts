@@ -44,6 +44,11 @@ export interface FreeGroupUsage {
   daily_limit: number
   used: number
   remaining: number
+  user?: {
+    limit: number
+    used: number
+    remaining: number
+  }
 }
 
 export interface FreeGroupUsageState {

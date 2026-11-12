@@ -50,6 +50,42 @@ func TestGetFreeGroupUsageReturnsPublicDailyTotals(t *testing.T) {
 		Remaining:  3,
 	}, response.Data)
 	assert.NotContains(t, recorder.Body.String(), "user_limit")
+	assert.NotContains(t, recorder.Body.String(), `"user":`)
+}
+
+func TestGetFreeGroupUsageIncludesPersonalDailyUsage(t *testing.T) {
+	db := modelManagementDB(t, "sqlite", "")
+	require.NoError(t, db.AutoMigrate(&model.FreeGroupDailyUsage{}))
+	require.NoError(t, db.Create(&model.Option{
+		Key:   model.FreeGroupSettingOption,
+		Value: `{"enabled":true,"group":"free-eggs","daily_limit":10,"user_limit":2}`,
+	}).Error)
+	user := model.User{Username: "free-user", AffCode: "free-user-code"}
+	require.NoError(t, db.Create(&user).Error)
+	day := time.Now().In(time.FixedZone("UTC+8", 8*60*60)).Format("2006-01-02")
+	require.NoError(t, db.Create(&[]model.FreeGroupDailyUsage{
+		{Day: day, UserID: 0, Count: 7},
+		{Day: day, UserID: user.Id, Count: 1},
+	}).Error)
+
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Set("id", user.Id)
+	context.Request = httptest.NewRequest(http.MethodGet, "/api/free_group/usage", nil)
+
+	GetFreeGroupUsage(context)
+
+	var response struct {
+		Success bool                   `json:"success"`
+		Data    freeGroupUsageResponse `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.True(t, response.Success)
+	require.NotNil(t, response.Data.User)
+	assert.Equal(t, freeGroupUserUsageResponse{
+		Limit: 2, Used: 1, Remaining: 1,
+	}, *response.Data.User)
 }
 
 func TestGetFreeGroupScheduleResolvesDateOverridesOverWeeklySlots(t *testing.T) {

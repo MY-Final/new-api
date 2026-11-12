@@ -11,11 +11,18 @@ import (
 )
 
 type freeGroupUsageResponse struct {
-	Enabled    bool   `json:"enabled"`
-	Group      string `json:"group"`
-	DailyLimit int64  `json:"daily_limit"`
-	Used       int64  `json:"used"`
-	Remaining  int64  `json:"remaining"`
+	Enabled    bool                        `json:"enabled"`
+	Group      string                      `json:"group"`
+	DailyLimit int64                       `json:"daily_limit"`
+	Used       int64                       `json:"used"`
+	Remaining  int64                       `json:"remaining"`
+	User       *freeGroupUserUsageResponse `json:"user,omitempty"`
+}
+
+type freeGroupUserUsageResponse struct {
+	Limit     int64 `json:"limit"`
+	Used      int64 `json:"used"`
+	Remaining int64 `json:"remaining"`
 }
 
 const freeGroupScheduleMaxDays = 93
@@ -66,11 +73,27 @@ func GetFreeGroupUsage(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	setting = model.ResolveFreeGroupSetting(setting, time.Now())
-	used, err := model.FreeGroupDailyCount(time.Now())
+	now := time.Now()
+	setting = model.ResolveFreeGroupSetting(setting, now)
+	used, err := model.FreeGroupDailyCount(now)
 	if err != nil {
 		common.ApiError(c, err)
 		return
+	}
+	var userUsage *freeGroupUserUsageResponse
+	if userID := c.GetInt("id"); userID > 0 {
+		userUsed, err := model.FreeGroupUserDailyCount(now, userID)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		userRemaining := int64(0)
+		if setting.UserLimit > 0 {
+			userRemaining = max(setting.UserLimit-userUsed, 0)
+		}
+		userUsage = &freeGroupUserUsageResponse{
+			Limit: setting.UserLimit, Used: userUsed, Remaining: userRemaining,
+		}
 	}
 	common.ApiSuccess(c, freeGroupUsageResponse{
 		Enabled:    setting.Enabled,
@@ -78,6 +101,7 @@ func GetFreeGroupUsage(c *gin.Context) {
 		DailyLimit: setting.DailyLimit,
 		Used:       used,
 		Remaining:  max(setting.DailyLimit-used, 0),
+		User:       userUsage,
 	})
 }
 

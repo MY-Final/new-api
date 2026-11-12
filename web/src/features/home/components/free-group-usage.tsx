@@ -37,7 +37,14 @@ export function FreeGroupUsage(props: FreeGroupUsageProps) {
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const dailyLimit = props.usage?.daily_limit ?? 0
   const used = props.usage?.used ?? 0
-  const progress = dailyLimit > 0 ? Math.min((used / dailyLimit) * 100, 100) : 0
+  const personal = props.usage?.user
+  const displayLimit = personal?.limit ?? dailyLimit
+  const displayUsed = personal?.used ?? used
+  const displayRemaining = personal?.remaining ?? props.usage?.remaining ?? 0
+  const progressLimit = displayLimit > 0 ? displayLimit : dailyLimit
+  const progressUsed = displayLimit > 0 ? displayUsed : used
+  const progress =
+    progressLimit > 0 ? Math.min((progressUsed / progressLimit) * 100, 100) : 0
 
   if (props.usage?.enabled === false) {
     return null
@@ -55,18 +62,35 @@ export function FreeGroupUsage(props: FreeGroupUsageProps) {
   } else {
     value = (
       <div className='text-right'>
+        <div className='mb-1 text-[10px] font-black tracking-[0.16em] text-white/60 uppercase'>
+          {personal ? t('Your calls today') : t('Free group calls today')}
+        </div>
         <div className='text-3xl font-black tracking-tight tabular-nums sm:text-4xl'>
-          {formatNumber(used, locale)}
-          <span className='text-lg font-medium text-white/65 sm:text-xl'>
-            {' / '}
-            {formatNumber(dailyLimit, locale)}
-          </span>
+          {formatNumber(displayUsed, locale)}
+          {displayLimit > 0 && (
+            <span className='text-lg font-medium text-white/65 sm:text-xl'>
+              {' / '}
+              {formatNumber(displayLimit, locale)}
+            </span>
+          )}
         </div>
         <div className='mt-1 text-xs text-white/75 tabular-nums'>
-          {t('Remaining today: {{remaining}}', {
-            remaining: formatNumber(props.usage.remaining, locale),
-          })}
+          {displayLimit > 0
+            ? t('Remaining today: {{remaining}}', {
+                remaining: formatNumber(displayRemaining, locale),
+              })
+            : t('Unlimited')}
         </div>
+        {personal && (
+          <div className='mt-2 border-t border-white/15 pt-2 text-[11px] text-white/65 tabular-nums'>
+            {t('Site total')}: {formatNumber(used, locale)} /{' '}
+            {formatNumber(dailyLimit, locale)}
+            {' · '}
+            {t('Remaining today: {{remaining}}', {
+              remaining: formatNumber(props.usage?.remaining ?? 0, locale),
+            })}
+          </div>
+        )}
       </div>
     )
   }
@@ -155,12 +179,19 @@ export function FreeGroupUsageIndicator(props: FreeGroupUsageProps) {
     )
   }
 
-  const used = formatNumber(props.usage.used, locale)
-  const dailyLimit = formatNumber(props.usage.daily_limit, locale)
+  const personal = props.usage.user
+  const displayUsed = formatNumber(personal?.used ?? props.usage.used, locale)
+  const displayLimit = personal?.limit ?? props.usage.daily_limit
+  const displayRemaining = personal?.remaining ?? props.usage.remaining
   const remaining = t('Remaining today: {{remaining}}', {
-    remaining: formatNumber(props.usage.remaining, locale),
+    remaining:
+      displayLimit > 0
+        ? formatNumber(displayRemaining, locale)
+        : t('Unlimited'),
   })
-  const label = `${t('Free group calls today')}: ${props.usage.group}, ${used} / ${dailyLimit}, ${remaining}`
+  const label = `${personal ? t('Your calls today') : t('Free group calls today')}: ${props.usage.group}, ${displayUsed}${
+    displayLimit > 0 ? ` / ${formatNumber(displayLimit, locale)}` : ''
+  }, ${remaining}`
 
   return (
     <div
@@ -178,8 +209,12 @@ export function FreeGroupUsageIndicator(props: FreeGroupUsageProps) {
       <span className='text-muted-foreground hidden max-w-24 truncate xl:inline'>
         {props.usage.group}
       </span>
-      <span className='shrink-0 font-semibold'>{used}</span>
-      <span className='text-muted-foreground shrink-0'>/ {dailyLimit}</span>
+      <span className='shrink-0 font-semibold'>{displayUsed}</span>
+      {displayLimit > 0 && (
+        <span className='text-muted-foreground shrink-0'>
+          / {formatNumber(displayLimit, locale)}
+        </span>
+      )}
     </div>
   )
 }
