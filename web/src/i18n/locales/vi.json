@@ -3388,6 +3388,7 @@
     "Forwarding Routes": "Route chuyển tiếp",
     "Frames per second": "Khung hình / giây",
     "Free": "Trống",
+    "Free draws remaining today: {{remaining}}/{{limit}}": "Lượt mở trứng miễn phí còn lại hôm nay: {{remaining}}/{{limit}}",
     "Free group": "Nhóm miễn phí",
     "Free group calls today": "Lượt gọi nhóm miễn phí hôm nay",
     "Free group schedule": "Lịch nhóm miễn phí",

@@ -102,6 +102,9 @@ func TestDailyEggDatabaseMatrix(t *testing.T) {
 			status, err := GetDailyEggStatus(users[0].Id)
 			require.NoError(t, err)
 			assert.False(t, status.Eligible)
+			assert.Equal(t, 1, status.FreeDrawLimit)
+			assert.Zero(t, status.FreeDrawUsed)
+			assert.Equal(t, 1, status.FreeDrawRemaining)
 			_, err = OpenDailyEgg(users[0].Id, 1)
 			require.ErrorIs(t, err, errDailyEggSpend)
 			require.NoError(t, db.Model(&RequestBilling{}).Where("id = ?", users[0].Username).Update("refunded_quota", 0).Error)
@@ -143,6 +146,10 @@ func TestDailyEggDatabaseMatrix(t *testing.T) {
 				var draw DailyEggDraw
 				err := db.Where("user_id = ?", user.Id).First(&draw).Error
 				if err == nil {
+					status, statusErr := GetDailyEggStatus(user.Id)
+					require.NoError(t, statusErr)
+					assert.Equal(t, 1, status.FreeDrawUsed)
+					assert.Zero(t, status.FreeDrawRemaining)
 					_, duplicateErr := OpenDailyEgg(user.Id, 2)
 					require.ErrorIs(t, duplicateErr, errDailyEggDrawn)
 				}

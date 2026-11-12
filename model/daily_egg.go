@@ -17,6 +17,7 @@ import (
 
 const DailyEggSettingOption = "DailyEggSetting"
 const DefaultDailyEggSetting = `{"enabled":false,"min_spend_cny":2.5,"egg_count":3,"prizes":[]}`
+const dailyEggFreeDrawLimit = 1
 
 type DailyEggPrize struct {
 	ID          string `json:"id"`
@@ -51,14 +52,17 @@ type DailyEggInventory struct {
 }
 
 type DailyEggStatus struct {
-	Enabled     bool            `json:"enabled"`
-	Day         string          `json:"day"`
-	MinSpendCNY float64         `json:"min_spend_cny"`
-	SpendCNY    float64         `json:"spend_cny"`
-	EggCount    int             `json:"egg_count"`
-	Prizes      []DailyEggPrize `json:"prizes"`
-	Eligible    bool            `json:"eligible"`
-	Draw        *DailyEggDraw   `json:"draw"`
+	Enabled           bool            `json:"enabled"`
+	Day               string          `json:"day"`
+	MinSpendCNY       float64         `json:"min_spend_cny"`
+	SpendCNY          float64         `json:"spend_cny"`
+	EggCount          int             `json:"egg_count"`
+	Prizes            []DailyEggPrize `json:"prizes"`
+	Eligible          bool            `json:"eligible"`
+	FreeDrawLimit     int             `json:"free_draw_limit"`
+	FreeDrawUsed      int             `json:"free_draw_used"`
+	FreeDrawRemaining int             `json:"free_draw_remaining"`
+	Draw              *DailyEggDraw   `json:"draw"`
 }
 
 type DailyEggAdminDraw struct {
@@ -230,6 +234,7 @@ func GetDailyEggStatus(userID int) (DailyEggStatus, error) {
 	status := DailyEggStatus{
 		Enabled: setting.Enabled, Day: now.Format("2006-01-02"),
 		MinSpendCNY: setting.MinSpendCNY, EggCount: setting.EggCount, Prizes: setting.Prizes,
+		FreeDrawLimit: dailyEggFreeDrawLimit, FreeDrawRemaining: dailyEggFreeDrawLimit,
 	}
 	if !setting.Enabled {
 		return status, nil
@@ -247,6 +252,8 @@ func GetDailyEggStatus(userID int) (DailyEggStatus, error) {
 	err = DB.Where("user_id = ? AND day = ?", userID, status.Day).First(&draw).Error
 	if err == nil {
 		status.Draw = &draw
+		status.FreeDrawUsed = 1
+		status.FreeDrawRemaining = 0
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return status, err
 	}

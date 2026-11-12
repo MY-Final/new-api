@@ -27,6 +27,9 @@ const status = {
     },
   ],
   eligible: true,
+  free_draw_limit: 1,
+  free_draw_used: 0,
+  free_draw_remaining: 1,
   draw: null,
 }
 
@@ -120,6 +123,42 @@ it('shows the server result and prevents another draw', async () => {
   )
   expect(await screen.findByText('Come back tomorrow')).toBeVisible()
   expect(screen.getByRole('button', { name: 'Egg 1' })).toBeDisabled()
+})
+
+it('shows the remaining free draw count and clears it after drawing', async () => {
+  const result = {
+    day: status.day,
+    egg: 1,
+    prize_name: 'First prize',
+    quota: 100,
+  }
+  vi.spyOn(api, 'get')
+    .mockResolvedValueOnce({
+      data: { success: true, data: status },
+    })
+    .mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          ...status,
+          free_draw_used: 1,
+          free_draw_remaining: 0,
+          draw: result,
+        },
+      },
+    })
+  vi.spyOn(api, 'post').mockResolvedValue({
+    data: { success: true, data: result },
+  })
+  renderPage()
+
+  expect(
+    await screen.findByText('Free draws remaining today: 1/1')
+  ).toBeVisible()
+  await userEvent.click(screen.getByRole('button', { name: 'Egg 1' }))
+  expect(
+    await screen.findByText('Free draws remaining today: 0/1')
+  ).toBeVisible()
 })
 
 it('restores an existing draw and does not allow another', async () => {

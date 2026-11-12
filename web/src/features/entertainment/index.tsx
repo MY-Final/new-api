@@ -44,6 +44,9 @@ type DailyEggStatus = {
   egg_count: number
   prizes: Prize[]
   eligible: boolean
+  free_draw_limit: number
+  free_draw_used: number
+  free_draw_remaining: number
   draw: Draw | null
 }
 
@@ -69,7 +72,22 @@ export function Entertainment() {
     },
     onSuccess: (result) => {
       queryClient.setQueryData<DailyEggStatus>(['daily-egg'], (previous) =>
-        previous ? { ...previous, day: result.day, draw: result } : previous
+        previous
+          ? {
+              ...previous,
+              day: result.day,
+              draw: result,
+              free_draw_used: previous.draw
+                ? previous.free_draw_used
+                : Math.min(
+                    previous.free_draw_used + 1,
+                    previous.free_draw_limit
+                  ),
+              free_draw_remaining: previous.draw
+                ? previous.free_draw_remaining
+                : Math.max(previous.free_draw_remaining - 1, 0),
+            }
+          : previous
       )
       void queryClient.invalidateQueries({ queryKey: ['daily-egg'] })
       void queryClient.invalidateQueries({ queryKey: ['user'] })
@@ -114,6 +132,12 @@ export function Entertainment() {
               <CardContent className='px-4 py-6 text-center sm:px-8 sm:py-8'>
                 <p className='text-muted-foreground text-sm tabular-nums'>
                   {t('Today')} · {data.day}
+                </p>
+                <p className='text-primary mt-2 text-sm font-semibold tabular-nums'>
+                  {t('Free draws remaining today: {{remaining}}/{{limit}}', {
+                    remaining: formatNumber(data.free_draw_remaining, locale),
+                    limit: formatNumber(data.free_draw_limit, locale),
+                  })}
                 </p>
                 <h2 className='mt-4 text-xl font-bold'>{t('Choose an egg')}</h2>
                 <p className='text-muted-foreground mt-2 text-sm'>

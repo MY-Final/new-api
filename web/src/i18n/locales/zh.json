@@ -3388,6 +3388,7 @@
     "Forwarding Routes": "路由转发",
     "Frames per second": "帧率",
     "Free": "可用",
+    "Free draws remaining today: {{remaining}}/{{limit}}": "今日剩余免费抽蛋次数：{{remaining}}/{{limit}}",
     "Free group": "免费分组",
     "Free group calls today": "今日免费分组调用",
     "Free group schedule": "免费分组排班",

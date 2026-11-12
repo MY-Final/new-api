@@ -3388,6 +3388,7 @@
     "Forwarding Routes": "転送ルート",
     "Frames per second": "フレームレート",
     "Free": "空き",
+    "Free draws remaining today: {{remaining}}/{{limit}}": "本日の無料抽選回数：残り {{remaining}}/{{limit}}",
     "Free group": "無料グループ",
     "Free group calls today": "本日の無料グループ呼び出し",
     "Free group schedule": "無料グループのスケジュール",

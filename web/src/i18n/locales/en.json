@@ -3388,6 +3388,7 @@
     "Forwarding Routes": "Forwarding Routes",
     "Frames per second": "Frames per second",
     "Free": "Free",
+    "Free draws remaining today: {{remaining}}/{{limit}}": "Free draws remaining today: {{remaining}}/{{limit}}",
     "Free group": "Free group",
     "Free group calls today": "Free group calls today",
     "Free group schedule": "Free group schedule",

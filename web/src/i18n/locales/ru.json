@@ -3388,6 +3388,7 @@
     "Forwarding Routes": "Маршруты пересылки",
     "Frames per second": "Кадров в секунду",
     "Free": "Свободно",
+    "Free draws remaining today: {{remaining}}/{{limit}}": "Бесплатных попыток сегодня: осталось {{remaining}}/{{limit}}",
     "Free group": "Бесплатная группа",
     "Free group calls today": "Вызовы бесплатной группы сегодня",
     "Free group schedule": "Расписание бесплатных групп",
