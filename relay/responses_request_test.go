@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/requestplugin"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/setting/request_plugin_setting"
@@ -142,4 +143,38 @@ func TestPrepareResponsesRequestEgressReadsTheFinalizedBody(t *testing.T) {
 	}
 	require.NotNil(t, apiErr, "egress must read the reasoning item the finalizer added")
 	assert.Equal(t, types.ErrorCodeRequestRejected, apiErr.GetErrorCode())
+}
+
+func TestPrepareResponsesRequestReservesForTheFinalizedBody(t *testing.T) {
+	settings := model_setting.GetGlobalSettings()
+	previous := settings.PassThroughRequestEnabled
+	settings.PassThroughRequestEnabled = false
+	t.Cleanup(func() { settings.PassThroughRequestEnabled = previous })
+	raw := `{"model":"deepseek-flash","reasoning":{"effort":"high"},"input":[{"type":"function_call","call_id":"c1","name":"lookup","arguments":"{}"}]}`
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(raw))
+	c.Request.Header.Set("Content-Type", "application/json")
+	t.Cleanup(func() { common.CleanupBodyStorage(c) })
+	common.SetContextKey(c, constant.ContextKeyOriginalModel, "deepseek-flash")
+	common.SetContextKey(c, constant.ContextKeyChannelType, constant.ChannelTypeDeepSeek)
+	common.SetContextKey(c, constant.ContextKeyChannelBaseUrl, "https://api.deepseek.com")
+	common.SetContextKey(c, constant.ContextKeyChannelSetting, dto.ChannelSettings{})
+	var req dto.OpenAIResponsesRequest
+	require.NoError(t, common.Unmarshal([]byte(raw), &req))
+	info := relaycommon.GenRelayInfoResponses(c, &req)
+	info.SubscriptionOutputLimit = 10
+	info.BillingSource = service.BillingSourceSubscription
+	reservation := &imageReservation{limit: 1_000_000}
+	info.Billing = reservation
+	info.PriceData.ModelRatio = 1
+	info.PriceData.CompletionRatio = 1
+	info.PriceData.GroupRatioInfo.GroupRatio = 1
+	_, body, closer, apiErr := PrepareResponsesRequest(c, info, &req)
+	require.Nil(t, apiErr)
+	t.Cleanup(func() { require.NoError(t, closer.Close()) })
+	wire, err := io.ReadAll(body)
+	require.NoError(t, err)
+	assert.Equal(t, "reasoning", gjson.GetBytes(wire, "input.0.type").String())
+	assert.Equal(t, len(wire), info.SubscriptionInputBudget)
+	assert.GreaterOrEqual(t, reservation.held, len(wire))
 }
