@@ -155,18 +155,6 @@ func reserveRequestBilling(c *gin.Context, info *relaycommon.RelayInfo, tokens i
 		info.BillingRequestInput = nil
 
 		if source == service.BillingSourceSubscription && info.SubscriptionOutputLimit > 0 {
-			if err := helper.ValidateSubscriptionRequestLimits(info.Request, info.SubscriptionOutputLimit); err != nil {
-				// A request whose output limit exceeds the package cap is invalid
-				// for the subscription itself; reject it instead of silently
-				// shifting the charge to the wallet. Only an exhausted quota
-				// window (insufficient quota) may fall back to the wallet.
-				return types.NewErrorWithStatusCode(
-					err,
-					types.ErrorCodeInvalidRequest,
-					http.StatusBadRequest,
-					types.ErrOptionWithSkipRetry(),
-				)
-			}
 			// Reserve against the same input budget the final request body will
 			// use. EstimateRequestToken counts prompt tokens, which is smaller
 			// than the byte length the finalizer meters, so without this the
