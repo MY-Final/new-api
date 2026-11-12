@@ -77,6 +77,7 @@ const consoleRouteSegments = new Set([
   'playground',
   'profile',
   'redemption-codes',
+  'request-processing',
   'security',
   'subscription-plans',
   'subscriptions',

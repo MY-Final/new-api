@@ -78,7 +78,10 @@ func TestAdaptorMasksDialedHostsInDialFailure(t *testing.T) {
 		if address == "egress.private.invalid:8080" {
 			return nil, &net.DNSError{Err: "no such host", Name: "egress.private.invalid", IsNotFound: true}
 		}
-		return direct.DialContext(ctx, network, address)
+		if strings.HasPrefix(address, "localhost:") {
+			return direct.DialContext(ctx, network, address)
+		}
+		return nil, fmt.Errorf("dial %s %s: test connection failure", network, address)
 	}
 	websocket.DefaultDialer = &dialer
 	t.Cleanup(func() { websocket.DefaultDialer = previousDialer })

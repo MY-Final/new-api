@@ -80,6 +80,7 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"GET /api/custom-pages":               accessTokenScopeRule("profile:read"),
 	"GET /api/status/test":                accessTokenScopeRule("log:read"),
 	"GET /api/free_group/users":           accessTokenScopeRule("user:read"),
+	"GET /api/daily_egg/records":          accessTokenScopeRule("user:read"),
 	"GET /api/pricing":                    accessTokenAnyRule,
 	"GET /api/perf-metrics/summary":       accessTokenAnyRule,
 	"GET /api/perf-metrics":               accessTokenAnyRule,
@@ -93,6 +94,14 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"GET /api/oauth/:provider":            accessTokenSessionRule,
 	"GET /api/verify/methods":             accessTokenAnyRule,
 	"POST /api/verify":                    accessTokenAnyRule,
+
+	// Invitation codes and their claims are administrator-managed user data.
+	"GET /api/invite_codes":            accessTokenScopeRule("user:read"),
+	"GET /api/invite_codes/:id":        accessTokenScopeRule("user:read"),
+	"GET /api/invite_codes/:id/claims": accessTokenScopeRule("user:read"),
+	"POST /api/invite_codes":           accessTokenScopeRule("user:write"),
+	"PUT /api/invite_codes/:id":        accessTokenScopeRule("user:write"),
+	"DELETE /api/invite_codes/:id":     accessTokenScopeRule("user:write"),
 
 	// router/api-router.go: /api/user (self)
 	"GET /api/user/sessions":                       accessTokenSessionRule,
@@ -204,9 +213,11 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"POST /api/subscription/creem/pay":                               accessTokenScopeRule("wallet:write"),
 	"POST /api/subscription/waffo-pancake/pay":                       accessTokenScopeRule("wallet:write"),
 	"GET /api/subscription/admin/plans":                              accessTokenScopeRule("billing:read"),
+	"GET /api/subscription/admin/overview":                           accessTokenScopeRule("billing:read"),
 	"POST /api/subscription/admin/plans":                             accessTokenScopeRule("billing:write"),
 	"PUT /api/subscription/admin/plans/:id":                          accessTokenScopeRule("billing:write"),
 	"PATCH /api/subscription/admin/plans/:id":                        accessTokenScopeRule("billing:write"),
+	"DELETE /api/subscription/admin/plans/:id":                       accessTokenScopeRule("billing:write"),
 	"POST /api/subscription/admin/bind":                              accessTokenScopeRule("billing:write"),
 	"POST /api/subscription/admin/plans/:id/subscriptions/reset":     accessTokenScopeRule("billing:write"),
 	"GET /api/subscription/admin/users/:id/subscriptions":            accessTokenScopeRule("billing:read"),
@@ -261,6 +272,7 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"GET /api/system-task/current":                 accessTokenScopeRule("ops:read"),
 	"GET /api/system-task/:task_id":                accessTokenScopeRule("ops:read"),
 	"GET /api/system-info/instances":               accessTokenScopeRule("ops:read"),
+	"GET /api/system-info/sync":                    accessTokenScopeRule("ops:read"),
 	"DELETE /api/system-info/stale-instances":      accessTokenScopeRule("ops:write"),
 	"DELETE /api/system-info/instances/:node_name": accessTokenScopeRule("ops:write"),
 
@@ -278,6 +290,9 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"POST /api/plugin/task/:key/status":              accessTokenScopeRule("plugin:write"),
 	"POST /api/plugin/task/:key/dryrun":              accessTokenScopeRule("plugin:write"),
 	"DELETE /api/plugin/task/:key/versions/:version": accessTokenScopeRule("plugin:write"),
+	// router/api-router.go: /api/request_plugin
+	"PUT /api/request_plugin/instances": accessTokenScopeRule("plugin:write"),
+	"POST /api/request_plugin/dry_run":  accessTokenScopeRule("plugin:write"),
 
 	// router/channel-router.go: the key route is RootAuth, not Casbin-guarded.
 	"POST /api/channel/:id/key": accessTokenScopeRule(service.AccessTokenScopeOf(authz.ChannelSecretView)),

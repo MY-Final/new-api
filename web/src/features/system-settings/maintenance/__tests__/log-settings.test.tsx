@@ -48,6 +48,7 @@ function Fixture() {
             'request_error_log_setting.status_codes': '400,403,500',
             'request_error_log_setting.max_body_kb': 64,
             'request_error_log_setting.retention_days': 7,
+            'system_task_setting.retention_days': 30,
           }}
         />
       </SettingsPageProvider>
@@ -82,7 +83,7 @@ beforeEach(() => {
   vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true } })
 })
 
-test('the page shows the four log modules in order, each with its own controls', async () => {
+test('the page shows the log modules in order, each with its own controls', async () => {
   await renderSettings()
 
   expect(
@@ -91,6 +92,7 @@ test('the page shows the four log modules in order, each with its own controls',
     'Log recording',
     'Log search and export',
     'Error request capture',
+    'System task records',
     'Clean history logs',
     'Server Log Management',
   ])
@@ -121,6 +123,12 @@ test('the page shows the four log modules in order, each with its own controls',
   expect(
     within(capture).getByRole('spinbutton', { name: 'Retention days' })
   ).toHaveValue(7)
+  const tasks = screen.getByRole('group', { name: 'System task records' })
+  expect(
+    within(tasks).getByRole('spinbutton', {
+      name: 'Keep finished tasks for (days)',
+    })
+  ).toHaveValue(30)
   const cleanup = screen.getByRole('group', { name: 'Clean history logs' })
   expect(
     within(cleanup).getByRole('button', { name: 'Clean logs' })
@@ -232,4 +240,26 @@ test('a time range under one day shows a field error and is not saved', async ()
 
   await waitFor(() => expect(days).toHaveAttribute('aria-invalid', 'true'))
   expect(api.put).not.toHaveBeenCalled()
+})
+
+test('the task retention saves whole days and rejects less than one day', async () => {
+  const user = userEvent.setup()
+  await renderSettings()
+  const retention = screen.getByRole('spinbutton', {
+    name: 'Keep finished tasks for (days)',
+  })
+  const save = screen.getByRole('button', { name: 'Save log settings' })
+
+  fireEvent.change(retention, { target: { value: '0' } })
+  await user.click(save)
+  await waitFor(() => expect(retention).toHaveAttribute('aria-invalid', 'true'))
+  expect(api.put).not.toHaveBeenCalled()
+
+  fireEvent.change(retention, { target: { value: '7' } })
+  await user.click(save)
+  await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1))
+  expect(api.put).toHaveBeenCalledWith('/api/option/', {
+    key: 'system_task_setting.retention_days',
+    value: 7,
+  })
 })

@@ -144,6 +144,8 @@ const OPERATIONS_SECTIONS = [
             settings['request_error_log_setting.max_body_kb'] ?? 64,
           'request_error_log_setting.retention_days':
             settings['request_error_log_setting.retention_days'] ?? 7,
+          'system_task_setting.retention_days':
+            settings['system_task_setting.retention_days'] ?? 30,
         }}
       />
     ),

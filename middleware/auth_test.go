@@ -278,6 +278,87 @@ func TestAuthenticationFailsClosedWhenSubscriptionExpiryCheckFails(t *testing.T)
 	}
 }
 
+func TestDashboardAuthRejectsRedisRoleTampering(t *testing.T) {
+	for _, role := range []int{common.RoleCommonUser, common.RoleAdminUser, common.RoleRootUser} {
+		t.Run(fmt.Sprintf("role_%d", role), func(t *testing.T) {
+			setupDashboardAuthMiddlewareTest(t)
+			gin.SetMode(gin.TestMode)
+			_, redisClient := useRateLimitMiniRedis(t)
+			legacy := "cache-integrity-legacy"
+			user := createMiddlewarePATUser(t, "cache-integrity", legacy)
+			require.NoError(t, model.DB.Model(user).Update("role", role).Error)
+			bundle, err := service.CreateLoginSession(user.Id, "password", "127.0.0.1", "cache-integrity-test")
+			require.NoError(t, err)
+			pat, _ := createMiddlewareScopedToken(t, user.Id, 0, "profile:read", "user:read")
+
+			router := gin.New()
+			router.GET("/api/perf-metrics", RootAuth(), func(c *gin.Context) { c.Status(http.StatusNoContent) })
+			router.GET("/api/user/", AdminAuth(), func(c *gin.Context) { c.Status(http.StatusNoContent) })
+			showIdentity := func(c *gin.Context) {
+				c.JSON(http.StatusOK, gin.H{"id": c.GetInt("id"), "role": c.GetInt("role")})
+			}
+			router.GET("/api/user/self", UserAuth(), showIdentity)
+			router.GET("/api/pricing", TryUserAuth(), showIdentity)
+			rootStatus, adminStatus := http.StatusForbidden, http.StatusForbidden
+			if role == common.RoleRootUser {
+				rootStatus = http.StatusNoContent
+			}
+			if role >= common.RoleAdminUser {
+				adminStatus = http.StatusNoContent
+			}
+			for _, credential := range []struct{ name, raw string }{
+				{name: "login JWT", raw: bundle.AccessToken},
+				{name: "scoped PAT", raw: pat},
+				{name: "legacy token", raw: legacy},
+			} {
+				t.Run(credential.name, func(t *testing.T) {
+					cacheKey := fmt.Sprintf("user:%d", user.Id)
+					require.NoError(t, redisClient.HSet(t.Context(), cacheKey, "Role", role).Err())
+					response := middlewareBearerRequest(router, "/api/perf-metrics", credential.raw)
+					require.Equal(t, rootStatus, response.Code, response.Body.String())
+					response = middlewareBearerRequest(router, "/api/user/", credential.raw)
+					require.Equal(t, adminStatus, response.Code, response.Body.String())
+
+					require.NoError(t, redisClient.HSet(t.Context(), cacheKey, "Role", common.RoleRootUser).Err())
+					response = middlewareBearerRequest(router, "/api/perf-metrics", credential.raw)
+					assert.Equal(t, rootStatus, response.Code, response.Body.String())
+					response = middlewareBearerRequest(router, "/api/user/", credential.raw)
+					assert.Equal(t, adminStatus, response.Code, response.Body.String())
+					for _, path := range []string{"/api/user/self", "/api/pricing"} {
+						response = middlewareBearerRequest(router, path, credential.raw)
+						require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+						var body struct {
+							ID   int `json:"id"`
+							Role int `json:"role"`
+						}
+						require.NoError(t, common.Unmarshal(response.Body.Bytes(), &body))
+						assert.Equal(t, user.Id, body.ID, path)
+						assert.Equal(t, role, body.Role, path)
+					}
+				})
+			}
+			stored, err := model.GetUserById(user.Id, false)
+			require.NoError(t, err)
+			assert.Equal(t, role, stored.Role)
+			if role == common.RoleCommonUser {
+				const callbackName = "test:dashboard-auth-user-read-failure"
+				require.NoError(t, model.DB.Callback().Query().Before("gorm:query").Register(callbackName, func(tx *gorm.DB) {
+					if tx.Statement.Table == "users" {
+						tx.AddError(errors.New("forced user database read failure"))
+					}
+				}))
+				t.Cleanup(func() { model.DB.Callback().Query().Remove(callbackName) })
+				response := middlewareBearerRequest(router, "/api/user/self", bundle.AccessToken)
+				assert.Equal(t, http.StatusOK, response.Code, "a valid cache hit must not query the user table")
+				require.NoError(t, redisClient.HSet(t.Context(), fmt.Sprintf("user:%d", user.Id), "CacheMAC", "tampered", "Role", common.RoleRootUser).Err())
+				response = middlewareBearerRequest(router, "/api/perf-metrics", bundle.AccessToken)
+				assert.Equal(t, http.StatusInternalServerError, response.Code, response.Body.String())
+				assert.Contains(t, response.Body.String(), "AUTH_INTERNAL_ERROR")
+			}
+		})
+	}
+}
+
 func TestTryUserAuthCredentialClassification(t *testing.T) {
 	setupDashboardAuthMiddlewareTest(t)
 	gin.SetMode(gin.TestMode)
@@ -442,6 +523,9 @@ func TestUserAuthAppliesAccessTokenRouteRules(t *testing.T) {
 	require.NoError(t, model.DB.Model(admin).Update("role", common.RoleAdminUser).Error)
 	profile, _ := createMiddlewareScopedToken(t, admin.Id, 0, "profile:read")
 	users, _ := createMiddlewareScopedToken(t, admin.Id, 0, "user:read")
+	userWrite, _ := createMiddlewareScopedToken(t, admin.Id, 0, "user:write")
+	billingRead, _ := createMiddlewareScopedToken(t, admin.Id, 0, "billing:read")
+	billingWrite, _ := createMiddlewareScopedToken(t, admin.Id, 0, "billing:write")
 	ordinary := createMiddlewarePATUser(t, "free-group-ordinary", "free-group-ordinary-legacy")
 	ordinaryUsers, _ := createMiddlewareScopedToken(t, ordinary.Id, 0, "user:read")
 	channel, _ := createMiddlewareScopedToken(t, admin.Id, time.Now().Unix()+3600, "channel:read")
@@ -454,6 +538,11 @@ func TestUserAuthAppliesAccessTokenRouteRules(t *testing.T) {
 	router.GET("/api/undeclared", UserAuth(), ok)
 	router.GET("/api/channel/", AdminAuth(), RequirePermission(authz.ChannelRead), ok)
 	router.GET("/api/free_group/users", AdminAuth(), ok)
+	router.GET("/api/invite_codes", AdminAuth(), ok)
+	router.POST("/api/invite_codes", AdminAuth(), ok)
+	router.GET("/api/daily_egg/records", AdminAuth(), ok)
+	router.GET("/api/subscription/admin/overview", AdminAuth(), ok)
+	router.DELETE("/api/subscription/admin/plans/:id", AdminAuth(), ok)
 	router.GET("/api/pricing", TryUserAuth(), ok)
 
 	for _, test := range []struct {
@@ -465,6 +554,12 @@ func TestUserAuthAppliesAccessTokenRouteRules(t *testing.T) {
 		{name: "free group users with admin scope", path: "/api/free_group/users", token: users, status: http.StatusOK},
 		{name: "free group users without scope", path: "/api/free_group/users", token: profile, status: http.StatusForbidden, code: "ACCESS_TOKEN_SCOPE_DENIED", reason: "scope_denied"},
 		{name: "free group users reject ordinary user", path: "/api/free_group/users", token: ordinaryUsers, status: http.StatusForbidden, code: "AUTH_INSUFFICIENT_PRIVILEGE"},
+		{name: "invitation list with user read scope", path: "/api/invite_codes", token: users, status: http.StatusOK},
+		{name: "invitation list rejects missing scope", path: "/api/invite_codes", token: profile, status: http.StatusForbidden, code: "ACCESS_TOKEN_SCOPE_DENIED", reason: "scope_denied"},
+		{name: "invitation list rejects ordinary users", path: "/api/invite_codes", token: ordinaryUsers, status: http.StatusForbidden, code: "AUTH_INSUFFICIENT_PRIVILEGE"},
+		{name: "daily egg records with user read scope", path: "/api/daily_egg/records", token: users, status: http.StatusOK},
+		{name: "subscription overview with billing read scope", path: "/api/subscription/admin/overview", token: billingRead, status: http.StatusOK},
+		{name: "subscription overview rejects user read scope", path: "/api/subscription/admin/overview", token: users, status: http.StatusForbidden, code: "ACCESS_TOKEN_SCOPE_DENIED", reason: "scope_denied"},
 		{name: "undeclared route", path: "/api/undeclared", token: profile, status: http.StatusForbidden, code: "ACCESS_TOKEN_ROUTE_UNDECLARED", reason: "route_undeclared"},
 		{name: "session route", path: "/api/user/access_tokens", token: profile, status: http.StatusForbidden, code: "AUTH_SESSION_REQUIRED", reason: "session_required"},
 		{name: "permission route with its scope", path: "/api/channel/", token: channel, status: http.StatusOK},
@@ -494,6 +589,21 @@ func TestUserAuthAppliesAccessTokenRouteRules(t *testing.T) {
 				assert.Contains(t, string(params), `"required_scope":"`)
 			}
 		})
+	}
+	for _, test := range []struct {
+		method, path, token string
+		status              int
+	}{
+		{http.MethodPost, "/api/invite_codes", userWrite, http.StatusOK},
+		{http.MethodPost, "/api/invite_codes", users, http.StatusForbidden},
+		{http.MethodDelete, "/api/subscription/admin/plans/1", billingWrite, http.StatusOK},
+		{http.MethodDelete, "/api/subscription/admin/plans/1", billingRead, http.StatusForbidden},
+	} {
+		request := httptest.NewRequest(test.method, test.path, nil)
+		request.Header.Set("Authorization", "Bearer "+test.token)
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		assert.Equal(t, test.status, response.Code, response.Body.String())
 	}
 
 	// The token grant never widens the account: revoking the Casbin permission

@@ -67,7 +67,9 @@ describe('free group usage', () => {
             items: [
               {
                 user_id: 8,
-                username: config?.params?.username || 'alice',
+                username:
+                  (config?.params as { username?: string } | undefined)
+                    ?.username || 'alice',
                 count: 4,
                 rejected_count: 3,
                 last_rejected_at: 1794009600,
@@ -113,7 +115,7 @@ describe('free group usage', () => {
       data: {
         success: true,
         data: {
-          day: config?.params?.day || '2026-11-07',
+          day: (config?.params as { day?: string } | undefined)?.day || '2026-11-07',
           today: '2026-11-07',
           enabled: true,
           group: 'free',

@@ -26,7 +26,7 @@ describe('daily egg records', () => {
         data: {
           success: true,
           data: {
-            day: config?.params?.day || '2026-11-07',
+            day: (config?.params as { day?: string } | undefined)?.day || '2026-11-07',
             today: '2026-11-07',
             total: 1,
             prizes: [

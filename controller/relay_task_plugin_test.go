@@ -471,7 +471,7 @@ func TestExecuteTaskSubmissionDisconnectAfterDurableInsertDoesNotRefund(t *testi
 func setupTaskSubmissionDatabase(t *testing.T, migrate bool, events *[]string) *gorm.DB {
 	t.Helper()
 	previousDB := model.DB
-	var models []any
+	models := []any{&model.Option{}}
 	if migrate {
 		models = append(models, &model.Task{})
 	}
@@ -557,7 +557,7 @@ func openTaskDialectDatabase(t *testing.T, models ...any) (*gorm.DB, common.Data
 }
 
 func TestImmediateTaskSettlementDatabase(t *testing.T) {
-	db, dialect := openTaskDialectDatabase(t, &model.User{}, &model.Channel{}, &model.Task{}, &model.Log{}, &model.RequestBilling{}, &model.QuotaUsageDaily{}, &model.UserSubscription{}, &model.UserSubscriptionRouteGroup{})
+	db, dialect := openTaskDialectDatabase(t, &model.Option{}, &model.User{}, &model.Channel{}, &model.Task{}, &model.Log{}, &model.RequestBilling{}, &model.QuotaUsageDaily{}, &model.UserSubscription{}, &model.UserSubscriptionRouteGroup{})
 	oldDB, oldLogDB := model.DB, model.LOG_DB
 	oldMain, oldLog := common.MainDatabaseType(), common.LogDatabaseType()
 	oldRedis, oldMemory, oldBatch, oldConsume, oldExport := common.RedisEnabled, common.MemoryCacheEnabled, common.BatchUpdateEnabled, common.LogConsumeEnabled, common.DataExportEnabled

@@ -16,6 +16,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -28,7 +29,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func setupRelayStreamOptions(t *testing.T) {
+	t.Helper()
+	db, dialect := openTaskDialectDatabase(t, &model.Option{})
+	previousDB, previousType := model.DB, common.MainDatabaseType()
+	model.DB = db
+	common.SetMainDatabaseType(dialect)
+	t.Cleanup(func() {
+		model.DB = previousDB
+		common.SetMainDatabaseType(previousType)
+	})
+}
+
 func TestRelayKeepAliveDuringImagePreparation(t *testing.T) {
+	setupRelayStreamOptions(t)
 	settings := operation_setting.GetGeneralSetting()
 	previousEnabled, previousInterval := settings.PingIntervalEnabled, settings.PingIntervalSeconds
 	previousCount, previousMedia := constant.CountToken, constant.GetMediaToken
@@ -236,6 +250,7 @@ func TestStreamKeepAlivePreservesFastHTTPFailures(t *testing.T) {
 }
 
 func TestRelayKeepAliveHonorsStreamSettings(t *testing.T) {
+	setupRelayStreamOptions(t)
 	settings := operation_setting.GetGeneralSetting()
 	previousEnabled := settings.PingIntervalEnabled
 	previousCount, previousMedia, previousNonStreamMedia := constant.CountToken, constant.GetMediaToken, constant.GetMediaTokenNotStream

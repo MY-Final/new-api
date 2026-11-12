@@ -109,6 +109,24 @@ function sidebarFor(
   return result
 }
 
+describe('request processing sidebar visibility', () => {
+  it.each([
+    [ROLE.SUPER_ADMIN, true],
+    [ROLE.ADMIN, false],
+    [ROLE.USER, false],
+  ])('shows the entry for role %s: %s', (role, visible) => {
+    const { result } = sidebarFor(undefined, undefined, true, [], role)
+    const items = result.current.flatMap((group) => group.items)
+    expect(items.some((item) => item.url === '/request-processing')).toBe(visible)
+  })
+
+  it('labels the plugin marketplace for all plugin kinds', () => {
+    const { result } = sidebarFor(undefined, undefined, true, [], ROLE.SUPER_ADMIN)
+    const items = result.current.flatMap((group) => group.items)
+    expect(items.find((item) => item.url === '/task-plugins')?.title).toBe('Plugins')
+  })
+})
+
 describe('security sidebar visibility', () => {
   it('shows check-in and daily egg in the entertainment group', () => {
     const { result } = sidebarFor()

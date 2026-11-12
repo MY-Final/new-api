@@ -184,6 +184,7 @@ describe('top navigation section activity', () => {
       isTopNavLinkActive('/system-settings/site/system-info', '/dashboard')
     ).toBe(true)
     expect(isTopNavLinkActive('/keys', '/dashboard')).toBe(true)
+    expect(isTopNavLinkActive('/request-processing', '/dashboard')).toBe(true)
   })
 
   test('does not mark console active on public pages or product routes', () => {

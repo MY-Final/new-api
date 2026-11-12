@@ -141,6 +141,7 @@ func TestSMTPAndLegacyConfigurationNeverUseResend(t *testing.T) {
 }
 
 func TestEmailOptionsNeverReturnResendCredentials(t *testing.T) {
+	setupEmailStatisticsDB(t)
 	configureEmailDelivery(t, map[string]string{"EmailProvider": "resend", "ResendApiKey": "private-email-credential", "ResendFrom": "sender@example.com"})
 	response := httptest.NewRecorder()
 	context, _ := gin.CreateTestContext(response)
@@ -235,6 +236,7 @@ func TestResendSettingsChangesKeepActiveDeliveryWorking(t *testing.T) {
 }
 
 func TestEmailKeyStatusIsDerivedAndReadOnly(t *testing.T) {
+	setupEmailStatisticsDB(t)
 	configureEmailDelivery(t, map[string]string{"EmailProvider": "smtp", "ResendKeyConfigured": "true"})
 	response := httptest.NewRecorder()
 	context, _ := gin.CreateTestContext(response)
@@ -255,7 +257,7 @@ func setupEmailStatisticsDB(t *testing.T) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.EmailSendStat{}))
+	require.NoError(t, db.AutoMigrate(&model.EmailSendStat{}, &model.FreeGroupDailyUsage{}))
 	previousDB, previousRecorder := model.DB, common.EmailDeliveryRecorder
 	model.DB, common.EmailDeliveryRecorder = db, model.RecordEmailDelivery
 	t.Cleanup(func() {
