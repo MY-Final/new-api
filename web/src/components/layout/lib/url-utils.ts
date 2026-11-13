@@ -79,6 +79,7 @@ const consoleRouteSegments = new Set([
   'redemption-codes',
   'request-processing',
   'security',
+  'showcase',
   'subscription-plans',
   'subscriptions',
   'system-info',

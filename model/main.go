@@ -389,6 +389,8 @@ func migrateDB() error {
 		&SystemInstance{},
 		&SystemTask{},
 		&SystemTaskLock{},
+		&ModelShowcasePlan{},
+		&ModelShowcaseRun{},
 		&CasbinRule{},
 		&AuthzRole{},
 		&UserAccessToken{},

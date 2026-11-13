@@ -71,6 +71,13 @@ export function SidebarModulesCard() {
           description: t('AI model testing environment'),
         },
         {
+          key: 'showcase',
+          title: t('Model showcase'),
+          description: t(
+            'Platform-funded model tests and their recent outputs.'
+          ),
+        },
+        {
           key: 'chat',
           title: t('Chat'),
           description: t('Chat session management'),

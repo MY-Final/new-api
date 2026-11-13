@@ -179,6 +179,14 @@ describe('top navigation contact action', () => {
 })
 
 describe('top navigation section activity', () => {
+  test('keeps Model showcase in the sidebar instead of the top navigation', () => {
+    renderNavLinks({ HeaderNavModules: JSON.stringify({ showcase: true }) })
+    expect(
+      screen.queryByRole('link', { name: 'Model showcase' })
+    ).not.toBeInTheDocument()
+    expect(isTopNavLinkActive('/showcase', '/dashboard')).toBe(true)
+  })
+
   test('keeps the console entry active throughout authenticated console pages', () => {
     expect(
       isTopNavLinkActive('/system-settings/site/system-info', '/dashboard')

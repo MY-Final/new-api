@@ -96,6 +96,10 @@ export function SidebarModulesSection({
         title: t('Intelligence Test'),
         description: t('Run reasoning, drawing, and knowledge checks.'),
       },
+      showcase: {
+        title: t('Model showcase'),
+        description: t('Platform-funded model tests and their recent outputs.'),
+      },
       canvas: {
         title: t('Canvas'),
         description: t(

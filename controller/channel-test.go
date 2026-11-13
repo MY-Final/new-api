@@ -22,6 +22,7 @@ import (
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relay"
+	openaichannel "github.com/QuantumNous/new-api/relay/channel/openai"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -38,9 +39,12 @@ import (
 )
 
 type testResult struct {
-	context     *gin.Context
-	localErr    error
-	newAPIError *types.NewAPIError
+	context      *gin.Context
+	localErr     error
+	newAPIError  *types.NewAPIError
+	responseBody []byte
+	usage        *dto.Usage
+	quota        int
 }
 
 func normalizeChannelTestEndpoint(channel *model.Channel, endpointType string) string {
@@ -100,6 +104,10 @@ func resolveChannelTestUserID(c *gin.Context) (int, error) {
 }
 
 func testChannel(ctx context.Context, channel *model.Channel, testUserID int, testModel string, endpointType string, isStream bool) testResult {
+	return testChannelWithRequest(ctx, channel, testUserID, testModel, endpointType, isStream, nil, "")
+}
+
+func testChannelWithRequest(ctx context.Context, channel *model.Channel, testUserID int, testModel string, endpointType string, isStream bool, customRequest dto.Request, testGroup string) testResult {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -209,6 +217,11 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	c.Set("channel", channel.Type)
 	c.Set("base_url", channel.GetBaseURL())
 	group, _ := model.GetUserGroup(testUserID, false)
+	if customRequest != nil {
+		group = testGroup
+		common.SetContextKey(c, constant.ContextKeyUsingGroup, group)
+		common.SetContextKey(c, constant.ContextKeyTokenGroup, group)
+	}
 	c.Set("group", group)
 
 	newAPIError := middleware.SetupContextForSelectedChannel(c, channel, testModel)
@@ -271,6 +284,9 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	}
 
 	request := buildTestRequest(testModel, endpointType, channel, isStream)
+	if customRequest != nil {
+		request = customRequest
+	}
 
 	info, err := relaycommon.GenRelayInfo(c, relayFormat, request, nil)
 
@@ -348,6 +364,26 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	}
 
 	adaptor.Init(info)
+
+	showcaseViaResponses := customRequest != nil && info.RelayMode == relayconstant.RelayModeChatCompletions &&
+		(channel.Type == constant.ChannelTypeCodex || service.ShouldChatCompletionsUseResponsesGlobal(info.ChannelId, info.ChannelType, info.OriginModelName))
+	if showcaseViaResponses {
+		converted, convertErr := service.ConvertRequest(c, info, types.RelayFormatOpenAIResponses, request)
+		if convertErr != nil {
+			return testResult{context: c, localErr: convertErr, newAPIError: types.NewError(convertErr, types.ErrorCodeConvertRequestFailed)}
+		}
+		responsesRequest, ok := converted.Value.(*dto.OpenAIResponsesRequest)
+		if !ok {
+			return testResult{context: c, localErr: errors.New("invalid showcase responses request type")}
+		}
+		if channel.Type == constant.ChannelTypeCodex {
+			responsesRequest.Stream = common.GetPointer(true)
+			info.IsStream = true
+		}
+		request = responsesRequest
+		info.RelayMode = relayconstant.RelayModeResponses
+		info.RequestURLPath = "/v1/responses"
+	}
 
 	var convertedRequest any
 	// 根据 RelayMode 选择正确的转换函数
@@ -507,7 +543,18 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 			}
 		}
 	}
-	usageA, respErr := adaptor.DoResponse(c, httpResp, info)
+	var usageA any
+	var respErr *types.NewAPIError
+	if showcaseViaResponses {
+		info.IsStream = false
+		if httpResp != nil && strings.Contains(strings.ToLower(httpResp.Header.Get("Content-Type")), "text/event-stream") {
+			usageA, respErr = openaichannel.OaiResponsesToChatBufferedStreamHandler(c, info, httpResp)
+		} else {
+			usageA, respErr = openaichannel.OaiResponsesToChatHandler(c, info, httpResp)
+		}
+	} else {
+		usageA, respErr = adaptor.DoResponse(c, httpResp, info)
+	}
 	if respErr != nil {
 		return testResult{
 			context:     c,
@@ -546,24 +593,34 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	milliseconds := tok.Sub(tik).Milliseconds()
 	consumedTime := float64(milliseconds) / 1000.0
 	other := buildTestLogOther(c, info, priceData, usage, tieredResult)
+	tokenName := "Model test"
+	if customRequest != nil {
+		tokenName = "Model showcase"
+		other.SetAdmin("cost_bearer", "platform")
+	}
 	model.RecordConsumeLog(c, testUserID, model.RecordConsumeLogParams{
 		ChannelId:        channel.Id,
 		PromptTokens:     usage.PromptTokens,
 		CompletionTokens: usage.CompletionTokens,
 		ModelName:        info.OriginModelName,
-		TokenName:        "Model test",
+		TokenName:        tokenName,
 		Quota:            quota,
-		Content:          []*common.Message{common.NewMessage("Model test")},
+		Content:          []*common.Message{common.NewMessage(tokenName)},
 		UseTimeSeconds:   int(consumedTime),
 		IsStream:         info.IsStream,
 		Group:            info.UsingGroup,
 		Other:            other,
 	})
-	common.SysLog(common.LogText("testing channel #%d, response: \n%s", channel.Id, string(respBody)))
+	if customRequest == nil {
+		common.SysLog(common.LogText("testing channel #%d, response: \n%s", channel.Id, string(respBody)))
+	}
 	return testResult{
-		context:     c,
-		localErr:    nil,
-		newAPIError: nil,
+		context:      c,
+		localErr:     nil,
+		newAPIError:  nil,
+		responseBody: respBody,
+		usage:        usage,
+		quota:        quota,
 	}
 }
 

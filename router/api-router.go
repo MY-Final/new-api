@@ -58,6 +58,17 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/home_page_content", controller.GetHomePageContent)
 		apiRouter.GET("/free_group/usage", middleware.DisableCache(), middleware.TryUserAuth(), controller.GetFreeGroupUsage)
 		apiRouter.GET("/free_group/schedule", controller.GetFreeGroupSchedule)
+		apiRouter.GET("/showcase", controller.GetModelShowcase)
+		apiRouter.GET("/showcase/runs/:id", controller.GetModelShowcaseRun)
+		showcaseAdminRoute := apiRouter.Group("/showcase/admin")
+		showcaseAdminRoute.Use(middleware.RootAuth(), middleware.DisableCache())
+		{
+			showcaseAdminRoute.GET("/plans", controller.GetModelShowcasePlans)
+			showcaseAdminRoute.GET("/models", controller.GetModelShowcaseModels)
+			showcaseAdminRoute.POST("/plans", controller.SaveModelShowcasePlan)
+			showcaseAdminRoute.DELETE("/plans/:id", controller.DeleteModelShowcasePlan)
+			showcaseAdminRoute.POST("/plans/:id/run", controller.RunModelShowcasePlan)
+		}
 		apiRouter.GET("/free_group/users", middleware.AdminAuth(), controller.GetFreeGroupUserUsage)
 		apiRouter.GET("/daily_egg/records", middleware.AdminAuth(), controller.GetDailyEggRecords)
 		apiRouter.GET("/invite_codes/public/:code", middleware.CriticalRateLimit(), controller.GetPublicInviteCode)

@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { ShowcaseAdmin } from '@/features/model-showcase/admin'
+
 import { SystemBehaviorSection } from '../general/system-behavior-section'
 import { EmailSettingsSection } from '../integrations/email-settings-section'
 import { EmailStatisticsSection } from '../integrations/email-statistics-section'
@@ -29,6 +31,11 @@ import type { OperationsSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
 
 const OPERATIONS_SECTIONS = [
+  {
+    id: 'showcase',
+    titleKey: 'Model showcase',
+    build: () => <ShowcaseAdmin />,
+  },
   {
     id: 'behavior',
     titleKey: 'System Behavior',

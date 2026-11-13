@@ -117,13 +117,23 @@ describe('request processing sidebar visibility', () => {
   ])('shows the entry for role %s: %s', (role, visible) => {
     const { result } = sidebarFor(undefined, undefined, true, [], role)
     const items = result.current.flatMap((group) => group.items)
-    expect(items.some((item) => item.url === '/request-processing')).toBe(visible)
+    expect(items.some((item) => item.url === '/request-processing')).toBe(
+      visible
+    )
   })
 
   it('labels the plugin marketplace for all plugin kinds', () => {
-    const { result } = sidebarFor(undefined, undefined, true, [], ROLE.SUPER_ADMIN)
+    const { result } = sidebarFor(
+      undefined,
+      undefined,
+      true,
+      [],
+      ROLE.SUPER_ADMIN
+    )
     const items = result.current.flatMap((group) => group.items)
-    expect(items.find((item) => item.url === '/task-plugins')?.title).toBe('Plugins')
+    expect(items.find((item) => item.url === '/task-plugins')?.title).toBe(
+      'Plugins'
+    )
   })
 })
 
@@ -248,6 +258,65 @@ describe('audit log sidebar entry', () => {
     expect(titles).not.toContain('Usage Logs')
     expect(titles).toContain('Audit Logs')
   })
+})
+
+describe('model showcase sidebar entry', () => {
+  it('legacy configurations show Model showcase after Intelligence Test for ordinary users', () => {
+    location.pathname = '/showcase'
+    const { result } = sidebarFor(
+      { chat: { enabled: true, intelligence: true } },
+      { chat: { enabled: true, intelligence: true } },
+      true,
+      [],
+      ROLE.USER
+    )
+    const items =
+      result.current.find((group) => group.id === 'chat')?.items ?? []
+    const intelligenceIndex = items.findIndex(
+      (item) => item.url === '/intelligence-test'
+    )
+    expect(items[intelligenceIndex + 1]).toMatchObject({
+      title: 'Model showcase',
+      url: '/showcase',
+    })
+    expect(
+      items
+        .filter((item) => checkIsActive('/showcase', item))
+        .map((item) => item.title)
+    ).toEqual(['Model showcase'])
+  })
+
+  it('admin settings preserve the independent showcase visibility toggle when saved', () => {
+    const config = parseSidebarModulesAdmin(
+      '{"chat":{"enabled":true,"intelligence":true}}'
+    )
+    expect(config.chat.showcase).toBe(true)
+    config.chat.showcase = false
+    const saved = parseSidebarModulesAdmin(serializeSidebarModulesAdmin(config))
+    const { result } = sidebarFor(saved)
+    const titles = result.current.flatMap((group) =>
+      group.items.map((item) => item.title)
+    )
+    expect(titles).not.toContain('Model showcase')
+    expect(titles).toContain('Intelligence Test')
+  })
+
+  it.each([
+    [{ chat: { enabled: true, showcase: false } }, undefined],
+    [{ chat: { enabled: false } }, { chat: { showcase: true } }],
+    [undefined, { chat: { enabled: true, showcase: false } }],
+    [undefined, { chat: { enabled: false } }],
+  ])(
+    'admin or user disablement hides Model showcase (%j, %j)',
+    (admin, user) => {
+      const { result } = sidebarFor(admin, user)
+      expect(
+        result.current
+          .flatMap((group) => group.items)
+          .some((item) => item.url === '/showcase')
+      ).toBe(false)
+    }
+  )
 })
 
 describe('Custom pages sidebar group', () => {

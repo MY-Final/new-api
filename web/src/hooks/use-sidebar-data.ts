@@ -94,6 +94,11 @@ export function useSidebarData(badges: SidebarBadges = {}): SidebarData {
           icon: Brain,
         },
         {
+          title: t('Model showcase'),
+          url: '/showcase',
+          icon: PanelsTopLeft,
+        },
+        {
           title: t('Canvas'),
           url: '/canvas',
           icon: ImageIcon,
