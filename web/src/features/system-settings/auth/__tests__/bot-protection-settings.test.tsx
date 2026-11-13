@@ -23,7 +23,7 @@ import {
   createRouter,
   RouterProvider,
 } from '@tanstack/react-router'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createInstance, type i18n } from 'i18next'
 import { useState } from 'react'
@@ -41,6 +41,13 @@ const defaults = {
   TurnstileCheckEnabled: false,
   TurnstileSiteKey: '',
   TurnstileSecretKey: '',
+  turnstile: {
+    login: true,
+    register: true,
+    email_verification: true,
+    password_reset: true,
+    checkin: true,
+  },
 }
 
 let testI18n: i18n
@@ -85,6 +92,45 @@ beforeEach(async () => {
 })
 
 describe('Bot Protection settings saves', () => {
+  it('defaults every scene to enabled and saves independent choices without enabling the master switch', async () => {
+    localStorage.setItem('status', '{}')
+    await renderSettings()
+    const user = userEvent.setup()
+    for (const name of [
+      'Password login',
+      'Account registration',
+      'Registration verification email',
+      'Password reset email',
+      'Daily Check-in',
+    ]) {
+      expect(screen.getByRole('switch', { name })).toHaveAttribute(
+        'aria-checked',
+        'true'
+      )
+    }
+    await user.click(screen.getByRole('switch', { name: 'Password login' }))
+    await user.click(screen.getByRole('switch', { name: 'Daily Check-in' }))
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+    const put = vi.mocked(api.put)
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(2))
+    expect(put.mock.calls.map(([, body]) => body)).toEqual([
+      { key: 'turnstile.login', value: false },
+      { key: 'turnstile.checkin', value: false },
+    ])
+    expect(
+      screen.getByRole('switch', { name: 'Enable Turnstile' })
+    ).toHaveAttribute('aria-checked', 'false')
+    expect(localStorage.getItem('status')).toBeNull()
+  })
+
+  it('updates scene labels when the interface language changes', async () => {
+    await renderSettings()
+    await act(() => testI18n.changeLanguage('zh'))
+    expect(screen.getByRole('switch', { name: '密码登录' })).toBeVisible()
+    expect(screen.getByRole('switch', { name: '账号注册' })).toBeVisible()
+    expect(screen.getByRole('switch', { name: '注册验证邮件' })).toBeVisible()
+  })
+
   it('saves both keys before enabling Turnstile in one save', async () => {
     const savedOptions: Record<string, string | number | boolean> = {}
     const put = vi.spyOn(api, 'put').mockImplementation(async (_url, body) => {

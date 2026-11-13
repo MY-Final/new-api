@@ -36,6 +36,7 @@ import { toIntlLocale } from '@/i18n/languages'
 import { formatQuotaWithCurrency } from '@/lib/currency'
 import dayjs from '@/lib/dayjs'
 import { formatNumber } from '@/lib/format'
+import { isTurnstileRequired } from '@/lib/turnstile'
 import { useSystemConfigStore } from '@/stores/system-config-store'
 
 import { useCheckin } from '../hooks/use-checkin'
@@ -71,9 +72,7 @@ export function CheckinFloatingWindow() {
   }))
 
   const checkinEnabled = status?.checkin_enabled === true
-  const turnstileEnabled = !!(
-    status?.turnstile_check && status?.turnstile_site_key
-  )
+  const turnstileEnabled = isTurnstileRequired(status, 'checkin')
   const turnstileSiteKey = status?.turnstile_site_key || ''
   const today = dayjs().format('YYYY-MM-DD')
   const onProfilePage =

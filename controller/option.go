@@ -289,7 +289,7 @@ func UpdateOption(c *gin.Context) {
 			return
 		}
 	case "TurnstileCheckEnabled":
-		if option.Value == "true" && common.TurnstileSiteKey == "" {
+		if option.Value == "true" && (common.TurnstileSiteKey == "" || common.TurnstileSecretKey == "") {
 			common.ApiErrorT(c, "Cannot enable Turnstile verification. Enter the Turnstile settings first.")
 			return
 		}

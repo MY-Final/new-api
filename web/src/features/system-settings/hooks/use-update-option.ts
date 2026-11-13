@@ -28,6 +28,13 @@ import type { UpdateOptionRequest, UpdatePasskeyDomainsRequest } from '../types'
 
 // Configuration keys that require status refresh
 const STATUS_RELATED_KEYS = new Set([
+  'TurnstileCheckEnabled',
+  'TurnstileSiteKey',
+  'turnstile.login',
+  'turnstile.register',
+  'turnstile.email_verification',
+  'turnstile.password_reset',
+  'turnstile.checkin',
   'SupportTicketsEnabled',
   'HeaderNavModules',
   'SidebarModulesAdmin',

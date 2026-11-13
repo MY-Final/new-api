@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { TurnstileScene } from '@/lib/turnstile'
 import type { AuthBundle } from '@/stores/auth-store'
 
 import type { LoginResult } from './secure-verification/types'
@@ -127,6 +128,7 @@ export interface SystemStatus {
     wechat_qr_code_image_url?: string
     wechat_account_qrcode_image_url?: string
     WeChatAccountQRCodeImageURL?: string
+    turnstile_scenes?: Partial<Record<TurnstileScene, boolean>>
     turnstile_check?: boolean
     turnstile_site_key?: string
     email_verification?: boolean
@@ -176,6 +178,7 @@ export interface SystemStatus {
   wechat_qr_code_image_url?: string
   wechat_account_qrcode_image_url?: string
   WeChatAccountQRCodeImageURL?: string
+  turnstile_scenes?: Partial<Record<TurnstileScene, boolean>>
   turnstile_check?: boolean
   turnstile_site_key?: string
   email_verification?: boolean

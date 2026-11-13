@@ -33,9 +33,11 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
+import type { TurnstileScene } from '@/lib/turnstile'
 
 import {
   SettingsForm,
+  SettingsControlChildren,
   SettingsSwitchContent,
   SettingsSwitchItem,
 } from '../components/settings-form-layout'
@@ -47,6 +49,13 @@ const botProtectionSchema = z.object({
   TurnstileCheckEnabled: z.boolean(),
   TurnstileSiteKey: z.string().optional(),
   TurnstileSecretKey: z.string().optional(),
+  turnstile: z.object({
+    login: z.boolean(),
+    register: z.boolean(),
+    email_verification: z.boolean(),
+    password_reset: z.boolean(),
+    checkin: z.boolean(),
+  }),
 })
 
 type BotProtectionFormValues = z.infer<typeof botProtectionSchema>
@@ -65,16 +74,32 @@ export function BotProtectionSection({
     resolver: zodResolver(botProtectionSchema),
     defaultValues,
   })
+  const scenes = [
+    { key: 'turnstile.login', label: t('Password login') },
+    { key: 'turnstile.register', label: t('Account registration') },
+    {
+      key: 'turnstile.email_verification',
+      label: t('Registration verification email'),
+    },
+    { key: 'turnstile.password_reset', label: t('Password reset email') },
+    { key: 'turnstile.checkin', label: t('Daily Check-in') },
+  ] as const
 
   useEffect(() => {
     form.reset(defaultValues)
   }, [defaultValues, form])
 
   const onSubmit = async (data: BotProtectionFormValues) => {
-    const updates = Object.entries(data).filter(
+    const { turnstile, ...globalSettings } = data
+    const updates = Object.entries(globalSettings).filter(
       ([key, value]) =>
         value !== defaultValues[key as keyof BotProtectionFormValues]
     )
+    for (const [scene, enabled] of Object.entries(turnstile)) {
+      if (enabled !== defaultValues.turnstile[scene as TurnstileScene]) {
+        updates.push([`turnstile.${scene}`, enabled])
+      }
+    }
     const turnstileEnableUpdate = updates.find(
       ([key, value]) => key === 'TurnstileCheckEnabled' && value === true
     )
@@ -107,7 +132,7 @@ export function BotProtectionSection({
                   <FormLabel>{t('Enable Turnstile')}</FormLabel>
                   <FormDescription>
                     {t(
-                      'Protect login and registration with Cloudflare Turnstile'
+                      'Choose where Cloudflare Turnstile is required. Scene switches take effect only when Turnstile is enabled.'
                     )}
                   </FormDescription>
                 </SettingsSwitchContent>
@@ -120,6 +145,29 @@ export function BotProtectionSection({
               </SettingsSwitchItem>
             )}
           />
+
+          <SettingsControlChildren>
+            {scenes.map((scene) => (
+              <FormField
+                key={scene.key}
+                control={form.control}
+                name={scene.key}
+                render={({ field }) => (
+                  <SettingsSwitchItem>
+                    <SettingsSwitchContent>
+                      <FormLabel>{scene.label}</FormLabel>
+                    </SettingsSwitchContent>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </SettingsSwitchItem>
+                )}
+              />
+            ))}
+          </SettingsControlChildren>
 
           <FormField
             control={form.control}

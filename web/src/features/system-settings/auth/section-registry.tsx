@@ -111,6 +111,13 @@ const AUTH_SECTIONS = [
           TurnstileCheckEnabled: settings.TurnstileCheckEnabled,
           TurnstileSiteKey: settings.TurnstileSiteKey,
           TurnstileSecretKey: settings.TurnstileSecretKey,
+          turnstile: {
+            login: settings['turnstile.login'],
+            register: settings['turnstile.register'],
+            email_verification: settings['turnstile.email_verification'],
+            password_reset: settings['turnstile.password_reset'],
+            checkin: settings['turnstile.checkin'],
+          },
         }}
       />
     ),

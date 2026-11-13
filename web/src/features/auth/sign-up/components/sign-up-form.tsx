@@ -64,6 +64,7 @@ import { formatQuotaWithCurrency } from '@/lib/currency'
 import { handleServerError } from '@/lib/handle-server-error'
 import { AuthOperationError } from '@/lib/secure-verification'
 import { createServerError } from '@/lib/server-error-message'
+import { isTurnstileRequired } from '@/lib/turnstile'
 import { cn } from '@/lib/utils'
 
 export function SignUpForm({
@@ -95,7 +96,7 @@ export function SignUpForm({
     turnstileToken,
     setTurnstileToken,
     validateTurnstile,
-  } = useTurnstile()
+  } = useTurnstile('register')
   const { redirectToLogin, handleLoginResult } = useAuthRedirect()
   const {
     isSending: isSendingCode,
@@ -104,7 +105,7 @@ export function SignUpForm({
     sendCode,
   } = useEmailVerification({
     turnstileToken,
-    validateTurnstile,
+    validateTurnstile: () => validateTurnstile('email_verification'),
   })
 
   const form = useForm<z.infer<typeof registerFormSchema>>({
@@ -140,6 +141,11 @@ export function SignUpForm({
     true
   const hasWeChatLogin = Boolean(status?.wechat_login)
   const turnstileReady = !isTurnstileEnabled || Boolean(turnstileToken)
+  const verificationTurnstileEnabled =
+    emailVerificationRequired &&
+    isTurnstileRequired(status, 'email_verification')
+  const verificationTurnstileReady =
+    !verificationTurnstileEnabled || Boolean(turnstileToken)
 
   const wechatQrCodeUrl = useMemo(() => {
     return (
@@ -221,11 +227,16 @@ export function SignUpForm({
       )
     } finally {
       setIsLoading(false)
+      if (isTurnstileEnabled) {
+        setTurnstileToken('')
+        setTurnstileWidgetKey((current) => current + 1)
+      }
     }
   }
 
   async function handleSendVerificationCode() {
-    if (await sendCode(emailValue || '')) {
+    await sendCode(emailValue || '')
+    if (verificationTurnstileEnabled) {
       setTurnstileToken('')
       setTurnstileWidgetKey((current) => current + 1)
     }
@@ -461,7 +472,7 @@ export function SignUpForm({
                   isSendingCode ||
                   isActive ||
                   !emailValue ||
-                  !turnstileReady
+                  !verificationTurnstileReady
                 }
                 onClick={handleSendVerificationCode}
               >
@@ -472,12 +483,13 @@ export function SignUpForm({
         )}
 
         {/* Turnstile */}
-        {isTurnstileEnabled && (
+        {(isTurnstileEnabled || verificationTurnstileEnabled) && (
           <div className='mt-2'>
             <Turnstile
               key={turnstileWidgetKey}
               siteKey={turnstileSiteKey}
               onVerify={setTurnstileToken}
+              onExpire={() => setTurnstileToken('')}
             />
           </div>
         )}

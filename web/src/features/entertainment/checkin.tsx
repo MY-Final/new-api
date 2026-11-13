@@ -5,6 +5,7 @@ import { EmptyState } from '@/components/empty-state'
 import { Main } from '@/components/layout'
 import { CheckinCalendarCard } from '@/features/profile/components/checkin-calendar-card'
 import { useStatus } from '@/hooks/use-status'
+import { isTurnstileRequired } from '@/lib/turnstile'
 
 export function EntertainmentCheckin() {
   const { t } = useTranslation()
@@ -18,9 +19,7 @@ export function EntertainmentCheckin() {
         {status?.checkin_enabled ? (
           <CheckinCalendarCard
             checkinEnabled
-            turnstileEnabled={
-              !!(status.turnstile_check && status.turnstile_site_key)
-            }
+            turnstileEnabled={isTurnstileRequired(status, 'checkin')}
             turnstileSiteKey={status.turnstile_site_key || ''}
           />
         ) : (

@@ -72,6 +72,7 @@ func GetStatus(c *gin.Context) {
 		"api_base_urls":               system_setting.ParseAPIBaseURLs(common.OptionMap[system_setting.APIBaseURLsOptionKey]),
 		"turnstile_check":             common.TurnstileCheckEnabled,
 		"turnstile_site_key":          common.TurnstileSiteKey,
+		"turnstile_scenes":            *system_setting.GetTurnstileSettings(),
 		"docs_link":                   operation_setting.GetGeneralSetting().DocsLink,
 		"quota_per_unit":              common.QuotaPerUnit,
 		// 兼容旧前端：保留 display_in_currency，同时提供新的 quota_display_type

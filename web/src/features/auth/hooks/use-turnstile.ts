@@ -21,24 +21,25 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { useStatus } from '@/hooks/use-status'
+import { isTurnstileRequired, type TurnstileScene } from '@/lib/turnstile'
 
 /**
  * Hook for managing Turnstile verification
  */
-export function useTurnstile() {
+export function useTurnstile(scene: TurnstileScene) {
   const { status } = useStatus()
   const [turnstileToken, setTurnstileToken] = useState('')
 
-  const isTurnstileEnabled = !!(
-    status?.turnstile_check && status?.turnstile_site_key
-  )
+  const isTurnstileEnabled = isTurnstileRequired(status, scene)
   const turnstileSiteKey = status?.turnstile_site_key || ''
 
   /**
    * Validate if turnstile is ready when required
    */
-  const validateTurnstile = (): boolean => {
-    if (isTurnstileEnabled && !turnstileToken) {
+  const validateTurnstile = (
+    requiredScene: TurnstileScene = scene
+  ): boolean => {
+    if (isTurnstileRequired(status, requiredScene) && !turnstileToken) {
       toast.info(
         i18next.t('Please wait a moment, human check is initializing...')
       )

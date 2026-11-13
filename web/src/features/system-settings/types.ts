@@ -258,6 +258,11 @@ export type AuthSettings = {
   TurnstileCheckEnabled: boolean
   TurnstileSiteKey: string
   TurnstileSecretKey: string
+  'turnstile.login': boolean
+  'turnstile.register': boolean
+  'turnstile.email_verification': boolean
+  'turnstile.password_reset': boolean
+  'turnstile.checkin': boolean
   'passkey.enabled': boolean
   'passkey.rp_display_name': string
   'passkey.rp_id': string

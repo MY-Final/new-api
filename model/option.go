@@ -256,6 +256,15 @@ func SyncOptions(frequency int) {
 }
 
 func validateOptionValue(key string, value string) error {
+	if strings.HasPrefix(key, "turnstile.") {
+		switch key {
+		case "turnstile.login", "turnstile.register", "turnstile.email_verification", "turnstile.password_reset", "turnstile.checkin":
+			if value == "true" || value == "false" {
+				return nil
+			}
+		}
+		return common.NewMessage("Invalid parameters")
+	}
 	if key == DailyEggSettingOption {
 		_, err := ParseDailyEggSetting(value)
 		return err
