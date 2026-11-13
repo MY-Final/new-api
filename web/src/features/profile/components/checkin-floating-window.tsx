@@ -30,7 +30,6 @@ import { useTranslation } from 'react-i18next'
 import { FloatingWindow } from '@/components/floating-window'
 import { Button } from '@/components/ui/button'
 import { IconBadge } from '@/components/ui/icon-badge'
-import { Spinner } from '@/components/ui/spinner'
 import { useStatus } from '@/hooks/use-status'
 import { toIntlLocale } from '@/i18n/languages'
 import { formatQuotaWithCurrency } from '@/lib/currency'
@@ -40,11 +39,12 @@ import { isTurnstileRequired } from '@/lib/turnstile'
 import { useSystemConfigStore } from '@/stores/system-config-store'
 
 import { useCheckin } from '../hooks/use-checkin'
+import { CheckinAction } from './checkin-action'
 import { CheckinTurnstileDialog } from './checkin-turnstile-dialog'
 
 const WINDOW_WIDTH = 336
 /** The window is content-sized, so this keeps its top clear of the bottom edge. */
-const WINDOW_BOTTOM_OFFSET = 440
+const WINDOW_BOTTOM_OFFSET = 560
 const DISMISSED_STORAGE_KEY = 'checkin-floating-window:dismissed'
 
 /**
@@ -185,29 +185,11 @@ export function CheckinFloatingWindow() {
             </div>
           </dl>
 
-          <Button
-            type='button'
-            size='lg'
-            className='h-10 w-full rounded-xl'
-            onClick={startCheckin}
-            disabled={checkinLoading}
-            aria-busy={checkinLoading}
-          >
-            {checkinLoading ? (
-              <Spinner
-                data-icon='inline-start'
-                className='motion-reduce:animate-none'
-                aria-hidden='true'
-              />
-            ) : (
-              <HugeiconsIcon
-                icon={GiftIcon}
-                data-icon='inline-start'
-                aria-hidden='true'
-              />
-            )}
-            {checkinLoading ? t('Loading...') : t('Check in now')}
-          </Button>
+          <CheckinAction
+            compact
+            onCheckin={startCheckin}
+            loading={checkinLoading}
+          />
           <Button
             variant='ghost'
             size='sm'

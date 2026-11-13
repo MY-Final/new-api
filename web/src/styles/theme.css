@@ -103,54 +103,54 @@ For commercial licensing, please contact support@quantumnous.com
    * saved preference. Explicit Sans selects Public Sans in theme-presets.css. */
   --font-ui-sans: sans-serif;
   --font-body: var(--font-ui-sans);
-  /* The default console palette follows the warm KunRouter public site:
-   * cream canvas, near-black ink, warm-white surfaces and restrained orange
-   * emphasis. Keep contrast suitable for dense admin screens. */
-  --background: #fdf8f3;
-  --foreground: #1a1a1a;
-  --card: #fffdfb;
-  --card-foreground: #1a1a1a;
-  --popover: #fffdfb;
-  --popover-foreground: #1a1a1a;
-  --primary: #c2410c;
-  --primary-foreground: #fffaf5;
-  --secondary: #f4ebe3;
-  --secondary-foreground: #7c2d12;
-  --muted: #f7f0e9;
-  --muted-foreground: #6b625a;
-  --accent: #f4e5d9;
-  --accent-foreground: #2b211b;
+  --background: #f5f5f5;
+  --foreground: #18181b;
+  --card: #ffffff;
+  --card-foreground: #18181b;
+  --popover: #ffffff;
+  --popover-foreground: #18181b;
+  --primary: #27272a;
+  --primary-foreground: #ffffff;
+  --secondary: #e4e4e7;
+  --secondary-foreground: #27272a;
+  --muted: #ededee;
+  --muted-foreground: #606068;
+  --accent: #e4e4e7;
+  --accent-foreground: #18181b;
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
   --success: #4d7c45;
   --success-foreground: oklch(0.985 0 0);
   --warning: #a16207;
-  --warning-foreground: #fffaf5;
+  --warning-foreground: #ffffff;
   --info: #526b7a;
   --info-foreground: oklch(0.985 0 0);
-  --neutral: #8a8178;
-  --neutral-foreground: #1a1a1a;
-  --border: #eadfd5;
-  --input: #e2d5ca;
-  --ring: #ea580c;
-  --chart-1: #c2410c;
-  --chart-2: #d97706;
-  --chart-3: #9a3412;
-  --chart-4: #6b7160;
-  --chart-5: #8c5a3c;
-  --overview-accent-1: #c2410c;
-  --overview-accent-2: #d97706;
-  --overview-accent-3: #9a3412;
-  --sidebar: #faf4ee;
-  --sidebar-foreground: #312821;
-  --sidebar-primary: #c2410c;
-  --sidebar-primary-foreground: #fffaf5;
-  --sidebar-accent: #f2e2d4;
-  --sidebar-accent-foreground: #9a3412;
-  --sidebar-border: #eadfd5;
-  --sidebar-ring: #ea580c;
-  --skeleton-base: #f1e8df;
-  --skeleton-highlight: #faf4ee;
+  --neutral: #71717a;
+  --neutral-foreground: #ffffff;
+  --border: #d8d8dc;
+  --input: #c9c9ce;
+  --ring: #52525b;
+  --chart-1: #27272a;
+  --chart-2: #52525b;
+  --chart-3: #71717a;
+  --chart-4: #a1a1aa;
+  --chart-5: #b8b8c0;
+  --overview-accent-1: #27272a;
+  --overview-accent-2: #52525b;
+  --overview-accent-3: #71717a;
+  --sidebar: #efeff0;
+  --sidebar-foreground: #27272a;
+  --sidebar-primary: #27272a;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #dedee2;
+  --sidebar-accent-foreground: #18181b;
+  --sidebar-border: #d8d8dc;
+  --sidebar-ring: #52525b;
+  --skeleton-base: #e4e4e7;
+  --skeleton-highlight: #fafafa;
+  --practice-highlight: #71717a;
+  --practice-code-string: #e4e4e7;
+  --practice-code-value: #d4d4d8;
   --table-row: var(--background);
   --table-header: color-mix(
     in oklch,
@@ -185,53 +185,52 @@ For commercial licensing, please contact support@quantumnous.com
   /* Native controls follow the theme; Dark Reader also reads this to detect
      the built-in dark theme. */
   color-scheme: dark;
-  /* Warm charcoal pairs with the public site's dark mode instead of using a
-   * cool blue-black admin shell. */
-  --background: #15120f;
-  --foreground: #faf7f2;
-  --card: #211b17;
-  --card-foreground: #faf7f2;
-  --popover: #271f1a;
-  --popover-foreground: #faf7f2;
-  --primary: #fb923c;
-  --primary-foreground: #20140d;
-  --secondary: #30271f;
-  --secondary-foreground: #fed7aa;
-  --muted: #29211b;
-  --muted-foreground: #b8ada2;
-  --accent: #35281e;
-  --accent-foreground: #fff7ed;
+  --background: #111113;
+  --foreground: #fafafa;
+  --card: #1c1c1f;
+  --card-foreground: #fafafa;
+  --popover: #232326;
+  --popover-foreground: #fafafa;
+  --primary: #f4f4f5;
+  --primary-foreground: #18181b;
+  --secondary: #2b2b30;
+  --secondary-foreground: #e4e4e7;
+  --muted: #26262b;
+  --muted-foreground: #b0b0b8;
+  --accent: #323238;
+  --accent-foreground: #fafafa;
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
   --success: #86a873;
-  --success-foreground: #15120f;
+  --success-foreground: #111113;
   --warning: #fbbf24;
-  --warning-foreground: #20140d;
+  --warning-foreground: #18181b;
   --info: #94a9b6;
-  --info-foreground: #15120f;
-  --neutral: #a89d93;
-  --neutral-foreground: #15120f;
-  --border: #3a3028;
-  --input: #45372d;
-  --ring: #fb923c;
-  --chart-1: #fb923c;
-  --chart-2: #fbbf24;
-  --chart-3: #f97316;
-  --chart-4: #a3a380;
-  --chart-5: #c08457;
-  --overview-accent-1: #fb923c;
-  --overview-accent-2: #fbbf24;
-  --overview-accent-3: #c08457;
-  --sidebar: #1a1613;
-  --sidebar-foreground: #f5eee7;
-  --sidebar-primary: #fb923c;
-  --sidebar-primary-foreground: #20140d;
-  --sidebar-accent: #33271f;
-  --sidebar-accent-foreground: #ffedd5;
-  --sidebar-border: #322820;
-  --sidebar-ring: #fb923c;
-  --skeleton-base: #29211b;
-  --skeleton-highlight: #3a3028;
+  --info-foreground: #111113;
+  --neutral: #a1a1aa;
+  --neutral-foreground: #111113;
+  --border: #38383f;
+  --input: #45454d;
+  --ring: #d4d4d8;
+  --chart-1: #f4f4f5;
+  --chart-2: #d4d4d8;
+  --chart-3: #a1a1aa;
+  --chart-4: #81818c;
+  --chart-5: #62626c;
+  --overview-accent-1: #f4f4f5;
+  --overview-accent-2: #d4d4d8;
+  --overview-accent-3: #a1a1aa;
+  --sidebar: #18181b;
+  --sidebar-foreground: #f4f4f5;
+  --sidebar-primary: #f4f4f5;
+  --sidebar-primary-foreground: #18181b;
+  --sidebar-accent: #303036;
+  --sidebar-accent-foreground: #fafafa;
+  --sidebar-border: #38383f;
+  --sidebar-ring: #d4d4d8;
+  --skeleton-base: #26262b;
+  --skeleton-highlight: #38383f;
+  --practice-highlight: #a1a1aa;
   --table-row: var(--background);
   --table-header: color-mix(in oklch, var(--foreground) 6%, var(--background));
   --table-header-hover: color-mix(
@@ -254,4 +253,75 @@ For commercial licensing, please contact support@quantumnous.com
     var(--foreground) 24%,
     var(--background)
   );
+}
+
+.kuncode-backdrop {
+  background-image:
+    linear-gradient(
+      105deg,
+      transparent 0% 21%,
+      color-mix(in srgb, var(--foreground) 4%, transparent) 21% 24%,
+      transparent 24% 76%,
+      color-mix(in srgb, var(--foreground) 4%, transparent) 76% 79%,
+      transparent 79%
+    ),
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--foreground) 2%, transparent) 0 1px,
+      transparent 1px 8px
+    );
+}
+
+.kuncode-glow {
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--primary) 10%, transparent),
+    transparent 70%
+  );
+}
+
+.kuncode-auth-showcase {
+  background:
+    radial-gradient(ellipse at 50% 60%, rgb(255 255 255 / 5%), transparent 65%),
+    #19191c;
+}
+
+.kuncode-auth-straps {
+  background: linear-gradient(
+    105deg,
+    transparent 0% 28%,
+    rgb(255 255 255 / 3%) 28% 34%,
+    transparent 34% 70%,
+    rgb(255 255 255 / 3%) 70% 76%,
+    transparent 76%
+  );
+}
+
+[data-theme-preset='basketball'] .kuncode-auth-showcase {
+  background:
+    radial-gradient(ellipse at 50% 60%, rgb(234 151 90 / 14%), transparent 65%),
+    #2b211c;
+}
+
+[data-theme-preset='basketball'] .kuncode-auth-straps {
+  background-image:
+    linear-gradient(rgb(255 255 255 / 3%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 3%) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+@keyframes kuncode-auth-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(2deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .kuncode-auth-motif {
+    animation: kuncode-auth-float 7s ease-in-out infinite;
+  }
 }

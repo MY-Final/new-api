@@ -206,6 +206,46 @@ test('password login can proceed without CAPTCHA while registration remains prot
   expect(turnstileApi.render).not.toHaveBeenCalled()
 })
 
+test('password login rejects missing or expired CAPTCHA and consumes a rejected submission token before retry', async () => {
+  await renderForm(UserAuthForm, { turnstile_scenes: { login: true } })
+  const user = userEvent.setup()
+  await user.type(
+    screen.getByRole('textbox', { name: 'Username or Email' }),
+    'alice'
+  )
+  await user.type(screen.getByLabelText('Password'), 'correct-password')
+  await user.click(screen.getByRole('button', { name: 'Sign in' }))
+  expect(api.post).not.toHaveBeenCalled()
+
+  act(() => widget.callback('expired-token'))
+  act(() => widget['expired-callback']())
+  await user.click(screen.getByRole('button', { name: 'Sign in' }))
+  expect(api.post).not.toHaveBeenCalled()
+
+  act(() => widget.callback('first-token'))
+  await user.click(screen.getByRole('button', { name: 'Sign in' }))
+  await waitFor(() =>
+    expect(api.post).toHaveBeenCalledWith(
+      '/api/user/login?turnstile=first-token',
+      { username: 'alice', password: 'correct-password' },
+      { skipAuthRefresh: true }
+    )
+  )
+  await user.click(screen.getByRole('button', { name: 'Sign in' }))
+  expect(api.post).toHaveBeenCalledTimes(1)
+
+  act(() => widget.callback('retry-token'))
+  await user.click(screen.getByRole('button', { name: 'Sign in' }))
+  await waitFor(() =>
+    expect(api.post).toHaveBeenLastCalledWith(
+      '/api/user/login?turnstile=retry-token',
+      { username: 'alice', password: 'correct-password' },
+      { skipAuthRefresh: true }
+    )
+  )
+  expect(useAuthStore.getState().auth.user).toBeNull()
+})
+
 test('a widget remounted while the shared script loads initializes once and removes its instance on unmount', () => {
   const turnstile = turnstileApi
   delete window.turnstile

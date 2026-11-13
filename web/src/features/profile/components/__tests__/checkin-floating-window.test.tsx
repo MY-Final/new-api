@@ -177,6 +177,9 @@ describe('CheckinFloatingWindow', () => {
       expect(screen.getByRole('button', { name: 'View calendar' })).toHaveClass(
         'whitespace-normal'
       )
+      expect(
+        screen.getByRole('button', { name: 'Shoulder bump to check in' })
+      ).toHaveClass('min-w-0', 'whitespace-normal')
     } finally {
       vi.unstubAllGlobals()
     }
@@ -248,12 +251,14 @@ describe('CheckinFloatingWindow', () => {
     renderCheckinWindow()
 
     await userEvent.click(
-      await screen.findByRole('button', { name: 'Check in now' })
+      await screen.findByRole('button', { name: 'Shoulder bump to check in' })
     )
 
     const loadingButton = screen.getByRole('button', { name: 'Loading...' })
     expect(loadingButton).toBeDisabled()
     expect(loadingButton).toHaveAttribute('aria-busy', 'true')
+    await userEvent.click(loadingButton)
+    expect(performCheckin).toHaveBeenCalledTimes(1)
 
     await act(async () => {
       resolveCheckin({
@@ -266,7 +271,7 @@ describe('CheckinFloatingWindow', () => {
   test('can be collapsed and reopened using keyboard controls', async () => {
     getCheckinStatus.mockResolvedValue(checkinStatus())
     renderCheckinWindow()
-    await screen.findByRole('button', { name: 'Check in now' })
+    await screen.findByRole('button', { name: 'Shoulder bump to check in' })
 
     screen.getByRole('button', { name: 'Collapse panel' }).focus()
     await userEvent.keyboard('{Enter}')
@@ -276,7 +281,9 @@ describe('CheckinFloatingWindow', () => {
     await userEvent.keyboard('{Enter}')
 
     expect(checkinWindow()).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Check in now' })).toBeEnabled()
+    expect(
+      screen.getByRole('button', { name: 'Shoulder bump to check in' })
+    ).toBeEnabled()
   })
 
   test('stays hidden when the check-in feature is disabled', () => {
@@ -304,7 +311,7 @@ describe('CheckinFloatingWindow', () => {
     renderCheckinWindow()
 
     const checkinButton = await screen.findByRole('button', {
-      name: 'Check in now',
+      name: 'Shoulder bump to check in',
     })
     expect(
       screen.getByRole('button', { name: 'View calendar' })
@@ -322,7 +329,7 @@ describe('CheckinFloatingWindow', () => {
     getCheckinStatus.mockResolvedValue(checkinStatus())
 
     const rendered = renderCheckinWindow()
-    await screen.findByRole('button', { name: 'Check in now' })
+    await screen.findByRole('button', { name: 'Shoulder bump to check in' })
     await userEvent.click(screen.getByRole('button', { name: 'Close panel' }))
 
     await waitFor(() => expect(checkinWindow()).not.toBeInTheDocument())
@@ -332,6 +339,34 @@ describe('CheckinFloatingWindow', () => {
     await waitFor(() => expect(getCheckinStatus).toHaveBeenCalledTimes(2))
 
     expect(checkinWindow()).not.toBeInTheDocument()
+  })
+
+  test('allows another themed attempt after a failed request and closes only after success', async () => {
+    getCheckinStatus
+      .mockResolvedValueOnce(checkinStatus())
+      .mockResolvedValueOnce(checkinStatus({ checked_in_today: true }))
+    performCheckin
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({
+        success: true,
+        data: { quota_awarded: 5000, checkin_date: '2026-11-13' },
+      })
+    renderCheckinWindow()
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Shoulder bump to check in' })
+    )
+
+    const retry = await screen.findByRole('button', {
+      name: 'Shoulder bump to check in',
+    })
+    expect(retry).toBeEnabled()
+    expect(checkinWindow()).toBeInTheDocument()
+    expect(performCheckin).toHaveBeenCalledTimes(1)
+    await userEvent.click(retry)
+
+    await waitFor(() => expect(checkinWindow()).not.toBeInTheDocument())
+    expect(performCheckin).toHaveBeenCalledTimes(2)
   })
 
   test('stays hidden on the profile page where the full calendar is shown', async () => {
@@ -367,7 +402,7 @@ describe('CheckinFloatingWindow', () => {
 
     renderCheckinWindow()
     await userEvent.click(
-      await screen.findByRole('button', { name: 'Check in now' })
+      await screen.findByRole('button', { name: 'Shoulder bump to check in' })
     )
     await userEvent.click(
       await screen.findByRole('button', { name: 'solve-turnstile' })

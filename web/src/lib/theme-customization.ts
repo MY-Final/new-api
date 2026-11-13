@@ -26,7 +26,12 @@ For commercial licensing, please contact support@quantumnous.com
 export const THEME_PRESETS = [
   {
     value: 'default',
-    name: 'Default',
+    name: 'Black & White Suspenders',
+    swatches: ['#f5f5f5', '#27272a'],
+  },
+  {
+    value: 'basketball',
+    name: 'Basketball',
     swatches: ['#fdf8f3', '#c2410c'],
   },
   {

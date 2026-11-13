@@ -60,6 +60,12 @@ function ThemeControls() {
       </button>
       <button
         type='button'
+        onClick={() => customization.setPreset('basketball')}
+      >
+        Basketball preset
+      </button>
+      <button
+        type='button'
         onClick={() => {
           theme.setTheme('dark')
           customization.setPreset('rose-garden')
@@ -113,6 +119,23 @@ afterEach(() => {
 })
 
 describe('theme preference persistence', () => {
+  it('restores the basketball preset after remounting and returns to suspenders on reset', async () => {
+    const user = userEvent.setup()
+    const first = render(<ThemeFixture />)
+
+    await user.click(screen.getByRole('button', { name: 'Basketball preset' }))
+    first.unmount()
+    render(<ThemeFixture />)
+
+    expect(document.body).toHaveAttribute('data-theme-preset', 'basketball')
+    expect(localStorage.getItem('newapi:theme:v1:preset')).toBe('basketball')
+
+    await user.click(screen.getByRole('button', { name: 'Reset' }))
+
+    expect(document.body).not.toHaveAttribute('data-theme-preset')
+    expect(localStorage.getItem('newapi:theme:v1:preset')).toBeNull()
+  })
+
   it('starts with defaults when only shared legacy theme cookies exist', () => {
     document.cookie = 'theme_preset=ocean-breeze; path=/'
     document.cookie = 'vite-ui-theme=dark; path=/'

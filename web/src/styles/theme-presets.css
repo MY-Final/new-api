@@ -428,8 +428,10 @@ For commercial licensing, please contact support@quantumnous.com
  *     cards/borders rather than tinting them with the clay accent).
  *   - `simple-large`: keeps intentionally neutral, high-contrast surfaces. */
 [data-theme-preset]:not([data-theme-preset='default']):not(
-  [data-theme-preset='anthropic']
-):not([data-theme-preset='simple-large']) {
+    [data-theme-preset='anthropic']
+  ):not([data-theme-preset='simple-large']):not(
+    [data-theme-preset='basketball']
+  ) {
   --card: color-mix(in oklch, var(--primary) 3%, var(--background));
   --popover: color-mix(in oklch, var(--primary) 5%, var(--background));
   --muted: color-mix(in oklch, var(--primary) 7%, var(--background));
@@ -454,7 +456,9 @@ For commercial licensing, please contact support@quantumnous.com
 .dark
   [data-theme-preset]:not([data-theme-preset='default']):not(
     [data-theme-preset='anthropic']
-  ):not([data-theme-preset='simple-large']) {
+  ):not([data-theme-preset='simple-large']):not(
+    [data-theme-preset='basketball']
+  ) {
   --card: color-mix(in oklch, var(--primary) 8%, var(--background));
   --popover: color-mix(in oklch, var(--primary) 12%, var(--background));
   --muted: color-mix(in oklch, var(--primary) 12%, var(--background));
@@ -469,6 +473,89 @@ For commercial licensing, please contact support@quantumnous.com
   --sidebar: color-mix(in oklch, var(--primary) 5%, var(--background));
   --sidebar-accent: color-mix(in oklch, var(--primary) 18%, var(--background));
   --sidebar-border: color-mix(in oklch, var(--primary) 22%, var(--background));
+}
+
+[data-theme-preset='basketball'] {
+  --background: #fdf8f3;
+  --foreground: #1a1a1a;
+  --card: #fffdfb;
+  --card-foreground: #1a1a1a;
+  --popover: #fffdfb;
+  --popover-foreground: #1a1a1a;
+  --primary: #c2410c;
+  --primary-foreground: #fffaf5;
+  --secondary: #f4ebe3;
+  --secondary-foreground: #7c2d12;
+  --muted: #f7f0e9;
+  --muted-foreground: #6b625a;
+  --accent: #f4e5d9;
+  --accent-foreground: #2b211b;
+  --neutral: #8a8178;
+  --neutral-foreground: #1a1a1a;
+  --border: #eadfd5;
+  --input: #e2d5ca;
+  --ring: #ea580c;
+  --chart-1: #c2410c;
+  --chart-2: #d97706;
+  --chart-3: #9a3412;
+  --chart-4: #6b7160;
+  --chart-5: #8c5a3c;
+  --sidebar: #faf4ee;
+  --sidebar-foreground: #312821;
+  --sidebar-primary: #c2410c;
+  --sidebar-primary-foreground: #fffaf5;
+  --sidebar-accent: #f2e2d4;
+  --sidebar-accent-foreground: #9a3412;
+  --sidebar-border: #eadfd5;
+  --sidebar-ring: #ea580c;
+  --skeleton-base: #f1e8df;
+  --skeleton-highlight: #faf4ee;
+  --practice-highlight: #f97316;
+  --practice-code-string: #fb923c;
+  --practice-code-value: #fcd34d;
+}
+.dark [data-theme-preset='basketball'] {
+  --background: #15120f;
+  --foreground: #faf7f2;
+  --card: #211b17;
+  --card-foreground: #faf7f2;
+  --popover: #271f1a;
+  --popover-foreground: #faf7f2;
+  --primary: #fb923c;
+  --primary-foreground: #20140d;
+  --secondary: #30271f;
+  --secondary-foreground: #fed7aa;
+  --muted: #29211b;
+  --muted-foreground: #b8ada2;
+  --accent: #35281e;
+  --accent-foreground: #fff7ed;
+  --neutral: #a89d93;
+  --neutral-foreground: #15120f;
+  --border: #3a3028;
+  --input: #45372d;
+  --ring: #fb923c;
+  --chart-1: #fb923c;
+  --chart-2: #fbbf24;
+  --chart-3: #f97316;
+  --chart-4: #a3a380;
+  --chart-5: #c08457;
+  --overview-accent-3: #c08457;
+  --sidebar: #1a1613;
+  --sidebar-foreground: #f5eee7;
+  --sidebar-primary: #fb923c;
+  --sidebar-primary-foreground: #20140d;
+  --sidebar-accent: #33271f;
+  --sidebar-accent-foreground: #ffedd5;
+  --sidebar-border: #322820;
+  --sidebar-ring: #fb923c;
+  --skeleton-base: #29211b;
+  --skeleton-highlight: #3a3028;
+}
+[data-theme-preset='basketball'] .kuncode-backdrop {
+  background-image:
+    linear-gradient(90deg, rgba(193, 84, 27, 0.045) 1px, transparent 1px),
+    linear-gradient(rgba(193, 84, 27, 0.045) 1px, transparent 1px);
+  background-size: 40px 40px;
 }
 
 /* ── Anthropic ────────────────────────────────────────────────────────── */

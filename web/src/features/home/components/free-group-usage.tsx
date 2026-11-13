@@ -62,19 +62,19 @@ export function FreeGroupUsage(props: FreeGroupUsageProps) {
   } else {
     value = (
       <div className='text-right'>
-        <div className='mb-1 text-[10px] font-black tracking-[0.16em] text-white/60 uppercase'>
+        <div className='text-primary-foreground/70 mb-1 text-[10px] font-black tracking-[0.16em] uppercase'>
           {personal ? t('Your calls today') : t('Free group calls today')}
         </div>
         <div className='text-3xl font-black tracking-tight tabular-nums sm:text-4xl'>
           {formatNumber(displayUsed, locale)}
           {displayLimit > 0 && (
-            <span className='text-lg font-medium text-white/65 sm:text-xl'>
+            <span className='text-primary-foreground/70 text-lg font-medium sm:text-xl'>
               {' / '}
               {formatNumber(displayLimit, locale)}
             </span>
           )}
         </div>
-        <div className='mt-1 text-xs text-white/75 tabular-nums'>
+        <div className='text-primary-foreground/80 mt-1 text-xs tabular-nums'>
           {displayLimit > 0
             ? t('Remaining today: {{remaining}}', {
                 remaining: formatNumber(displayRemaining, locale),
@@ -82,7 +82,7 @@ export function FreeGroupUsage(props: FreeGroupUsageProps) {
             : t('Unlimited')}
         </div>
         {personal && (
-          <div className='mt-2 border-t border-white/15 pt-2 text-[11px] text-white/65 tabular-nums'>
+          <div className='border-primary-foreground/20 text-primary-foreground/70 mt-2 border-t pt-2 text-[11px] tabular-nums'>
             {t('Site total')}: {formatNumber(used, locale)} /{' '}
             {formatNumber(dailyLimit, locale)}
             {' · '}
@@ -98,25 +98,25 @@ export function FreeGroupUsage(props: FreeGroupUsageProps) {
   return (
     <section
       aria-label={t('Free group calls today')}
-      className='relative w-full overflow-hidden rounded-[1.75rem] border-2 border-orange-500/35 bg-white/90 p-5 shadow-[0_18px_50px_-28px_rgba(249,115,22,0.65)] backdrop-blur-md md:p-6 dark:border-orange-400/30 dark:bg-[#211b17]/95 dark:shadow-[0_18px_50px_-28px_rgba(249,115,22,0.45)]'
+      className='border-primary/25 bg-card/90 shadow-primary/5 relative w-full overflow-hidden rounded-[1.75rem] border-2 p-5 shadow-lg backdrop-blur-md md:p-6'
     >
       <div
         aria-hidden='true'
-        className='pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_95%_0%,rgba(249,115,22,0.16),transparent_35%)] dark:bg-[radial-gradient(circle_at_95%_0%,rgba(249,115,22,0.2),transparent_35%)]'
+        className='from-primary/10 pointer-events-none absolute inset-0 bg-gradient-to-bl to-transparent to-40%'
       />
       <div
         aria-hidden='true'
-        className='pointer-events-none absolute -top-16 -right-10 size-40 rounded-full border-[18px] border-orange-500/[0.06]'
+        className='border-primary/5 pointer-events-none absolute -top-16 -right-10 size-40 rounded-full border-[18px]'
       />
 
       <div className='relative flex flex-col gap-5 md:flex-row md:items-center md:justify-between'>
         <div className='flex items-start gap-4'>
-          <div className='grid size-12 shrink-0 place-items-center rounded-2xl bg-orange-500 text-white shadow-[0_10px_25px_-8px_rgba(249,115,22,0.9)]'>
+          <div className='bg-primary text-primary-foreground grid size-12 shrink-0 place-items-center rounded-2xl shadow-md'>
             <Activity className='size-6' aria-hidden='true' />
           </div>
           <div>
             <div className='flex flex-wrap items-center gap-2'>
-              <p className='text-[11px] font-black tracking-[0.2em] text-orange-700 uppercase dark:text-orange-400'>
+              <p className='text-primary text-[11px] font-black tracking-[0.2em] uppercase'>
                 {t('Daily')}
               </p>
               <h3 className='text-base font-black tracking-tight md:text-lg'>
@@ -126,7 +126,7 @@ export function FreeGroupUsage(props: FreeGroupUsageProps) {
                 <>
                   <Badge
                     variant='outline'
-                    className='border-orange-500/30 bg-orange-500/10 text-orange-800 dark:text-orange-200'
+                    className='border-primary/30 bg-primary/10 text-primary'
                   >
                     {props.usage.group}
                   </Badge>
@@ -134,13 +134,13 @@ export function FreeGroupUsage(props: FreeGroupUsageProps) {
                 </>
               )}
             </div>
-            <p className='mt-2 text-xs leading-5 text-[#6b6259] dark:text-[#c9c0b5]'>
+            <p className='text-muted-foreground mt-2 text-xs leading-5'>
               {t('The daily limit resets at midnight UTC+8.')}
             </p>
           </div>
         </div>
 
-        <div className='min-w-52 rounded-2xl bg-[#1a1a1a] px-5 py-3.5 text-white shadow-[0_10px_30px_-15px_rgba(0,0,0,0.8)] dark:bg-orange-500'>
+        <div className='bg-primary text-primary-foreground min-w-52 rounded-2xl px-5 py-3.5 shadow-[0_10px_30px_-15px_rgba(0,0,0,0.8)]'>
           {value}
         </div>
       </div>
@@ -148,7 +148,7 @@ export function FreeGroupUsage(props: FreeGroupUsageProps) {
         <Progress
           aria-label={t('Progress for free group calls')}
           value={progress}
-          className='relative mt-5 [&_[data-slot=progress-indicator]]:bg-gradient-to-r [&_[data-slot=progress-indicator]]:from-orange-500 [&_[data-slot=progress-indicator]]:to-amber-400 [&_[data-slot=progress-track]]:h-2 [&_[data-slot=progress-track]]:bg-orange-950/10 dark:[&_[data-slot=progress-track]]:bg-black/30'
+          className='[&_[data-slot=progress-indicator]]:bg-primary [&_[data-slot=progress-track]]:bg-primary/10 relative mt-5 [&_[data-slot=progress-track]]:h-2'
         />
       )}
     </section>

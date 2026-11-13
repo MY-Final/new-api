@@ -21,7 +21,7 @@ import { ArrowRight } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { KunCodeCourt } from '@/components/kuncode-court'
+import { KunCodeCourt, KunCodeMotif } from '@/components/kuncode-court'
 import { Button } from '@/components/ui/button'
 
 const PRACTICE_PILLARS = [
@@ -129,12 +129,12 @@ export function KunCodeAboutPage() {
     <KunCodeCourt>
       <main className='mx-auto max-w-6xl px-6 pt-28 pb-16 md:px-10 md:pt-36 md:pb-24'>
         <header className='mx-auto mb-20 max-w-4xl text-center md:mb-28'>
-          <span className='inline-flex rounded-full bg-[#1a1a1a] px-6 py-2.5 text-xs font-black text-white shadow-[0_4px_15px_rgba(0,0,0,0.1)] dark:bg-orange-500'>
+          <span className='bg-primary text-primary-foreground inline-flex rounded-full px-6 py-2.5 text-xs font-black shadow-[0_4px_15px_rgba(0,0,0,0.1)]'>
             {t('Two and a half years of practice')}
           </span>
           <h1 className='mt-8 text-[clamp(3.25rem,8vw,6rem)] leading-[1.02] font-black tracking-[-0.055em]'>
             {t('More than code')}
-            <span className='mt-2 block bg-gradient-to-r from-orange-500 to-rose-500 bg-clip-text text-transparent'>
+            <span className='from-primary mt-2 block bg-gradient-to-r to-[var(--practice-highlight)] bg-clip-text text-transparent'>
               {t('This is my rhythm')}
             </span>
           </h1>
@@ -144,9 +144,9 @@ export function KunCodeAboutPage() {
           <div>
             <h2 className='relative inline-block pb-4 text-3xl font-black tracking-tight md:text-4xl'>
               {t('A studio of one')}
-              <span className='absolute bottom-0 left-0 h-1.5 w-12 rounded-full bg-orange-500' />
+              <span className='bg-primary absolute bottom-0 left-0 h-1.5 w-12 rounded-full' />
             </h2>
-            <div className='mt-8 space-y-6 text-base leading-8 text-[#4b5563] md:text-lg dark:text-[#c9c0b5]'>
+            <div className='text-muted-foreground mt-8 space-y-6 text-base leading-8 md:text-lg'>
               <p>
                 {t(
                   'Many people ask me how many people are behind KunCode. I can only say: "It has always been just me."'
@@ -171,16 +171,16 @@ export function KunCodeAboutPage() {
             variant='ghost'
             onClick={performShoulderBump}
             aria-label={t('Trigger the KunCode shoulder bump animation')}
-            className='relative mx-auto h-[22rem] w-full max-w-md overflow-hidden rounded-[3rem] border-4 border-[#1a1a1a] bg-white shadow-[20px_20px_0_#f97316] transition-shadow hover:bg-white active:translate-x-2 active:translate-y-2 active:shadow-[10px_10px_0_#f97316] dark:border-orange-200 dark:bg-[#211b17] dark:hover:bg-[#211b17]'
+            className='border-foreground bg-card hover:bg-card relative mx-auto h-[22rem] w-full max-w-md overflow-hidden rounded-[3rem] border-4 shadow-[20px_20px_0_var(--practice-highlight)] transition-shadow active:translate-x-2 active:translate-y-2 active:shadow-[10px_10px_0_var(--practice-highlight)]'
           >
             <span
               ref={avatarRef}
               aria-hidden='true'
-              className='relative z-10 text-[8rem] drop-shadow-[0_10px_20px_rgba(0,0,0,0.1)]'
+              className='relative z-10 inline-flex drop-shadow-[0_10px_20px_rgba(0,0,0,0.1)]'
             >
-              🕺
+              <KunCodeMotif className='size-44 text-[8rem]' />
             </span>
-            <span className='absolute inset-x-6 bottom-7 text-xs font-black tracking-wider text-[#625b53] dark:text-[#d6cbc0]'>
+            <span className='text-muted-foreground absolute inset-x-6 bottom-7 text-xs font-black tracking-wider'>
               {t('Click to trigger: Perfect shoulder bump')}
             </span>
             <span
@@ -206,7 +206,7 @@ export function KunCodeAboutPage() {
             {PRACTICE_PILLARS.map((pillar) => (
               <article
                 key={pillar.title}
-                className='group relative overflow-hidden rounded-[2rem] border border-black/[0.035] bg-white p-7 shadow-[0_10px_35px_rgba(0,0,0,0.035)] transition-all duration-300 hover:-translate-y-2 hover:border-orange-500/50 hover:shadow-[0_30px_70px_rgba(249,115,22,0.12)] md:p-10 dark:border-white/[0.06] dark:bg-[#211b17]'
+                className='group border-border bg-card hover:border-primary/50 hover:shadow-primary/10 relative overflow-hidden rounded-[2rem] border p-7 shadow-[0_10px_35px_rgba(0,0,0,0.035)] transition-all duration-300 hover:-translate-y-2 hover:shadow-xl md:p-10'
               >
                 <span aria-hidden='true' className='text-5xl'>
                   {pillar.icon}
@@ -214,7 +214,7 @@ export function KunCodeAboutPage() {
                 <h3 className='mt-6 text-2xl font-black tracking-tight'>
                   {t(pillar.title)}
                 </h3>
-                <p className='mt-4 text-sm leading-7 text-[#6b7280] md:text-base dark:text-[#b8afa4]'>
+                <p className='text-muted-foreground mt-4 text-sm leading-7 md:text-base'>
                   {t(pillar.description)}
                 </p>
                 <span
@@ -229,12 +229,9 @@ export function KunCodeAboutPage() {
         </section>
 
         <section className='relative mt-28 overflow-hidden rounded-[3rem] bg-[#1a1a1a] px-6 py-20 text-center text-white shadow-[0_40px_100px_-20px_rgba(0,0,0,0.3)] md:mt-36 md:px-12 md:py-28'>
-          <span
-            aria-hidden='true'
-            className='pointer-events-none absolute -right-16 -bottom-16 text-[14rem] opacity-[0.06]'
-          >
-            🏀
-          </span>
+          <div aria-hidden='true'>
+            <KunCodeMotif className='pointer-events-none absolute -right-8 -bottom-8 size-64 text-[14rem] opacity-10' />
+          </div>
           <h2 className='text-3xl font-black tracking-tight md:text-5xl'>
             {t('Producers, watch closely')}
           </h2>
@@ -244,7 +241,7 @@ export function KunCodeAboutPage() {
             )}
           </p>
           <Button
-            className='mt-9 h-14 rounded-2xl bg-orange-500 px-8 text-base font-black text-white shadow-[0_10px_30px_rgba(249,115,22,0.3)] transition-transform hover:scale-105 hover:-rotate-1 hover:bg-white hover:text-[#1a1a1a]'
+            className='mt-9 h-14 rounded-2xl bg-white px-8 text-base font-black text-[#1a1a1a] shadow-lg transition-transform hover:scale-105 hover:-rotate-1 hover:bg-white/90'
             render={<Link to='/keys' />}
           >
             {t('Start practicing now')}
@@ -252,7 +249,7 @@ export function KunCodeAboutPage() {
           </Button>
         </section>
 
-        <p className='mt-20 text-center text-xs font-semibold tracking-wide text-[#625b53] dark:text-[#c9c0b5]'>
+        <p className='text-muted-foreground mt-20 text-center text-xs font-semibold tracking-wide'>
           {t('© {{year}} KunCode Practice Studio · Keep practicing', {
             year: currentYear,
           })}

@@ -64,7 +64,8 @@ function previousMonthLabel(): string {
 }
 
 function mockCheckin(
-  records: { checkin_date: string; quota_awarded: number }[]
+  records: { checkin_date: string; quota_awarded: number }[],
+  checkedToday = false
 ) {
   vi.spyOn(api, 'get').mockImplementation(async (url) => {
     const month = String(url).split('month=')[1]
@@ -77,7 +78,7 @@ function mockCheckin(
         data: {
           enabled: true,
           stats: {
-            checked_in_today: false,
+            checked_in_today: checkedToday,
             total_checkins: 2,
             total_quota: 39550,
             current_streak: 3,
@@ -187,4 +188,15 @@ it('shows a selected check-in reward without requiring hover', async () => {
     await screen.findByRole('button', { name: `${date}: +${reward}` })
   )
   expect(screen.getByText(`${date}: +${reward}`)).toBeInTheDocument()
+})
+
+it('disables the themed action when today is already checked in', async () => {
+  mockCheckin([], true)
+  const post = vi.spyOn(api, 'post')
+  renderCard()
+
+  const action = await screen.findByRole('button', { name: 'Checked in' })
+  expect(action).toBeDisabled()
+  await userEvent.click(action)
+  expect(post).not.toHaveBeenCalled()
 })

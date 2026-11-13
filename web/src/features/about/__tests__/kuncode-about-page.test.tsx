@@ -22,7 +22,7 @@ import {
   createRouter,
   RouterProvider,
 } from '@tanstack/react-router'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { KunCodeAboutPage } from '../kuncode-about-page'
@@ -81,6 +81,17 @@ function setReducedMotion(matches: boolean) {
 }
 
 describe('KunCode about page', () => {
+  it('keeps the suspenders stage artwork large instead of using the default button icon size', async () => {
+    await renderAboutPage()
+
+    const stage = screen.getByRole('button', {
+      name: 'Trigger the KunCode shoulder bump animation',
+    })
+    const artwork = within(stage).getByRole('img', { hidden: true })
+
+    expect(artwork).toHaveClass('size-44')
+  })
+
   it('renders the studio story, practice pillars, and keys call to action', async () => {
     await renderAboutPage()
 

@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
   createMemoryHistory,
   createRootRoute,
@@ -25,7 +26,10 @@ import {
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { ThemeCustomizationProvider } from '@/context/theme-customization-provider'
+import { THEME_STORAGE_KEYS } from '@/lib/theme-storage'
 
 import { Home } from '../../index'
 import type { FreeGroupUsageState } from '../../types'
@@ -64,10 +68,12 @@ async function renderHomePage(
 ) {
   const root = createRootRoute({
     component: () => (
-      <KunCodeHomePage
-        apiBaseUrl={apiBaseUrl}
-        freeGroupUsage={freeGroupUsageState}
-      />
+      <ThemeCustomizationProvider>
+        <KunCodeHomePage
+          apiBaseUrl={apiBaseUrl}
+          freeGroupUsage={freeGroupUsageState}
+        />
+      </ThemeCustomizationProvider>
     ),
   })
   const router = createRouter({
@@ -76,10 +82,51 @@ async function renderHomePage(
   })
   await router.load()
 
-  render(<RouterProvider router={router} />)
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>
+  )
 }
 
+beforeEach(() => {
+  localStorage.clear()
+})
+
+afterEach(() => {
+  localStorage.clear()
+  document.body.removeAttribute('data-theme-preset')
+})
+
 describe('KunCode home page', () => {
+  it('shows the suspenders artwork by default while preserving the keys action name', async () => {
+    await renderHomePage()
+
+    expect(
+      screen.getByRole('img', { name: 'Black and white suspenders' })
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('img', { name: 'Basketball' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Enter the practice room' })
+    ).toHaveAttribute('href', '/keys')
+  })
+
+  it('restores the basketball artwork when that preset is saved', async () => {
+    localStorage.setItem(THEME_STORAGE_KEYS.preset, 'basketball')
+
+    await renderHomePage()
+
+    expect(screen.getByRole('img', { name: 'Basketball' })).toBeVisible()
+    expect(
+      screen.queryByRole('img', { name: 'Black and white suspenders' })
+    ).not.toBeInTheDocument()
+  })
+
   it('shows the public free group allowance before the hero content', async () => {
     await renderHomePage()
 

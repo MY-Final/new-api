@@ -362,6 +362,7 @@ export function UserAuthForm({
                   <FormLabel>{t('Username or Email')}</FormLabel>
                   <FormControl>
                     <Input
+                      autoComplete='username'
                       placeholder={t('Enter your username or email')}
                       {...field}
                     />
@@ -376,18 +377,22 @@ export function UserAuthForm({
               control={form.control}
               name='password'
               render={({ field }) => (
-                <FormItem className='relative'>
-                  <FormLabel>{t('Password')}</FormLabel>
+                <FormItem className='grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3'>
+                  <FormLabel className='col-start-1 row-start-1 min-w-0 wrap-anywhere'>
+                    {t('Password')}
+                  </FormLabel>
                   <FormControl>
                     <PasswordInput
+                      className='col-span-2 row-start-2'
+                      autoComplete='current-password'
                       placeholder={t('Enter password')}
                       {...field}
                     />
                   </FormControl>
-                  <FormMessage />
+                  <FormMessage className='col-span-2 row-start-3' />
                   <Link
                     to='/forgot-password'
-                    className='text-muted-foreground absolute end-0 -top-0.5 z-10 text-sm font-medium hover:opacity-75'
+                    className='text-muted-foreground col-start-2 row-start-1 text-right text-xs font-medium hover:opacity-75 sm:text-sm'
                   >
                     {t('Forgot password?')}
                   </Link>
@@ -407,7 +412,7 @@ export function UserAuthForm({
 
             {/* Turnstile */}
             {isTurnstileEnabled && (
-              <div className='mt-2'>
+              <div className='mt-2 min-w-0 overflow-x-auto'>
                 <Turnstile
                   key={turnstileWidgetKey}
                   siteKey={turnstileSiteKey}

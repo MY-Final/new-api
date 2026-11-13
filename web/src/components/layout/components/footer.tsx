@@ -143,7 +143,7 @@ function ProjectSource() {
         href='https://github.com/QuantumNous/new-api'
         target='_blank'
         rel='noopener noreferrer'
-        className='group text-foreground inline-flex items-center gap-1.5 text-sm font-black transition-colors hover:text-orange-600 dark:hover:text-orange-400'
+        className='group text-foreground hover:text-primary inline-flex items-center gap-1.5 text-sm font-black transition-colors'
       >
         {t('New API')}
         <ArrowUpRight
@@ -206,17 +206,17 @@ export function Footer(props: FooterProps) {
   return (
     <footer
       className={cn(
-        'border-border/40 relative z-10 overflow-hidden border-t bg-[#faf5ef] dark:bg-[#120f0d]',
+        'border-border/40 bg-muted relative z-10 overflow-hidden border-t',
         props.className
       )}
     >
       <div
         aria-hidden='true'
-        className='pointer-events-none absolute -top-24 right-[8%] size-72 rounded-full bg-orange-500/10 blur-3xl dark:bg-orange-500/[0.08]'
+        className='bg-primary/5 pointer-events-none absolute -top-24 right-[8%] size-72 rounded-full blur-3xl'
       />
       <div
         aria-hidden='true'
-        className='pointer-events-none absolute inset-0 [background-image:linear-gradient(90deg,rgba(193,84,27,0.045)_1px,transparent_1px),linear-gradient(rgba(193,84,27,0.045)_1px,transparent_1px)] [mask-image:linear-gradient(to_bottom,black,transparent_72%)] [background-size:36px_36px] dark:opacity-30'
+        className='kuncode-backdrop pointer-events-none absolute inset-0 [mask-image:linear-gradient(to_bottom,black,transparent_72%)] dark:opacity-30'
       />
 
       <div className='relative mx-auto w-full max-w-6xl px-6 py-10 md:px-10 md:py-12'>
@@ -224,7 +224,7 @@ export function Footer(props: FooterProps) {
           <div className='max-w-sm'>
             <Link
               to='/'
-              className='group inline-flex items-center gap-3 rounded-xl focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-4 focus-visible:outline-none'
+              className='group focus-visible:ring-ring inline-flex items-center gap-3 rounded-xl focus-visible:ring-2 focus-visible:ring-offset-4 focus-visible:outline-none'
             >
               {props.logo ? (
                 <img
@@ -233,10 +233,10 @@ export function Footer(props: FooterProps) {
                   className='size-11 rounded-2xl object-contain'
                 />
               ) : (
-                <span className='relative grid size-11 place-items-center overflow-hidden rounded-2xl bg-[#1a1a1a] text-lg font-black text-white shadow-[0_10px_25px_-12px_rgba(0,0,0,0.8)] dark:bg-orange-500'>
+                <span className='bg-primary text-primary-foreground relative grid size-11 place-items-center overflow-hidden rounded-2xl text-lg font-black shadow-[0_10px_25px_-12px_rgba(0,0,0,0.8)]'>
                   <span
                     aria-hidden='true'
-                    className='absolute -top-4 -right-3 size-9 rounded-full border-[6px] border-orange-500/35'
+                    className='border-primary-foreground/20 absolute -top-4 -right-3 size-9 rounded-full border-[6px]'
                   />
                   <span className='relative' aria-hidden='true'>
                     K

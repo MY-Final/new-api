@@ -49,6 +49,7 @@ import { cn } from '@/lib/utils'
 import { useSystemConfigStore } from '@/stores/system-config-store'
 
 import { useCheckin } from '../hooks/use-checkin'
+import { CheckinAction } from './checkin-action'
 import { CheckinTurnstileDialog } from './checkin-turnstile-dialog'
 
 interface CheckinCalendarCardProps {
@@ -255,13 +256,6 @@ export function CheckinCalendarCard({
     )
   }
 
-  let checkinButtonLabel = t('Check in now')
-  if (checkinLoading) {
-    checkinButtonLabel = t('Loading...')
-  } else if (checkedToday) {
-    checkinButtonLabel = t('Checked in')
-  }
-
   return (
     <TooltipProvider delay={100}>
       <CheckinTurnstileDialog siteKey={turnstileSiteKey} state={turnstile} />
@@ -286,7 +280,7 @@ export function CheckinCalendarCard({
 
         <section className='from-primary/10 via-card to-card text-card-foreground overflow-hidden rounded-2xl border bg-gradient-to-br shadow-sm'>
           <div className='flex flex-col justify-between gap-8 p-6 sm:p-8 md:flex-row md:items-center'>
-            <div className='max-w-xl'>
+            <div className='w-full max-w-xl min-w-0'>
               <span className='border-primary/20 bg-primary/10 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium'>
                 <Sparkles className='size-3.5' />
                 {checkedToday ? t('Checked in') : t('Daily Check-in')}
@@ -299,17 +293,15 @@ export function CheckinCalendarCard({
               <p className='text-muted-foreground mt-3 text-sm leading-6'>
                 {t('Rewards will be added directly to your balance')}
               </p>
-              <div className='mt-5 flex flex-wrap items-center gap-3'>
-                <Button
-                  onClick={startCheckin}
-                  disabled={checkinLoading || checkedToday}
-                  className='hover:bg-primary/90'
-                >
-                  <CalendarCheck className='size-4' /> {checkinButtonLabel}
-                </Button>
-                <span className='text-muted-foreground text-xs'>
+              <div className='mt-5 space-y-3'>
+                <CheckinAction
+                  onCheckin={startCheckin}
+                  loading={checkinLoading}
+                  checkedToday={checkedToday}
+                />
+                <p className='text-muted-foreground text-xs'>
                   {t('Do not repeat check-in; only once per day')}
-                </span>
+                </p>
               </div>
             </div>
             <div className='bg-background/70 w-full rounded-xl border p-5 sm:max-w-56'>

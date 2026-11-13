@@ -28,19 +28,22 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useTheme } from '@/context/theme-provider'
+import { useThemeColor } from '@/lib/theme-color'
 import { cn } from '@/lib/utils'
 
 export function ThemeSwitch() {
   const { t } = useTranslation()
-  const { resolvedTheme, theme, setTheme } = useTheme()
+  const { theme, setTheme } = useTheme()
+  const themeColor = useThemeColor('--background')
 
   /* Update theme-color meta tag
    * when theme is updated */
   useEffect(() => {
-    const themeColor = resolvedTheme === 'dark' ? '#15120f' : '#fdf8f3'
     const metaThemeColor = document.querySelector("meta[name='theme-color']")
-    if (metaThemeColor) metaThemeColor.setAttribute('content', themeColor)
-  }, [resolvedTheme])
+    if (metaThemeColor && themeColor) {
+      metaThemeColor.setAttribute('content', themeColor)
+    }
+  }, [themeColor])
 
   return (
     <DropdownMenu modal={false}>
