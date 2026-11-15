@@ -408,27 +408,39 @@ it('combines creation and last use while keeping expiry, models and IP restricti
   expect(quotaTrigger.closest('td')).not.toHaveClass('pr-8')
 })
 
-it('shows configured API endpoints below the filters as copy-only buttons', async () => {
-  const urls = ['https://kuncode.120403.xyz', 'https://wcnmb.fun']
-  await renderKeysPage(1, {}, { api_base_urls: urls })
+it('shows labeled API endpoints below the filters with copy and open actions', async () => {
+  const endpoints = [
+    { name: '默认', url: 'https://kuncode.120403.xyz' },
+    { name: '直连', url: 'https://wcnmb.fun' },
+  ]
+  await renderKeysPage(1, {}, { api_base_endpoints: endpoints })
 
   const endpointRegion = screen.getByLabelText('API endpoints')
+  const rows = within(endpointRegion).getAllByRole('listitem')
+  expect(rows).toHaveLength(endpoints.length)
   const user = userEvent.setup()
   const copy = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue()
-  for (const url of urls) {
-    const copyButton = within(endpointRegion).getByRole('button', {
-      name: `Copy API endpoint: ${url}`,
+  for (const [index, endpoint] of endpoints.entries()) {
+    expect(rows[index]).toHaveTextContent(endpoint.name)
+    expect(rows[index]).toHaveTextContent(endpoint.url)
+    const openLink = within(rows[index]).getByRole('button', {
+      name: `Open API endpoint: ${endpoint.url}`,
     })
-    expect(copyButton).toHaveTextContent(url)
+    expect(openLink.tagName).toBe('A')
+    expect(openLink).toHaveAttribute('href', endpoint.url)
+    expect(
+      within(rows[index]).getByRole('button', {
+        name: `Copy API endpoint: ${endpoint.url}`,
+      })
+    ).toBeVisible()
   }
-  expect(within(endpointRegion).queryByRole('link')).not.toBeInTheDocument()
 
   await user.click(
-    within(endpointRegion).getByRole('button', {
-      name: `Copy API endpoint: ${urls[0]}`,
+    within(rows[0]).getByRole('button', {
+      name: `Copy API endpoint: ${endpoints[0].url}`,
     })
   )
-  expect(copy).toHaveBeenCalledWith(urls[0])
+  expect(copy).toHaveBeenCalledWith(endpoints[0].url)
 })
 
 it('hides the API endpoint row when no endpoints are configured', async () => {
@@ -616,37 +628,6 @@ it('keeps mobile quota readable and opens complete model and IP restrictions by 
   expect(within(details).getByText('2001:db8::1')).toBeVisible()
 })
 
-it('offers the Setup download alongside key management without passing credentials in the link', async () => {
-  const { client } = await renderKeysPage()
-
-  const download = screen.getByRole('link', { name: 'Download Setup' })
-  expect(download).toHaveAttribute(
-    'href',
-    'https://github.com/MY-Final/kuncode-setup/releases/latest'
-  )
-  expect(download).toHaveAttribute('target', '_blank')
-  expect(download).toHaveAttribute('rel', 'noopener noreferrer')
-  act(() =>
-    client.setQueryData(['status'], {
-      HeaderNavModules: JSON.stringify({ setupDownload: false }),
-    })
-  )
-  await waitFor(() =>
-    expect(
-      screen.queryByRole('link', { name: 'Download Setup' })
-    ).not.toBeInTheDocument()
-  )
-  expect(screen.getByRole('button', { name: 'Create API Key' })).toBeVisible()
-  act(() =>
-    client.setQueryData(['status'], {
-      HeaderNavModules: JSON.stringify({ setupDownload: true }),
-    })
-  )
-  expect(
-    await screen.findByRole('link', { name: 'Download Setup' })
-  ).toBeVisible()
-})
-
 it('offers the create drawer from the empty state when there are no keys or active filters', async () => {
   await renderKeysPage(1, {}, {}, [])
   await screen.findByText('No API Keys Found')
@@ -685,19 +666,20 @@ it('does not offer the empty-state create action while a search filter is active
 })
 
 it.each([
-  { count: 1, prefix: '', setupDownload: true },
-  { count: 2, prefix: '', setupDownload: true },
-  { count: 1, prefix: 'sk-', setupDownload: true },
-  { count: 1, prefix: '', setupDownload: false },
+  { count: 1, prefix: '' },
+  { count: 2, prefix: '' },
+  { count: 1, prefix: 'sk-' },
 ])(
-  'shows and copies complete keys after creating $count key(s) with response prefix "$prefix" and setupDownload=$setupDownload',
-  async ({ count, prefix, setupDownload }) => {
+  'shows and copies complete keys after creating $count key(s) with response prefix "$prefix"',
+  async ({ count, prefix }) => {
     const { post } = await renderKeysPage(
       1,
       {},
       {
-        api_base_urls: ['https://kuncode.120403.xyz', 'https://wcnmb.fun'],
-        HeaderNavModules: JSON.stringify({ setupDownload }),
+        api_base_endpoints: [
+          { name: '默认', url: 'https://kuncode.120403.xyz' },
+          { name: '直连', url: 'https://wcnmb.fun' },
+        ],
       }
     )
     const user = userEvent.setup()
@@ -735,31 +717,6 @@ it.each([
     const nextStep = await screen.findByRole('dialog', {
       name: 'API Key created',
     })
-    if (setupDownload) {
-      const download = within(nextStep).getByRole('link', {
-        name: 'Download Setup',
-      })
-      expect(download).toHaveAttribute(
-        'href',
-        'https://github.com/MY-Final/kuncode-setup/releases/latest'
-      )
-      expect(download).toHaveAttribute('target', '_blank')
-      expect(download).toHaveAttribute('rel', 'noopener noreferrer')
-      expect(
-        within(nextStep).getByText(
-          'Configure Codex, Claude Code, and OpenCode with KunCode Setup. Windows x64.'
-        )
-      ).toBeVisible()
-    } else {
-      expect(
-        within(nextStep).queryByRole('link', { name: 'Download Setup' })
-      ).not.toBeInTheDocument()
-      expect(
-        within(nextStep).queryByText(
-          'Configure Codex, Claude Code, and OpenCode with KunCode Setup. Windows x64.'
-        )
-      ).not.toBeInTheDocument()
-    }
     const copyButtons = within(nextStep).getAllByRole('button', {
       name: 'Copy API key: first-key',
     })

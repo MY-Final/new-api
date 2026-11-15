@@ -18,13 +18,11 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { CherryStudio } from '@lobehub/icons'
 import { Link } from '@tanstack/react-router'
-import { ArrowRight, BookOpen, Download } from 'lucide-react'
+import { ArrowRight, BookOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
 import { useStatus } from '@/hooks/use-status'
-import { resolveSetupDownloadUrl } from '@/lib/kuncode-setup'
-import { parseHeaderNavModulesFromStatus } from '@/lib/nav-modules'
 
 import { HeroTerminalDemo } from '../hero-terminal-demo'
 
@@ -50,11 +48,6 @@ const MoreIcon = () => (
 export function Hero(props: HeroProps) {
   const { t } = useTranslation()
   const { status } = useStatus()
-  const headerNavModules = parseHeaderNavModulesFromStatus(status)
-  const showSetupDownload = headerNavModules.setupDownload
-  const setupDownloadUrl = resolveSetupDownloadUrl(
-    headerNavModules.setupDownloadUrl
-  )
   const docsUrl =
     (status?.docs_link as string | undefined) || 'https://docs.newapi.pro'
 
@@ -170,32 +163,8 @@ export function Hero(props: HeroProps) {
                 </Button>
               </>
             )}
-            {showSetupDownload && (
-              <Button
-                variant='outline'
-                role='link'
-                className='border-border/50 hover:border-border hover:bg-muted/50 h-11 rounded-lg px-5 text-sm font-medium'
-                render={
-                  <a
-                    href={setupDownloadUrl}
-                    target='_blank'
-                    rel='noopener noreferrer'
-                  />
-                }
-              >
-                <Download className='size-4' aria-hidden='true' />
-                {t('Download Setup')}
-              </Button>
-            )}
             {renderDocsButton()}
           </div>
-          {showSetupDownload && (
-            <p className='text-muted-foreground mt-3 max-w-xl text-xs leading-relaxed'>
-              {t(
-                'Configure Codex, Claude Code, and OpenCode with KunCode Setup. Windows x64.'
-              )}
-            </p>
-          )}
 
           {/* Supported Apps (参考图二样式，进行卡片化和信息扩充设计，增加视觉高度) */}
           <div

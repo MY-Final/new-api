@@ -17,7 +17,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Link } from '@tanstack/react-router'
-import { ArrowUpRight } from 'lucide-react'
 import { Fragment } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -47,14 +46,16 @@ interface FooterProps {
 const DEFAULT_FOOTER_COLUMNS: FooterColumnProps[] = [
   {
     title: 'Product',
-    links: [
-      { text: 'API Keys', href: '/keys' },
-      { text: 'Models', href: '/pricing' },
-    ],
+    links: [{ text: 'Models', href: '/pricing' }],
   },
   {
     title: 'Resources',
-    links: [{ text: 'About', href: '/about' }],
+    links: [
+      {
+        text: 'Magpie Plugin',
+        href: 'https://github.com/MY-Final/opencode-kunrouter-auth',
+      },
+    ],
   },
 ]
 
@@ -128,30 +129,6 @@ function LegalLinks(props: { leadingSeparator?: boolean }) {
         </Fragment>
       ))}
     </>
-  )
-}
-
-function ProjectSource() {
-  const { t } = useTranslation()
-
-  return (
-    <div className='border-border/70 bg-background/70 flex items-center justify-between gap-5 rounded-2xl border px-4 py-3 shadow-xs backdrop-blur-sm'>
-      <span className='text-muted-foreground text-[10px] font-bold tracking-[0.18em] uppercase'>
-        {t('Open Source')}
-      </span>
-      <a
-        href='https://github.com/QuantumNous/new-api'
-        target='_blank'
-        rel='noopener noreferrer'
-        className='group text-foreground hover:text-primary inline-flex items-center gap-1.5 text-sm font-black transition-colors'
-      >
-        {t('New API')}
-        <ArrowUpRight
-          className='size-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5'
-          aria-hidden='true'
-        />
-      </a>
-    </div>
   )
 }
 
@@ -248,7 +225,7 @@ export function Footer(props: FooterProps) {
               </span>
             </Link>
             <p className='text-muted-foreground mt-4 max-w-xs text-sm leading-6'>
-              {t('Powerful API Management Platform')}
+              {t('Two and a half years of practice')}
             </p>
           </div>
 
@@ -259,7 +236,6 @@ export function Footer(props: FooterProps) {
                 dangerouslySetInnerHTML={{ __html: footerHtml }}
               />
               <ContactInfo />
-              <ProjectSource />
             </div>
           ) : (
             <div className='flex flex-col gap-8 sm:flex-row sm:items-start sm:gap-12 lg:gap-16'>
@@ -283,7 +259,6 @@ export function Footer(props: FooterProps) {
                 ))}
               </nav>
               <ContactInfo />
-              <ProjectSource />
             </div>
           )}
         </div>
@@ -294,6 +269,17 @@ export function Footer(props: FooterProps) {
               &copy; {currentYear} {brandName}.{' '}
               {props.copyright ?? t('footer.defaultCopyright')}
             </span>
+            <span aria-hidden='true' className='text-muted-foreground/30'>
+              ·
+            </span>
+            <a
+              href='https://github.com/QuantumNous/new-api'
+              target='_blank'
+              rel='noopener noreferrer'
+              className='hover:text-foreground transition-colors duration-200'
+            >
+              {t('Based on New API')}
+            </a>
             <LegalLinks leadingSeparator />
           </div>
         </div>

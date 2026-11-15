@@ -21,7 +21,6 @@ import { useTranslation } from 'react-i18next'
 
 import { useContactSettings } from '@/features/contact/use-contact-settings'
 import { useStatus } from '@/hooks/use-status'
-import { resolveSetupDownloadUrl } from '@/lib/kuncode-setup'
 import { parseHeaderNavModulesFromStatus } from '@/lib/nav-modules'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -88,7 +87,7 @@ export function useTopNavLinks(): TopNavLink[] {
       title: t('Model Square'),
       href: '/pricing',
       requiresAuth,
-      section: 'product',
+      section: 'primary',
     })
   }
 
@@ -100,7 +99,7 @@ export function useTopNavLinks(): TopNavLink[] {
       title: t('Rankings'),
       href: '/rankings',
       requiresAuth,
-      section: 'product',
+      section: 'primary',
     })
   }
 
@@ -111,24 +110,15 @@ export function useTopNavLinks(): TopNavLink[] {
         title: t('Docs'),
         href: docsLink,
         external: true,
-        section: 'resources',
+        section: 'primary',
       })
     } else {
       links.push({
         title: t('Docs'),
         href: '/docs',
-        section: 'resources',
+        section: 'primary',
       })
     }
-  }
-
-  if (modules.setupDownload) {
-    links.push({
-      title: t('Download Setup'),
-      href: resolveSetupDownloadUrl(modules?.setupDownloadUrl),
-      external: true,
-      section: 'resources',
-    })
   }
 
   // About
@@ -136,7 +126,7 @@ export function useTopNavLinks(): TopNavLink[] {
     links.push({
       title: t('About'),
       href: '/about',
-      section: 'resources',
+      section: 'primary',
     })
   }
 
@@ -145,7 +135,7 @@ export function useTopNavLinks(): TopNavLink[] {
     links.push({
       title: t('Contact Us'),
       href: '/contact',
-      section: 'resources',
+      section: 'primary',
     })
   }
 

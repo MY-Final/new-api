@@ -25,8 +25,8 @@ import { afterEach, expect, it } from 'vitest'
 
 import en from '@/i18n/locales/en.json'
 
-import { HeaderNavigationSection } from '../header-navigation-section'
 import { parseHeaderNavModules, serializeHeaderNavModules } from '../config'
+import { HeaderNavigationSection } from '../header-navigation-section'
 
 const i18n = createInstance()
 await i18n.init({ lng: 'en', resources: { en } })
@@ -64,31 +64,26 @@ it('lists the configured top navigation links', () => {
   expect(screen.getByText('Custom links')).toBeInTheDocument()
 })
 
-it('shows the setup download override and disables it when the entry is hidden', () => {
-  renderSection(
+it('drops removed setup download settings from legacy navigation config', () => {
+  const config = parseHeaderNavModules(
     JSON.stringify({
+      docs: false,
       setupDownload: true,
       setupDownloadUrl: 'https://downloads.example.com/kuncode',
     })
   )
 
-  expect(
-    screen.getByLabelText('Setup download URL')
-  ).toHaveValue('https://downloads.example.com/kuncode')
-  expect(screen.getByLabelText('Setup download URL')).toBeEnabled()
-
-  cleanup()
-  renderSection(JSON.stringify({ setupDownload: false }))
-  expect(screen.getByLabelText('Setup download URL')).toBeDisabled()
+  expect(config).not.toHaveProperty('setupDownload')
+  expect(config).not.toHaveProperty('setupDownloadUrl')
+  expect(serializeHeaderNavModules(config)).not.toContain('setupDownload')
+  expect(config.docs).toBe(false)
 })
 
 it('appends an empty link row and removes it again', async () => {
   const user = userEvent.setup()
   renderSection(JSON.stringify({ links: [] }))
 
-  expect(
-    screen.getByText('No custom links yet.')
-  ).toBeInTheDocument()
+  expect(screen.getByText('No custom links yet.')).toBeInTheDocument()
 
   await user.click(screen.getByRole('button', { name: 'Add link' }))
 

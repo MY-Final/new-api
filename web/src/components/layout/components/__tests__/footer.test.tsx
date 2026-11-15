@@ -22,7 +22,7 @@ import {
   createRouter,
   RouterProvider,
 } from '@tanstack/react-router'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { Footer } from '../footer'
@@ -80,40 +80,56 @@ async function renderFooter() {
 }
 
 describe('Footer', () => {
-  it('uses the KunRouter brand and copyright while keeping New API as the source', async () => {
+  it('separates the upstream attribution from our Magpie resource', async () => {
     await renderFooter()
 
-    expect(screen.getByRole('link', { name: /KunRouter/ })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'KunRouter' })).toBeVisible()
     expect(screen.getByRole('contentinfo').textContent).toContain(
       `© ${new Date().getFullYear()} KunRouter.`
     )
+    expect(screen.getByText('Two and a half years of practice')).toBeVisible()
 
-    const newApiLinks = screen.getAllByRole('link', { name: 'New API' })
-    expect(newApiLinks).toHaveLength(1)
-    expect(newApiLinks[0]).toHaveAttribute(
+    expect(screen.queryByText('Open Source')).not.toBeInTheDocument()
+    expect(screen.queryByText('Related Links')).not.toBeInTheDocument()
+
+    const newApiLink = screen.getByRole('link', { name: 'Based on New API' })
+    expect(newApiLink).toHaveAttribute(
       'href',
       'https://github.com/QuantumNous/new-api'
     )
+    const resources = screen.getByText('Resources').parentElement
+    expect(resources).not.toBeNull()
+    expect(
+      within(resources as HTMLElement).getByRole('link', {
+        name: 'Magpie Plugin',
+      })
+    ).toHaveAttribute(
+      'href',
+      'https://github.com/MY-Final/opencode-kunrouter-auth'
+    )
+    expect(
+      within(resources as HTMLElement).queryByRole('link', {
+        name: 'Based on New API',
+      })
+    ).not.toBeInTheDocument()
     expect(
       screen.queryByText(new RegExp(`©.*New API`, 'i'))
     ).not.toBeInTheDocument()
   })
 
-  it('links the main footer navigation to the existing app routes', async () => {
+  it('shows only the remaining footer navigation destinations', async () => {
     await renderFooter()
 
-    expect(screen.getByRole('link', { name: 'API Keys' })).toHaveAttribute(
-      'href',
-      '/keys'
-    )
     expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute(
       'href',
       '/pricing'
     )
-    expect(screen.getByRole('link', { name: 'About' })).toHaveAttribute(
-      'href',
-      '/about'
-    )
+    expect(
+      screen.queryByRole('link', { name: 'API Keys' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'About' })
+    ).not.toBeInTheDocument()
   })
 
   it('exposes a contact entry even when no contact details are configured', async () => {

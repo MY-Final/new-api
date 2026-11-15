@@ -16,11 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import {
-  parseHeaderNavLinks,
-  parseSetupDownloadUrl,
-  type HeaderNavLink,
-} from '@/lib/nav-modules'
+import { parseHeaderNavLinks, type HeaderNavLink } from '@/lib/nav-modules'
 
 export type HeaderNavAccessConfig = {
   enabled: boolean
@@ -35,9 +31,6 @@ export type HeaderNavModulesConfig = {
   docs: boolean
   about: boolean
   contact: boolean
-  setupDownload: boolean
-  /** Administrator override for the setup download target; empty uses the built-in page. */
-  setupDownloadUrl: string
   links: HeaderNavLink[]
   [key: string]: boolean | string | HeaderNavAccessConfig | HeaderNavLink[]
 }
@@ -63,8 +56,6 @@ export const HEADER_NAV_DEFAULT: HeaderNavModulesConfig = {
   docs: true,
   about: true,
   contact: true,
-  setupDownload: true,
-  setupDownloadUrl: '',
   links: [],
 }
 
@@ -186,8 +177,7 @@ export function parseHeaderNavModules(
         result.links = parseHeaderNavLinks(raw)
         return
       }
-      if (key === 'setupDownloadUrl') {
-        result.setupDownloadUrl = parseSetupDownloadUrl(raw)
+      if (key === 'setupDownload' || key === 'setupDownloadUrl') {
         return
       }
 

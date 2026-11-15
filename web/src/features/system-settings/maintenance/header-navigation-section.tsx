@@ -35,7 +35,6 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
-import { KUNCODE_SETUP_RELEASE_URL as DEFAULT_SETUP_DOWNLOAD_URL } from '@/lib/kuncode-setup'
 import {
   MAX_HEADER_NAV_LINKS,
   MAX_HEADER_NAV_LINK_NAME_LENGTH,
@@ -89,23 +88,12 @@ const headerNavSchema = z.object({
   docs: z.boolean(),
   about: z.boolean(),
   contact: z.boolean(),
-  setupDownload: z.boolean(),
-  setupDownloadUrl: z
-    .string()
-    .trim()
-    .refine(
-      (value) => !value || /^https?:\/\/\S+$/i.test(value),
-      'Provide a valid URL starting with http:// or https://'
-    ),
 })
 
 type HeaderNavFormValues = z.infer<typeof headerNavSchema>
 
-/** Every form field except the link list and the download URL renders as a switch. */
-type HeaderNavSwitchKey = Exclude<
-  keyof HeaderNavFormValues,
-  'links' | 'setupDownloadUrl'
->
+/** Every form field except the link list renders as a switch. */
+type HeaderNavSwitchKey = Exclude<keyof HeaderNavFormValues, 'links'>
 
 type HeaderNavigationSectionProps = {
   config: HeaderNavModulesConfig
@@ -146,11 +134,6 @@ const toFormValues = (config: HeaderNavModulesConfig): HeaderNavFormValues => ({
     config.contact === undefined
       ? HEADER_NAV_DEFAULT.contact
       : Boolean(config.contact),
-  setupDownload:
-    config.setupDownload === undefined
-      ? HEADER_NAV_DEFAULT.setupDownload
-      : Boolean(config.setupDownload),
-  setupDownloadUrl: config.setupDownloadUrl ?? '',
 })
 
 export function HeaderNavigationSection({
@@ -184,8 +167,6 @@ export function HeaderNavigationSection({
       docs: values.docs,
       about: values.about,
       contact: values.contact,
-      setupDownload: values.setupDownload,
-      setupDownloadUrl: values.setupDownloadUrl.trim(),
       pricing: {
         ...(config.pricing ?? HEADER_NAV_DEFAULT.pricing),
         enabled: values.pricingEnabled,
@@ -242,13 +223,6 @@ export function HeaderNavigationSection({
       key: 'contact',
       title: t('Contact Us'),
       description: t('Contact information and community group.'),
-    },
-    {
-      key: 'setupDownload',
-      title: t('Download Setup'),
-      description: t(
-        'Show KunCode Setup downloads in navigation, the home page, API keys, and the key creation dialog.'
-      ),
     },
   ]
 
@@ -319,29 +293,6 @@ export function HeaderNavigationSection({
                 )}
               />
             ))}
-            <FormField
-              control={form.control}
-              name='setupDownloadUrl'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('Setup download URL')}</FormLabel>
-                  <FormControl>
-                    <Input
-                      {...field}
-                      type='url'
-                      placeholder={DEFAULT_SETUP_DOWNLOAD_URL}
-                      disabled={!form.watch('setupDownload')}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    {t(
-                      'Where the setup download entry points. Leave empty to use the built-in release page.'
-                    )}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
           </div>
 
           <div className='grid gap-4 lg:grid-cols-2'>

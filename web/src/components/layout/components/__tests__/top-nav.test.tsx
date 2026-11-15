@@ -26,6 +26,7 @@ import { describe, expect, test, vi } from 'vitest'
 import { useTopNavLinks } from '@/hooks/use-top-nav-links'
 
 import { isTopNavLinkActive } from '../../lib/url-utils'
+import { PublicNavigation } from '../public-navigation'
 import { TopNav } from '../top-nav'
 
 vi.mock('@tanstack/react-router', () => ({
@@ -69,43 +70,28 @@ function NavLinksHarness() {
   return <TopNav links={links} />
 }
 
-function renderNavLinks(status: Record<string, unknown>) {
+function PublicNavigationHarness() {
+  const links = useTopNavLinks()
+  return <PublicNavigation links={links} pathname='/' />
+}
+
+function renderWithStatus(status: Record<string, unknown>, content: ReactNode) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
   client.setQueryData(['status'], status, { updatedAt: Date.now() + 60_000 })
   render(
     <QueryClientProvider client={client}>
-      <I18nextProvider i18n={i18n}>
-        <NavLinksHarness />
-      </I18nextProvider>
+      <I18nextProvider i18n={i18n}>{content}</I18nextProvider>
     </QueryClientProvider>
   )
 }
 
+function renderNavLinks(status: Record<string, unknown>) {
+  renderWithStatus(status, <NavLinksHarness />)
+}
+
 describe('top navigation contact action', () => {
-  test.each([false, 'false', 0])(
-    'hides the Setup download when the administrator sets setupDownload=%s',
-    (setupDownload) => {
-      renderNavLinks({ HeaderNavModules: JSON.stringify({ setupDownload }) })
-      expect(
-        screen.queryByRole('link', { name: 'Download Setup' })
-      ).not.toBeInTheDocument()
-    }
-  )
-
-  test('offers the latest Setup release as an external download without requiring login', () => {
-    renderNavLinks({})
-
-    const download = screen.getByRole('link', { name: 'Download Setup' })
-    expect(download).toHaveAttribute(
-      'href',
-      'https://github.com/MY-Final/kuncode-setup/releases/latest'
-    )
-    expect(download).toHaveAttribute('target', '_blank')
-    expect(download).toHaveAttribute('rel', 'noopener noreferrer')
-  })
-
   test('shows administrator-defined links as public external links', () => {
     renderNavLinks({
       HeaderNavModules: JSON.stringify({
@@ -127,18 +113,6 @@ describe('top navigation contact action', () => {
       'https://help.example.com'
     )
     expect(screen.queryByRole('link', { name: 'Bad' })).not.toBeInTheDocument()
-  })
-
-  test('uses the administrator-defined setup download URL', () => {
-    renderNavLinks({
-      HeaderNavModules: JSON.stringify({
-        setupDownloadUrl: 'https://downloads.example.com/kuncode',
-      }),
-    })
-
-    expect(
-      screen.getByRole('link', { name: 'Download Setup' })
-    ).toHaveAttribute('href', 'https://downloads.example.com/kuncode')
   })
 
   test('opens the contact dialog instead of navigating to the contact route', () => {
@@ -175,6 +149,37 @@ describe('top navigation contact action', () => {
     })
 
     expect(screen.getByText('Contact Us')).toBeInTheDocument()
+  })
+})
+
+describe('public navigation placement', () => {
+  test('shows public product and resource destinations without opening a menu', () => {
+    renderWithStatus(
+      {
+        HeaderNavModules: JSON.stringify({}),
+        contact: { qq_group_number: '123456789' },
+      },
+      <PublicNavigationHarness />
+    )
+
+    for (const name of [
+      'Model Square',
+      'Rankings',
+      'Docs',
+      'About',
+      'Contact Us',
+    ]) {
+      expect(screen.getByRole('link', { name })).toBeVisible()
+    }
+    expect(
+      screen.queryByRole('button', { name: 'Product' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Resources' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'Download Setup' })
+    ).not.toBeInTheDocument()
   })
 })
 

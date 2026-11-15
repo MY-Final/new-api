@@ -99,9 +99,11 @@ vi.mock('@/hooks/use-top-nav-links', () => ({
   useTopNavLinks: () => [
     { href: '/', title: 'Home', section: 'primary' },
     { href: '/dashboard', title: 'Dashboard', section: 'primary' },
-    { href: '/pricing', title: 'Model Square', section: 'product' },
-    { href: '/rankings', title: 'Rankings', section: 'product' },
-    { href: '/about', title: 'About', section: 'resources' },
+    { href: '/pricing', title: 'Model Square', section: 'primary' },
+    { href: '/rankings', title: 'Rankings', section: 'primary' },
+    { href: '/docs', title: 'Docs', section: 'primary' },
+    { href: '/about', title: 'About', section: 'primary' },
+    { href: '/contact', title: 'Contact Us', section: 'primary' },
     {
       href: 'https://help.example.com',
       title: 'Help',
@@ -124,12 +126,23 @@ describe('PublicHeader', () => {
     })
     expect(desktopLink).toHaveClass('whitespace-nowrap')
     expect(desktopLink).not.toHaveClass('truncate')
-    expect(screen.getByRole('button', { name: 'Product' })).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Resources' })).toBeVisible()
-    expect(screen.getByRole('button', { name: 'More' })).toBeVisible()
+
+    for (const name of [
+      'Model Square',
+      'Rankings',
+      'Docs',
+      'About',
+      'Contact Us',
+    ]) {
+      expect(screen.getByRole('link', { name })).toBeVisible()
+    }
     expect(
-      screen.queryByRole('link', { name: 'Model Square' })
+      screen.queryByRole('button', { name: 'Product' })
     ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Resources' })
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'More' })).toBeVisible()
 
     const toggle = screen.getByRole('button', {
       name: 'Toggle navigation menu',
@@ -146,28 +159,35 @@ describe('PublicHeader', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
     const mobileNavigation = document.querySelector('#public-navigation-menu')
     expect(mobileNavigation).toHaveAttribute('aria-hidden', 'false')
+    for (const name of [
+      'Model Square',
+      'Rankings',
+      'Docs',
+      'About',
+      'Contact Us',
+    ]) {
+      expect(
+        within(mobileNavigation as HTMLElement).getByRole('link', {
+          name,
+        })
+      ).toBeVisible()
+    }
     expect(
-      within(mobileNavigation as HTMLElement).getByRole('link', {
-        name: 'Model Square',
-      })
-    ).toBeVisible()
+      within(mobileNavigation as HTMLElement).queryByText('Product')
+    ).not.toBeInTheDocument()
     expect(
-      within(mobileNavigation as HTMLElement).getByText('Product')
-    ).toBeVisible()
-    expect(
-      within(mobileNavigation as HTMLElement).getByText('Resources')
-    ).toBeVisible()
+      within(mobileNavigation as HTMLElement).queryByText('Resources')
+    ).not.toBeInTheDocument()
   })
 
-  it('opens grouped desktop navigation without flattening the primary links', async () => {
+  it('keeps custom links grouped without hiding primary links', async () => {
     const user = userEvent.setup()
     render(<PublicHeader />)
 
-    await user.click(screen.getByRole('button', { name: 'Product' }))
+    expect(screen.getByRole('link', { name: 'Model Square' })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'More' }))
 
-    expect(
-      await screen.findByRole('menuitem', { name: 'Model Square' })
-    ).toBeVisible()
-    expect(screen.getByRole('menuitem', { name: 'Rankings' })).toBeVisible()
+    expect(await screen.findByRole('menuitem', { name: 'Help' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Rankings' })).toBeVisible()
   })
 })

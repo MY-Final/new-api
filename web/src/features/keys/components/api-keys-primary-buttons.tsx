@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { ChevronDown, Download, Globe, Plus } from 'lucide-react'
+import { ChevronDown, Globe, Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { LoadingState } from '@/components/loading-state'
@@ -27,10 +27,6 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import {
-  useSetupDownload,
-  useSetupDownloadUrl,
-} from '@/hooks/use-setup-download'
 
 import { useApiAddresses } from '../hooks/use-api-addresses'
 import { ApiAddressList } from './api-address-list'
@@ -40,28 +36,9 @@ export function ApiKeysPrimaryButtons() {
   const { t } = useTranslation()
   const { setOpen } = useApiKeys()
   const { loading } = useApiAddresses()
-  const showSetupDownload = useSetupDownload()
-  const setupDownloadUrl = useSetupDownloadUrl()
 
   return (
     <div className='flex flex-wrap gap-2'>
-      {showSetupDownload && (
-        <Button
-          variant='outline'
-          role='link'
-          size='sm'
-          render={
-            <a
-              href={setupDownloadUrl}
-              target='_blank'
-              rel='noopener noreferrer'
-            />
-          }
-        >
-          <Download aria-hidden='true' />
-          {t('Download Setup')}
-        </Button>
-      )}
       <Popover>
         <PopoverTrigger render={<Button variant='outline' size='sm' />}>
           <Globe aria-hidden='true' />

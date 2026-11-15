@@ -15,9 +15,6 @@ const (
 	maxHeaderNavURLLen      = 500
 
 	headerNavLinksField = "links"
-	// headerNavSetupDownloadURLField overrides where the setup download entry
-	// points. Empty means "use the client's built-in release page".
-	headerNavSetupDownloadURLField = "setupDownloadUrl"
 )
 
 // HeaderNavLink is one administrator-defined external link in the top
@@ -68,9 +65,8 @@ func ParseHeaderNavLinks(raw string) ([]HeaderNavLink, error) {
 	return links, nil
 }
 
-// ValidateHeaderNavModulesOption validates the parts of HeaderNavModules that
-// the console renders for visitors: the optional `links` array and the optional
-// `setupDownloadUrl` override.
+// ValidateHeaderNavModulesOption validates the optional `links` array carried
+// by HeaderNavModules.
 //
 // The other keys keep their historical shapes (a boolean or
 // {enabled, requireAuth}) and are read by the navigation middleware, so unknown
@@ -93,18 +89,6 @@ func ValidateHeaderNavModulesOption(value string) error {
 		}
 		if _, err := ParseHeaderNavLinks(string(encoded)); err != nil {
 			return err
-		}
-	}
-
-	if raw, exists := parsed[headerNavSetupDownloadURLField]; exists && raw != nil {
-		target, ok := raw.(string)
-		if !ok {
-			return fmt.Errorf("HeaderNavModules %s must be a string", headerNavSetupDownloadURLField)
-		}
-		if strings.TrimSpace(target) != "" {
-			if _, err := normalizeExternalNavURL("setup download", target, maxHeaderNavURLLen); err != nil {
-				return err
-			}
 		}
 	}
 
