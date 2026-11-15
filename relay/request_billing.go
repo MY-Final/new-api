@@ -119,7 +119,6 @@ func PrepareSelectedGroupBilling(c *gin.Context, info *relaycommon.RelayInfo) *t
 	info.SubscriptionAllowWalletOverflow = false
 	info.BillingSourceTarget = ""
 	info.FinalPreConsumedQuota = 0
-	info.SubscriptionInputBudget = 0
 	info.TieredBillingSnapshot = nil
 	info.BillingRequestInput = nil
 	info.QuotaClamp = nil
@@ -142,18 +141,6 @@ func reserveRequestBilling(c *gin.Context, info *relaycommon.RelayInfo, tokens i
 		info.TieredBillingSnapshot = nil
 		info.BillingRequestInput = nil
 
-		if source == service.BillingSourceSubscription && info.SubscriptionOutputLimit > 0 {
-			// Reserve against the same input budget the final request body will
-			// use. EstimateRequestToken counts prompt tokens, which is smaller
-			// than the byte length the finalizer meters, so without this the
-			// initial hold can squeak under a quota window and only the larger
-			// finalize reservation fails, which cannot fall back to the wallet.
-			if info.SubscriptionInputBudget == 0 && info.Request != nil {
-				if raw, marshalErr := common.Marshal(info.Request); marshalErr == nil {
-					info.SubscriptionInputBudget = len(raw)
-				}
-			}
-		}
 		priceData, err := helper.ModelPriceHelper(c, info, tokens, meta)
 		if err != nil {
 			return types.NewErrorWithStatusCode(
@@ -248,7 +235,7 @@ func requestBillingCanFallback(apiErr *types.NewAPIError) bool {
 	}
 }
 
-// FinalizeSubscriptionRequestBilling validates and reserves the final
+// FinalizeSubscriptionRequestBilling validates the reservation for the final
 // protocol body immediately before it is sent to an upstream provider.
 func FinalizeSubscriptionRequestBilling(c *gin.Context, info *relaycommon.RelayInfo, body []byte) ([]byte, *types.NewAPIError) {
 	body, err := helper.FinalizeSubscriptionRequestBudget(c, info, body)

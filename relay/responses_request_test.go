@@ -145,7 +145,7 @@ func TestPrepareResponsesRequestEgressReadsTheFinalizedBody(t *testing.T) {
 	assert.Equal(t, types.ErrorCodeRequestRejected, apiErr.GetErrorCode())
 }
 
-func TestPrepareResponsesRequestReservesForTheFinalizedBody(t *testing.T) {
+func TestPrepareResponsesRequestPreservesSubscriptionReservation(t *testing.T) {
 	settings := model_setting.GetGlobalSettings()
 	previous := settings.PassThroughRequestEnabled
 	settings.PassThroughRequestEnabled = false
@@ -164,7 +164,7 @@ func TestPrepareResponsesRequestReservesForTheFinalizedBody(t *testing.T) {
 	info := relaycommon.GenRelayInfoResponses(c, &req)
 	info.SubscriptionOutputLimit = 10
 	info.BillingSource = service.BillingSourceSubscription
-	reservation := &imageReservation{limit: 1_000_000}
+	reservation := &imageReservation{limit: 1_000_000, held: 100}
 	info.Billing = reservation
 	info.PriceData.ModelRatio = 1
 	info.PriceData.CompletionRatio = 1
@@ -175,6 +175,6 @@ func TestPrepareResponsesRequestReservesForTheFinalizedBody(t *testing.T) {
 	wire, err := io.ReadAll(body)
 	require.NoError(t, err)
 	assert.Equal(t, "reasoning", gjson.GetBytes(wire, "input.0.type").String())
-	assert.Equal(t, len(wire), info.SubscriptionInputBudget)
-	assert.GreaterOrEqual(t, reservation.held, len(wire))
+	assert.Equal(t, 100, reservation.held)
+	assert.Equal(t, 100, info.FinalPreConsumedQuota)
 }

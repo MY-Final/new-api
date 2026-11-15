@@ -164,11 +164,10 @@ type RelayInfo struct {
 	SubscriptionPlanId         int
 	SubscriptionPlanTitle      string
 	SubscriptionUsageRequestId string
-	// SubscriptionOutputLimit is the effective cap sent to the upstream. A
-	// positive value enables subscription budget metering at the selected
-	// subscription route multiplier.
+	// SubscriptionOutputLimit is the plan's snapshotted output setting. A
+	// positive value identifies a subscription-funded route without changing
+	// the client's output limit or reserving its maximum possible cost.
 	SubscriptionOutputLimit int
-	SubscriptionInputBudget int
 	// BillingSourceTarget selects wallet or subscription for the current
 	// price estimate. PrepareRequestBilling changes it before repricing a
 	// fallback attempt so each source uses its own multiplier.
