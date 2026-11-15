@@ -214,15 +214,17 @@ it('keeps password visibility keyboard accessible without submitting the form', 
   await renderSignIn()
   const password = screen.getByLabelText('Password')
   const toggle = screen.getByRole('button', {
-    name: 'Toggle password visibility',
+    name: 'Show password',
   })
   expect(password).toHaveAttribute('type', 'password')
   toggle.focus()
 
   await userEvent.keyboard(' ')
   expect(password).toHaveAttribute('type', 'text')
+  expect(toggle).toHaveAccessibleName('Hide password')
   await userEvent.keyboard(' ')
   expect(password).toHaveAttribute('type', 'password')
+  expect(toggle).toHaveAccessibleName('Show password')
   expect(api.post).not.toHaveBeenCalled()
 })
 
