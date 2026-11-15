@@ -48,11 +48,17 @@ afterEach(() => {
   localStorage.clear()
 })
 
-// The keys toolbar renders other actions (for example the setup download
-// link) before the trigger, so walk the tab order until it is reached.
-async function tabToApiAddressesTrigger(user: ReturnType<typeof userEvent.setup>) {
+// The keys toolbar renders several actions before the trigger, so walk the tab
+// order until it is reached.
+async function tabToApiAddressesTrigger(
+  user: ReturnType<typeof userEvent.setup>
+) {
   const trigger = screen.getByRole('button', { name: 'API Addresses' })
-  for (let step = 0; step < 6 && document.activeElement !== trigger; step += 1) {
+  for (
+    let step = 0;
+    step < 6 && document.activeElement !== trigger;
+    step += 1
+  ) {
     await user.tab()
   }
   return trigger
@@ -74,9 +80,9 @@ it('shows every configured API endpoint and copies only the chosen visible URL',
   const writeText = vi.spyOn(navigator.clipboard, 'writeText')
   renderAddresses({
     server_address: 'https://console.example.com',
-    api_base_urls: [
-      'https://api.example.com/v1',
-      'https://asia.example.com/gateway/v1/',
+    api_base_endpoints: [
+      { name: '默认', url: 'https://api.example.com/v1' },
+      { name: '亚洲', url: 'https://asia.example.com/gateway/v1/' },
     ],
   })
 
@@ -84,6 +90,8 @@ it('shows every configured API endpoint and copies only the chosen visible URL',
   const dialog = await screen.findByRole('dialog', { name: 'API Addresses' })
   const rows = within(dialog).getAllByRole('listitem')
   expect(rows).toHaveLength(2)
+  expect(within(rows[0]).getByText('默认')).toBeVisible()
+  expect(within(rows[1]).getByText('亚洲')).toBeVisible()
   expect(within(rows[0]).getByText('https://api.example.com/v1')).toBeVisible()
   expect(
     within(rows[1]).getByText('https://asia.example.com/gateway/v1/')
@@ -109,7 +117,9 @@ it('shows every configured API endpoint and copies only the chosen visible URL',
 it('prefers configured API endpoints over dashboard API shortcuts', async () => {
   const user = userEvent.setup()
   renderAddresses({
-    api_base_urls: ['https://configured.example.com'],
+    api_base_endpoints: [
+      { name: '已配置', url: 'https://configured.example.com' },
+    ],
     api_info_enabled: true,
     api_info: [
       {

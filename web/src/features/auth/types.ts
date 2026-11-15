@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { APIBaseEndpoint } from '@/lib/api-endpoints'
 import type { TurnstileScene } from '@/lib/turnstile'
 import type { AuthBundle } from '@/stores/auth-store'
 
@@ -150,6 +151,7 @@ export interface SystemStatus {
     password_register_enabled?: boolean
     custom_oauth_providers?: CustomOAuthProviderInfo[]
     api_base_urls?: string[]
+    api_base_endpoints?: APIBaseEndpoint[]
     contact?: ContactStatus
     [key: string]: unknown
   }
@@ -200,6 +202,7 @@ export interface SystemStatus {
   password_register_enabled?: boolean
   custom_oauth_providers?: CustomOAuthProviderInfo[]
   api_base_urls?: string[]
+  api_base_endpoints?: APIBaseEndpoint[]
   contact?: ContactStatus
   log_export_enabled?: boolean
   log_max_range_days?: number

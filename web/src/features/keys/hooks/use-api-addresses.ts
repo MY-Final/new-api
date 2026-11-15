@@ -20,8 +20,7 @@ import { useTranslation } from 'react-i18next'
 
 import { useApiInfo } from '@/features/dashboard/hooks/use-status-data'
 import { useStatus } from '@/hooks/use-status'
-
-import { getAPIBaseURLs } from '../lib/api-addresses'
+import { getAPIBaseEndpoints } from '@/lib/api-endpoints'
 
 export type ApiAddress = {
   url: string
@@ -46,11 +45,17 @@ export function useApiAddresses(): {
     (typeof status?.server_address === 'string' &&
       status.server_address.trim()) ||
     ''
-  const configuredURLs = getAPIBaseURLs(status?.api_base_urls)
+  const configuredEndpoints = getAPIBaseEndpoints(
+    status?.api_base_endpoints,
+    status?.api_base_urls
+  )
 
   let addresses: ApiAddress[]
-  if (configuredURLs.length) {
-    addresses = configuredURLs.map((url) => ({ url }))
+  if (configuredEndpoints.length) {
+    addresses = configuredEndpoints.map((endpoint) => ({
+      url: endpoint.url,
+      route: endpoint.name || undefined,
+    }))
   } else if (items.length) {
     addresses = items.map((item) => ({
       url: item.url,

@@ -17,10 +17,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
-import type { Resolver } from 'react-hook-form'
+import { Plus, Trash2 } from 'lucide-react'
+import { useFieldArray, type Resolver } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import * as z from 'zod'
 
+import { Button } from '@/components/ui/button'
 import {
   Form,
   FormControl,
@@ -32,6 +34,12 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  MAX_API_BASE_ENDPOINTS,
+  isValidAPIBaseEndpointURL,
+  parseAPIBaseEndpointsOption,
+  serializeAPIBaseEndpointsOption,
+} from '@/lib/api-endpoints'
 
 import { FormDirtyIndicator } from '../components/form-dirty-indicator'
 import { FormNavigationGuard } from '../components/form-navigation-guard'
@@ -46,36 +54,15 @@ import { useSettingsForm } from '../hooks/use-settings-form'
 import { useUpdateOption } from '../hooks/use-update-option'
 import { isValidTaskPublicAddress } from './task-public-address'
 
-const MAX_API_BASE_URLS = 20
-
-function hasValidAPIBaseURLs(value: string): boolean {
-  const urls = value
-    .split(/\r?\n/)
-    .map((url) => url.trim())
-    .filter(Boolean)
-
-  if (urls.length > MAX_API_BASE_URLS) return false
-
-  return urls.every((rawURL) => {
-    try {
-      const url = new URL(rawURL)
-      return (
-        (url.protocol === 'http:' || url.protocol === 'https:') &&
-        !url.username &&
-        !url.password &&
-        !url.search &&
-        !url.hash
-      )
-    } catch {
-      return false
-    }
-  })
-}
+const _apiBaseEndpointSchema = z.object({
+  name: z.string().trim().max(50),
+  url: z.string().trim().min(1).refine(isValidAPIBaseEndpointURL),
+})
 
 const _systemInfoSchema = z.object({
   SystemName: z.string().min(1),
   ServerAddress: z.string().optional(),
-  ApiBaseURLs: z.string().refine(hasValidAPIBaseURLs),
+  ApiBaseURLs: z.array(_apiBaseEndpointSchema).max(MAX_API_BASE_ENDPOINTS),
   TaskPublicAddress: z.string().refine(isValidTaskPublicAddress),
   Logo: z.string().url().optional().or(z.literal('')),
   Footer: z.string().optional(),
@@ -93,7 +80,9 @@ const _systemInfoSchema = z.object({
 type SystemInfoFormValues = z.infer<typeof _systemInfoSchema>
 
 type SystemInfoSectionProps = {
-  defaultValues: SystemInfoFormValues
+  defaultValues: Omit<SystemInfoFormValues, 'ApiBaseURLs'> & {
+    ApiBaseURLs: string
+  }
 }
 
 function normalizeValue(value: unknown): string {
@@ -108,7 +97,9 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
   const normalizedDefaults: SystemInfoFormValues = {
     SystemName: normalizeValue(defaultValues.SystemName),
     ServerAddress: normalizeValue(defaultValues.ServerAddress),
-    ApiBaseURLs: normalizeValue(defaultValues.ApiBaseURLs),
+    ApiBaseURLs: parseAPIBaseEndpointsOption(
+      normalizeValue(defaultValues.ApiBaseURLs)
+    ),
     TaskPublicAddress: normalizeValue(defaultValues.TaskPublicAddress),
     Logo: normalizeValue(defaultValues.Logo),
     Footer: normalizeValue(defaultValues.Footer),
@@ -128,12 +119,30 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
       error: () => t('System name is required'),
     }),
     ServerAddress: z.string().optional(),
-    ApiBaseURLs: z.string().refine(hasValidAPIBaseURLs, {
-      error: () =>
-        t(
-          'Enter up to 20 absolute HTTP(S) URLs, one per line, without credentials, query parameters, or fragments'
-        ),
-    }),
+    ApiBaseURLs: z
+      .array(
+        z.object({
+          name: z
+            .string()
+            .trim()
+            .max(50, {
+              error: () => t('Endpoint name cannot exceed 50 characters'),
+            }),
+          url: z
+            .string()
+            .trim()
+            .min(1, { error: () => t('URL is required') })
+            .refine(isValidAPIBaseEndpointURL, {
+              error: () =>
+                t(
+                  'Enter an absolute HTTP(S) URL without credentials, query parameters, or fragments'
+                ),
+            }),
+        })
+      )
+      .max(MAX_API_BASE_ENDPOINTS, {
+        error: () => t('At most 20 API endpoints are allowed'),
+      }),
     TaskPublicAddress: z.string().refine(isValidTaskPublicAddress, {
       error: () =>
         t(
@@ -161,18 +170,22 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
         SystemInfoFormValues
       >,
       defaultValues: normalizedDefaults,
-      onSubmit: async (_data, changedFields) => {
+      onSubmit: async (data, changedFields) => {
+        const endpointsChanged = Object.keys(changedFields).some(
+          (key) => key === 'ApiBaseURLs' || key.startsWith('ApiBaseURLs.')
+        )
+        if (endpointsChanged) {
+          await updateOption.mutateAsync({
+            key: 'ApiBaseURLs',
+            value: serializeAPIBaseEndpointsOption(data.ApiBaseURLs),
+          })
+        }
+
         for (const [key, value] of Object.entries(changedFields)) {
+          if (key === 'ApiBaseURLs' || key.startsWith('ApiBaseURLs.')) continue
           let v = normalizeValue(value)
           if (key === 'ServerAddress' || key === 'TaskPublicAddress') {
             v = v.replace(/\/+$/, '')
-          }
-          if (key === 'ApiBaseURLs') {
-            v = v
-              .split(/\r?\n/)
-              .map((url) => url.trim().replace(/\/+$/, ''))
-              .filter(Boolean)
-              .join('\n')
           }
           await updateOption.mutateAsync({
             key,
@@ -181,6 +194,11 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
         }
       },
     })
+
+  const endpointFields = useFieldArray({
+    control: form.control,
+    name: 'ApiBaseURLs',
+  })
 
   return (
     <>
@@ -234,30 +252,83 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
               />
 
               <SettingsFormGridItem span='full'>
-                <FormField
-                  control={form.control}
-                  name='ApiBaseURLs'
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t('API endpoints')}</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder={
-                            'https://api.example.com\nhttps://api-fast.example.com'
-                          }
-                          rows={3}
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        {t(
-                          'Configure one API endpoint per line. These endpoints are shown below the filters on the API keys page.'
+                <div className='space-y-3'>
+                  <div className='space-y-1'>
+                    <p className='text-sm font-medium'>{t('API endpoints')}</p>
+                    <p className='text-muted-foreground text-sm'>
+                      {t(
+                        'Configure labeled API endpoints. Each name appears before its URL on the API keys page.'
+                      )}
+                    </p>
+                  </div>
+
+                  {endpointFields.fields.map((field, index) => (
+                    <div
+                      key={field.id}
+                      className='grid gap-3 rounded-lg border p-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto]'
+                    >
+                      <FormField
+                        control={form.control}
+                        name={`ApiBaseURLs.${index}.name`}
+                        render={({ field: nameField }) => (
+                          <FormItem>
+                            <FormLabel>{t('Name')}</FormLabel>
+                            <FormControl>
+                              <Input
+                                {...nameField}
+                                placeholder={t('Default')}
+                                autoComplete='off'
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
                         )}
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                      />
+                      <FormField
+                        control={form.control}
+                        name={`ApiBaseURLs.${index}.url`}
+                        render={({ field: urlField }) => (
+                          <FormItem>
+                            <FormLabel>{t('URL')}</FormLabel>
+                            <FormControl>
+                              <Input
+                                {...urlField}
+                                placeholder='https://api.example.com'
+                                autoComplete='off'
+                                inputMode='url'
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <div className='flex items-end'>
+                        <Button
+                          type='button'
+                          variant='ghost'
+                          size='icon'
+                          aria-label={t('Remove endpoint')}
+                          onClick={() => endpointFields.remove(index)}
+                        >
+                          <Trash2 className='size-4' aria-hidden='true' />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+
+                  <Button
+                    type='button'
+                    variant='outline'
+                    size='sm'
+                    disabled={
+                      endpointFields.fields.length >= MAX_API_BASE_ENDPOINTS
+                    }
+                    onClick={() => endpointFields.append({ name: '', url: '' })}
+                  >
+                    <Plus className='size-4' aria-hidden='true' />
+                    {t('Add endpoint')}
+                  </Button>
+                </div>
               </SettingsFormGridItem>
 
               <FormField

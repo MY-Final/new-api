@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
 import { flexRender, type Table as TanstackTable } from '@tanstack/react-table'
-import { Database, Globe2, Plus } from 'lucide-react'
+import { ArrowUpRight, Database, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -44,6 +44,7 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useStatus } from '@/hooks/use-status'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
+import { getAPIBaseEndpoints, type APIBaseEndpoint } from '@/lib/api-endpoints'
 import { createServerError } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
 
@@ -54,7 +55,6 @@ import {
   API_KEY_STATUSES,
   ERROR_MESSAGES,
 } from '../constants'
-import { getAPIBaseURLs } from '../lib/api-addresses'
 import type { ApiKey } from '../types'
 import { ApiKeyQuotaCell } from './api-key-quota-cell'
 import { ApiKeyActivityCell } from './api-key-timestamp-cell'
@@ -79,35 +79,66 @@ function isDisabledApiKeyRow(apiKey: ApiKey) {
   return apiKey.status !== API_KEY_STATUS.ENABLED
 }
 
-function APIEndpointList(props: { urls: string[] }) {
+function APIEndpointList(props: { endpoints: APIBaseEndpoint[] }) {
   const { t } = useTranslation()
 
-  if (!props.urls.length) return null
+  if (!props.endpoints.length) return null
 
   return (
-    <div
-      className='border-border/70 bg-muted/30 flex max-w-full min-w-0 flex-wrap items-center gap-1.5 rounded-md border px-2 py-1'
-      aria-label={t('API endpoints')}
-    >
-      <span className='text-muted-foreground flex shrink-0 items-center gap-1 text-xs font-medium'>
-        <Globe2 className='size-3.5' aria-hidden='true' />
+    <div className='flex max-w-full min-w-0 flex-wrap items-center gap-2'>
+      <span className='text-muted-foreground text-xs font-medium'>
         {t('API endpoints')}
       </span>
-      <span className='bg-border mx-0.5 hidden h-4 w-px sm:block' />
-      {props.urls.map((url) => (
-        <CopyButton
-          key={url}
-          value={url}
-          variant='outline'
-          size='sm'
-          className='h-7 max-w-72 min-w-0 gap-1.5 rounded-sm px-2 font-mono text-xs font-normal sm:max-w-88'
-          iconClassName='size-3'
-          tooltip={t('Copy API endpoint')}
-          aria-label={`${t('Copy API endpoint')}: ${url}`}
-        >
-          <span className='truncate'>{url}</span>
-        </CopyButton>
-      ))}
+      <div
+        role='list'
+        className='flex max-w-full min-w-0 flex-wrap items-center gap-2'
+        aria-label={t('API endpoints')}
+      >
+        {props.endpoints.map((endpoint) => (
+          <div
+            key={endpoint.url}
+            role='listitem'
+            className='border-border/70 bg-background flex h-8 max-w-full min-w-0 items-center rounded-md border pr-0.5 pl-2.5'
+          >
+            {endpoint.name && (
+              <>
+                <span className='text-primary max-w-40 truncate text-xs font-medium'>
+                  {endpoint.name}
+                </span>
+                <span className='text-border mx-1.5' aria-hidden='true'>
+                  |
+                </span>
+              </>
+            )}
+            <span className='text-muted-foreground max-w-56 truncate font-mono text-xs sm:max-w-80'>
+              {endpoint.url}
+            </span>
+            <CopyButton
+              value={endpoint.url}
+              variant='ghost'
+              size='icon'
+              className='ml-1 size-7'
+              iconClassName='size-3.5'
+              tooltip={t('Copy API endpoint')}
+              aria-label={`${t('Copy API endpoint')}: ${endpoint.url}`}
+            />
+            <Button
+              variant='ghost'
+              size='icon-xs'
+              aria-label={`${t('Open API endpoint')}: ${endpoint.url}`}
+              render={
+                <a
+                  href={endpoint.url}
+                  target='_blank'
+                  rel='noopener noreferrer'
+                />
+              }
+            >
+              <ArrowUpRight aria-hidden='true' />
+            </Button>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -344,7 +375,10 @@ export function ApiKeysTable() {
   })
 
   const apiKeys = data?.items || []
-  const apiBaseURLs = getAPIBaseURLs(status?.api_base_urls)
+  const apiBaseEndpoints = getAPIBaseEndpoints(
+    status?.api_base_endpoints,
+    status?.api_base_urls
+  )
   const hasActiveFilters = Boolean(
     globalFilter?.trim() ||
     tokenFilter.trim() ||
@@ -430,8 +464,8 @@ export function ApiKeysTable() {
             singleSelect: true,
           },
         ],
-        leftActions: apiBaseURLs.length ? (
-          <APIEndpointList urls={apiBaseURLs} />
+        leftActions: apiBaseEndpoints.length ? (
+          <APIEndpointList endpoints={apiBaseEndpoints} />
         ) : undefined,
       }}
       mobile={
