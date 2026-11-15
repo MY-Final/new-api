@@ -99,7 +99,11 @@ func ensureLogRequestId(log *Log) {
 
 func createLog(log *Log) error {
 	ensureLogRequestId(log)
-	return LOG_DB.Create(log).Error
+	if err := LOG_DB.Create(log).Error; err != nil {
+		return err
+	}
+	common.UsageLogNotifications.Publish(log.UserId)
+	return nil
 }
 
 func clickHouseLogOrder(prefix string) string {

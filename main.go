@@ -410,6 +410,7 @@ func InitResources() error {
 	if err != nil {
 		return err
 	}
+	go common.UsageLogNotifications.Run(context.Background(), common.RDB)
 
 	perfmetrics.Init()
 

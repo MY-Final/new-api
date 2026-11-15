@@ -332,6 +332,8 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"GET /api/log/analysis":                     accessTokenScopeRule("log:read"),
 	"GET /api/log/search":                       accessTokenScopeRule("log:read"),
 	"GET /api/log/self":                         accessTokenScopeRule("usage:read"),
+	"GET /api/log/stream":                       accessTokenSessionRule,
+	"GET /api/log/self/stream":                  accessTokenSessionRule,
 	"GET /api/log/self/search":                  accessTokenScopeRule("usage:read"),
 	"GET /api/log/export":                       accessTokenScopeRule("log:read"),
 	"GET /api/log/self/export":                  accessTokenScopeRule("usage:read"),

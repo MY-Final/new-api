@@ -16,10 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -48,6 +48,7 @@ import { parseLogOther } from '../lib/format'
 import { fetchLogsByCategory } from '../lib/utils'
 import type { LogCategory } from '../types'
 import { CommonLogsFilterBar } from './common-logs-filter-bar'
+import { LogLiveRefresh } from './log-live-refresh'
 import { TaskLogsFilterBar } from './task-logs-filter-bar'
 import { UsageLogsMobileList } from './usage-logs-mobile-card'
 import {
@@ -90,6 +91,9 @@ interface UsageLogsTableProps {
 
 export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const navigate = route.useNavigate()
+  const lastStatsRefresh = useRef(0)
   const getColumnClassName = useCallback(
     () => (logCategory === 'common' ? 'py-2' : 'py-3.5'),
     [logCategory]
@@ -165,17 +169,18 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
     ],
   })
 
+  const logsQueryKey = [
+    'logs',
+    logCategory,
+    viewAccess,
+    pagination.pageIndex + 1,
+    pagination.pageSize,
+    columnFilters,
+    searchParams,
+    t,
+  ] as const
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: [
-      'logs',
-      logCategory,
-      viewAccess,
-      pagination.pageIndex + 1,
-      pagination.pageSize,
-      columnFilters,
-      searchParams,
-      t,
-    ],
+    queryKey: logsQueryKey,
     queryFn: async () => {
       const result = await fetchLogsByCategory({
         logCategory,
@@ -258,7 +263,39 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       }
       toolbar={
         isCommon ? (
-          <CommonLogsFilterBar table={table} />
+          <div className='space-y-2'>
+            <LogLiveRefresh
+              key={`${viewAccess}:${userId}`}
+              isAdmin={isAdmin}
+              pageIndex={pagination.pageIndex}
+              endTime={searchParams.endTime}
+              onRefresh={async () => {
+                await queryClient.refetchQueries(
+                  { queryKey: logsQueryKey, exact: true, type: 'active' },
+                  { throwOnError: true }
+                )
+                if (Date.now() - lastStatsRefresh.current >= 15000) {
+                  lastStatsRefresh.current = Date.now()
+                  await queryClient.refetchQueries({
+                    queryKey: ['usage-logs-stats', isAdmin, searchParams],
+                    exact: true,
+                    type: 'active',
+                  })
+                }
+              }}
+              onShowLatest={() => {
+                void navigate({
+                  search: {
+                    ...searchParams,
+                    page: 1,
+                    startTime: undefined,
+                    endTime: undefined,
+                  },
+                })
+              }}
+            />
+            <CommonLogsFilterBar table={table} />
+          </div>
         ) : (
           <TaskLogsFilterBar table={table} logCategory={logCategory} />
         )
