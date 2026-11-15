@@ -34,6 +34,7 @@ import type {
   SubscriptionUsagePage,
   SubscriptionUsageRecordFilters,
   SubscriptionUsageStatistics,
+  SubscriptionCycleTokenUsage,
 } from './types'
 
 // ============================================================================
@@ -84,6 +85,15 @@ export async function getUserSubscriptions(
 ): Promise<ApiResponse<UserSubscriptionRecord[]>> {
   const res = await api.get(
     `/api/subscription/admin/users/${userId}/subscriptions`
+  )
+  return res.data
+}
+
+export async function getUserSubscriptionTokenUsage(
+  userId: number
+): Promise<ApiResponse<SubscriptionCycleTokenUsage[]>> {
+  const res = await api.get(
+    `/api/subscription/admin/users/${userId}/subscriptions/usage`
   )
   return res.data
 }

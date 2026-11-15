@@ -17,7 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
-import { Link2, UserRound, UserRoundPlus, WalletCards } from 'lucide-react'
+import {
+  ChartNoAxesCombined,
+  Link2,
+  UserRound,
+  UserRoundPlus,
+  WalletCards,
+} from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -27,6 +33,7 @@ import { LoadingState } from '@/components/loading-state'
 import { StatusBadge, type StatusVariant } from '@/components/status-badge'
 import { TableId } from '@/components/table-id'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { SubscriptionCycleUsage } from '@/features/subscriptions/components/subscription-cycle-usage'
 import {
   formatCompactNumber,
   formatNumber,
@@ -157,6 +164,17 @@ export function UserInfoDialog({
               />
             </div>
           </div>
+
+          {open && (
+            <InfoCard
+              title={t('Subscription cycle usage')}
+              icon={
+                <ChartNoAxesCombined className='text-muted-foreground size-4' />
+              }
+            >
+              <SubscriptionCycleUsage userId={userInfo.id} />
+            </InfoCard>
+          )}
 
           <div className='grid gap-4 lg:grid-cols-2'>
             <InfoCard

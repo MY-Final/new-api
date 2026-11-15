@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -104,4 +105,56 @@ func TestGetMyUsageIgnoresUserIDQueryParameter(t *testing.T) {
 	require.Equal(t, user.Id, response.Data.User.Id)
 	require.Equal(t, int64(1), response.Data.Summary.RequestCount)
 	require.Equal(t, int64(30), response.Data.Summary.UserCost)
+}
+
+func TestAdminSubscriptionTokenUsagePermissions(t *testing.T) {
+	db := setupManageUserTestDB(t)
+	require.NoError(t, db.AutoMigrate(&model.SubscriptionPlan{}, &model.SubscriptionOrder{}))
+	user := model.User{Username: "subscription-usage-user", Role: common.RoleCommonUser, AffCode: "subscription-usage-user-aff"}
+	admin := model.User{Username: "subscription-usage-admin", Role: common.RoleAdminUser, AffCode: "subscription-usage-admin-aff"}
+	require.NoError(t, db.Create(&user).Error)
+	require.NoError(t, db.Create(&admin).Error)
+	subscription := model.UserSubscription{UserId: user.Id, PlanId: 1, StartTime: 1000, EndTime: 2000, Source: "admin"}
+	require.NoError(t, db.Create(&subscription).Error)
+	metadata, err := common.Marshal(map[string]any{"billing_source": "subscription", "subscription_id": subscription.Id})
+	require.NoError(t, err)
+	require.NoError(t, model.LOG_DB.Create(&model.Log{
+		UserId: user.Id, CreatedAt: 1500, Type: model.LogTypeConsume, PromptTokens: 8,
+		CompletionTokens: 2, Other: string(metadata),
+	}).Error)
+
+	for _, testCase := range []struct {
+		name     string
+		role     int
+		target   int
+		expected bool
+	}{
+		{name: "admin can read a common user", role: common.RoleAdminUser, target: user.Id, expected: true},
+		{name: "user cannot read statistics", role: common.RoleCommonUser, target: user.Id},
+		{name: "admin cannot read a peer admin", role: common.RoleAdminUser, target: admin.Id},
+		{name: "root can read an admin", role: common.RoleRootUser, target: admin.Id, expected: true},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			context, _ := gin.CreateTestContext(recorder)
+			context.Set("role", testCase.role)
+			context.Params = gin.Params{{Key: "id", Value: fmt.Sprint(testCase.target)}}
+			context.Request = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/subscription/admin/users/%d/subscriptions/usage", testCase.target), nil)
+			AdminGetUserSubscriptionTokenUsage(context)
+			var response struct {
+				Success bool                                `json:"success"`
+				Data    []model.SubscriptionCycleTokenUsage `json:"data"`
+			}
+			require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+			assert.Equal(t, testCase.expected, response.Success)
+			if !testCase.expected {
+				assert.Equal(t, http.StatusForbidden, recorder.Code)
+				assert.Empty(t, response.Data)
+			}
+			if testCase.expected && testCase.target == user.Id {
+				require.Len(t, response.Data, 1)
+				assert.EqualValues(t, 10, response.Data[0].TotalTokens)
+			}
+		})
+	}
 }

@@ -113,6 +113,22 @@ export interface UserSubscriptionRecord {
   subscription: UserSubscription
 }
 
+export interface SubscriptionCycleTokenUsage {
+  subscription_id: number
+  plan_id: number
+  plan_title: string
+  order_id: number
+  cycle: number
+  start_time: number
+  end_time: number
+  request_count: number
+  input_tokens: number
+  output_tokens: number
+  cache_read_tokens: number
+  cache_write_tokens: number
+  total_tokens: number
+}
+
 export interface SubscriptionUsageRecord {
   billing_id: string
   request_id: string

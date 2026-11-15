@@ -21,6 +21,8 @@ import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, test, vi } from 'vitest'
 
+import type { SubscriptionCycleTokenUsage } from '@/features/subscriptions/types'
+
 const { createInstance } = await import('i18next')
 const { I18nextProvider, initReactI18next } = await import('react-i18next')
 const { api } = await import('@/lib/api')
@@ -58,6 +60,7 @@ function renderDialog(
     userDenied?: boolean
     subscriptionResponses?: Record<string, unknown>[]
     subscriptionPromise?: Promise<Record<string, unknown>>
+    cycleUsage?: SubscriptionCycleTokenUsage[]
   } = {}
 ) {
   const queryClient = new QueryClient({
@@ -85,6 +88,11 @@ function renderDialog(
     }
     if (url === '/api/subscription/admin/plans') {
       return { data: { success: true, data: options.plans ?? [] } }
+    }
+    if (
+      url === `/api/subscription/admin/users/${user.id}/subscriptions/usage`
+    ) {
+      return { data: { success: true, data: options.cycleUsage ?? [] } }
     }
     throw new Error(`Unexpected request: ${url}`)
   })
@@ -263,6 +271,58 @@ describe('usage log user info dialog', () => {
     expect(oneDay).toHaveTextContent(formatQuota(300_000))
     expect(oneDay).toHaveTextContent(formatQuota(700_000))
     expect(screen.queryByText('Old Plan')).not.toBeInTheDocument()
+  })
+
+  test('shows purchase cycle tokens directly in the user info opened from usage logs', async () => {
+    const { request } = renderDialog(invitedUser, {
+      cycleUsage: [
+        {
+          subscription_id: 42,
+          plan_id: 3,
+          plan_title: 'Pro Plan',
+          order_id: 2,
+          cycle: 2,
+          start_time: 1_790_100_000,
+          end_time: 1_790_200_000,
+          request_count: 15,
+          input_tokens: 1200,
+          output_tokens: 300,
+          cache_read_tokens: 400,
+          cache_write_tokens: 100,
+          total_tokens: 1500,
+        },
+        {
+          subscription_id: 42,
+          plan_id: 3,
+          plan_title: 'Pro Plan',
+          order_id: 1,
+          cycle: 1,
+          start_time: 1_790_000_000,
+          end_time: 1_790_100_000,
+          request_count: 6,
+          input_tokens: 100,
+          output_tokens: 50,
+          cache_read_tokens: 20,
+          cache_write_tokens: 10,
+          total_tokens: 150,
+        },
+      ],
+    })
+
+    const table = await screen.findByRole('table')
+    const rows = within(table).getAllByRole('row')
+    expect(rows).toHaveLength(3)
+    expect(rows[1]).toHaveTextContent('Cycle 2')
+    expect(within(rows[1]).getByText('1,500', { exact: true })).toBeVisible()
+    expect(rows[2]).toHaveTextContent('Cycle 1')
+    expect(within(rows[2]).getByText('150', { exact: true })).toBeVisible()
+    expect(screen.getByText('No active subscriptions')).toBeVisible()
+    expect(request).toHaveBeenCalledWith(
+      '/api/subscription/admin/users/7/subscriptions/usage'
+    )
+    expect(
+      screen.queryByRole('dialog', { name: 'User Subscription Management' })
+    ).not.toBeInTheDocument()
   })
 
   test('shows remaining quota and unlimited subscriptions without rolling windows', async () => {

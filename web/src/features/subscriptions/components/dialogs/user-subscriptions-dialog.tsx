@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Ban, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { Ban, ChartNoAxesCombined, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -71,6 +71,7 @@ import {
   formatWindowDuration,
 } from '../../lib'
 import type { PlanRecord, UserSubscriptionRecord } from '../../types'
+import { SubscriptionCycleUsageDialog } from './subscription-cycle-usage-dialog'
 
 interface Props {
   open: boolean
@@ -121,6 +122,7 @@ export function UserSubscriptionsDialog(props: Props) {
   const [creating, setCreating] = useState(false)
   const [plans, setPlans] = useState<PlanRecord[]>([])
   const [subs, setSubs] = useState<UserSubscriptionRecord[]>([])
+  const [usageOpen, setUsageOpen] = useState(false)
   const [selectedPlanId, setSelectedPlanId] = useState<string>('')
   const [resetting, setResetting] = useState(false)
   const [advanceResetTime, setAdvanceResetTime] = useState(true)
@@ -169,6 +171,7 @@ export function UserSubscriptionsDialog(props: Props) {
   useEffect(() => {
     if (props.open && props.user?.id) {
       setSelectedPlanId('')
+      setUsageOpen(false)
       loadData()
     }
   }, [props.open, props.user?.id, loadData])
@@ -274,6 +277,15 @@ export function UserSubscriptionsDialog(props: Props) {
           </SheetHeader>
 
           <div className={sideDrawerFormClassName()}>
+            <Button
+              variant='outline'
+              className='self-start'
+              onClick={() => setUsageOpen(true)}
+              disabled={loading}
+            >
+              <ChartNoAxesCombined aria-hidden='true' />
+              {t('Subscription cycle usage')}
+            </Button>
             <div className='flex gap-2'>
               <Combobox
                 options={plans.map((p) => ({
@@ -459,6 +471,12 @@ export function UserSubscriptionsDialog(props: Props) {
           </div>
         </SheetContent>
       </Sheet>
+
+      <SubscriptionCycleUsageDialog
+        open={props.open && usageOpen}
+        onOpenChange={setUsageOpen}
+        user={props.user}
+      />
 
       {confirmAction && (
         <ConfirmDialog
