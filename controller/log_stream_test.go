@@ -86,7 +86,7 @@ func TestLogStreamRefreshOptionsDatabaseMatrix(t *testing.T) {
 			}
 			db, _ := newAuditTestDatabase(t, database.name, dsn)
 			useLogExportDatabases(t, db, db, database.kind, database.kind)
-			require.NoError(t, db.AutoMigrate(&model.Option{}, &model.SystemTask{}, &model.User{}, &model.AuditLog{}))
+			require.NoError(t, db.AutoMigrate(&model.Option{}, &model.SystemTask{}, &model.User{}, &model.AuditLog{}, &model.FreeGroupDailyUsage{}))
 			admin := model.User{Username: "sse-settings-admin", AffCode: "sse-settings-admin", Role: common.RoleRootUser, Status: common.UserStatusEnabled}
 			require.NoError(t, db.Create(&admin).Error)
 			engine := gin.New()
@@ -128,9 +128,11 @@ func TestLogStreamRefreshOptionsDatabaseMatrix(t *testing.T) {
 			}
 			response := accessTokenRequest(engine, http.MethodGet, "/api/option/", "", "", "")
 			var options struct {
-				Data []model.Option `json:"data"`
+				Success bool           `json:"success"`
+				Data    []model.Option `json:"data"`
 			}
 			require.NoError(t, common.Unmarshal(response.Body.Bytes(), &options))
+			require.True(t, options.Success, response.Body.String())
 			values := make(map[string]string)
 			for _, option := range options.Data {
 				values[option.Key] = option.Value
