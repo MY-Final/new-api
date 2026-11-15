@@ -98,14 +98,14 @@ export function useLogLiveRefresh(options: LogLiveRefreshOptions) {
           lastEvent = Date.now()
           return true
         }
-        next.addEventListener('ready', (event) => {
-          if (!receive()) return
+        const configureInterval = (event: Event & { data?: string }) => {
+          if (!receive()) return false
           let settings: unknown
           try {
             settings = JSON.parse(event.data ?? '{}')
           } catch {
             retry()
-            return
+            return false
           }
           const configured =
             settings != null &&
@@ -116,6 +116,11 @@ export function useLogLiveRefresh(options: LogLiveRefreshOptions) {
           if (typeof configured === 'number' && Number.isFinite(configured)) {
             interval = Math.max(1000, Math.min(configured, 60000))
           }
+          return true
+        }
+        next.addEventListener('settings', configureInterval)
+        next.addEventListener('ready', (event) => {
+          if (!configureInterval(event)) return
           failures = 0
           streamConnected = true
           setConnected(true)

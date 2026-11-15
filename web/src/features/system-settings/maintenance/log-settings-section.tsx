@@ -48,11 +48,20 @@ import { safeNumberFieldProps } from '../utils/numeric-field'
 import { HistoryLogCleanup } from './history-log-cleanup'
 import { ServerLogFiles } from './server-log-files'
 
+const logRefreshSecondsSchema = z
+  .number()
+  .refine(
+    (seconds) => Number.isInteger(seconds) && seconds >= 0 && seconds <= 60,
+    'The log refresh interval must be an integer between 0 and 60 seconds'
+  )
+
 const logSettingsSchema = z.object({
   LogConsumeEnabled: z.boolean(),
   log_setting: z.object({
     user_export_enabled: z.boolean(),
     max_range_days: z.number().int().min(1),
+    user_refresh_seconds: logRefreshSecondsSchema,
+    admin_refresh_seconds: logRefreshSecondsSchema,
   }),
   request_error_log_setting: z.object({
     enabled: z.boolean(),
@@ -76,6 +85,8 @@ type LogSettingsSectionProps = {
     'request_error_log_setting.status_codes': string
     'request_error_log_setting.max_body_kb': number
     'request_error_log_setting.retention_days': number
+    'log_setting.user_refresh_seconds': number
+    'log_setting.admin_refresh_seconds': number
     'system_task_setting.retention_days': number
   }
 }
@@ -86,6 +97,7 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
   const recordingTitleId = useId()
   const searchTitleId = useId()
   const captureTitleId = useId()
+  const liveRefreshTitleId = useId()
   const taskHistoryTitleId = useId()
   const formDefaults = useMemo<LogSettingsFormValues>(
     () => ({
@@ -94,6 +106,10 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
         user_export_enabled:
           props.defaultValues['log_setting.user_export_enabled'],
         max_range_days: props.defaultValues['log_setting.max_range_days'],
+        user_refresh_seconds:
+          props.defaultValues['log_setting.user_refresh_seconds'],
+        admin_refresh_seconds:
+          props.defaultValues['log_setting.admin_refresh_seconds'],
       },
       request_error_log_setting: {
         enabled: props.defaultValues['request_error_log_setting.enabled'],
@@ -143,6 +159,14 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
       [
         'request_error_log_setting.retention_days',
         values.request_error_log_setting.retention_days,
+      ],
+      [
+        'log_setting.user_refresh_seconds',
+        values.log_setting.user_refresh_seconds,
+      ],
+      [
+        'log_setting.admin_refresh_seconds',
+        values.log_setting.admin_refresh_seconds,
       ],
       [
         'system_task_setting.retention_days',
@@ -356,6 +380,85 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
                     <FormDescription>
                       {t(
                         'Captured requests older than this are deleted automatically. Use 0 to keep them until deleted manually.'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </SettingsFormGrid>
+          </div>
+
+          <Separator />
+
+          <div
+            role='group'
+            aria-labelledby={liveRefreshTitleId}
+            className='flex min-w-0 flex-col gap-4'
+          >
+            <h4 id={liveRefreshTitleId} className='font-medium'>
+              {t('Usage log live refresh')}
+            </h4>
+            <p className='text-muted-foreground text-sm'>
+              {t(
+                'Set 1–60 seconds to override the environment, or 0 to follow it. Saved changes apply to open log pages automatically.'
+              )}
+            </p>
+            <SettingsFormGrid>
+              <FormField
+                control={form.control}
+                name='log_setting.user_refresh_seconds'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      {t('User refresh interval (seconds)')}
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        min={0}
+                        max={60}
+                        step={1}
+                        {...safeNumberFieldProps(field)}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        '0 uses {{variable}} (default: {{seconds}} seconds).',
+                        {
+                          variable: 'LOG_SSE_USER_REFRESH_SECONDS',
+                          seconds: 3,
+                        }
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='log_setting.admin_refresh_seconds'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      {t('Administrator refresh interval (seconds)')}
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        min={0}
+                        max={60}
+                        step={1}
+                        {...safeNumberFieldProps(field)}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        '0 uses {{variable}} (default: {{seconds}} seconds).',
+                        {
+                          variable: 'LOG_SSE_ADMIN_REFRESH_SECONDS',
+                          seconds: 5,
+                        }
                       )}
                     </FormDescription>
                     <FormMessage />

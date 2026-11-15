@@ -3,6 +3,7 @@ package controller
 import (
 	"bufio"
 	"context"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-contrib/gzip"
@@ -23,6 +25,171 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func isolateLogRefreshSettings(t *testing.T) {
+	t.Helper()
+	common.OptionMapRWMutex.Lock()
+	settings := operation_setting.GetLogSetting()
+	previous := *settings
+	previousOptions := maps.Clone(common.OptionMap)
+	settings.UserRefreshSeconds, settings.AdminRefreshSeconds = 0, 0
+	if common.OptionMap == nil {
+		common.OptionMap = make(map[string]string)
+	}
+	delete(common.OptionMap, operation_setting.LogUserRefreshSecondsOptionKey)
+	delete(common.OptionMap, operation_setting.LogAdminRefreshSecondsOptionKey)
+	common.OptionMapRWMutex.Unlock()
+	t.Cleanup(func() {
+		common.OptionMapRWMutex.Lock()
+		*settings = previous
+		common.OptionMap = previousOptions
+		common.OptionMapRWMutex.Unlock()
+	})
+}
+
+func TestLogStreamRefreshEnvironmentFallback(t *testing.T) {
+	isolateLogRefreshSettings(t)
+	for _, test := range []struct {
+		name, userEnv, adminEnv   string
+		userSeconds, adminSeconds int
+	}{
+		{"defaults", "", "", 3, 5},
+		{"environment", "7", "11", 7, 11},
+		{"bounded environment", "0", "300", 1, 60},
+		{"invalid environment", "invalid", "invalid", 3, 5},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("LOG_SSE_USER_REFRESH_SECONDS", test.userEnv)
+			t.Setenv("LOG_SSE_ADMIN_REFRESH_SECONDS", test.adminEnv)
+			assert.Equal(t, time.Duration(test.userSeconds)*time.Second, operation_setting.GetLogRefreshInterval(false))
+			assert.Equal(t, time.Duration(test.adminSeconds)*time.Second, operation_setting.GetLogRefreshInterval(true))
+		})
+	}
+}
+
+func TestLogStreamRefreshOptionsDatabaseMatrix(t *testing.T) {
+	isolateLogRefreshSettings(t)
+	t.Setenv("LOG_SSE_USER_REFRESH_SECONDS", "7")
+	t.Setenv("LOG_SSE_ADMIN_REFRESH_SECONDS", "11")
+	for _, database := range []struct {
+		name, env string
+		kind      common.DatabaseType
+	}{
+		{"sqlite", "", common.DatabaseTypeSQLite},
+		{"mysql", "AUDIT_MYSQL_DSN", common.DatabaseTypeMySQL},
+		{"postgres", "AUDIT_POSTGRES_DSN", common.DatabaseTypePostgreSQL},
+	} {
+		t.Run(database.name, func(t *testing.T) {
+			dsn := os.Getenv(database.env)
+			if database.env != "" && dsn == "" {
+				t.Skip(database.env + " is not configured")
+			}
+			db, _ := newAuditTestDatabase(t, database.name, dsn)
+			useLogExportDatabases(t, db, db, database.kind, database.kind)
+			require.NoError(t, db.AutoMigrate(&model.Option{}, &model.SystemTask{}, &model.User{}, &model.AuditLog{}))
+			admin := model.User{Username: "sse-settings-admin", AffCode: "sse-settings-admin", Role: common.RoleRootUser, Status: common.UserStatusEnabled}
+			require.NoError(t, db.Create(&admin).Error)
+			engine := gin.New()
+			engine.Use(func(c *gin.Context) {
+				c.Set("id", admin.Id)
+				c.Set("role", admin.Role)
+				c.Next()
+			})
+			engine.PUT("/api/option/", UpdateOption)
+			engine.GET("/api/option/", GetOptions)
+			for key, value := range map[string]int{
+				operation_setting.LogUserRefreshSecondsOptionKey:  2,
+				operation_setting.LogAdminRefreshSecondsOptionKey: 9,
+			} {
+				body, err := common.Marshal(map[string]any{"key": key, "value": value})
+				require.NoError(t, err)
+				response := accessTokenRequest(engine, http.MethodPut, "/api/option/", "", "", string(body))
+				require.Equal(t, http.StatusOK, response.Code)
+				var result struct {
+					Success bool `json:"success"`
+				}
+				require.NoError(t, common.Unmarshal(response.Body.Bytes(), &result))
+				require.True(t, result.Success, response.Body.String())
+				for _, invalid := range []string{"-1", "61", "1.5", "", "invalid"} {
+					assert.Error(t, model.UpdateOption(key, invalid), "invalid interval %q must not be persisted", invalid)
+				}
+				var stored model.Option
+				require.NoError(t, db.Where(&model.Option{Key: key}).First(&stored).Error)
+				assert.Equal(t, common.Interface2String(value), stored.Value)
+			}
+			for range 2 {
+				common.OptionMapRWMutex.Lock()
+				settings := operation_setting.GetLogSetting()
+				settings.UserRefreshSeconds, settings.AdminRefreshSeconds = 0, 0
+				common.OptionMapRWMutex.Unlock()
+				require.NoError(t, model.LoadOptionsFromDatabase())
+				assert.Equal(t, 2*time.Second, operation_setting.GetLogRefreshInterval(false))
+				assert.Equal(t, 9*time.Second, operation_setting.GetLogRefreshInterval(true))
+			}
+			response := accessTokenRequest(engine, http.MethodGet, "/api/option/", "", "", "")
+			var options struct {
+				Data []model.Option `json:"data"`
+			}
+			require.NoError(t, common.Unmarshal(response.Body.Bytes(), &options))
+			values := make(map[string]string)
+			for _, option := range options.Data {
+				values[option.Key] = option.Value
+			}
+			assert.Equal(t, "2", values[operation_setting.LogUserRefreshSecondsOptionKey])
+			assert.Equal(t, "9", values[operation_setting.LogAdminRefreshSecondsOptionKey])
+			require.NoError(t, model.UpdateOption(operation_setting.LogUserRefreshSecondsOptionKey, "0"))
+			assert.Equal(t, 7*time.Second, operation_setting.GetLogRefreshInterval(false))
+			assert.Equal(t, 9*time.Second, operation_setting.GetLogRefreshInterval(true))
+			require.NoError(t, model.UpdateOption(operation_setting.LogAdminRefreshSecondsOptionKey, "0"))
+			require.NoError(t, model.LoadOptionsFromDatabase())
+			assert.Equal(t, 11*time.Second, operation_setting.GetLogRefreshInterval(true))
+		})
+	}
+}
+
+func TestLogStreamRefreshSettingsUpdateOpenStream(t *testing.T) {
+	isolateLogRefreshSettings(t)
+	user, _ := setupAccessTokenAudit(t)
+	identity, _ := createAccessTokenTestSession(t, user.Id, "sse-settings-session")
+	require.NoError(t, model.DB.AutoMigrate(&model.SystemTask{}))
+	t.Setenv("LOG_SSE_USER_REFRESH_SECONDS", "7")
+	synctest.Test(t, func(t *testing.T) {
+		credential, _, err := service.IssueAccessToken(identity)
+		require.NoError(t, err)
+		recorder := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(recorder)
+		requestContext, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		ctx.Request = httptest.NewRequestWithContext(requestContext, http.MethodGet, "/api/log/self/stream", nil)
+		ctx.Request.Header.Set("Authorization", "Bearer "+credential)
+		ctx.Set("id", user.Id)
+		ctx.Set("session_id", identity.SessionID)
+		ctx.Set("auth_version", identity.UserAuthVersion)
+		ctx.Set("session_version", identity.SessionVersion)
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			StreamUserLogs(ctx)
+		}()
+		synctest.Wait()
+		assert.Contains(t, recorder.Body.String(), "event: ready\ndata: {\"refresh_interval_ms\":7000}")
+		require.NoError(t, model.UpdateOption(operation_setting.LogUserRefreshSecondsOptionKey, "1"))
+		time.Sleep(15 * time.Second)
+		synctest.Wait()
+		assert.Contains(t, recorder.Body.String(), "event: settings\ndata: {\"refresh_interval_ms\":1000}")
+		common.UsageLogNotifications.Publish(user.Id)
+		synctest.Wait()
+		time.Sleep(time.Second)
+		synctest.Wait()
+		assert.Contains(t, recorder.Body.String(), "event: changed\ndata: {}")
+		require.NoError(t, model.UpdateOption(operation_setting.LogUserRefreshSecondsOptionKey, "0"))
+		time.Sleep(14 * time.Second)
+		synctest.Wait()
+		assert.Contains(t, recorder.Body.String(), "event: settings\ndata: {\"refresh_interval_ms\":7000}")
+		cancel()
+		<-done
+	})
+}
 
 func TestLogNotificationScopeAndLimits(t *testing.T) {
 	broker := common.NewLogNotificationBroker()

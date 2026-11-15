@@ -48,6 +48,8 @@ function Fixture() {
             'request_error_log_setting.status_codes': '400,403,500',
             'request_error_log_setting.max_body_kb': 64,
             'request_error_log_setting.retention_days': 7,
+            'log_setting.user_refresh_seconds': 0,
+            'log_setting.admin_refresh_seconds': 5,
             'system_task_setting.retention_days': 30,
           }}
         />
@@ -92,6 +94,7 @@ test('the page shows the log modules in order, each with its own controls', asyn
     'Log recording',
     'Log search and export',
     'Error request capture',
+    'Usage log live refresh',
     'System task records',
     'Clean history logs',
     'Server Log Management',
@@ -138,6 +141,59 @@ test('the page shows the log modules in order, each with its own controls', asyn
     await within(server).findByRole('button', { name: 'Clean Up Log Files' })
   ).toBeVisible()
 })
+
+test('saving custom refresh intervals and zero to follow the environment sends the selected values', async () => {
+  const user = userEvent.setup()
+  await renderSettings()
+  const refresh = screen.getByRole('group', { name: 'Usage log live refresh' })
+  const userInterval = within(refresh).getByRole('spinbutton', {
+    name: 'User refresh interval (seconds)',
+  })
+  const adminInterval = within(refresh).getByRole('spinbutton', {
+    name: 'Administrator refresh interval (seconds)',
+  })
+  expect(userInterval).toHaveValue(0)
+  expect(adminInterval).toHaveValue(5)
+  expect(userInterval).toHaveAccessibleDescription(
+    '0 uses LOG_SSE_USER_REFRESH_SECONDS (default: 3 seconds).'
+  )
+  expect(adminInterval).toHaveAccessibleDescription(
+    '0 uses LOG_SSE_ADMIN_REFRESH_SECONDS (default: 5 seconds).'
+  )
+
+  fireEvent.change(userInterval, { target: { value: '8' } })
+  fireEvent.change(adminInterval, { target: { value: '0' } })
+  await user.click(screen.getByRole('button', { name: 'Save log settings' }))
+
+  await waitFor(() => expect(api.put).toHaveBeenCalledTimes(2))
+  expect(api.put).toHaveBeenCalledWith('/api/option/', {
+    key: 'log_setting.user_refresh_seconds',
+    value: 8,
+  })
+  expect(api.put).toHaveBeenCalledWith('/api/option/', {
+    key: 'log_setting.admin_refresh_seconds',
+    value: 0,
+  })
+})
+
+test.each([
+  ['User refresh interval (seconds)', '-1'],
+  ['User refresh interval (seconds)', '1.5'],
+  ['Administrator refresh interval (seconds)', '61'],
+])(
+  'an invalid %s value of %s is rejected without saving',
+  async (name, value) => {
+    const user = userEvent.setup()
+    await renderSettings()
+    const interval = screen.getByRole('spinbutton', { name })
+    fireEvent.change(interval, { target: { value } })
+    await user.click(screen.getByRole('button', { name: 'Save log settings' }))
+    await waitFor(() =>
+      expect(interval).toHaveAttribute('aria-invalid', 'true')
+    )
+    expect(api.put).not.toHaveBeenCalled()
+  }
+)
 
 test('confirming a history cleanup starts the task and shows its progress in that module', async () => {
   const user = userEvent.setup()

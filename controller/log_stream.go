@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 )
 
@@ -56,11 +57,7 @@ func streamLogChanges(c *gin.Context, all bool) {
 		return
 	}
 	defer cancel()
-	intervalSeconds := common.GetEnvOrDefault("LOG_SSE_USER_REFRESH_SECONDS", 3)
-	if all {
-		intervalSeconds = common.GetEnvOrDefault("LOG_SSE_ADMIN_REFRESH_SECONDS", 5)
-	}
-	interval := time.Duration(max(1, min(intervalSeconds, 60))) * time.Second
+	interval := operation_setting.GetLogRefreshInterval(all)
 	ready, err := common.Marshal(map[string]int64{"refresh_interval_ms": interval.Milliseconds()})
 	if err != nil {
 		c.AbortWithStatus(http.StatusInternalServerError)
@@ -110,6 +107,15 @@ func streamLogChanges(c *gin.Context, all bool) {
 				}
 			}
 		case <-heartbeat.C:
+			configured := operation_setting.GetLogRefreshInterval(all)
+			if configured != interval {
+				interval = configured
+				flush.Reset(interval)
+				settings, err := common.Marshal(map[string]int64{"refresh_interval_ms": interval.Milliseconds()})
+				if err != nil || !write("settings", string(settings)) {
+					return
+				}
+			}
 			if !write("heartbeat", "{}") {
 				return
 			}

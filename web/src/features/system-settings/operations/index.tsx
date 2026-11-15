@@ -62,6 +62,8 @@ const defaultOperationsSettings: OperationsSettings = {
     '400,401,403,413,422,429,451,500,502,503,504',
   'request_error_log_setting.max_body_kb': 64,
   'request_error_log_setting.retention_days': 7,
+  'log_setting.user_refresh_seconds': 0,
+  'log_setting.admin_refresh_seconds': 0,
   'system_task_setting.retention_days': 30,
   'performance_setting.disk_cache_enabled': false,
   'performance_setting.disk_cache_threshold_mb': 10,

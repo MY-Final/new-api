@@ -156,6 +156,35 @@ it.each([
   }
 )
 
+it('applies settings changes to an open stream without reconnecting or triggering an extra refresh', async () => {
+  const props = fixture()
+  render(<LogLiveRefresh {...props} />)
+  await advance(0)
+  await ready(1000)
+  await advance(1000)
+  props.onRefresh.mockClear()
+
+  act(() =>
+    streams[0].emit('settings', JSON.stringify({ refresh_interval_ms: 8000 }))
+  )
+  await advance(1000)
+  expect(props.onRefresh).not.toHaveBeenCalled()
+  act(() => streams[0].emit('changed'))
+  await advance(6000)
+  expect(props.onRefresh).not.toHaveBeenCalled()
+  await advance(1000)
+  expect(props.onRefresh).toHaveBeenCalledOnce()
+
+  act(() => {
+    streams[0].emit('settings', JSON.stringify({ refresh_interval_ms: 1000 }))
+    streams[0].emit('changed')
+  })
+  await advance(1000)
+  expect(props.onRefresh).toHaveBeenCalledTimes(2)
+  expect(streams).toHaveLength(1)
+  expect(streams[0].close).not.toHaveBeenCalled()
+})
+
 it.each([
   { pageIndex: 1, endTime: undefined },
   { pageIndex: 0, endTime: now.getTime() - 1000 },

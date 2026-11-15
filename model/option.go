@@ -349,6 +349,9 @@ func validateOptionValue(key string, value string) error {
 	if key == operation_setting.LogMaxRangeDaysOptionKey {
 		return operation_setting.ValidateLogMaxRangeDays(value)
 	}
+	if key == operation_setting.LogUserRefreshSecondsOptionKey || key == operation_setting.LogAdminRefreshSecondsOptionKey {
+		return operation_setting.ValidateLogRefreshSeconds(value)
+	}
 	if key == operation_setting.SystemTaskRetentionDaysOptionKey {
 		return operation_setting.ValidateSystemTaskRetentionDays(value)
 	}

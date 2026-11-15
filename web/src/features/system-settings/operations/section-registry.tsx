@@ -151,6 +151,10 @@ const OPERATIONS_SECTIONS = [
             settings['request_error_log_setting.max_body_kb'] ?? 64,
           'request_error_log_setting.retention_days':
             settings['request_error_log_setting.retention_days'] ?? 7,
+          'log_setting.user_refresh_seconds':
+            settings['log_setting.user_refresh_seconds'] ?? 0,
+          'log_setting.admin_refresh_seconds':
+            settings['log_setting.admin_refresh_seconds'] ?? 0,
           'system_task_setting.retention_days':
             settings['system_task_setting.retention_days'] ?? 30,
         }}

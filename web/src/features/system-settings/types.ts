@@ -467,6 +467,8 @@ export type OperationsSettings = {
   'request_error_log_setting.status_codes': string
   'request_error_log_setting.max_body_kb': number
   'request_error_log_setting.retention_days': number
+  'log_setting.user_refresh_seconds': number
+  'log_setting.admin_refresh_seconds': number
   'system_task_setting.retention_days': number
   'performance_setting.disk_cache_enabled': boolean
   'performance_setting.disk_cache_threshold_mb': number
