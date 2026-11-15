@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
 import { flexRender, type Table as TanstackTable } from '@tanstack/react-table'
-import { ArrowUpRight, Database, Plus } from 'lucide-react'
+import { Database, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -98,44 +98,35 @@ function APIEndpointList(props: { endpoints: APIBaseEndpoint[] }) {
           <div
             key={endpoint.url}
             role='listitem'
-            className='border-border/70 bg-background flex h-8 max-w-full min-w-0 items-center rounded-md border pr-0.5 pl-2.5'
+            className='max-w-full min-w-0'
           >
-            {endpoint.name && (
-              <>
-                <span className='text-primary max-w-40 truncate text-xs font-medium'>
-                  {endpoint.name}
-                </span>
-                <span className='text-border mx-1.5' aria-hidden='true'>
-                  |
-                </span>
-              </>
-            )}
-            <span className='text-muted-foreground max-w-56 truncate font-mono text-xs sm:max-w-80'>
-              {endpoint.url}
-            </span>
             <CopyButton
               value={endpoint.url}
               variant='ghost'
-              size='icon'
-              className='ml-1 size-7'
-              iconClassName='size-3.5'
+              size='sm'
+              className='border-border/70 bg-background hover:bg-muted h-8 max-w-full min-w-0 shrink justify-start gap-0 rounded-md border px-2.5 font-normal [&>svg]:order-last [&>svg]:ml-2'
+              iconClassName='text-muted-foreground size-3.5'
               tooltip={t('Copy API endpoint')}
+              successTooltip={t('Copied!')}
               aria-label={`${t('Copy API endpoint')}: ${endpoint.url}`}
-            />
-            <Button
-              variant='ghost'
-              size='icon-xs'
-              aria-label={`${t('Open API endpoint')}: ${endpoint.url}`}
-              render={
-                <a
-                  href={endpoint.url}
-                  target='_blank'
-                  rel='noopener noreferrer'
-                />
-              }
             >
-              <ArrowUpRight aria-hidden='true' />
-            </Button>
+              {endpoint.name && (
+                <>
+                  <span className='text-primary max-w-40 truncate text-xs font-medium'>
+                    {endpoint.name}
+                  </span>
+                  <span className='text-border mx-1.5' aria-hidden='true'>
+                    |
+                  </span>
+                </>
+              )}
+              <span
+                className='text-muted-foreground max-w-56 truncate font-mono text-xs sm:max-w-80'
+                title={endpoint.url}
+              >
+                {endpoint.url}
+              </span>
+            </CopyButton>
           </div>
         ))}
       </div>

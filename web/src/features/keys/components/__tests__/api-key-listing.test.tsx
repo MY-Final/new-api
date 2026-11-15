@@ -408,7 +408,7 @@ it('combines creation and last use while keeping expiry, models and IP restricti
   expect(quotaTrigger.closest('td')).not.toHaveClass('pr-8')
 })
 
-it('shows labeled API endpoints below the filters with copy and open actions', async () => {
+it('copies an API endpoint when its labeled address is clicked', async () => {
   const endpoints = [
     { name: '默认', url: 'https://kuncode.120403.xyz' },
     { name: '直连', url: 'https://wcnmb.fun' },
@@ -423,17 +423,13 @@ it('shows labeled API endpoints below the filters with copy and open actions', a
   for (const [index, endpoint] of endpoints.entries()) {
     expect(rows[index]).toHaveTextContent(endpoint.name)
     expect(rows[index]).toHaveTextContent(endpoint.url)
-    const openLink = within(rows[index]).getByRole('button', {
-      name: `Open API endpoint: ${endpoint.url}`,
-    })
-    expect(openLink.tagName).toBe('A')
-    expect(openLink).toHaveAttribute('href', endpoint.url)
     expect(
       within(rows[index]).getByRole('button', {
         name: `Copy API endpoint: ${endpoint.url}`,
       })
     ).toBeVisible()
   }
+  expect(within(endpointRegion).queryByRole('link')).not.toBeInTheDocument()
 
   await user.click(
     within(rows[0]).getByRole('button', {
@@ -441,6 +437,9 @@ it('shows labeled API endpoints below the filters with copy and open actions', a
     })
   )
   expect(copy).toHaveBeenCalledWith(endpoints[0].url)
+  expect(
+    await within(rows[0]).findByRole('button', { name: 'Copied' })
+  ).toBeVisible()
 })
 
 it('hides the API endpoint row when no endpoints are configured', async () => {
