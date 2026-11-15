@@ -48,13 +48,17 @@ func TestGetStatusAdvertisesDefaultDashboard(t *testing.T) {
 }
 
 func TestAPIBaseURLsAreValidatedAndExposedByStatus(t *testing.T) {
-	valid := "https://kuncode.120403.xyz\nhttps://wcnmb.fun"
+	valid := `[{"name":"默认","url":"https://kuncode.120403.xyz"},{"name":"直连","url":"https://wcnmb.fun"}]`
 	require.NoError(t, system_setting.ValidateAPIBaseURLs(valid))
+	require.NoError(t, system_setting.ValidateAPIBaseURLs("https://legacy.example.com\nhttps://legacy-two.example.com"))
 	for _, invalid := range []string{
 		"javascript:alert(1)",
 		"https://user:password@example.com",
 		"https://example.com?token=secret",
 		"https://example.com#fragment",
+		`[{"name":"Broken"`,
+		`[{"name":"","url":""}]`,
+		`[{"name":"` + strings.Repeat("长", 51) + `","url":"https://example.com"}]`,
 	} {
 		assert.Error(t, system_setting.ValidateAPIBaseURLs(invalid), invalid)
 	}
@@ -84,10 +88,15 @@ func TestAPIBaseURLsAreValidatedAndExposedByStatus(t *testing.T) {
 	var payload struct {
 		Success bool `json:"success"`
 		Data    struct {
-			APIBaseURLs []string `json:"api_base_urls"`
+			APIBaseURLs      []string                         `json:"api_base_urls"`
+			APIBaseEndpoints []system_setting.APIBaseEndpoint `json:"api_base_endpoints"`
 		} `json:"data"`
 	}
 	require.NoError(t, common.Unmarshal(response.Body.Bytes(), &payload))
 	require.True(t, payload.Success)
 	assert.Equal(t, []string{"https://kuncode.120403.xyz", "https://wcnmb.fun"}, payload.Data.APIBaseURLs)
+	assert.Equal(t, []system_setting.APIBaseEndpoint{
+		{Name: "默认", URL: "https://kuncode.120403.xyz"},
+		{Name: "直连", URL: "https://wcnmb.fun"},
+	}, payload.Data.APIBaseEndpoints)
 }

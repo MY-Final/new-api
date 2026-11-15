@@ -70,6 +70,7 @@ func GetStatus(c *gin.Context) {
 		"wechat_login":                common.WeChatAuthEnabled,
 		"server_address":              system_setting.ServerAddress,
 		"api_base_urls":               system_setting.ParseAPIBaseURLs(common.OptionMap[system_setting.APIBaseURLsOptionKey]),
+		"api_base_endpoints":          system_setting.ParseAPIBaseEndpoints(common.OptionMap[system_setting.APIBaseURLsOptionKey]),
 		"turnstile_check":             common.TurnstileCheckEnabled,
 		"turnstile_site_key":          common.TurnstileSiteKey,
 		"turnstile_scenes":            *system_setting.GetTurnstileSettings(),
