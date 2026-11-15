@@ -24,7 +24,7 @@ import {
   createRouter,
   RouterProvider,
 } from '@tanstack/react-router'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
@@ -93,6 +93,7 @@ async function renderLogs() {
 }
 
 beforeEach(() => {
+  localStorage.clear()
   Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
     configurable: true,
     value: vi.fn(),
@@ -116,20 +117,35 @@ afterEach(() => {
   }
 })
 
-it('defaults to off and lists every refresh cadence', async () => {
+it('defaults to off and lists every polling cadence', async () => {
   await renderLogs()
   const user = userEvent.setup()
-  await user.click(screen.getByRole('button', { name: 'Auto refresh' }))
+  await user.click(screen.getByRole('button', { name: 'Refresh' }))
   expect(screen.getByRole('menuitemradio', { name: 'Off' })).toHaveAttribute(
     'aria-checked',
     'true'
   )
-  for (const label of ['5 seconds', '10 seconds', '1 minute', '5 minutes']) {
+  for (const label of [
+    'Off',
+    'Auto refresh · 5 seconds',
+    'Auto refresh · 10 seconds',
+    'Auto refresh · 15 seconds',
+    'Auto refresh · 30 seconds',
+    'Auto refresh · 1 minute',
+    'Auto refresh · 5 minutes',
+  ]) {
     expect(screen.getByRole('menuitemradio', { name: label })).toBeVisible()
   }
 })
 
 it('refreshes logs and stats on the selected interval and stops when disabled', async () => {
+  const matchMedia = window.matchMedia.bind(window)
+  vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+    ...matchMedia(query),
+    matches: query.includes('prefers-reduced-motion')
+      ? false
+      : matchMedia(query).matches,
+  }))
   const counts = await renderLogs()
   const initial = { ...counts }
   vi.useFakeTimers({ shouldAdvanceTime: true })
@@ -140,12 +156,23 @@ it('refreshes logs and stats on the selected interval and stops when disabled', 
   await vi.advanceTimersByTimeAsync(60_000)
   expect(counts).toEqual(initial)
 
-  await user.click(screen.getByRole('button', { name: 'Auto refresh' }))
-  await user.click(screen.getByRole('menuitemradio', { name: '5 seconds' }))
+  await user.click(screen.getByRole('button', { name: 'Refresh' }))
+  await user.click(
+    screen.getByRole('menuitemradio', {
+      name: 'Auto refresh · 5 seconds',
+    })
+  )
   expect(
     screen.getByRole('button', { name: 'Auto refresh · 5 seconds' })
   ).toBeVisible()
   expect(localStorage.getItem(AUTO_REFRESH_STORAGE_KEY)).toBe('5000')
+  const control = screen
+    .getByRole('button', { name: 'Auto refresh · 5 seconds' })
+    .closest('[data-slot="logs-refresh-control"]')
+  expect(control).toHaveAttribute('data-refresh-interval', '5000')
+  expect(control?.querySelector('[data-refresh-progress-halo]')).toHaveStyle({
+    animationDuration: '5000ms',
+  })
 
   await vi.advanceTimersByTimeAsync(5_000)
   await vi.waitFor(() => {
@@ -154,7 +181,19 @@ it('refreshes logs and stats on the selected interval and stops when disabled', 
   })
 
   const whileActive = { ...counts }
-  await user.click(screen.getByRole('menuitemradio', { name: 'Off' }))
+  await waitFor(() =>
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  )
+  await user.click(
+    screen.getByRole('button', { name: 'Auto refresh · 5 seconds' })
+  )
+  await user.click(await screen.findByRole('menuitemradio', { name: 'Off' }))
   await vi.advanceTimersByTimeAsync(60_000)
   expect(counts).toEqual(whileActive)
+  expect(
+    screen
+      .getByRole('button', { name: 'Refresh' })
+      .closest('[data-slot="logs-refresh-control"]')
+      ?.querySelector('[data-refresh-progress-halo]')
+  ).not.toBeInTheDocument()
 })

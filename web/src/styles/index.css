@@ -753,8 +753,71 @@ For commercial licensing, please contact support@quantumnous.com
   animation-duration: 3s;
 }
 
+@property --logs-refresh-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes logs-refresh-halo-travel {
+  to {
+    --logs-refresh-angle: 360deg;
+  }
+}
+
+.logs-refresh-halo {
+  padding: 2px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--logs-refresh-angle),
+    transparent 0deg,
+    transparent 235deg,
+    color-mix(in oklch, var(--success) 28%, transparent) 292deg,
+    color-mix(in oklch, var(--success) 75%, transparent) 334deg,
+    var(--success) 352deg,
+    transparent 360deg
+  );
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  filter: drop-shadow(
+    0 0 5px color-mix(in oklch, var(--success) 55%, transparent)
+  );
+  animation: logs-refresh-halo-travel 5s linear infinite;
+}
+
+@keyframes logs-refresh-halo-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px color-mix(in oklch, var(--success) 16%, transparent),
+      0 0 8px color-mix(in oklch, var(--success) 18%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px color-mix(in oklch, var(--success) 28%, transparent),
+      0 0 14px color-mix(in oklch, var(--success) 32%, transparent);
+  }
+}
+
+.logs-refresh-active {
+  animation: logs-refresh-halo-pulse var(--logs-refresh-cycle, 5s) ease-in-out
+    infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .auto-group-flow-border {
+  .auto-group-flow-border,
+  .logs-refresh-halo {
     display: none;
+  }
+
+  .logs-refresh-active {
+    animation: none;
+    box-shadow: 0 0 0 1px color-mix(in oklch, var(--success) 18%, transparent);
   }
 }

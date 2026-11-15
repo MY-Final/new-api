@@ -6,9 +6,9 @@ import {
   createRouter,
   RouterProvider,
 } from '@tanstack/react-router'
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { ComponentProps } from 'react'
+import type { ComponentProps, ReactNode } from 'react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 import { Dialog } from '@/components/dialog'
@@ -16,7 +16,10 @@ import { api, getFreshAuthHeaders } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { usageLogSchema } from '../../data/schema'
-import { LogLiveRefresh } from '../log-live-refresh'
+import {
+  LIVE_REFRESH_STORAGE_KEY,
+  LogsRefreshControl,
+} from '../logs-refresh-control'
 import { UsageLogsProvider } from '../usage-logs-provider'
 import { UsageLogsTable } from '../usage-logs-table'
 
@@ -65,6 +68,8 @@ const now = new Date('2026-11-15T12:00:00Z')
 beforeEach(() => {
   vi.useFakeTimers()
   vi.setSystemTime(now)
+  localStorage.clear()
+  localStorage.setItem(LIVE_REFRESH_STORAGE_KEY, 'true')
   streams.length = 0
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
   vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
@@ -103,7 +108,10 @@ async function advance(milliseconds: number) {
 
 function fixture(
   overrides: Partial<
-    Omit<ComponentProps<typeof LogLiveRefresh>, 'onRefresh' | 'onShowLatest'>
+    Omit<
+      ComponentProps<typeof LogsRefreshControl>,
+      'onRefresh' | 'onShowLatest'
+    >
   > = {}
 ) {
   return {
@@ -114,6 +122,18 @@ function fixture(
     onShowLatest: vi.fn(),
     ...overrides,
   }
+}
+
+function renderControl(
+  props: ReturnType<typeof fixture>,
+  children?: ReactNode
+) {
+  return render(
+    <UsageLogsProvider>
+      <LogsRefreshControl {...props} />
+      {children}
+    </UsageLogsProvider>
+  )
 }
 
 async function ready(interval = 3000) {
@@ -131,7 +151,7 @@ it.each([
   'subscribes with fresh authorization to $url and coalesces changes at $interval ms',
   async ({ isAdmin, url, interval }) => {
     const props = fixture({ isAdmin })
-    render(<LogLiveRefresh {...props} />)
+    renderControl(props)
     await advance(0)
     expect(streams[0].url).toBe(url)
     expect(streams[0].headers.Authorization).toBe('Bearer first-credential')
@@ -158,7 +178,7 @@ it.each([
 
 it('applies settings changes to an open stream without reconnecting or triggering an extra refresh', async () => {
   const props = fixture()
-  render(<LogLiveRefresh {...props} />)
+  renderControl(props)
   await advance(0)
   await ready(1000)
   await advance(1000)
@@ -190,7 +210,7 @@ it.each([
   { pageIndex: 0, endTime: now.getTime() - 1000 },
 ])('keeps historical rows stable with $pageIndex / $endTime', async (scope) => {
   const props = fixture(scope)
-  const view = render(<LogLiveRefresh {...props} />)
+  const view = renderControl(props)
   await advance(0)
   await ready()
   act(() => streams[0].emit('changed'))
@@ -199,20 +219,22 @@ it.each([
   expect(screen.getByRole('status')).toHaveTextContent('Live refresh paused')
   fireEvent.click(screen.getByRole('button', { name: 'New logs available' }))
   expect(props.onShowLatest).toHaveBeenCalledOnce()
-  view.rerender(<LogLiveRefresh {...props} pageIndex={0} endTime={undefined} />)
+  view.rerender(
+    <UsageLogsProvider>
+      <LogsRefreshControl {...props} pageIndex={0} endTime={undefined} />
+    </UsageLogsProvider>
+  )
   await advance(1000)
   expect(props.onRefresh).toHaveBeenCalledOnce()
 })
 
 it('defers changes while a log dialog is open and refreshes after it closes', async () => {
   const props = fixture()
-  const view = render(
-    <>
-      <LogLiveRefresh {...props} />
-      <Dialog open title='Log details'>
-        Stable log details
-      </Dialog>
-    </>
+  const view = renderControl(
+    props,
+    <Dialog open title='Log details'>
+      Stable log details
+    </Dialog>
   )
   await advance(0)
   await ready()
@@ -220,14 +242,18 @@ it('defers changes while a log dialog is open and refreshes after it closes', as
   await advance(5000)
   expect(props.onRefresh).not.toHaveBeenCalled()
   expect(screen.getByRole('dialog')).toHaveTextContent('Stable log details')
-  view.rerender(<LogLiveRefresh {...props} />)
+  view.rerender(
+    <UsageLogsProvider>
+      <LogsRefreshControl {...props} />
+    </UsageLogsProvider>
+  )
   await advance(1000)
   expect(props.onRefresh).toHaveBeenCalledOnce()
 })
 
 it('pauses when the selected end time passes instead of repeatedly querying a fixed range', async () => {
   const props = fixture({ endTime: now.getTime() + 2000 })
-  render(<LogLiveRefresh {...props} />)
+  renderControl(props)
   await advance(0)
   await ready()
   await advance(3000)
@@ -236,7 +262,7 @@ it('pauses when the selected end time passes instead of repeatedly querying a fi
 
 it('closes the stream in the background and reconciles after becoming visible', async () => {
   const props = fixture()
-  render(<LogLiveRefresh {...props} />)
+  renderControl(props)
   await advance(0)
   await ready()
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
@@ -259,7 +285,7 @@ it('closes the stream in the background and reconciles after becoming visible', 
 
 it('reconnects with fresh headers and uses low frequency reconciliation when streaming fails', async () => {
   const props = fixture()
-  render(<LogLiveRefresh {...props} />)
+  renderControl(props)
   await advance(0)
   await ready()
   await advance(3000)
@@ -283,7 +309,7 @@ it('reconnects with fresh headers and uses low frequency reconciliation when str
 it('keeps a failed refresh pending and backs off before retrying', async () => {
   const props = fixture()
   props.onRefresh.mockRejectedValueOnce(new Error('temporary failure'))
-  render(<LogLiveRefresh {...props} />)
+  renderControl(props)
   await advance(0)
   await ready()
   act(() => streams[0].emit('changed'))
@@ -304,7 +330,7 @@ it('retains changes arriving during a refresh and prevents overlapping requests'
   props.onRefresh.mockImplementationOnce(
     () => new Promise<void>((resolve) => (finish = resolve))
   )
-  render(<LogLiveRefresh {...props} />)
+  renderControl(props)
   await advance(0)
   await ready()
   await advance(3000)
@@ -316,24 +342,51 @@ it('retains changes arriving during a refresh and prevents overlapping requests'
   expect(props.onRefresh).toHaveBeenCalledTimes(2)
 })
 
-it('supports pausing with the keyboard and closes subscriptions on logout', async () => {
+it('keeps live and polling modes exclusive and closes subscriptions on logout', async () => {
   vi.useRealTimers()
   const user = userEvent.setup()
   const props = fixture()
-  render(<LogLiveRefresh {...props} />)
+  renderControl(props)
   await act(async () => {})
-  const toggle = screen.getByRole('switch', { name: 'Live refresh' })
-  toggle.focus()
-  await user.keyboard(' ')
-  expect(toggle).not.toBeChecked()
+  const trigger = screen.getByRole('button', { name: 'Live refresh' })
+  await user.click(trigger)
+  await user.click(
+    screen.getByRole('menuitemradio', {
+      name: 'Auto refresh · 5 seconds',
+    })
+  )
   expect(streams[0].close).toHaveBeenCalledOnce()
   expect(props.onRefresh).not.toHaveBeenCalled()
-  await user.keyboard(' ')
+  await waitFor(() =>
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  )
+  await user.click(
+    screen.getByRole('button', { name: 'Auto refresh · 5 seconds' })
+  )
+  await user.click(await screen.findByRole('menuitemradio', { name: 'Off' }))
+  await waitFor(() =>
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  )
+  await user.click(screen.getByRole('button', { name: 'Refresh' }))
+  await user.click(
+    await screen.findByRole('menuitemradio', { name: 'Live refresh' })
+  )
   await act(async () => {})
-  expect(toggle).toBeChecked()
   expect(streams).toHaveLength(2)
   act(() => useAuthStore.getState().auth.reset())
   expect(streams[1].close).toHaveBeenCalledOnce()
+})
+
+it('opens and closes the refresh menu from the keyboard', async () => {
+  vi.useRealTimers()
+  const user = userEvent.setup()
+  renderControl(fixture())
+  const trigger = screen.getByRole('button', { name: 'Live refresh' })
+  trigger.focus()
+  await user.keyboard('{Enter}')
+  expect(await screen.findByRole('menu')).toBeVisible()
+  await user.keyboard('{Escape}')
+  await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'false'))
 })
 
 it('does not open a stream when credentials resolve after unmount', async () => {
@@ -341,7 +394,7 @@ it('does not open a stream when credentials resolve after unmount', async () => 
   vi.mocked(getFreshAuthHeaders).mockImplementationOnce(
     () => new Promise((resolve) => (resolveHeaders = resolve))
   )
-  const view = render(<LogLiveRefresh {...fixture()} />)
+  const view = renderControl(fixture())
   view.unmount()
   await act(async () =>
     resolveHeaders?.({ Authorization: 'Bearer late-credential' })
@@ -353,7 +406,7 @@ it('waits for a browser session before requesting stream credentials', async () 
   useAuthStore.setState({
     auth: { ...useAuthStore.getState().auth, session: null },
   })
-  render(<LogLiveRefresh {...fixture()} />)
+  renderControl(fixture())
   await advance(30000)
   expect(getFreshAuthHeaders).not.toHaveBeenCalled()
   expect(streams).toHaveLength(0)

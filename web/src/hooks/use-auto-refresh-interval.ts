@@ -34,6 +34,8 @@ export const AUTO_REFRESH_INTERVALS = [
   { value: 0, labelKey: 'Off' },
   { value: 5000, labelKey: '5 seconds' },
   { value: 10000, labelKey: '10 seconds' },
+  { value: 15000, labelKey: '15 seconds' },
+  { value: 30000, labelKey: '30 seconds' },
   { value: 60000, labelKey: '1 minute' },
   { value: 300000, labelKey: '5 minutes' },
 ] as const

@@ -48,7 +48,7 @@ import { parseLogOther } from '../lib/format'
 import { fetchLogsByCategory } from '../lib/utils'
 import type { LogCategory } from '../types'
 import { CommonLogsFilterBar } from './common-logs-filter-bar'
-import { LogLiveRefresh } from './log-live-refresh'
+import { LogsRefreshControl } from './logs-refresh-control'
 import { TaskLogsFilterBar } from './task-logs-filter-bar'
 import { UsageLogsMobileList } from './usage-logs-mobile-card'
 import {
@@ -179,7 +179,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
     searchParams,
     t,
   ] as const
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, dataUpdatedAt, isLoading, isFetching } = useQuery({
     queryKey: logsQueryKey,
     queryFn: async () => {
       const result = await fetchLogsByCategory({
@@ -263,39 +263,42 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       }
       toolbar={
         isCommon ? (
-          <div className='space-y-2'>
-            <LogLiveRefresh
-              key={`${viewAccess}:${userId}`}
-              isAdmin={isAdmin}
-              pageIndex={pagination.pageIndex}
-              endTime={searchParams.endTime}
-              onRefresh={async () => {
-                await queryClient.refetchQueries(
-                  { queryKey: logsQueryKey, exact: true, type: 'active' },
-                  { throwOnError: true }
-                )
-                if (Date.now() - lastStatsRefresh.current >= 15000) {
-                  lastStatsRefresh.current = Date.now()
-                  await queryClient.refetchQueries({
-                    queryKey: ['usage-logs-stats', isAdmin, searchParams],
-                    exact: true,
-                    type: 'active',
+          <CommonLogsFilterBar
+            table={table}
+            refreshControl={
+              <LogsRefreshControl
+                key={`${viewAccess}:${userId}`}
+                isAdmin={isAdmin}
+                pageIndex={pagination.pageIndex}
+                endTime={searchParams.endTime}
+                refreshCycleKey={dataUpdatedAt}
+                onRefresh={async () => {
+                  await queryClient.refetchQueries(
+                    { queryKey: logsQueryKey, exact: true, type: 'active' },
+                    { throwOnError: true }
+                  )
+                  if (Date.now() - lastStatsRefresh.current >= 15000) {
+                    lastStatsRefresh.current = Date.now()
+                    await queryClient.refetchQueries({
+                      queryKey: ['usage-logs-stats', isAdmin, searchParams],
+                      exact: true,
+                      type: 'active',
+                    })
+                  }
+                }}
+                onShowLatest={() => {
+                  void navigate({
+                    search: {
+                      ...searchParams,
+                      page: 1,
+                      startTime: undefined,
+                      endTime: undefined,
+                    },
                   })
-                }
-              }}
-              onShowLatest={() => {
-                void navigate({
-                  search: {
-                    ...searchParams,
-                    page: 1,
-                    startTime: undefined,
-                    endTime: undefined,
-                  },
-                })
-              }}
-            />
-            <CommonLogsFilterBar table={table} />
-          </div>
+                }}
+              />
+            }
+          />
         ) : (
           <TaskLogsFilterBar table={table} logCategory={logCategory} />
         )
