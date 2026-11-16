@@ -214,6 +214,9 @@ export function RefundBatches() {
                       <p className='text-muted-foreground text-xs'>
                         {item.username}
                       </p>
+                      <p className='text-muted-foreground font-mono text-xs'>
+                        {t('Billing ID')}: {item.billing_id}
+                      </p>
                     </div>
                   ),
                 },

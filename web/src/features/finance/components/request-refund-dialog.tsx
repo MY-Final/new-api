@@ -27,6 +27,7 @@ import { CopyButton } from '@/components/copy-button'
 import { Dialog } from '@/components/dialog'
 import { EmptyState } from '@/components/empty-state'
 import { ErrorState } from '@/components/error-state'
+import { GroupBadge } from '@/components/group-badge'
 import { LoadingState } from '@/components/loading-state'
 import { StatusBadge } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
@@ -51,7 +52,7 @@ import {
 } from '../api'
 import { formatRefundReason } from '../lib/request-refund'
 import type { RequestBilling } from '../types'
-import { RefundReasonFields } from './refund-reason'
+import { RefundReasonBadge, RefundReasonFields } from './refund-reason'
 
 type SearchMode = 'request' | 'user'
 type RefundBatch = { records: RequestBilling[]; reason: string }
@@ -481,9 +482,37 @@ export function RequestRefundDialog(props: {
                             {record.username || record.user_id} ·{' '}
                             {record.model_name}
                           </p>
-                          <p className='text-muted-foreground text-xs'>
-                            {formatTimestampToDate(record.created_at)}
-                          </p>
+                          <div className='text-muted-foreground mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs'>
+                            <span>
+                              {formatTimestampToDate(record.created_at)}
+                            </span>
+                            <span aria-hidden='true'>·</span>
+                            <span className='inline-flex min-w-0 items-center gap-1.5'>
+                              <span>{t('Group')}</span>
+                              {record.group ? (
+                                <GroupBadge
+                                  group={record.group}
+                                  size='sm'
+                                  className='text-xs font-normal'
+                                />
+                              ) : (
+                                <span>-</span>
+                              )}
+                            </span>
+                            <span className='inline-flex min-w-0 items-center gap-1'>
+                              <span>{t('Token')}</span>
+                              <span className='text-foreground max-w-56 truncate'>
+                                {record.token_name || '-'}
+                                {record.token_id ? ` #${record.token_id}` : ''}
+                              </span>
+                            </span>
+                            <span className='inline-flex items-center gap-1'>
+                              <span>{t('Channel')}</span>
+                              <span className='text-foreground'>
+                                #{record.channel_id || '-'}
+                              </span>
+                            </span>
+                          </div>
                         </div>
                       </div>
                       <StatusBadge
@@ -492,16 +521,38 @@ export function RequestRefundDialog(props: {
                         copyable={false}
                       />
                     </div>
-                    <div className='text-muted-foreground flex min-w-0 items-center gap-1 text-xs'>
-                      <span className='min-w-0 break-all'>
-                        {record.request_id}
-                      </span>
-                      <CopyButton
-                        value={record.request_id}
-                        size='icon'
-                        className='size-7 shrink-0'
-                      />
-                    </div>
+                    <dl className='grid min-w-0 gap-2 text-xs sm:grid-cols-2'>
+                      <div className='min-w-0'>
+                        <dt className='text-muted-foreground'>
+                          {t('Request ID')}
+                        </dt>
+                        <dd className='mt-0.5 flex min-w-0 items-center gap-1'>
+                          <span className='min-w-0 break-all'>
+                            {record.request_id}
+                          </span>
+                          <CopyButton
+                            value={record.request_id}
+                            size='icon'
+                            className='size-7 shrink-0'
+                          />
+                        </dd>
+                      </div>
+                      <div className='min-w-0'>
+                        <dt className='text-muted-foreground'>
+                          {t('Billing ID')}
+                        </dt>
+                        <dd className='mt-0.5 flex min-w-0 items-center gap-1'>
+                          <span className='min-w-0 break-all'>
+                            {record.billing_id}
+                          </span>
+                          <CopyButton
+                            value={record.billing_id}
+                            size='icon'
+                            className='size-7 shrink-0'
+                          />
+                        </dd>
+                      </div>
+                    </dl>
                     <dl className='grid grid-cols-1 gap-3 text-sm sm:grid-cols-3'>
                       <div>
                         <dt className='text-muted-foreground'>
@@ -541,13 +592,29 @@ export function RequestRefundDialog(props: {
                       </p>
                     ) : null}
                     {refunded ? (
-                      <p
+                      <div
                         role='status'
-                        className='text-muted-foreground text-sm'
+                        className='bg-muted/40 space-y-2 rounded-md p-3 text-sm'
                       >
-                        {t('This request has already been refunded')} · #
-                        {record.refund_operation_id}
-                      </p>
+                        <p className='text-muted-foreground'>
+                          {t('This request has already been refunded')} · #
+                          {record.refund_operation_id}
+                        </p>
+                        {record.refunded_at ? (
+                          <p className='text-muted-foreground text-xs'>
+                            {t('Refunded at')}:{' '}
+                            {formatTimestampToDate(record.refunded_at)}
+                          </p>
+                        ) : null}
+                        {record.refund_reason ? (
+                          <div className='space-y-1'>
+                            <p className='text-muted-foreground text-xs'>
+                              {t('Refund reason')}
+                            </p>
+                            <RefundReasonBadge reason={record.refund_reason} />
+                          </div>
+                        ) : null}
+                      </div>
                     ) : (
                       <Button
                         variant='outline'

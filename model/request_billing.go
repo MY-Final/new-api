@@ -34,10 +34,10 @@ type RequestBilling struct {
 	Username            string `json:"username" gorm:"type:varchar(64)"`
 	ModelName           string `json:"model_name" gorm:"type:varchar(255)"`
 	TokenId             int    `json:"token_id"`
-	TokenName           string `json:"-" gorm:"type:varchar(255)"`
+	TokenName           string `json:"token_name" gorm:"type:varchar(255)"`
 	TokenQuota          int    `json:"-" gorm:"type:bigint"`
 	ChannelId           int    `json:"channel_id"`
-	Group               string `json:"-" gorm:"type:varchar(64)"`
+	Group               string `json:"group" gorm:"type:varchar(64)"`
 	FundingSource       string `json:"funding_source" gorm:"type:varchar(16)"`
 	SubscriptionId      int    `json:"subscription_id"`
 	SubscriptionResetAt int64  `json:"-" gorm:"type:bigint"`
@@ -141,6 +141,7 @@ type RequestBillingQuery struct {
 	RequestId     string `form:"request_id" binding:"max=64"`
 	ModelName     string `form:"model_name" binding:"max=255"`
 	ChannelId     int    `form:"channel_id" binding:"gte=0"`
+	Group         string `form:"group" binding:"max=64"`
 	FundingSource string `form:"funding_source" binding:"omitempty,oneof=wallet subscription"`
 	Status        string `form:"status" binding:"omitempty,oneof=unrefunded refunded"`
 	StartTime     int64  `form:"start_time" binding:"gte=0"`
@@ -335,6 +336,12 @@ func ListRequestBillings(filter RequestBillingQuery, page *common.PageInfo) ([]R
 	}
 	if filter.ChannelId > 0 {
 		query = query.Where("channel_id = ?", filter.ChannelId)
+	}
+	if filter.Group != "" {
+		if commonGroupCol == "" {
+			initCol()
+		}
+		query = query.Where(commonGroupCol+" = ?", strings.TrimSpace(filter.Group))
 	}
 	if filter.FundingSource != "" {
 		query = query.Where("funding_source = ?", filter.FundingSource)

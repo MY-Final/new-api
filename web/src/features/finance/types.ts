@@ -163,6 +163,9 @@ export interface RequestBilling {
   username: string
   model_name: string
   channel_id?: number
+  group: string
+  token_id: number
+  token_name: string
   funding_source: 'wallet' | 'subscription'
   subscription_id: number
   task_id?: string
@@ -183,6 +186,7 @@ export interface RefundQueueFilters {
   request_id?: string
   model_name?: string
   channel_id?: number
+  group?: string
   funding_source?: 'wallet' | 'subscription'
   status?: 'unrefunded' | 'refunded'
   start_time?: number

@@ -25,6 +25,7 @@ import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { StaticDataTable } from '@/components/data-table'
 import { ErrorState } from '@/components/error-state'
+import { GroupBadge } from '@/components/group-badge'
 import { SectionPageLayout } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -108,6 +109,7 @@ export function RefundWorkspace(props: { initialRequestId?: string }) {
     eligible.length > 0 &&
     eligible.every((record) => !!selected[record.billing_id])
   const records = Object.values(selected)
+  const selectedTotal = records.reduce((sum, record) => sum + record.quota, 0)
   const pageExceedsLimit =
     records.length +
       eligible.filter((record) => !selected[record.billing_id]).length >
@@ -180,6 +182,9 @@ export function RefundWorkspace(props: { initialRequestId?: string }) {
                     {t('{{count}} requests selected', {
                       count: records.length,
                     })}
+                    <span className='text-muted-foreground ml-2 text-xs tabular-nums'>
+                      {t('Refund amount')}: {formatQuotaPrecise(selectedTotal)}
+                    </span>
                     <span className='text-muted-foreground ml-2 text-xs'>
                       {t(
                         'Up to 200 per batch; selection is kept across pages.'
@@ -315,6 +320,33 @@ export function RefundWorkspace(props: { initialRequestId?: string }) {
                     <p className='text-muted-foreground text-xs'>
                       {record.username}
                     </p>
+                    <p className='text-muted-foreground font-mono text-xs'>
+                      {t('Billing ID')}: {record.billing_id}
+                    </p>
+                  </div>
+                ),
+              },
+              {
+                id: 'group',
+                header: t('Group'),
+                cell: (record) =>
+                  record.group ? (
+                    <GroupBadge group={record.group} className='font-normal' />
+                  ) : (
+                    <span className='text-muted-foreground'>-</span>
+                  ),
+              },
+              {
+                id: 'token',
+                header: t('Token'),
+                cell: (record) => (
+                  <div className='max-w-40 break-all whitespace-normal'>
+                    {record.token_name || '-'}
+                    {record.token_id ? (
+                      <p className='text-muted-foreground text-xs'>
+                        #{record.token_id}
+                      </p>
+                    ) : null}
                   </div>
                 ),
               },

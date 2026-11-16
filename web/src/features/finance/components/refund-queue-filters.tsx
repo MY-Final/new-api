@@ -27,7 +27,7 @@ import { Combobox } from '@/components/ui/combobox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
-import { searchUsers } from '@/features/users/api'
+import { getGroups, searchUsers } from '@/features/users/api'
 import type { User } from '@/features/users/types'
 import { useDebounce } from '@/hooks/use-debounce'
 import { useMediaQuery } from '@/hooks/use-media-query'
@@ -65,6 +65,13 @@ export function RefundQueueFilterBar(props: {
     staleTime: 30_000,
     meta: { errorToast: false },
   })
+  const groups = useQuery({
+    queryKey: ['groups'],
+    queryFn: async () => requireServerSuccess(await getGroups()).data ?? [],
+    retry: false,
+    staleTime: 60_000,
+    meta: { errorToast: false },
+  })
   const searching = search !== userSearch.trim() || users.isFetching
   const options = useMemo(() => {
     const items = searching ? [] : users.data || []
@@ -77,6 +84,14 @@ export function RefundQueueFilterBar(props: {
       label: `${user.display_name || user.username} (@${user.username}) · #${user.id}`,
     }))
   }, [searching, selectedUser, users.data])
+  const groupOptions = useMemo(
+    () =>
+      (groups.data ?? []).map((group) => ({
+        value: group,
+        label: group,
+      })),
+    [groups.data]
+  )
   let emptyText = t('No users found')
   if (searching) emptyText = t('Loading...')
   else if (users.isError) emptyText = t('Failed to search users')
@@ -151,6 +166,24 @@ export function RefundQueueFilterBar(props: {
                 ...draft,
                 model_name: event.target.value || undefined,
               })
+            }
+          />
+        </div>
+        <div className='space-y-1.5'>
+          <Label htmlFor='refund-queue-group'>{t('Group')}</Label>
+          <Combobox
+            id='refund-queue-group'
+            aria-label={t('Group')}
+            allowCustomValue
+            options={groupOptions}
+            value={draft.group || ''}
+            placeholder={t('Group')}
+            emptyText={t('No group found.')}
+            onValueChange={(value) =>
+              setDraft((old) => ({
+                ...old,
+                group: value?.trim() || undefined,
+              }))
             }
           />
         </div>

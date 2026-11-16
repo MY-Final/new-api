@@ -46,6 +46,10 @@ const record: RequestBilling = {
   user_id: 7,
   username: 'alice',
   model_name: 'test-model',
+  channel_id: 17,
+  group: 'default',
+  token_id: 9,
+  token_name: 'primary-key',
   funding_source: 'wallet',
   subscription_id: 0,
   quota: 120,
@@ -140,10 +144,18 @@ test('full refund requires a reason, locks while pending and then shows refunded
   await user.keyboard('{Escape}')
   expect(onClose).not.toHaveBeenCalled()
   getRequestBillings.mockResolvedValue([
-    { ...record, refunded_quota: 120, refund_operation_id: 44 },
+    {
+      ...record,
+      refunded_quota: 120,
+      refunded_at: 1700000100,
+      refund_operation_id: 44,
+      refund_reason: 'System error',
+    },
   ])
   finish?.({ already_refunded: false })
   expect(await screen.findByText('Refunded')).toBeInTheDocument()
+  expect(screen.getByText(/Refunded at/)).toBeInTheDocument()
+  expect(screen.getByText('System error')).toBeInTheDocument()
   expect(
     screen.queryByRole('button', { name: 'Refund full amount' })
   ).not.toBeInTheDocument()
@@ -189,6 +201,25 @@ test('multiple charges keep long identifiers readable and cancellation performs 
   expect(
     await screen.findAllByRole('button', { name: 'Refund full amount' })
   ).toHaveLength(2)
+})
+
+test('request cards show the billing group for otherwise identical charges', async () => {
+  getRequestBillings.mockResolvedValue([
+    { ...record, group: 'default-group' },
+    {
+      ...record,
+      billing_id: 'billing-2',
+      group: 'premium-group',
+    },
+  ])
+  show()
+  expect(await screen.findByText('default-group')).toBeVisible()
+  expect(screen.getByText('premium-group')).toBeVisible()
+  expect(screen.getAllByText('Group')).toHaveLength(2)
+  expect(screen.getByText('billing-1')).toBeVisible()
+  expect(screen.getByText('billing-2')).toBeVisible()
+  expect(screen.getAllByText('primary-key #9')).toHaveLength(2)
+  expect(screen.getAllByText('#17')).toHaveLength(2)
 })
 
 test('user lookup allows selecting and refunding multiple requests in one confirmation', async () => {

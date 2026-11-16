@@ -37,7 +37,10 @@ vi.mock('@tanstack/react-router', () => ({
   ),
 }))
 vi.mock('@/features/users/api', () => ({
-  getGroups: vi.fn(async () => []),
+  getGroups: vi.fn(async () => ({
+    success: true,
+    data: ['default', 'premium'],
+  })),
   searchUsers: vi.fn(async () => ({ success: true, data: { items: [] } })),
 }))
 const record: RequestBilling = {
@@ -47,6 +50,9 @@ const record: RequestBilling = {
   username: 'Alice',
   model_name: 'model-a',
   channel_id: 17,
+  group: 'default',
+  token_id: 9,
+  token_name: 'primary-key',
   funding_source: 'wallet',
   subscription_id: 0,
   quota: 1000000,
@@ -116,6 +122,7 @@ beforeEach(() => {
         request_id: 'request-2',
         username: 'Bob',
         user_id: 8,
+        group: 'premium',
         funding_source: 'subscription',
         bonus_quota: 0,
         paid_quota: 0,
@@ -152,10 +159,16 @@ test('filters are submitted to the server and changing them clears selected char
   )
   await user.type(screen.getByRole('textbox', { name: 'Model' }), 'model-a')
   await user.type(screen.getByRole('spinbutton', { name: 'Channel ID' }), '17')
+  await user.click(screen.getByRole('combobox', { name: 'Group' }))
+  await user.click(await screen.findByRole('option', { name: 'premium' }))
   await user.click(screen.getByRole('button', { name: 'Apply filters' }))
   await waitFor(() =>
     expect(api.getRefundQueue).toHaveBeenLastCalledWith(
-      expect.objectContaining({ model_name: 'model-a', channel_id: 17 }),
+      expect.objectContaining({
+        model_name: 'model-a',
+        channel_id: 17,
+        group: 'premium',
+      }),
       1,
       20
     )
@@ -164,6 +177,17 @@ test('filters are submitted to the server and changing them clears selected char
     screen.getByRole('checkbox', { name: 'Select request-1' })
   ).not.toBeChecked()
 })
+
+test('refund queue shows each request billing group', async () => {
+  show()
+  expect(await screen.findByText('default')).toBeVisible()
+  expect(screen.getByText('premium')).toBeVisible()
+  expect(screen.getByRole('columnheader', { name: 'Group' })).toBeVisible()
+  expect(screen.getByRole('columnheader', { name: 'Token' })).toBeVisible()
+  expect(screen.getAllByText('primary-key')).toHaveLength(2)
+  expect(screen.getByText('Billing ID: charge-1')).toBeVisible()
+})
+
 test('preview shows each funding destination and confirmation creates a persistent batch', async () => {
   const user = userEvent.setup()
   api.createRefundBatch.mockResolvedValue({ ...batch, status: 'pending' })
@@ -178,6 +202,8 @@ test('preview shows each funding destination and confirmation creates a persiste
   expect(within(confirmation).getByText('Bonus quota')).toBeVisible()
   expect(within(confirmation).getByText('Paid quota')).toBeVisible()
   expect(within(confirmation).getByText('Subscription')).toBeVisible()
+  expect(within(confirmation).getAllByText('default')).toHaveLength(1)
+  expect(within(confirmation).getAllByText('primary-key')).toHaveLength(2)
   const submit = within(confirmation).getByRole('button', {
     name: 'Confirm and refund',
   })

@@ -26,9 +26,9 @@ func TestRequestRefundQueueFilters(t *testing.T) {
 	db := setupManageUserTestDB(t)
 	require.NoError(t, db.AutoMigrate(&model.RequestBilling{}, &model.UserSubscription{}, &model.SubscriptionPreConsumeRecord{}, &model.FinancialOperation{}))
 	rows := []model.RequestBilling{
-		{Id: "queue-a", RequestId: "incident-a", UserId: 1, ModelName: "model-a", ChannelId: 17, FundingSource: "wallet", Quota: 20, PaidQuota: 20, Settled: true, CreatedAt: 100},
-		{Id: "queue-b", RequestId: "incident-b", UserId: 2, ModelName: "model-a", ChannelId: 17, FundingSource: "wallet", Quota: 30, PaidQuota: 30, Settled: true, CreatedAt: 200},
-		{Id: "queue-c", RequestId: "incident-c", UserId: 2, ModelName: "model-b", ChannelId: 18, FundingSource: "wallet", Quota: 40, PaidQuota: 40, Settled: true, CreatedAt: 300, RefundOperationId: 1, RefundedQuota: 40},
+		{Id: "queue-a", RequestId: "incident-a", UserId: 1, ModelName: "model-a", ChannelId: 17, Group: "default", FundingSource: "wallet", Quota: 20, PaidQuota: 20, Settled: true, CreatedAt: 100},
+		{Id: "queue-b", RequestId: "incident-b", UserId: 2, ModelName: "model-a", ChannelId: 17, Group: "premium", FundingSource: "wallet", Quota: 30, PaidQuota: 30, Settled: true, CreatedAt: 200},
+		{Id: "queue-c", RequestId: "incident-c", UserId: 2, ModelName: "model-b", ChannelId: 18, Group: "premium", FundingSource: "wallet", Quota: 40, PaidQuota: 40, Settled: true, CreatedAt: 300, RefundOperationId: 1, RefundedQuota: 40},
 	}
 	require.NoError(t, db.Create(&rows).Error)
 	require.NoError(t, db.Create(&model.FinancialOperation{Id: 1, OperationKey: "queue-c-refund", Reason: "Other reason: historical incident"}).Error)
@@ -42,6 +42,7 @@ func TestRequestRefundQueueFilters(t *testing.T) {
 		{"user and refund status", model.RequestBillingQuery{UserId: 2, Status: "refunded"}, []string{"queue-c"}},
 		{"not refunded", model.RequestBillingQuery{Status: "unrefunded"}, []string{"queue-b", "queue-a"}},
 		{"exact request", model.RequestBillingQuery{RequestId: "incident-a"}, []string{"queue-a"}},
+		{"group", model.RequestBillingQuery{Group: "premium"}, []string{"queue-c", "queue-b"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			records, total, err := model.ListRequestBillings(tc.filter, page)
@@ -582,8 +583,8 @@ func TestRequestRefundAccounting(t *testing.T) {
 		for i := range 2 {
 			record := model.RequestBilling{
 				Id: "request-list-billing-" + fmt.Sprint(i), RequestId: "request-list-" + fmt.Sprint(i),
-				UserId: user.Id, Username: user.Username, FundingSource: "wallet", Quota: 10,
-				PaidQuota: 10, Settled: true,
+				UserId: user.Id, Username: user.Username, TokenId: 9, TokenName: "request-list-token",
+				FundingSource: "wallet", Quota: 10, PaidQuota: 10, Group: "request-list-group", Settled: true,
 			}
 			require.NoError(t, model.RecordRequestBilling(&record))
 		}
@@ -605,5 +606,7 @@ func TestRequestRefundAccounting(t *testing.T) {
 		GetFinanceUserRequestBillings(requestCtx)
 		assert.Contains(t, response.Body.String(), `"success":true`)
 		assert.Contains(t, response.Body.String(), `"total":2`)
+		assert.Contains(t, response.Body.String(), `"group":"request-list-group"`)
+		assert.Contains(t, response.Body.String(), `"token_name":"request-list-token"`)
 	})
 }

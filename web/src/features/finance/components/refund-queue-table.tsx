@@ -21,6 +21,7 @@ import { useTranslation } from 'react-i18next'
 
 import { CopyButton } from '@/components/copy-button'
 import { DataTablePage, useDataTable } from '@/components/data-table'
+import { GroupBadge } from '@/components/group-badge'
 import { StatusBadge } from '@/components/status-badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { formatQuotaPrecise, formatTimestampToDate } from '@/lib/format'
@@ -81,6 +82,9 @@ export function RefundQueueTable(props: {
           <span className='text-muted-foreground text-xs'>
             {formatTimestampToDate(row.original.created_at)}
           </span>
+          <p className='text-muted-foreground text-xs'>
+            {t('Billing ID')}: {row.original.billing_id}
+          </p>
         </div>
       ),
     },
@@ -105,6 +109,37 @@ export function RefundQueueTable(props: {
           <p className='text-muted-foreground text-xs'>
             {t('Channel ID')}: {row.original.channel_id || '-'}
           </p>
+        </div>
+      ),
+    },
+    {
+      id: 'group',
+      header: t('Group'),
+      size: 120,
+      cell: ({ row }) =>
+        row.original.group ? (
+          <GroupBadge group={row.original.group} className='font-normal' />
+        ) : (
+          <span className='text-muted-foreground'>-</span>
+        ),
+    },
+    {
+      id: 'token',
+      header: t('Token'),
+      size: 160,
+      cell: ({ row }) => (
+        <div className='min-w-0'>
+          <p
+            className='max-w-48 truncate'
+            title={row.original.token_name || undefined}
+          >
+            {row.original.token_name || '-'}
+          </p>
+          {row.original.token_id ? (
+            <p className='text-muted-foreground text-xs'>
+              #{row.original.token_id}
+            </p>
+          ) : null}
         </div>
       ),
     },
@@ -145,11 +180,19 @@ export function RefundQueueTable(props: {
         const record = row.original
         if (record.refund_operation_id > 0 || record.refunded_quota > 0) {
           return (
-            <StatusBadge
-              copyable={false}
-              variant='neutral'
-              label={t('Refunded')}
-            />
+            <div className='space-y-1'>
+              <StatusBadge
+                copyable={false}
+                variant='neutral'
+                label={t('Refunded')}
+              />
+              {record.refunded_at ? (
+                <p className='text-muted-foreground text-xs'>
+                  {t('Refunded at')}:{' '}
+                  {formatTimestampToDate(record.refunded_at)}
+                </p>
+              ) : null}
+            </div>
           )
         }
         if (!canRefundRequest(record)) {
