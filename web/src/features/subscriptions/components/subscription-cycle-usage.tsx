@@ -67,7 +67,7 @@ export function SubscriptionCycleUsage(props: SubscriptionCycleUsageProps) {
           data={usageQuery.data ?? []}
           getRowKey={(period) => `${period.subscription_id}:${period.cycle}`}
           emptyContent={t('No subscription records')}
-          tableClassName='min-w-[760px]'
+          tableClassName='min-w-max'
           columns={[
             {
               id: 'period',

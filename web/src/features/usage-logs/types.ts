@@ -641,6 +641,8 @@ export interface UserInfo {
   bonus_quota?: number
   paid_quota?: number
   used_quota: number
+  wallet_used_quota?: number
+  subscription_used_quota?: number
   request_count: number
   group?: string
   max_concurrency?: number

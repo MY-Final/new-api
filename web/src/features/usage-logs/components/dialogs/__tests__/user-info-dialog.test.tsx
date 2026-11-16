@@ -128,7 +128,9 @@ const invitedUser = {
   quota: 0,
   bonus_quota: 500000,
   paid_quota: 0,
-  used_quota: 0,
+  used_quota: 1000000,
+  wallet_used_quota: 400000,
+  subscription_used_quota: 600000,
   request_count: 438,
   group: 'paidGroup',
   max_concurrency: 0,
@@ -175,7 +177,15 @@ describe('usage log user info dialog', () => {
     )
     const accountCard = screen.getByText('Account').closest('[data-slot=card]')
     const walletCard = screen.getByText('Wallet').closest('[data-slot=card]')
-    expect(accountCard).toHaveTextContent('Total Usage')
+    expect(accountCard).not.toHaveTextContent('Total Usage')
+    expect(accountCard).toHaveTextContent('Wallet Usage')
+    expect(accountCard).toHaveTextContent('Subscription Usage')
+    expect(infoValue('Wallet Usage')).toHaveTextContent(
+      formatQuota(invitedUser.wallet_used_quota)
+    )
+    expect(infoValue('Subscription Usage')).toHaveTextContent(
+      formatQuota(invitedUser.subscription_used_quota)
+    )
     expect(walletCard).not.toHaveTextContent('Total Usage')
     expect(screen.getByText('Affiliate Code')).toBeVisible()
     expect(screen.getByText('D4Fe')).toBeVisible()
@@ -184,6 +194,18 @@ describe('usage log user info dialog', () => {
     expect(screen.getByText('github-7')).toBeVisible()
     expect(screen.getByText('linuxdo-7')).toBeVisible()
     expect(screen.getByText('VIP account')).toBeVisible()
+  })
+
+  test('does not present total usage as a breakdown when it is unavailable', async () => {
+    renderDialog({
+      ...invitedUser,
+      wallet_used_quota: undefined,
+      subscription_used_quota: undefined,
+    })
+
+    expect(await screen.findByText('Wallet Usage')).toBeVisible()
+    expect(infoValue('Wallet Usage')).toHaveTextContent('-')
+    expect(infoValue('Subscription Usage')).toHaveTextContent('-')
   })
 
   test('shows who invited an invited user alongside the users they invited', async () => {
@@ -323,6 +345,43 @@ describe('usage log user info dialog', () => {
     expect(
       screen.queryByRole('dialog', { name: 'User Subscription Management' })
     ).not.toBeInTheDocument()
+  })
+
+  test('offers a larger viewport for user details and keeps wide token figures scrollable', async () => {
+    renderDialog(invitedUser, {
+      cycleUsage: [
+        {
+          subscription_id: 42,
+          plan_id: 3,
+          plan_title: 'Pro Plan',
+          order_id: 2,
+          cycle: 1,
+          start_time: 1_790_000_000,
+          end_time: 1_790_100_000,
+          request_count: 8512,
+          input_tokens: 1_098_878_680,
+          output_tokens: 5_138_463,
+          cache_read_tokens: 1_002_324_274,
+          cache_write_tokens: 0,
+          total_tokens: 1_104_017_143,
+        },
+      ],
+    })
+
+    const dialog = await screen.findByRole('dialog', {
+      name: 'User Information',
+    })
+    expect(dialog).toHaveClass('sm:max-w-[min(94vw,1152px)]')
+    expect(dialog).toHaveClass('lg:max-w-[min(94vw,1440px)]')
+    expect(dialog.style.getPropertyValue('--dialog-content-height')).toBe(
+      'min(85dvh, 1000px)'
+    )
+    const table = await screen.findByRole('table')
+    expect(table).toHaveClass('min-w-max')
+    expect(table.closest('[data-slot=table-container]')).toHaveClass(
+      'overflow-x-auto'
+    )
+    expect(within(table).getByText('1,104,017,143')).toBeVisible()
   })
 
   test('shows remaining quota and unlimited subscriptions without rolling windows', async () => {

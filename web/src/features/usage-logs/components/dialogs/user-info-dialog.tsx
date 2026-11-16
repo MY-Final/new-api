@@ -135,8 +135,8 @@ export function UserInfoDialog({
       description={t(
         'View detailed information about this user including balance, usage statistics, and invitation details.'
       )}
-      contentClassName='sm:max-w-4xl'
-      contentHeight='min(78dvh, 760px)'
+      contentClassName='sm:max-w-[min(94vw,1152px)] lg:max-w-[min(94vw,1440px)]'
+      contentHeight='min(85dvh, 1000px)'
       bodyClassName='space-y-4'
     >
       {isLoading && <LoadingState className='min-h-0 py-8' size='md' />}
@@ -192,8 +192,15 @@ export function UserInfoDialog({
                 <InfoItem label={t('Last Login')}>
                   {formatTimestampToDate(userInfo.last_login_at)}
                 </InfoItem>
-                <InfoItem label={t('Total Usage')}>
-                  {formatQuota(userInfo.used_quota)}
+                <InfoItem label={t('Wallet Usage')}>
+                  {userInfo.wallet_used_quota == null
+                    ? '-'
+                    : formatQuota(userInfo.wallet_used_quota)}
+                </InfoItem>
+                <InfoItem label={t('Subscription Usage')}>
+                  {userInfo.subscription_used_quota == null
+                    ? '-'
+                    : formatQuota(userInfo.subscription_used_quota)}
                 </InfoItem>
                 <InfoItem label={t('Request Count')}>
                   {formatCompactNumber(userInfo.request_count)}

@@ -84,6 +84,55 @@ func setupManageUserTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
+func TestGetUserIncludesUsageBreakdown(t *testing.T) {
+	db := setupManageUserTestDB(t)
+	require.NoError(t, db.AutoMigrate(&model.RequestBilling{}))
+	user := model.User{Username: "usage-detail", AffCode: "usage-detail", UsedQuota: 100, RequestCount: 3}
+	require.NoError(t, db.Create(&user).Error)
+	require.NoError(t, db.Create(&[]model.RequestBilling{
+		{Id: "usage-detail-sub", RequestId: "usage-detail-sub", UserId: user.Id, FundingSource: "subscription", Quota: 40, RefundedQuota: 10, Settled: true},
+		{Id: "usage-detail-pending", RequestId: "usage-detail-pending", UserId: user.Id, FundingSource: "subscription", Quota: 50},
+	}).Error)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/user/"+strconv.Itoa(user.Id), nil)
+	c.Params = gin.Params{{Key: "id", Value: strconv.Itoa(user.Id)}}
+	c.Set("role", common.RoleRootUser)
+	GetUser(c)
+
+	var response struct {
+		Success bool `json:"success"`
+		Data    struct {
+			UsedQuota             int  `json:"used_quota"`
+			WalletUsedQuota       *int `json:"wallet_used_quota"`
+			SubscriptionUsedQuota *int `json:"subscription_used_quota"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	require.True(t, response.Success)
+	assert.Equal(t, 100, response.Data.UsedQuota)
+	require.NotNil(t, response.Data.WalletUsedQuota)
+	require.NotNil(t, response.Data.SubscriptionUsedQuota)
+	assert.Equal(t, 70, *response.Data.WalletUsedQuota)
+	assert.Equal(t, 30, *response.Data.SubscriptionUsedQuota)
+
+	require.NoError(t, db.Migrator().DropTable(&model.RequestBilling{}))
+	recorder = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/user/"+strconv.Itoa(user.Id), nil)
+	c.Params = gin.Params{{Key: "id", Value: strconv.Itoa(user.Id)}}
+	c.Set("role", common.RoleRootUser)
+	GetUser(c)
+	response.Data.WalletUsedQuota = nil
+	response.Data.SubscriptionUsedQuota = nil
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	require.True(t, response.Success)
+	assert.Equal(t, 100, response.Data.UsedQuota)
+	assert.Nil(t, response.Data.WalletUsedQuota)
+	assert.Nil(t, response.Data.SubscriptionUsedQuota)
+}
+
 func performManageUserRequest(t *testing.T, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	return performVerifiedManageUserRequest(t, body, service.AuthIdentity{UserID: 9999}, "")

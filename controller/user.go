@@ -455,10 +455,21 @@ func GetUser(c *gin.Context) {
 		return
 	}
 	user.AdminPermissions = authz.Capabilities(user.Id, user.Role)
+	response := struct {
+		*model.User
+		WalletUsedQuota       *int `json:"wallet_used_quota,omitempty"`
+		SubscriptionUsedQuota *int `json:"subscription_used_quota,omitempty"`
+	}{User: user}
+	if breakdown, err := model.GetUserUsageBreakdown(user.Id, user.UsedQuota, user.RequestCount); err != nil {
+		common.SysError(common.LogText("failed to load user usage breakdown: %s", err.Error()))
+	} else {
+		response.WalletUsedQuota = &breakdown.WalletUsedQuota
+		response.SubscriptionUsedQuota = &breakdown.SubscriptionUsedQuota
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    user,
+		"data":    response,
 	})
 	return
 }
