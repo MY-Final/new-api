@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -20,7 +21,11 @@ func TestDailyEggSettingsValidation(t *testing.T) {
 	valid := `{"enabled":true,"min_spend_cny":2.5,"egg_count":3,"prizes":[{"id":"first","name":"First","quota":100,"quantity":1,"probability":10000}]}`
 	_, err := ParseDailyEggSetting(valid)
 	require.NoError(t, err)
+	legacy, err := ParseDailyEggSetting(valid)
+	require.NoError(t, err)
+	assert.Equal(t, "all", legacy.SpendSource)
 	for _, value := range []string{
+		`{"enabled":false,"min_spend_cny":2.5,"spend_source":"invalid","egg_count":3,"prizes":[]}`,
 		`{"enabled":true,"min_spend_cny":2.501,"egg_count":3,"prizes":[]}`,
 		`{"enabled":true,"min_spend_cny":2.5,"egg_count":1,"prizes":[]}`,
 		`{"enabled":true,"min_spend_cny":2.5,"egg_count":3,"prizes":[{"id":"A","name":"First","quota":100,"quantity":1,"probability":10000}]}`,
@@ -89,6 +94,45 @@ func TestDailyEggDatabaseMatrix(t *testing.T) {
 				{Key: DailyEggSettingOption, Value: `{"enabled":true,"min_spend_cny":2.5,"egg_count":3,"prizes":[{"id":"first","name":"First","quota":100,"quantity":1,"probability":10000}]}`},
 			}).Error)
 			now := UsageReportNow()
+			for i, tc := range []struct {
+				name, source string
+				minimum      float64
+				spend        float64
+				eligible     bool
+			}{
+				{name: "combined", source: "all", minimum: 2, spend: 2.75, eligible: true},
+				{name: "wallet excludes subscription", source: "wallet", minimum: 2, spend: 1},
+				{name: "wallet reaches threshold", source: "wallet", minimum: 1, spend: 1, eligible: true},
+				{name: "subscription excludes wallet", source: "subscription", minimum: 2, spend: 1.5},
+				{name: "subscription reaches threshold", source: "subscription", minimum: 1.5, spend: 1.5, eligible: true},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					user := User{Username: fmt.Sprintf("egg-source-%d", i), AffCode: fmt.Sprintf("egg-src-%d", i)}
+					require.NoError(t, db.Create(&user).Error)
+					require.NoError(t, db.Create(&[]RequestBilling{
+						{Id: user.Username + "-wallet", UserId: user.Id, FundingSource: "wallet", Quota: 100000, Settled: true, CreatedAt: now.Unix()},
+						{Id: user.Username + "-sub", UserId: user.Id, FundingSource: "subscription", Quota: 200000, RefundedQuota: 50000, Settled: true, CreatedAt: now.Unix()},
+						{Id: user.Username + "-legacy", UserId: user.Id, Quota: 25000, Settled: true, CreatedAt: now.Unix()},
+						{Id: user.Username + "-pending", UserId: user.Id, FundingSource: tc.source, Quota: 999999, CreatedAt: now.Unix()},
+					}).Error)
+					setting := fmt.Sprintf(`{"enabled":true,"min_spend_cny":%v,"spend_source":%q,"egg_count":3,"prizes":[{"id":"first","name":"First","quota":100,"quantity":1,"probability":10000}]}`, tc.minimum, tc.source)
+					require.NoError(t, db.Model(&Option{}).Where(commonKeyCol+" = ?", DailyEggSettingOption).Update("value", setting).Error)
+					status, err := GetDailyEggStatus(user.Id)
+					require.NoError(t, err)
+					assert.Equal(t, tc.source, status.SpendSource)
+					assert.InDelta(t, tc.spend, status.SpendCNY, 0.000001)
+					assert.Equal(t, tc.eligible, status.Eligible)
+					_, err = OpenDailyEgg(user.Id, 1)
+					if tc.eligible {
+						require.NoError(t, err)
+					} else {
+						require.ErrorIs(t, err, errDailyEggSpend)
+					}
+					require.NoError(t, db.Where("user_id = ?", user.Id).Delete(&DailyEggDraw{}).Error)
+					require.NoError(t, db.Where("day = ?", now.Format("2006-01-02")).Delete(&DailyEggInventory{}).Error)
+				})
+			}
+			require.NoError(t, db.Model(&Option{}).Where(commonKeyCol+" = ?", DailyEggSettingOption).Update("value", `{"enabled":true,"min_spend_cny":2.5,"egg_count":3,"prizes":[{"id":"first","name":"First","quota":100,"quantity":1,"probability":10000}]}`).Error)
 			users := make([]User, 3)
 			for index := range users {
 				users[index] = User{Username: "egg-user-" + string(rune('a'+index)), Password: "hash", AffCode: "egg-" + string(rune('a'+index)), Quota: 1000}
@@ -195,7 +239,7 @@ func TestDailyEggDatabaseMatrix(t *testing.T) {
 			assert.Zero(t, count)
 
 			tomorrow := now.AddDate(0, 0, 1)
-			spend, eligible, err := dailyEggSpend(db, users[0].Id, tomorrow, 2.5)
+			spend, eligible, err := dailyEggSpend(db, users[0].Id, tomorrow, 2.5, "all")
 			require.NoError(t, err)
 			assert.False(t, eligible)
 			assert.True(t, spend.IsZero())
@@ -204,19 +248,27 @@ func TestDailyEggDatabaseMatrix(t *testing.T) {
 			require.NoError(t, db.Create(&taskUser).Error)
 			task := Task{TaskID: "egg-task-id", UserId: taskUser.Id, ChannelId: 7, Quota: 250000, Status: TaskStatusInProgress}
 			require.NoError(t, db.Create(&task).Error)
-			taskBilling := RequestBilling{Id: "egg-task-billing", UserId: taskUser.Id, TaskId: task.TaskID, ChannelId: 7, Quota: task.Quota, UsageRecorded: true, CreatedAt: now.Unix()}
+			taskBilling := RequestBilling{Id: "egg-task-billing", UserId: taskUser.Id, TaskId: task.TaskID, ChannelId: 7, FundingSource: "subscription", Quota: task.Quota, UsageRecorded: true, CreatedAt: now.Unix()}
 			require.NoError(t, db.Create(&taskBilling).Error)
-			spend, eligible, err = dailyEggSpend(db, taskUser.Id, now, 2.5)
+			spend, eligible, err = dailyEggSpend(db, taskUser.Id, now, 2.5, "all")
 			require.NoError(t, err)
 			assert.False(t, eligible)
 			assert.True(t, spend.IsZero())
 			require.NoError(t, db.Model(&task).Update("status", TaskStatusSuccess).Error)
-			spend, eligible, err = dailyEggSpend(db, taskUser.Id, now, 2.5)
+			spend, eligible, err = dailyEggSpend(db, taskUser.Id, now, 2.5, "wallet")
+			require.NoError(t, err)
+			assert.False(t, eligible)
+			assert.True(t, spend.IsZero())
+			spend, eligible, err = dailyEggSpend(db, taskUser.Id, now, 2.5, "subscription")
+			require.NoError(t, err)
+			assert.True(t, eligible)
+			assert.Equal(t, "2.5", spend.String())
+			spend, eligible, err = dailyEggSpend(db, taskUser.Id, now, 2.5, "all")
 			require.NoError(t, err)
 			assert.True(t, eligible)
 			assert.Equal(t, "2.5", spend.String())
 			require.NoError(t, db.Model(&task).Update("quota", task.Quota-1).Error)
-			_, eligible, err = dailyEggSpend(db, taskUser.Id, now, 2.5)
+			_, eligible, err = dailyEggSpend(db, taskUser.Id, now, 2.5, "all")
 			require.NoError(t, err)
 			assert.False(t, eligible)
 		})

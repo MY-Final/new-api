@@ -26,7 +26,7 @@ import {
 
 const defaultBillingSettings: BillingSettings = {
   DailyEggSetting:
-    '{"enabled":false,"min_spend_cny":2.5,"egg_count":3,"prizes":[]}',
+    '{"enabled":false,"min_spend_cny":2.5,"spend_source":"all","egg_count":3,"prizes":[]}',
   QuotaForNewUser: 0,
   QuotaForInviter: 0,
   QuotaForInvitee: 0,

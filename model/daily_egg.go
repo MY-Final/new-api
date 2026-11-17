@@ -16,7 +16,7 @@ import (
 )
 
 const DailyEggSettingOption = "DailyEggSetting"
-const DefaultDailyEggSetting = `{"enabled":false,"min_spend_cny":2.5,"egg_count":3,"prizes":[]}`
+const DefaultDailyEggSetting = `{"enabled":false,"min_spend_cny":2.5,"spend_source":"all","egg_count":3,"prizes":[]}`
 const dailyEggFreeDrawLimit = 1
 
 type DailyEggPrize struct {
@@ -30,6 +30,7 @@ type DailyEggPrize struct {
 type DailyEggSetting struct {
 	Enabled     bool            `json:"enabled"`
 	MinSpendCNY float64         `json:"min_spend_cny"`
+	SpendSource string          `json:"spend_source"`
 	EggCount    int             `json:"egg_count"`
 	Prizes      []DailyEggPrize `json:"prizes"`
 }
@@ -56,6 +57,7 @@ type DailyEggStatus struct {
 	Day               string          `json:"day"`
 	MinSpendCNY       float64         `json:"min_spend_cny"`
 	SpendCNY          float64         `json:"spend_cny"`
+	SpendSource       string          `json:"spend_source"`
 	EggCount          int             `json:"egg_count"`
 	Prizes            []DailyEggPrize `json:"prizes"`
 	Eligible          bool            `json:"eligible"`
@@ -142,6 +144,12 @@ func ParseDailyEggSetting(value string) (DailyEggSetting, error) {
 	if err := common.UnmarshalJsonStr(value, &setting); err != nil {
 		return setting, errDailyEggSetting
 	}
+	if setting.SpendSource == "" {
+		setting.SpendSource = "all"
+	}
+	if setting.SpendSource != "all" && setting.SpendSource != "wallet" && setting.SpendSource != "subscription" {
+		return setting, errDailyEggSetting
+	}
 	if math.IsNaN(setting.MinSpendCNY) || math.IsInf(setting.MinSpendCNY, 0) ||
 		setting.MinSpendCNY < 0 || setting.MinSpendCNY > 1_000_000 ||
 		!decimal.NewFromFloat(setting.MinSpendCNY).Equal(decimal.NewFromFloat(setting.MinSpendCNY).Round(2)) ||
@@ -185,14 +193,17 @@ func loadDailyEggSetting(tx *gorm.DB) (DailyEggSetting, error) {
 	return ParseDailyEggSetting(option.Value)
 }
 
-func dailyEggSpend(tx *gorm.DB, userID int, now time.Time, minimum float64) (decimal.Decimal, bool, error) {
+func dailyEggSpend(tx *gorm.DB, userID int, now time.Time, minimum float64, source string) (decimal.Decimal, bool, error) {
 	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	var quota int64
-	err := tx.Model(&RequestBilling{}).
+	query := tx.Model(&RequestBilling{}).
 		Select("COALESCE(SUM(CASE WHEN quota > COALESCE(refunded_quota, 0) THEN quota - COALESCE(refunded_quota, 0) ELSE 0 END), 0)").
 		Where("user_id = ? AND created_at >= ? AND created_at < ?", userID, start.Unix(), start.AddDate(0, 0, 1).Unix()).
-		Where("(settled = ? OR (usage_recorded = ? AND task_id <> '' AND EXISTS (SELECT 1 FROM tasks WHERE tasks.task_id = request_billings.task_id AND tasks.user_id = request_billings.user_id AND tasks.channel_id = request_billings.channel_id AND tasks.status = ? AND tasks.quota = request_billings.quota)))", true, true, TaskStatusSuccess).
-		Scan(&quota).Error
+		Where("(settled = ? OR (usage_recorded = ? AND task_id <> '' AND EXISTS (SELECT 1 FROM tasks WHERE tasks.task_id = request_billings.task_id AND tasks.user_id = request_billings.user_id AND tasks.channel_id = request_billings.channel_id AND tasks.status = ? AND tasks.quota = request_billings.quota)))", true, true, TaskStatusSuccess)
+	if source != "all" {
+		query = query.Where("funding_source = ?", source)
+	}
+	err := query.Scan(&quota).Error
 	if err != nil {
 		return decimal.Zero, false, err
 	}
@@ -233,13 +244,13 @@ func GetDailyEggStatus(userID int) (DailyEggStatus, error) {
 	}
 	status := DailyEggStatus{
 		Enabled: setting.Enabled, Day: now.Format("2006-01-02"),
-		MinSpendCNY: setting.MinSpendCNY, EggCount: setting.EggCount, Prizes: setting.Prizes,
+		MinSpendCNY: setting.MinSpendCNY, SpendSource: setting.SpendSource, EggCount: setting.EggCount, Prizes: setting.Prizes,
 		FreeDrawLimit: dailyEggFreeDrawLimit, FreeDrawRemaining: dailyEggFreeDrawLimit,
 	}
 	if !setting.Enabled {
 		return status, nil
 	}
-	spend, eligible, err := dailyEggSpend(DB, userID, now, setting.MinSpendCNY)
+	spend, eligible, err := dailyEggSpend(DB, userID, now, setting.MinSpendCNY, setting.SpendSource)
 	if err != nil {
 		return status, err
 	}
@@ -277,7 +288,7 @@ func OpenDailyEgg(userID, egg int) (*DailyEggDraw, error) {
 		if egg < 1 || egg > setting.EggCount {
 			return errDailyEggChoice
 		}
-		_, eligible, err := dailyEggSpend(tx, userID, now, setting.MinSpendCNY)
+		_, eligible, err := dailyEggSpend(tx, userID, now, setting.MinSpendCNY, setting.SpendSource)
 		if err != nil {
 			return err
 		}

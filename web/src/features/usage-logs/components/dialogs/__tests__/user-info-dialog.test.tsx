@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
 import { describe, expect, test, vi } from 'vitest'
 
 import type { SubscriptionCycleTokenUsage } from '@/features/subscriptions/types'
@@ -96,14 +97,20 @@ function renderDialog(
     }
     throw new Error(`Unexpected request: ${url}`)
   })
+  function ControlledDialog() {
+    const [open, setOpen] = useState(true)
+    return (
+      <UserInfoDialog
+        userId={Number(user.id)}
+        open={open}
+        onOpenChange={setOpen}
+      />
+    )
+  }
   const result = render(
     <QueryClientProvider client={queryClient}>
       <I18nextProvider i18n={i18n}>
-        <UserInfoDialog
-          userId={Number(user.id)}
-          open
-          onOpenChange={() => undefined}
-        />
+        <ControlledDialog />
       </I18nextProvider>
     </QueryClientProvider>
   )
@@ -159,6 +166,35 @@ const activeSubscription = {
 }
 
 describe('usage log user info dialog', () => {
+  test('keeps subscription usage visible while the user information dialog closes', async () => {
+    renderDialog(invitedUser)
+    expect(await screen.findByText('Subscription cycle usage')).toBeVisible()
+    const dialog = screen.getByRole('dialog', { name: 'User Information' })
+    let finishAnimation!: () => void
+    const animationFinished = new Promise<void>((resolve) => {
+      finishAnimation = resolve
+    })
+    const animations = vi.spyOn(Element.prototype, 'getAnimations')
+    animations.mockImplementation(function (this: Element) {
+      if (this === dialog && this.hasAttribute('data-closed')) {
+        return [{ finished: animationFinished } as unknown as Animation]
+      }
+      return []
+    })
+
+    try {
+      await userEvent
+        .setup()
+        .click(within(dialog).getByRole('button', { name: 'Close' }))
+      expect(dialog).toHaveAttribute('data-closed')
+      expect(dialog).toHaveTextContent('Subscription cycle usage')
+    } finally {
+      finishAnimation()
+      animations.mockRestore()
+    }
+    await waitFor(() => expect(dialog).not.toBeInTheDocument())
+  })
+
   test('shows account, wallet, referral, and binding details', async () => {
     renderDialog(invitedUser)
 

@@ -66,6 +66,21 @@ it('displays daily spending in the configured currency', async () => {
   )
 })
 
+it.each([
+  ['all', 'Wallet and subscription'],
+  ['wallet', 'Wallet'],
+  ['subscription', 'Subscription'],
+] as const)(
+  'shows which spending counts when the source is %s',
+  async (source, label) => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: { success: true, data: { ...status, spend_source: source } },
+    })
+    renderPage()
+    expect(await screen.findByText(`Spending source: ${label}`)).toBeVisible()
+  }
+)
+
 it('shows configured eggs and prizes but prevents a draw below the spending threshold', async () => {
   vi.spyOn(api, 'get').mockResolvedValue({
     data: { success: true, data: { ...status, eligible: false, spend_cny: 1 } },

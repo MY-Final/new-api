@@ -41,6 +41,7 @@ type DailyEggStatus = {
   day: string
   min_spend_cny: number
   spend_cny: number
+  spend_source?: 'all' | 'wallet' | 'subscription'
   egg_count: number
   prizes: Prize[]
   eligible: boolean
@@ -100,6 +101,12 @@ export function Entertainment() {
   })
   const data = status.data
   const result = data?.draw
+  let spendingSourceLabel = t('Wallet and subscription')
+  if (data?.spend_source === 'wallet') {
+    spendingSourceLabel = t('Wallet')
+  } else if (data?.spend_source === 'subscription') {
+    spendingSourceLabel = t('Subscription')
+  }
 
   return (
     <Main className='overflow-y-auto'>
@@ -140,6 +147,9 @@ export function Entertainment() {
                   })}
                 </p>
                 <h2 className='mt-4 text-xl font-bold'>{t('Choose an egg')}</h2>
+                <p className='text-muted-foreground mt-2 text-sm'>
+                  {t('Spending source')}: {spendingSourceLabel}
+                </p>
                 <p className='text-muted-foreground mt-2 text-sm'>
                   {t('Daily spending')}:{' '}
                   {formatCurrencyFromUSD(

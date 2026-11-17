@@ -16,6 +16,13 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import {
   formatCurrencyFromUSD,
@@ -54,6 +61,7 @@ const prizeSchema = z.object({
 const schema = z
   .object({
     enabled: z.boolean(),
+    spendSource: z.enum(['all', 'wallet', 'subscription']),
     minSpendCNY: z
       .number()
       .min(0, invalid)
@@ -96,6 +104,7 @@ export function DailyEggSettingsSection(props: { setting: string }) {
       const value = JSON.parse(props.setting)
       const parsed = schema.safeParse({
         enabled: value.enabled,
+        spendSource: value.spend_source ?? 'all',
         minSpendCNY: value.min_spend_cny,
         eggCount: value.egg_count,
         prizes: value.prizes?.map(
@@ -116,7 +125,13 @@ export function DailyEggSettingsSection(props: { setting: string }) {
       })
       if (parsed.success) return parsed.data
     } catch {}
-    return { enabled: false, minSpendCNY: 2.5, eggCount: 3, prizes: [] }
+    return {
+      enabled: false,
+      spendSource: 'all',
+      minSpendCNY: 2.5,
+      eggCount: 3,
+      prizes: [],
+    }
   }, [props.setting])
   const form = useForm<Values>({
     resolver: zodResolver(schema),
@@ -133,6 +148,7 @@ export function DailyEggSettingsSection(props: { setting: string }) {
       value: JSON.stringify({
         enabled: values.enabled,
         min_spend_cny: values.minSpendCNY,
+        spend_source: values.spendSource,
         egg_count: values.eggCount,
         prizes: values.prizes.map((prize) => ({
           id: prize.prizeId,
@@ -175,6 +191,45 @@ export function DailyEggSettingsSection(props: { setting: string }) {
             )}
           />
           <SettingsFormGrid className='items-start'>
+            <FormField
+              control={form.control}
+              name='spendSource'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Spending source')}</FormLabel>
+                  <Select
+                    items={[
+                      { value: 'all', label: t('Wallet and subscription') },
+                      { value: 'wallet', label: t('Wallet') },
+                      { value: 'subscription', label: t('Subscription') },
+                    ]}
+                    value={field.value}
+                    onValueChange={field.onChange}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent alignItemWithTrigger={false}>
+                      <SelectItem value='all'>
+                        {t('Wallet and subscription')}
+                      </SelectItem>
+                      <SelectItem value='wallet'>{t('Wallet')}</SelectItem>
+                      <SelectItem value='subscription'>
+                        {t('Subscription')}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    {t(
+                      'Records without a spending source count only when both sources are selected.'
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <FormField
               control={form.control}
               name='minSpendCNY'

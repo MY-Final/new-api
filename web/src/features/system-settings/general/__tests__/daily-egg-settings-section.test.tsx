@@ -22,13 +22,13 @@ const initialSetting = JSON.stringify({
   ],
 })
 
-function Fixture() {
+function Fixture(props: { setting?: string }) {
   const [container, setContainer] = useState<HTMLDivElement | null>(null)
   return (
     <QueryClientProvider client={new QueryClient()}>
       <div ref={setContainer} />
       <SettingsPageProvider actionsContainer={container}>
-        <DailyEggSettingsSection setting={initialSetting} />
+        <DailyEggSettingsSection setting={props.setting ?? initialSetting} />
       </SettingsPageProvider>
     </QueryClientProvider>
   )
@@ -201,6 +201,7 @@ it('saves the minimum spend, egg count, prize quantity and probability', async (
       value: JSON.stringify({
         enabled: true,
         min_spend_cny: 3.25,
+        spend_source: 'all',
         egg_count: 4,
         prizes: [
           {
@@ -215,6 +216,35 @@ it('saves the minimum spend, egg count, prize quantity and probability', async (
     })
   )
 })
+
+it.each([
+  ['Wallet', 'wallet'],
+  ['Subscription', 'subscription'],
+] as const)(
+  'saves %s spending and restores it when settings reload',
+  async (label, value) => {
+    const put = vi
+      .spyOn(api, 'put')
+      .mockResolvedValue({ data: { success: true } })
+    const user = userEvent.setup()
+    const view = render(<Fixture />)
+    const source = screen.getByRole('combobox', { name: 'Spending source' })
+    expect(source).toHaveTextContent('Wallet and subscription')
+    await user.click(source)
+    await user.click(screen.getByRole('option', { name: label }))
+    await user.click(
+      screen.getByRole('button', { name: 'Save daily egg settings' })
+    )
+    await waitFor(() => expect(put).toHaveBeenCalled())
+    const saved = JSON.parse((put.mock.calls[0][1] as { value: string }).value)
+    expect(saved.spend_source).toBe(value)
+    view.unmount()
+    render(<Fixture setting={JSON.stringify(saved)} />)
+    expect(
+      screen.getByRole('combobox', { name: 'Spending source' })
+    ).toHaveTextContent(label)
+  }
+)
 
 it('rejects prize probabilities above 100 percent', async () => {
   const put = vi

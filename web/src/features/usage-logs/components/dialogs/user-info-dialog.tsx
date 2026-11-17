@@ -100,7 +100,7 @@ export function UserInfoDialog({
     refetchOnWindowFocus: false,
     meta: { errorToast: false },
   })
-  const isLoading = open && userInfoQuery.isFetching
+  const isLoading = userInfoQuery.isFetching
   const userInfo =
     !isLoading && userInfoQuery.isSuccess && userInfoQuery.data?.id === userId
       ? userInfoQuery.data
@@ -165,16 +165,14 @@ export function UserInfoDialog({
             </div>
           </div>
 
-          {open && (
-            <InfoCard
-              title={t('Subscription cycle usage')}
-              icon={
-                <ChartNoAxesCombined className='text-muted-foreground size-4' />
-              }
-            >
-              <SubscriptionCycleUsage userId={userInfo.id} />
-            </InfoCard>
-          )}
+          <InfoCard
+            title={t('Subscription cycle usage')}
+            icon={
+              <ChartNoAxesCombined className='text-muted-foreground size-4' />
+            }
+          >
+            <SubscriptionCycleUsage userId={userInfo.id} />
+          </InfoCard>
 
           <div className='grid gap-4 lg:grid-cols-2'>
             <InfoCard
