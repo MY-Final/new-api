@@ -24,6 +24,10 @@ import {
   splitBillingExprAndRequestRules,
   type ParsedTier,
 } from '@/features/pricing/lib/billing-expr'
+import {
+  getCachePriceLabels,
+  getTierCachePricingMode,
+} from '@/features/pricing/lib/cache-pricing'
 import { formatNumber, formatQuotaPrecise } from '@/lib/format'
 import { translateServerText } from '@/lib/server-error-message'
 
@@ -386,7 +390,8 @@ export function getInputTokenBreakdown(
 }
 
 export function getTieredBillingSummary(
-  other: LogOtherData | null
+  other: LogOtherData | null,
+  modelName?: string
 ): TieredBillingSummary | null {
   if (!other || other.billing_mode !== 'tiered_expr') return null
   const exprStr = decodeBillingExprB64(other.expr_b64)
@@ -445,6 +450,7 @@ export function getTieredBillingSummary(
   }
 
   const cacheTokensPresent = hasAnyCacheTokens(other)
+  const cacheMode = getTierCachePricingMode(tiers, modelName)
 
   const priceEntries: TieredBillingSummary['priceEntries'] = []
   for (const v of BILLING_PRICING_VARS) {
@@ -455,7 +461,7 @@ export function getTieredBillingSummary(
     if (Number.isFinite(price) && price >= 0) {
       priceEntries.push({
         field: v.field,
-        shortLabel: v.shortLabel,
+        shortLabel: getCachePriceLabels(v, cacheMode).shortLabel,
         price,
       })
     }
