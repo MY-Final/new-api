@@ -39,6 +39,34 @@ export function AuthLayout(props: AuthLayoutProps) {
   const { systemName, logo, loading } = useSystemConfig()
   const { qqGroupNumber, qqGroupURL } = useContactSettings()
 
+  const contactLinks = (
+    <div className='text-muted-foreground flex flex-wrap items-center justify-center gap-x-2 gap-y-1 pt-2 text-center text-xs'>
+      <span>{t('Contact Us')}:</span>
+      <Link
+        to='/contact'
+        className='hover:text-foreground underline underline-offset-4'
+      >
+        {t('Contact Us')}
+      </Link>
+      {qqGroupNumber ? (
+        <span>
+          {t('QQ Group Number')}:{' '}
+          <span className='text-foreground font-mono'>{qqGroupNumber}</span>
+        </span>
+      ) : null}
+      {qqGroupURL ? (
+        <a
+          href={qqGroupURL}
+          target='_blank'
+          rel='noopener noreferrer'
+          className='hover:text-foreground underline underline-offset-4'
+        >
+          {t('Join QQ Group')}
+        </a>
+      ) : null}
+    </div>
+  )
+
   const content = (
     <div
       className={cn(
@@ -96,7 +124,7 @@ export function AuthLayout(props: AuthLayoutProps) {
         className={cn(
           'container flex items-center pt-16 sm:pt-0',
           props.showcase &&
-            'mx-auto grid w-full max-w-7xl items-center gap-10 px-5 py-8 sm:px-10 sm:py-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-14 lg:pt-2 lg:pb-8'
+            'mx-auto grid w-full max-w-5xl grid-cols-1 items-center gap-x-10 gap-y-6 px-5 py-8 sm:px-10 sm:py-10 lg:grid-cols-2 lg:items-stretch lg:gap-x-14 lg:gap-y-4 lg:pt-2 lg:pb-8'
         )}
       >
         {props.showcase && (
@@ -108,38 +136,13 @@ export function AuthLayout(props: AuthLayoutProps) {
           className={cn(
             'mx-auto flex w-full flex-col justify-center space-y-2 px-4 py-8 sm:w-[480px] sm:p-8',
             props.showcase &&
-              'max-w-[460px] min-w-0 gap-4 space-y-0 px-0 py-0 sm:w-full sm:p-0'
+              'max-w-[460px] min-w-0 gap-4 space-y-0 px-0 py-0 sm:w-full sm:p-0 lg:max-w-none'
           )}
         >
           {props.children}
-          <div className='text-muted-foreground flex flex-wrap items-center justify-center gap-x-2 gap-y-1 pt-2 text-center text-xs'>
-            <span>{t('Contact Us')}:</span>
-            <Link
-              to='/contact'
-              className='hover:text-foreground underline underline-offset-4'
-            >
-              {t('Contact Us')}
-            </Link>
-            {qqGroupNumber ? (
-              <span>
-                {t('QQ Group Number')}:{' '}
-                <span className='text-foreground font-mono'>
-                  {qqGroupNumber}
-                </span>
-              </span>
-            ) : null}
-            {qqGroupURL ? (
-              <a
-                href={qqGroupURL}
-                target='_blank'
-                rel='noopener noreferrer'
-                className='hover:text-foreground underline underline-offset-4'
-              >
-                {t('Join QQ Group')}
-              </a>
-            ) : null}
-          </div>
+          {!props.showcase && contactLinks}
         </div>
+        {props.showcase && <div className='lg:col-span-2'>{contactLinks}</div>}
       </main>
     </div>
   )

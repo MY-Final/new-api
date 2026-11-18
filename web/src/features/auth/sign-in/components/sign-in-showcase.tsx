@@ -9,7 +9,7 @@ export function SignInShowcase() {
   return (
     <section
       aria-label={t('Your creative backstage')}
-      className='kuncode-auth-showcase relative isolate flex min-h-[560px] w-full flex-col overflow-hidden rounded-[2rem] border border-white/10 p-8 text-zinc-100 shadow-2xl'
+      className='kuncode-auth-showcase relative isolate flex min-h-[560px] w-full flex-col overflow-hidden rounded-[2rem] border border-white/10 p-8 text-zinc-100 shadow-2xl lg:h-full'
     >
       <div
         aria-hidden='true'

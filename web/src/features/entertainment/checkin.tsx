@@ -14,7 +14,7 @@ export function EntertainmentCheckin() {
   if (!status) return <Main />
 
   return (
-    <Main>
+    <Main className='overflow-y-auto'>
       <div className='mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10'>
         {status?.checkin_enabled ? (
           <CheckinCalendarCard

@@ -129,6 +129,24 @@ it('keeps the form first on mobile and adapts the showcase artwork to the select
   ).toBeVisible()
 })
 
+it('stretches the showcase and sign-in card to one equal-sized desktop row', async () => {
+  await renderSignIn()
+  const showcase = screen.getByRole('region', {
+    name: 'Your creative backstage',
+  })
+  const main = screen.getByRole('main')
+  const card = document.querySelector("[data-slot='auth-card']")
+
+  expect(main).toHaveClass('grid-cols-1', 'lg:grid-cols-2', 'lg:items-stretch')
+  expect(showcase).toHaveClass('lg:h-full')
+  expect(showcase.closest('aside')?.parentElement).toBe(main)
+  expect(card).toHaveClass('lg:h-full')
+  expect(card?.parentElement).toHaveClass('lg:max-w-none')
+  expect(card?.contains(screen.getByRole('link', { name: 'Contact Us' }))).toBe(
+    false
+  )
+})
+
 it('preserves the registration destination and contact links in the new layout', async () => {
   await renderSignIn({
     contact: {

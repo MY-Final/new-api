@@ -34,7 +34,10 @@ export function SignIn() {
 
   return (
     <AuthLayout showcase={<SignInShowcase />}>
-      <div className='border-border/70 bg-card/95 relative w-full min-w-0 rounded-3xl border p-5 shadow-[0_16px_64px_-24px_rgba(0,0,0,0.18)] sm:p-7 dark:shadow-[0_16px_64px_-24px_rgba(0,0,0,0.5)]'>
+      <div
+        data-slot='auth-card'
+        className='border-border/70 bg-card/95 relative flex w-full min-w-0 flex-col rounded-3xl border p-5 shadow-[0_16px_64px_-24px_rgba(0,0,0,0.18)] sm:p-7 lg:h-full lg:justify-center dark:shadow-[0_16px_64px_-24px_rgba(0,0,0,0.5)]'
+      >
         <div className='bg-primary text-primary-foreground mb-6 flex size-11 items-center justify-center rounded-2xl shadow-sm'>
           <ArrowUpRight className='size-5' aria-hidden='true' />
         </div>
