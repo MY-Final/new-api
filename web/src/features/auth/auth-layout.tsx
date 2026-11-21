@@ -17,21 +17,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Link } from '@tanstack/react-router'
-import { ArrowLeft } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { KunCodeCourt } from '@/components/kuncode-court'
-import { LanguageSwitcher } from '@/components/language-switcher'
-import { ThemeSwitch } from '@/components/theme-switch'
-import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useContactSettings } from '@/features/contact/use-contact-settings'
 import { useSystemConfig } from '@/hooks/use-system-config'
-import { cn } from '@/lib/utils'
 
 type AuthLayoutProps = {
   children: React.ReactNode
-  showcase?: React.ReactNode
 }
 
 export function AuthLayout(props: AuthLayoutProps) {
@@ -39,113 +32,60 @@ export function AuthLayout(props: AuthLayoutProps) {
   const { systemName, logo, loading } = useSystemConfig()
   const { qqGroupNumber, qqGroupURL } = useContactSettings()
 
-  const contactLinks = (
-    <div className='text-muted-foreground flex flex-wrap items-center justify-center gap-x-2 gap-y-1 pt-2 text-center text-xs'>
-      <span>{t('Contact Us')}:</span>
-      <Link
-        to='/contact'
-        className='hover:text-foreground underline underline-offset-4'
-      >
-        {t('Contact Us')}
-      </Link>
-      {qqGroupNumber ? (
-        <span>
-          {t('QQ Group Number')}:{' '}
-          <span className='text-foreground font-mono'>{qqGroupNumber}</span>
-        </span>
-      ) : null}
-      {qqGroupURL ? (
-        <a
-          href={qqGroupURL}
-          target='_blank'
-          rel='noopener noreferrer'
-          className='hover:text-foreground underline underline-offset-4'
-        >
-          {t('Join QQ Group')}
-        </a>
-      ) : null}
-    </div>
-  )
-
-  const content = (
-    <div
-      className={cn(
-        'relative grid min-h-svh max-w-none',
-        props.showcase && 'grid-rows-[auto_1fr]'
-      )}
-    >
-      <header
-        className={cn(
-          'absolute top-4 left-4 z-10 sm:top-8 sm:left-8',
-          props.showcase &&
-            'relative inset-auto mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-5 py-5 sm:inset-auto sm:px-10 sm:py-6'
-        )}
-      >
-        <Link
-          to='/'
-          className='flex min-w-0 items-center gap-2.5 transition-opacity hover:opacity-80'
-        >
-          <div className='relative size-8 shrink-0'>
+  return (
+    <div className='bg-background text-foreground flex min-h-svh items-center justify-center px-6 py-12 sm:px-8'>
+      <main className='w-full max-w-sm min-w-0'>
+        <header className='mb-8 flex justify-center'>
+          <Link
+            to='/'
+            className='flex min-w-0 items-center gap-2.5 transition-opacity hover:opacity-80'
+          >
+            <div className='relative size-8 shrink-0'>
+              {loading ? (
+                <Skeleton className='absolute inset-0 rounded-full' />
+              ) : (
+                <img
+                  src={logo}
+                  alt={t('Logo')}
+                  className='size-8 rounded-full object-cover'
+                />
+              )}
+            </div>
             {loading ? (
-              <Skeleton className='absolute inset-0 rounded-full' />
+              <Skeleton className='h-6 w-24' />
             ) : (
-              <img
-                src={logo}
-                alt={t('Logo')}
-                className='size-8 rounded-full object-cover'
-              />
+              <h1 className='truncate text-xl font-semibold tracking-tight'>
+                {systemName}
+              </h1>
             )}
-          </div>
-          {loading ? (
-            <Skeleton className='h-6 w-24' />
-          ) : (
-            <h1 className='truncate text-xl font-semibold tracking-tight'>
-              {systemName}
-            </h1>
-          )}
-        </Link>
-        {props.showcase && (
-          <div className='flex shrink-0 items-center gap-1 sm:gap-2'>
-            <Button
-              variant='ghost'
-              size='sm'
-              className='text-muted-foreground mr-2 hidden gap-2 sm:inline-flex'
-              render={<Link to='/' />}
+          </Link>
+        </header>
+        {props.children}
+        <div className='text-muted-foreground mt-8 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-xs'>
+          <Link
+            to='/contact'
+            className='hover:text-foreground underline underline-offset-4'
+          >
+            {t('Contact Us')}
+          </Link>
+          {qqGroupNumber ? (
+            <span>
+              {t('QQ Group Number')}:{' '}
+              <span className='text-foreground font-mono'>{qqGroupNumber}</span>
+            </span>
+          ) : null}
+          {qqGroupURL ? (
+            <a
+              href={qqGroupURL}
+              target='_blank'
+              rel='noopener noreferrer'
+              className='hover:text-foreground underline underline-offset-4'
             >
-              <ArrowLeft className='size-3.5' aria-hidden='true' />
-              {t('Back to Home')}
-            </Button>
-            <LanguageSwitcher />
-            <ThemeSwitch />
-          </div>
-        )}
-      </header>
-      <main
-        className={cn(
-          'container flex items-center pt-16 sm:pt-0',
-          props.showcase &&
-            'mx-auto grid w-full max-w-5xl grid-cols-1 items-center gap-x-10 gap-y-6 px-5 py-8 sm:px-10 sm:py-10 lg:grid-cols-2 lg:items-stretch lg:gap-x-14 lg:gap-y-4 lg:pt-2 lg:pb-8'
-        )}
-      >
-        {props.showcase && (
-          <aside className='hidden min-w-0 self-stretch lg:flex'>
-            {props.showcase}
-          </aside>
-        )}
-        <div
-          className={cn(
-            'mx-auto flex w-full flex-col justify-center space-y-2 px-4 py-8 sm:w-[480px] sm:p-8',
-            props.showcase &&
-              'max-w-[460px] min-w-0 gap-4 space-y-0 px-0 py-0 sm:w-full sm:p-0 lg:max-w-none'
-          )}
-        >
-          {props.children}
-          {!props.showcase && contactLinks}
+              {t('Join QQ Group')}
+            </a>
+          ) : null}
         </div>
-        {props.showcase && <div className='lg:col-span-2'>{contactLinks}</div>}
       </main>
     </div>
   )
-
-  return props.showcase ? <KunCodeCourt>{content}</KunCodeCourt> : content
 }

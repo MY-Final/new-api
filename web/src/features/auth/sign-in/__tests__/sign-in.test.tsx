@@ -7,21 +7,15 @@ import {
   Outlet,
   RouterProvider,
 } from '@tanstack/react-router'
-import {
-  cleanup,
-  render,
-  screen,
-  waitFor,
-  within,
-} from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import i18next from 'i18next'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
-import {
-  ThemeCustomizationProvider,
-  useThemeCustomization,
-} from '@/context/theme-customization-provider'
+import { ThemeCustomizationProvider } from '@/context/theme-customization-provider'
 import { ThemeProvider } from '@/context/theme-provider'
+import zhTW from '@/i18n/locales/zh-TW.json'
+import zh from '@/i18n/locales/zh.json'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 import { useSystemConfigStore } from '@/stores/system-config-store'
@@ -31,15 +25,6 @@ import type { SystemStatus } from '../../types'
 
 const clients: QueryClient[] = []
 const initialSystemState = useSystemConfigStore.getState()
-
-function PresetControl() {
-  const { setPreset } = useThemeCustomization()
-  return (
-    <button type='button' onClick={() => setPreset('basketball')}>
-      Basketball preset
-    </button>
-  )
-}
 
 async function renderSignIn(status: Partial<SystemStatus> = {}) {
   const client = new QueryClient({
@@ -73,13 +58,12 @@ async function renderSignIn(status: Partial<SystemStatus> = {}) {
     <QueryClientProvider client={client}>
       <ThemeProvider>
         <ThemeCustomizationProvider>
-          <PresetControl />
           <RouterProvider router={router} />
         </ThemeCustomizationProvider>
       </ThemeProvider>
     </QueryClientProvider>
   )
-  await screen.findByRole('heading', { name: 'Welcome back!' })
+  await screen.findByRole('heading', { name: i18next.t('Welcome back') })
 }
 
 beforeEach(() => {
@@ -93,8 +77,11 @@ beforeEach(() => {
   })
 })
 
-afterEach(() => {
+afterEach(async () => {
   cleanup()
+  await i18next.changeLanguage('en')
+  i18next.removeResourceBundle('zh', 'translation')
+  i18next.removeResourceBundle('zh-TW', 'translation')
   clients.splice(0).forEach((client) => client.clear())
   vi.restoreAllMocks()
   localStorage.clear()
@@ -106,46 +93,62 @@ afterEach(() => {
   }
 })
 
-it('keeps the form first on mobile and adapts the showcase artwork to the selected preset', async () => {
+it('keeps the brand and borderless form in one centered, responsive column', async () => {
   await renderSignIn()
-  const showcase = screen.getByRole('region', {
-    name: 'Your creative backstage',
-  })
-  expect(showcase.closest('aside')).toHaveClass('hidden', 'lg:flex')
-  expect(within(showcase).getByRole('img', { hidden: true })).toHaveAttribute(
-    'aria-label',
-    'Black and white suspenders'
-  )
-  await userEvent.click(
-    screen.getByRole('button', { name: 'Basketball preset' })
-  )
-
-  expect(within(showcase).getByRole('img', { hidden: true })).toHaveAttribute(
-    'aria-label',
-    'Basketball'
-  )
-  expect(
-    screen.getByRole('textbox', { name: 'Username or Email' })
-  ).toBeVisible()
-})
-
-it('stretches the showcase and sign-in card to one equal-sized desktop row', async () => {
-  await renderSignIn()
-  const showcase = screen.getByRole('region', {
-    name: 'Your creative backstage',
-  })
   const main = screen.getByRole('main')
   const card = document.querySelector("[data-slot='auth-card']")
+  const brand = screen.getByRole('img', { name: 'Logo' }).closest('a')
 
-  expect(main).toHaveClass('grid-cols-1', 'lg:grid-cols-2', 'lg:items-stretch')
-  expect(showcase).toHaveClass('lg:h-full')
-  expect(showcase.closest('aside')?.parentElement).toBe(main)
-  expect(card).toHaveClass('lg:h-full')
-  expect(card?.parentElement).toHaveClass('lg:max-w-none')
+  expect(
+    screen.queryByRole('region', { name: 'Your creative backstage' })
+  ).not.toBeInTheDocument()
+  expect(screen.queryByRole('complementary')).not.toBeInTheDocument()
+  expect(main).toHaveClass('w-full', 'min-w-0', 'max-w-sm')
+  expect(main.parentElement).toHaveClass(
+    'min-h-svh',
+    'flex',
+    'items-center',
+    'justify-center',
+    'px-6',
+    'py-12'
+  )
+  expect(main).toContainElement(brand)
+  expect(brand).toHaveAttribute('href', '/')
+  expect(brand?.closest('header')).toHaveClass('justify-center')
+  expect(brand?.closest('header')).not.toHaveClass('absolute')
+  expect(card).toHaveClass('w-full', 'min-w-0')
+  expect(card).not.toHaveClass('border', 'bg-card/95')
+  expect(card?.className).not.toMatch(/shadow-/)
+  expect(
+    screen.getByRole('heading', { name: 'Welcome back' }).parentElement
+  ).toHaveClass('text-center')
   expect(card?.contains(screen.getByRole('link', { name: 'Contact Us' }))).toBe(
     false
   )
 })
+
+it.each([
+  { language: 'zh', resources: zh },
+  { language: 'zh-TW', resources: zhTW },
+])(
+  'keeps $language welcome text centered without trailing full-width punctuation',
+  async ({ language, resources }) => {
+    i18next.addResourceBundle(language, 'translation', resources.translation)
+    await i18next.changeLanguage(language)
+    await renderSignIn()
+
+    const heading = screen.getByRole('heading', {
+      name: resources.translation['Welcome back'],
+    })
+    const description = screen.getByText(
+      resources.translation['Sign in to continue creating']
+    )
+
+    expect(heading.textContent).not.toMatch(/[！。]$/u)
+    expect(description.textContent).not.toMatch(/[！。]$/u)
+    expect(heading.parentElement).toHaveClass('text-center')
+  }
+)
 
 it('preserves the registration destination and contact links in the new layout', async () => {
   await renderSignIn({
