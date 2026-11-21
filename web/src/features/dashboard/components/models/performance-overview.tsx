@@ -25,7 +25,7 @@ import { useTranslation } from 'react-i18next'
 import { ErrorState } from '@/components/error-state'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
-import { getPerfMetricsSummary } from '@/features/performance-metrics/api'
+import { getDashboardPerfMetricsSummary } from '@/features/performance-metrics/api'
 import {
   formatLatency,
   formatThroughput,
@@ -47,8 +47,9 @@ interface PerformanceOverviewProps {
 
 function usePerformanceSummary(refetchInterval?: number | false) {
   return useQuery({
-    queryKey: ['perf-metrics-summary', 24],
-    queryFn: async () => requireServerSuccess(await getPerfMetricsSummary(24)),
+    queryKey: ['dashboard-perf-metrics-summary', 24],
+    queryFn: async () =>
+      requireServerSuccess(await getDashboardPerfMetricsSummary(24)),
     refetchInterval,
     staleTime: 60_000,
     retry: false,

@@ -26,10 +26,14 @@ import {
 import { render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { PerformanceOverview } from '@/features/dashboard/components/models/performance-overview'
+import {
+  PerformanceOverview,
+  PerformanceSuccessCard,
+} from '@/features/dashboard/components/models/performance-overview'
 import { PerformanceHealthPanel } from '@/features/dashboard/components/overview/performance-health-panel'
 import { ModelDetailsPerformance } from '@/features/pricing/components/model-details-performance'
 import { UptimeSparkline } from '@/features/pricing/components/model-details-uptime-sparkline'
+import { api } from '@/lib/api'
 
 const chart = vi.hoisted(() =>
   vi.fn(
@@ -127,17 +131,23 @@ function renderModelDetails() {
 }
 
 describe('server performance summaries', () => {
-  it.each([PerformanceHealthPanel, PerformanceOverview])(
-    'uses the weighted server result across models',
+  it.each([
+    PerformanceHealthPanel,
+    PerformanceOverview,
+    PerformanceSuccessCard,
+  ])(
+    'shows the site-wide weighted summary on the administrator dashboard',
     async (Component) => {
-      client.setQueryData(['perf-metrics-summary', 24], {
-        success: true,
+      const request = vi.spyOn(api, 'get').mockResolvedValue({
         data: {
-          summary,
-          models: groups.map((group) => ({
-            ...group,
-            model_name: group.group,
-          })),
+          success: true,
+          data: {
+            summary,
+            models: groups.map((group) => ({
+              ...group,
+              model_name: group.group,
+            })),
+          },
         },
       })
       const router = createRouter({
@@ -150,8 +160,13 @@ describe('server performance summaries', () => {
         </QueryClientProvider>
       )
       expect(await screen.findByText('99.01%')).toBeVisible()
+      expect(request).toHaveBeenCalledWith('/api/data/perf-metrics/summary', {
+        params: { hours: 24 },
+      })
       expect(screen.queryByText('50.00%')).not.toBeInTheDocument()
-      expect(screen.getByText('1.01s')).toBeVisible()
+      if (Component !== PerformanceSuccessCard) {
+        expect(screen.getByText('1.01s')).toBeVisible()
+      }
     }
   )
 
@@ -203,7 +218,7 @@ describe('server performance summaries', () => {
   })
 
   it('keeps an empty summary unknown instead of inventing a zero success rate', () => {
-    client.setQueryData(['perf-metrics-summary', 24], {
+    client.setQueryData(['dashboard-perf-metrics-summary', 24], {
       success: true,
       data: { models: [], summary: null },
     })

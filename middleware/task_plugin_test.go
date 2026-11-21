@@ -2119,7 +2119,7 @@ func TestRouteTaskPluginEndpointUsesSelectedChannel(t *testing.T) {
 			database := model.DB
 			// Every table belongs to this run, including when a developer points
 			// a test DSN at a database shared with another test suite.
-			database.Config.NamingStrategy = schema.NamingStrategy{TablePrefix: "endpoint_route_" + common.GetUUID() + "_"}
+			database.Config.NamingStrategy = schema.NamingStrategy{TablePrefix: "ep_" + common.GetUUID()[:16] + "_"}
 			require.NoError(t, database.AutoMigrate(
 				&model.Channel{},
 				&model.Ability{},

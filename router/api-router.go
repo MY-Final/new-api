@@ -72,9 +72,9 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/free_group/users", middleware.AdminAuth(), controller.GetFreeGroupUserUsage)
 		apiRouter.GET("/daily_egg/records", middleware.AdminAuth(), controller.GetDailyEggRecords)
 		apiRouter.GET("/invite_codes/public/:code", middleware.CriticalRateLimit(), controller.GetPublicInviteCode)
-		apiRouter.GET("/pricing", middleware.HeaderNavModuleAuth("pricing"), controller.GetPricing)
+		apiRouter.GET("/pricing", middleware.DisableCache(), middleware.HeaderNavModuleAuth("pricing"), controller.GetPricing)
 		perfMetricsRoute := apiRouter.Group("/perf-metrics")
-		perfMetricsRoute.Use(middleware.HeaderNavModulePublicOrUserAuth("pricing"))
+		perfMetricsRoute.Use(middleware.DisableCache(), middleware.HeaderNavModulePublicOrUserAuth("pricing"))
 		{
 			perfMetricsRoute.GET("/summary", controller.GetPerfMetricsSummary)
 			perfMetricsRoute.GET("", controller.GetPerfMetrics)
@@ -489,6 +489,7 @@ func SetApiRouter(router *gin.Engine) {
 		}
 
 		dataRoute := apiRouter.Group("/data")
+		dataRoute.GET("/perf-metrics/summary", middleware.DisableCache(), middleware.AdminAuth(), controller.GetDashboardPerfMetricsSummary)
 		dataRoute.GET("/", middleware.AdminAuth(), controller.GetAllQuotaDates)
 		dataRoute.GET("/users", middleware.AdminAuth(), controller.GetQuotaDatesByUser)
 		dataRoute.GET("/self", middleware.UserAuth(), controller.GetUserQuotaDates)

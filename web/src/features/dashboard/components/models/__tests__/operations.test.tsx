@@ -29,7 +29,7 @@ import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
-import { getPerfMetricsSummary } from '@/features/performance-metrics/api'
+import { getDashboardPerfMetricsSummary } from '@/features/performance-metrics/api'
 import { getUserLogs } from '@/features/usage-logs/api'
 import { usageLogSchema } from '@/features/usage-logs/data/schema'
 import type { GetLogsParams } from '@/features/usage-logs/types'
@@ -60,7 +60,7 @@ vi.mock('@/features/home/hooks/use-free-group-usage', () => ({
   }),
 }))
 vi.mock('@/features/performance-metrics/api', () => ({
-  getPerfMetricsSummary: vi.fn(),
+  getDashboardPerfMetricsSummary: vi.fn(),
 }))
 vi.mock('@/features/usage-statistics/api', () => ({
   getAdminUserUsageRanking: vi.fn(),
@@ -102,7 +102,7 @@ beforeEach(() => {
       },
     ],
   })
-  vi.mocked(getPerfMetricsSummary).mockResolvedValue({
+  vi.mocked(getDashboardPerfMetricsSummary).mockResolvedValue({
     success: true,
     data: {
       window_start: Math.floor(start.getTime() / 1000),
@@ -429,7 +429,7 @@ describe('operations dashboard', () => {
     expect(within(debt).getByText('$1')).toBeVisible()
     expect(within(debt).getByText('Recharge to settle debt')).toBeVisible()
     expect(await screen.findByText('No usage data')).toBeVisible()
-    expect(getPerfMetricsSummary).not.toHaveBeenCalled()
+    expect(getDashboardPerfMetricsSummary).not.toHaveBeenCalled()
   })
 
   test('keeps an unavailable balance unknown instead of showing zero', async () => {
@@ -504,7 +504,7 @@ describe('operations dashboard', () => {
     expect(
       await screen.findByText('All-site performance · last 24 hours')
     ).toBeVisible()
-    expect(getPerfMetricsSummary).toHaveBeenCalledWith(24)
+    expect(getDashboardPerfMetricsSummary).toHaveBeenCalledWith(24)
     expect(screen.getByText('alice')).toBeVisible()
   })
 
@@ -528,7 +528,7 @@ describe('operations dashboard', () => {
     renderDashboard(false)
     await screen.findByRole('region', { name: 'Recent usage' })
     expect(getUserQuotaDates).toHaveBeenCalledWith(expect.anything(), false)
-    expect(getPerfMetricsSummary).not.toHaveBeenCalled()
+    expect(getDashboardPerfMetricsSummary).not.toHaveBeenCalled()
     expect(screen.queryByText('Models to watch')).not.toBeInTheDocument()
   })
 
@@ -608,7 +608,7 @@ describe('operations dashboard', () => {
   })
 
   test('keeps success unknown when performance is empty', async () => {
-    vi.mocked(getPerfMetricsSummary).mockResolvedValue({
+    vi.mocked(getDashboardPerfMetricsSummary).mockResolvedValue({
       success: true,
       data: { models: [], summary: null },
     })
@@ -619,7 +619,7 @@ describe('operations dashboard', () => {
   })
 
   test('recovers from a failed performance response with retry', async () => {
-    vi.mocked(getPerfMetricsSummary).mockResolvedValueOnce({
+    vi.mocked(getDashboardPerfMetricsSummary).mockResolvedValueOnce({
       success: false,
       data: { models: [], summary: null },
     })

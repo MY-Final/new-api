@@ -13,6 +13,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/middleware"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
 	"github.com/gin-gonic/gin"
@@ -40,6 +41,8 @@ var accessTokenExemptRoutes = []string{
 	"GET /api/home_page_content",
 	"GET /api/free_group/usage",
 	"GET /api/free_group/schedule",
+	"GET /api/showcase",
+	"GET /api/showcase/runs/:id",
 	"GET /api/invite_codes/public/:code",
 	"GET /api/ratio_config",
 	"GET /api/user/groups",
@@ -160,6 +163,73 @@ func TestAccessTokenRouteRulesCoverEveryDashboardRoute(t *testing.T) {
 		require.True(t, ok, key)
 		assert.Equal(t, "scope", rule.Kind(), key)
 		assert.Equal(t, service.AccessTokenScopeOf(permission), rule.Scope(), key)
+	}
+}
+
+func TestDashboardPerfMetricsRequiresAdminReadAccess(t *testing.T) {
+	setupRelayRouterTestDB(t)
+	require.NoError(t, model.DB.AutoMigrate(&model.UserAccessToken{}, &model.AuditLog{}, &model.PerfMetric{}))
+	engine := gin.New()
+	SetApiRouter(engine)
+	for _, tc := range []struct {
+		name, scope string
+		role, want  int
+	}{
+		{"guest", "", 0, http.StatusUnauthorized},
+		{"member", "log:read", common.RoleCommonUser, http.StatusForbidden},
+		{"admin-profile", "profile:read", common.RoleAdminUser, http.StatusForbidden},
+		{"admin-log", "log:read", common.RoleAdminUser, http.StatusOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/data/perf-metrics/summary", nil)
+			if tc.role != 0 {
+				user := model.User{Username: tc.name, AffCode: tc.name, Role: tc.role, Group: "default", Status: common.UserStatusEnabled}
+				require.NoError(t, model.DB.Create(&user).Error)
+				suffix, err := common.GenerateRandomCharsKey(43)
+				require.NoError(t, err)
+				raw := model.AccessTokenPrefix + suffix
+				token := model.UserAccessToken{Name: tc.name, TokenHash: model.AccessTokenFingerprint(raw), TokenHint: model.AccessTokenHint(raw)}
+				require.NoError(t, token.SetScopes([]string{tc.scope}))
+				require.NoError(t, model.CreateUserAccessToken(user.Id, &token, service.AccessTokenMaxPerUser))
+				req.Header.Set("Authorization", "Bearer "+raw)
+			}
+			recorder := httptest.NewRecorder()
+			engine.ServeHTTP(recorder, req)
+			assert.Equal(t, tc.want, recorder.Code)
+			assert.Contains(t, recorder.Header().Get("Cache-Control"), "no-store")
+		})
+	}
+}
+
+func TestForkManagementRoutesRequireSession(t *testing.T) {
+	setupRelayRouterTestDB(t)
+	require.NoError(t, model.DB.AutoMigrate(&model.UserAccessToken{}, &model.AuditLog{}))
+	user := model.User{Username: "fork-root", AffCode: "fork-root", Role: common.RoleRootUser, Group: "default", Status: common.UserStatusEnabled}
+	require.NoError(t, model.DB.Create(&user).Error)
+	suffix, err := common.GenerateRandomCharsKey(43)
+	require.NoError(t, err)
+	raw := model.AccessTokenPrefix + suffix
+	token := model.UserAccessToken{Name: "fork management", TokenHash: model.AccessTokenFingerprint(raw), TokenHint: model.AccessTokenHint(raw)}
+	require.NoError(t, token.SetScopes([]string{"billing:read", "profile:read", "option:write"}))
+	require.NoError(t, model.CreateUserAccessToken(user.Id, &token, service.AccessTokenMaxPerUser))
+	engine := gin.New()
+	SetApiRouter(engine)
+	for _, route := range []struct{ method, path string }{
+		{http.MethodGet, "/api/showcase/admin/plans"},
+		{http.MethodGet, "/api/showcase/admin/models"},
+		{http.MethodPost, "/api/showcase/admin/plans"},
+		{http.MethodDelete, "/api/showcase/admin/plans/1"},
+		{http.MethodPost, "/api/showcase/admin/plans/1/run"},
+		{http.MethodGet, "/api/subscription/admin/users/" + strconv.Itoa(user.Id) + "/subscriptions/usage"},
+	} {
+		t.Run(route.method+" "+route.path, func(t *testing.T) {
+			request := httptest.NewRequest(route.method, route.path, nil)
+			request.Header.Set("Authorization", "Bearer "+raw)
+			response := httptest.NewRecorder()
+			engine.ServeHTTP(response, request)
+			assert.Equal(t, http.StatusForbidden, response.Code)
+			assert.Contains(t, response.Body.String(), "AUTH_SESSION_REQUIRED")
+		})
 	}
 }
 
