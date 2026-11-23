@@ -85,6 +85,13 @@ export function SignUpForm({
   const [isWeChatSubmitting, setIsWeChatSubmitting] = useState(false)
   const [turnstileWidgetKey, setTurnstileWidgetKey] = useState(0)
   const legalConsentErrorMessage = t('Please agree to the legal terms first')
+  const initialAffiliateCode = useMemo(() => {
+    const urlCode =
+      typeof window === 'undefined'
+        ? null
+        : new URLSearchParams(window.location.search).get('aff')
+    return (urlCode ?? getAffiliateCode()).trim()
+  }, [])
   const initialInviteCode = useMemo(() => {
     const urlCode =
       typeof window === 'undefined'
@@ -119,6 +126,7 @@ export function SignUpForm({
       email: '',
       password: '',
       confirmPassword: '',
+      affiliateCode: initialAffiliateCode,
       inviteCode: initialInviteCode,
     },
   })
@@ -179,11 +187,8 @@ export function SignUpForm({
   }, [requiresLegalConsent])
 
   useEffect(() => {
-    const aff = new URLSearchParams(window.location.search).get('aff')?.trim()
-    if (aff) {
-      saveAffiliateCode(aff)
-    }
-  }, [])
+    saveAffiliateCode(initialAffiliateCode)
+  }, [initialAffiliateCode])
 
   useEffect(() => {
     const inviteCode = initialInviteCode
@@ -219,7 +224,7 @@ export function SignUpForm({
         password: data.password,
         email: data.email || undefined,
         verification_code: verificationCode || undefined,
-        aff_code: getAffiliateCode(),
+        aff_code: data.affiliateCode || undefined,
         invite_code: normalizeInviteCode(data.inviteCode) || undefined,
         turnstile: turnstileToken,
       })
@@ -378,17 +383,46 @@ export function SignUpForm({
 
         <FormField
           control={form.control}
-          name='inviteCode'
+          name='affiliateCode'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{t('Invitation code (optional)')}</FormLabel>
+              <FormLabel>{t('Referral code (optional)')}</FormLabel>
               <FormControl>
                 <Input
                   {...field}
                   autoCapitalize='none'
                   autoCorrect='off'
                   spellCheck={false}
-                  placeholder={t('Enter an invitation code')}
+                  placeholder={t('Enter a personal referral code')}
+                  onChange={(event) => {
+                    field.onChange(event.target.value)
+                    saveAffiliateCode(event.target.value.trim())
+                  }}
+                />
+              </FormControl>
+              <FormDescription>
+                {t(
+                  'A personal referral code links your registration to the user who invited you.'
+                )}
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name='inviteCode'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{t('Campaign invitation code (optional)')}</FormLabel>
+              <FormControl>
+                <Input
+                  {...field}
+                  autoCapitalize='none'
+                  autoCorrect='off'
+                  spellCheck={false}
+                  placeholder={t('Enter a campaign invitation code')}
                   onChange={(event) => {
                     const value = normalizeInviteCode(event.target.value)
                     field.onChange(value)
@@ -397,10 +431,12 @@ export function SignUpForm({
                 />
               </FormControl>
               <FormDescription>
-                {inviteCodeStatus ||
-                  t(
-                    'The invitation code applies its group and registration bonus after account creation.'
-                  )}
+                {t(
+                  "Campaign codes apply a group and registration bonus. The campaign's inviter takes priority."
+                )}
+                {inviteCodeStatus && (
+                  <span className='mt-1 block'>{inviteCodeStatus}</span>
+                )}
               </FormDescription>
               <FormMessage />
             </FormItem>

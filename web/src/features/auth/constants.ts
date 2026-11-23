@@ -36,6 +36,10 @@ export const registerFormSchema = z
     email: z.string().optional(),
     password: accountPasswordSchema,
     confirmPassword: z.string().min(1, 'Please confirm your password'),
+    affiliateCode: z
+      .string()
+      .trim()
+      .max(32, 'Referral code must be at most 32 characters'),
     inviteCode: z
       .string()
       .trim()
