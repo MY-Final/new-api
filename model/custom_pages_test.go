@@ -52,6 +52,20 @@ func TestParseCustomPagesRejectsInvalidEntries(t *testing.T) {
 	}
 }
 
+func TestParseCustomPagesPreservesExpandedHighlightColors(t *testing.T) {
+	for _, color := range []string{"", "blue", "green", "purple", "orange", "red", "cyan", "teal", "emerald", "lime", "pink", "rose", "indigo", "slate", "sunset", "ocean", "aurora", "rainbow"} {
+		t.Run(color, func(t *testing.T) {
+			encoded, err := common.Marshal([]CustomPage{{Name: "Status", URL: "https://status.example.com", Highlight: true, HighlightColor: color}})
+			require.NoError(t, err)
+			require.NoError(t, ValidateCustomPagesOption(string(encoded)))
+			pages, err := ParseCustomPages(string(encoded))
+			require.NoError(t, err)
+			require.Len(t, pages, 1)
+			assert.Equal(t, color, pages[0].HighlightColor)
+		})
+	}
+}
+
 func TestValidateOptionValueGuardsCustomPages(t *testing.T) {
 	require.NoError(t, validateOptionValue(CustomPagesOptionKey, `[]`))
 	require.NoError(t, validateOptionValue(CustomPagesOptionKey, ""))

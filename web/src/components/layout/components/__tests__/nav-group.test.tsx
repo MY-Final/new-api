@@ -22,6 +22,10 @@ import type { AnchorHTMLAttributes, ReactNode } from 'react'
 import { describe, expect, test, vi } from 'vitest'
 
 import { SidebarProvider } from '@/components/ui/sidebar'
+import {
+  buildCustomPageLinks,
+  parseCustomPagesOption,
+} from '@/lib/custom-pages'
 
 import type { NavGroup as NavGroupProps } from '../../types'
 import { NavGroup } from '../nav-group'
@@ -63,6 +67,78 @@ function renderGroup(
 }
 
 describe('NavGroup highlighted item', () => {
+  test.each(['light', 'dark'])(
+    'keeps custom solid and gradient accents in the %s theme',
+    (theme) => {
+      document.documentElement.classList.toggle('dark', theme === 'dark')
+      try {
+        const items = buildCustomPageLinks(
+          parseCustomPagesOption(
+            JSON.stringify([
+              {
+                name: 'Cyan status',
+                url: 'https://status.example.com',
+                highlight: true,
+                highlightColor: 'cyan',
+              },
+              {
+                name: 'Aurora shop',
+                url: 'https://shop.example.com',
+                highlight: true,
+                highlightColor: 'aurora',
+              },
+              {
+                name: 'Plain status',
+                url: 'https://plain.example.com',
+                highlight: false,
+                highlightColor: 'cyan',
+              },
+            ])
+          )
+        ).map((page) => ({
+          title: page.name,
+          url: page.href,
+          highlight: page.highlight,
+          highlightColor: page.highlightColor,
+        }))
+        renderGroup(items)
+        expect(screen.getByRole('link', { name: 'Cyan status' })).toHaveClass(
+          'text-cyan-700',
+          'dark:text-cyan-300'
+        )
+        expect(screen.getByRole('link', { name: 'Aurora shop' })).toHaveClass(
+          'bg-linear-to-r',
+          'from-emerald-400/15',
+          'to-violet-500/15',
+          'dark:text-teal-300'
+        )
+        expect(
+          screen.getByRole('link', { name: 'Plain status' })
+        ).not.toHaveClass('text-cyan-700')
+      } finally {
+        document.documentElement.classList.remove('dark')
+      }
+    }
+  )
+
+  test('keeps the selected gradient when its destination is active', () => {
+    renderGroup([
+      {
+        title: 'Dashboard',
+        url: '/dashboard',
+        highlight: true,
+        highlightColor: 'sunset',
+      },
+    ])
+    const link = screen.getByRole('link', { name: 'Dashboard' })
+    expect(link).toHaveAttribute('data-active')
+    expect(link).toHaveClass(
+      'bg-linear-to-r',
+      'from-orange-400/15',
+      'to-pink-500/15'
+    )
+  })
+
   test('accents the wallet entry and leaves regular entries unstyled', () => {
     renderGroup([
       { title: 'Wallet', url: '/wallet', icon: Wallet, highlight: true },

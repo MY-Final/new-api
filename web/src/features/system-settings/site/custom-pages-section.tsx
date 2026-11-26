@@ -140,6 +140,34 @@ export function CustomPagesSection({
     { value: 'purple', label: t('Purple'), swatch: 'bg-purple-500' },
     { value: 'orange', label: t('Orange'), swatch: 'bg-orange-500' },
     { value: 'red', label: t('Red'), swatch: 'bg-red-500' },
+    { value: 'cyan', label: t('Cyan'), swatch: 'bg-cyan-500' },
+    { value: 'teal', label: t('Teal'), swatch: 'bg-teal-500' },
+    { value: 'emerald', label: t('Emerald'), swatch: 'bg-emerald-500' },
+    { value: 'lime', label: t('Lime'), swatch: 'bg-lime-500' },
+    { value: 'pink', label: t('Pink'), swatch: 'bg-pink-500' },
+    { value: 'rose', label: t('Rose'), swatch: 'bg-rose-500' },
+    { value: 'indigo', label: t('Indigo'), swatch: 'bg-indigo-500' },
+    { value: 'slate', label: t('Slate'), swatch: 'bg-slate-500' },
+    {
+      value: 'sunset',
+      label: t('Sunset'),
+      swatch: 'bg-linear-to-r from-orange-400 to-pink-500',
+    },
+    {
+      value: 'ocean',
+      label: t('Ocean'),
+      swatch: 'bg-linear-to-r from-cyan-400 to-blue-500',
+    },
+    {
+      value: 'aurora',
+      label: t('Aurora'),
+      swatch: 'bg-linear-to-r from-emerald-400 via-cyan-400 to-violet-500',
+    },
+    {
+      value: 'rainbow',
+      label: t('Rainbow'),
+      swatch: 'bg-linear-to-r from-rose-400 via-amber-300 to-sky-500',
+    },
   ]
 
   return (

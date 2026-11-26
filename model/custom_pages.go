@@ -29,12 +29,24 @@ const (
 // customPageHighlightColors are the sidebar accents an administrator can pick.
 // The empty string keeps the console's default highlight style.
 var customPageHighlightColors = map[string]struct{}{
-	"":       {},
-	"blue":   {},
-	"green":  {},
-	"purple": {},
-	"orange": {},
-	"red":    {},
+	"":        {},
+	"blue":    {},
+	"green":   {},
+	"purple":  {},
+	"orange":  {},
+	"red":     {},
+	"cyan":    {},
+	"teal":    {},
+	"emerald": {},
+	"lime":    {},
+	"pink":    {},
+	"rose":    {},
+	"indigo":  {},
+	"slate":   {},
+	"sunset":  {},
+	"ocean":   {},
+	"aurora":  {},
+	"rainbow": {},
 }
 
 // CustomPage is one administrator-configured embedded page: a sidebar entry

@@ -103,4 +103,48 @@ describe('custom page payload handling', () => {
     expect(parseCustomPagesOption('')).toEqual([])
     expect(parseCustomPagesOption('not json')).toEqual([])
   })
+
+  it.each([
+    'cyan',
+    'teal',
+    'emerald',
+    'lime',
+    'pink',
+    'rose',
+    'indigo',
+    'slate',
+    'sunset',
+    'ocean',
+    'aurora',
+    'rainbow',
+  ])(
+    'keeps the %s highlight when reading, saving and building links',
+    (color) => {
+      const raw = JSON.stringify([
+        {
+          name: 'Status',
+          url: 'https://status.example.com',
+          highlight: true,
+          highlightColor: color,
+        },
+      ])
+      const pages = parseCustomPagesOption(raw)
+      expect(pages[0]?.highlightColor).toBe(color)
+      expect(
+        parseCustomPagesOption(serializeCustomPages(pages))[0]?.highlightColor
+      ).toBe(color)
+      expect(buildCustomPageLinks(pages)[0]?.highlightColor).toBe(color)
+    }
+  )
+
+  it('discards unsupported highlight styles from server payloads', () => {
+    const pages = normalizeCustomPages([
+      {
+        name: 'Status',
+        url: 'https://status.example.com',
+        highlightColor: 'url(https://evil.example)',
+      },
+    ])
+    expect(pages[0]).not.toHaveProperty('highlightColor')
+  })
 })

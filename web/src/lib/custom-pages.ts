@@ -30,6 +30,18 @@ export const CUSTOM_PAGE_HIGHLIGHT_COLORS = [
   'purple',
   'orange',
   'red',
+  'cyan',
+  'teal',
+  'emerald',
+  'lime',
+  'pink',
+  'rose',
+  'indigo',
+  'slate',
+  'sunset',
+  'ocean',
+  'aurora',
+  'rainbow',
 ] as const
 export type CustomPageHighlightColor =
   (typeof CUSTOM_PAGE_HIGHLIGHT_COLORS)[number]

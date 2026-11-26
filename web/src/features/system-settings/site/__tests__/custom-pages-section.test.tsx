@@ -17,13 +17,20 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createInstance } from 'i18next'
 import { I18nextProvider } from 'react-i18next'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 
 import en from '@/i18n/locales/en.json'
+import { api } from '@/lib/api'
 import { serializeCustomPages } from '@/lib/custom-pages'
 
 import { CustomPagesSection } from '../custom-pages-section'
@@ -99,4 +106,73 @@ it('removes a page row and shows the empty hint when none are left', async () =>
     screen.getByText('No custom pages yet. Add one to show it in the sidebar.')
   ).toBeInTheDocument()
   expect(screen.queryByLabelText('Menu name')).not.toBeInTheDocument()
+})
+
+it('offers additional solid and gradient highlights and saves the selected style', async () => {
+  const put = vi
+    .spyOn(api, 'put')
+    .mockResolvedValue({ data: { success: true } })
+  const user = userEvent.setup()
+  renderSection(
+    JSON.stringify([
+      { name: 'Status', url: 'https://status.example.com', highlight: true },
+    ])
+  )
+  const selector = screen.getByRole('combobox', { name: 'Highlight color' })
+  await user.click(selector)
+  for (const name of [
+    'Cyan',
+    'Teal',
+    'Emerald',
+    'Lime',
+    'Pink',
+    'Rose',
+    'Indigo',
+    'Slate',
+    'Sunset',
+    'Ocean',
+    'Aurora',
+    'Rainbow',
+  ]) {
+    expect(await screen.findByRole('option', { name })).toBeInTheDocument()
+  }
+  await user.click(screen.getByRole('option', { name: 'Aurora' }))
+  expect(selector).toHaveTextContent('Aurora')
+  const form = screen.getByLabelText('Menu name').closest('form')
+  if (!form) throw new Error('Custom pages form was not rendered')
+  fireEvent.submit(form)
+  await waitFor(() =>
+    expect(put).toHaveBeenCalledWith('/api/option/', {
+      key: 'CustomPages',
+      value: JSON.stringify([
+        {
+          name: 'Status',
+          url: 'https://status.example.com',
+          adminOnly: false,
+          highlight: true,
+          highlightColor: 'aurora',
+          inWallet: false,
+        },
+      ]),
+    })
+  )
+})
+
+it('keeps a saved accent disabled until sidebar highlighting is enabled', async () => {
+  const user = userEvent.setup()
+  renderSection(
+    JSON.stringify([
+      {
+        name: 'Status',
+        url: 'https://status.example.com',
+        highlight: false,
+        highlightColor: 'cyan',
+      },
+    ])
+  )
+  const selector = screen.getByRole('combobox', { name: 'Highlight color' })
+  expect(selector).toBeDisabled()
+  await user.click(screen.getByRole('switch', { name: 'Highlight in sidebar' }))
+  expect(selector).toBeEnabled()
+  expect(selector).toHaveTextContent('Cyan')
 })
