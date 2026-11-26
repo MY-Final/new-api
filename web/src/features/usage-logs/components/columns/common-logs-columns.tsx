@@ -143,8 +143,12 @@ function buildTypeDetailSegments(
   language: string,
   usageSchema?: BillingUsageSchema
 ): DetailSegment[] {
-  // Top-up, audit, and login logs can carry a localized operation descriptor.
-  if (log.type === 1 || log.type === 3 || log.type === 7) {
+  // Wallet operations can also appear in system and refund logs.
+  if (log.type !== 2) {
+    const operationText = renderAuditContent(other, t)
+    if (operationText) return [{ text: operationText }]
+  }
+  if (log.type === 1 || log.type === 3 || log.type === 4 || log.type === 7) {
     const text = renderAuditContent(other, t) ?? renderLogContent(other, t)
     return text ? [{ text }] : []
   }

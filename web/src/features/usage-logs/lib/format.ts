@@ -656,11 +656,31 @@ export function renderAuditContent(
 ): string | null {
   const op = other?.op
   if (!op?.action) return null
-  if (op.action === 'finance.manual_credit') {
-    return t('Manually credited wallet: paid {{paid}}, promotional {{bonus}}', {
-      paid: formatQuotaPrecise(Number(op.params?.paid_delta ?? 0)),
-      bonus: formatQuotaPrecise(Number(op.params?.bonus_delta ?? 0)),
-    })
+  if (
+    op.action === 'finance.manual_credit' ||
+    op.action === 'finance.penalty' ||
+    op.action === 'finance.penalty_reverse'
+  ) {
+    let content: string
+    if (op.action === 'finance.manual_credit') {
+      content = t(
+        'Manually credited wallet: paid {{paid}}, promotional {{bonus}}',
+        {
+          paid: formatQuotaPrecise(Number(op.params?.paid_delta ?? 0)),
+          bonus: formatQuotaPrecise(Number(op.params?.bonus_delta ?? 0)),
+        }
+      )
+    } else {
+      content = t(
+        op.action === 'finance.penalty'
+          ? 'Wallet penalty: {{quota}}'
+          : 'Wallet penalty reversed: {{quota}}',
+        { quota: formatQuotaPrecise(Number(op.params?.quota ?? 0)) }
+      )
+    }
+    const reason =
+      typeof op.params?.reason === 'string' ? op.params.reason.trim() : ''
+    return reason ? `${content} · ${t('Reason')}: ${reason}` : content
   }
   if (
     op.action === 'redemption.delete_batch' ||

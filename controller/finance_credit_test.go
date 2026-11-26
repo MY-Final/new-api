@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -267,6 +268,15 @@ func TestManualFinanceCreditAPIRequiresReceiptConfirmationAndRecordsAudit(t *tes
 	assert.Contains(t, logs[0].Other, `"action":"finance.manual_credit"`)
 	assert.Contains(t, logs[0].Other, `"paid_delta":50`)
 	assert.Contains(t, logs[0].Other, `"bonus_delta":10`)
+	assert.Contains(t, logs[0].Other, `"reason":"offline payment"`)
+	assert.Contains(t, logs[0].Content, "reason: offline payment")
+	userLogs, total, err := model.GetUserLogs(target.Id, model.LogFilter{Type: model.LogTypeTopup}, 0, 10)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, total)
+	require.Len(t, userLogs, 1)
+	assert.Contains(t, userLogs[0].Other, `"reason":"offline payment"`)
+	assert.NotContains(t, userLogs[0].Other, `"admin_info"`)
+	assert.Contains(t, userLogs[0].Content, "reason: offline payment")
 }
 
 func TestManualFinanceCreditPreservesCachedReservationsAndDoesNotCreditRetriesTwice(t *testing.T) {
@@ -352,6 +362,134 @@ func TestManualFinanceCreditMigrationPreservesExistingLedger(t *testing.T) {
 			var saved model.FinancialOperation
 			require.NoError(t, db.First(&saved, fresh.Id).Error)
 			assert.Equal(t, "wechat", saved.PaymentChannel)
+		})
+	}
+}
+
+func TestFinanceWalletOperationUsageLogs(t *testing.T) {
+	for _, kind := range []string{"sqlite", "mysql", "postgres"} {
+		t.Run(kind, func(t *testing.T) {
+			dsn := ""
+			if kind == "mysql" {
+				dsn = os.Getenv("TEST_MYSQL_DSN")
+			} else if kind == "postgres" {
+				dsn = os.Getenv("TEST_POSTGRES_DSN")
+			}
+			if kind != "sqlite" && dsn == "" {
+				t.Skip("test database DSN is not configured")
+			}
+			t.Setenv("TEST_MANAGE_USER_DIALECT", kind)
+			t.Setenv("TEST_MANAGE_USER_SEPARATE_LOG_DB", "1")
+			db := setupManageUserTestDB(t)
+			require.NoError(t, db.AutoMigrate(&model.FinancialOperation{}))
+			operator := model.User{Username: "wallet-log-operator", AffCode: "wallet-log-operator", Role: common.RoleRootUser}
+			target := model.User{Username: "wallet-log-target", AffCode: "wallet-log-target", Role: common.RoleCommonUser, Quota: 100, PaidQuota: 100}
+			require.NoError(t, db.Create(&operator).Error)
+			require.NoError(t, db.Create(&target).Error)
+			var penaltyID int
+			for _, step := range []struct {
+				action  string
+				handler gin.HandlerFunc
+				logType int
+				reason  string
+			}{
+				{"finance.manual_credit", CreateFinanceCredit, model.LogTypeTopup, "QQ 实充及补偿 <credit> {{bonus}}"},
+				{"finance.penalty", ApplyFinancePenalty, model.LogTypeSystem, "违规罚款 <reason> {{quota}}"},
+				{"finance.penalty_reverse", ReverseFinancePenalty, model.LogTypeRefund, "申诉通过，撤销罚款"},
+			} {
+				t.Run(step.action, func(t *testing.T) {
+					body := model.AuditFields{"reason": step.reason}
+					switch step.action {
+					case "finance.manual_credit":
+						body = model.AuditFields{"user_id": target.Id, "paid_quota": 50, "bonus_quota": 10, "payment_channel": "qq", "payment_received": true, "reference": "qq-receipt", "client_id": "wallet-log-credit", "reason": step.reason}
+					case "finance.penalty":
+						body["user_id"], body["quota"], body["request_id"] = target.Id, 20, "wallet-log-penalty"
+					case "finance.penalty_reverse":
+						body["penalty_id"] = penaltyID
+					}
+					for _, retry := range []bool{false, true} {
+						encoded, err := common.Marshal(body)
+						require.NoError(t, err)
+						recorder := httptest.NewRecorder()
+						ctx, _ := gin.CreateTestContext(recorder)
+						ctx.Request = httptest.NewRequest(http.MethodPost, "/api/finance/test", strings.NewReader(string(encoded)))
+						ctx.Set("id", operator.Id)
+						ctx.Set("role", operator.Role)
+						step.handler(ctx)
+						var response struct {
+							Success bool `json:"success"`
+							Data    struct {
+								Operation       model.FinancialOperation `json:"operation"`
+								AlreadyApplied  bool                     `json:"already_applied"`
+								AlreadyReversed bool                     `json:"already_reversed"`
+							} `json:"data"`
+						}
+						require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+						require.True(t, response.Success, recorder.Body.String())
+						assert.Equal(t, retry, response.Data.AlreadyApplied || response.Data.AlreadyReversed)
+						if step.action == "finance.penalty" {
+							penaltyID = response.Data.Operation.Id
+						}
+					}
+					logs, total, err := model.GetUserLogs(target.Id, model.LogFilter{Type: step.logType}, 0, 10)
+					require.NoError(t, err)
+					require.EqualValues(t, 1, total, "retries must not duplicate wallet logs")
+					require.Len(t, logs, 1)
+					var other struct {
+						Op *struct {
+							Action string `json:"action"`
+							Params struct {
+								Reason         string `json:"reason"`
+								PaymentChannel string `json:"payment_channel"`
+							} `json:"params"`
+						} `json:"op"`
+					}
+					require.NoError(t, common.UnmarshalJsonStr(logs[0].Other, &other))
+					require.NotNil(t, other.Op)
+					assert.Equal(t, step.action, other.Op.Action)
+					assert.Equal(t, step.reason, other.Op.Params.Reason)
+					assert.Contains(t, logs[0].Content, step.reason)
+					assert.NotContains(t, logs[0].Other, "admin_info")
+					if step.action == "finance.manual_credit" {
+						assert.Equal(t, "qq", other.Op.Params.PaymentChannel)
+						var operation model.FinancialOperation
+						require.NoError(t, db.Where("operation_type = ?", model.FinancialOperationManualCredit).First(&operation).Error)
+						legacyOther, err := common.Marshal(map[string]any{"op": map[string]any{"action": step.action, "params": map[string]any{"financial_operation_id": operation.Id, "paid_delta": 50, "bonus_delta": 10}}, "admin_info": map[string]any{"admin_id": operator.Id}})
+						require.NoError(t, err)
+						require.NoError(t, model.LOG_DB.Model(&model.Log{}).Where("user_id = ? AND type = ?", target.Id, step.logType).Updates(map[string]any{"other": string(legacyOther), "content": "Legacy manual credit"}).Error)
+						adminLogs, adminTotal, err := model.GetAllLogs(model.LogFilter{Type: step.logType}, 0, 10)
+						require.NoError(t, err)
+						require.EqualValues(t, 1, adminTotal)
+						require.Len(t, adminLogs, 1)
+						assert.Contains(t, adminLogs[0].Content, step.reason)
+						require.NoError(t, common.UnmarshalJsonStr(adminLogs[0].Other, &other))
+						assert.Equal(t, step.reason, other.Op.Params.Reason)
+						assert.Contains(t, adminLogs[0].Other, "admin_info")
+						var stored model.Log
+						require.NoError(t, model.LOG_DB.First(&stored, adminLogs[0].Id).Error)
+						assert.Equal(t, string(legacyOther), stored.Other)
+						assert.Equal(t, "Legacy manual credit", stored.Content)
+						for _, userID := range []int{target.Id, target.Id + 1} {
+							if userID != target.Id {
+								require.NoError(t, model.LOG_DB.Create(&model.Log{UserId: userID, Type: step.logType, Other: string(legacyOther)}).Error)
+							}
+							restored, _, err := model.GetUserLogs(userID, model.LogFilter{Type: step.logType}, 0, 10)
+							require.NoError(t, err)
+							require.Len(t, restored, 1)
+							if userID == target.Id {
+								assert.Contains(t, restored[0].Content, step.reason)
+								require.NoError(t, common.UnmarshalJsonStr(restored[0].Other, &other))
+								assert.Equal(t, step.reason, other.Op.Params.Reason)
+							} else {
+								assert.NotContains(t, restored[0].Other, "reason")
+							}
+							assert.NotContains(t, restored[0].Other, "admin_info")
+						}
+					}
+				})
+			}
+			require.NoError(t, db.First(&target, target.Id).Error)
+			assert.Equal(t, 160, target.Quota)
 		})
 	}
 }

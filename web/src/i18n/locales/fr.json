@@ -9158,6 +9158,8 @@
     "Wallet Management": "Gestion du portefeuille",
     "Wallet management and personal preferences.": "Gestion du portefeuille et préférences personnelles.",
     "Wallet Only": "Portefeuille uniquement",
+    "Wallet penalty reversed: {{quota}}": "Pénalité annulée : {{quota}}",
+    "Wallet penalty: {{quota}}": "Pénalité sur le solde : {{quota}}",
     "Wallet pre-consume bypass threshold (USD)": "Seuil sans pré-débit du portefeuille (USD)",
     "Wallet quota limit exceeded": "Limite du quota du portefeuille dépassée",
     "Wallet Usage": "Utilisation du portefeuille",

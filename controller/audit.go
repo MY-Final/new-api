@@ -18,7 +18,9 @@ import (
 // action 的 params 填充。本地化展示文案在前端 i18n 模板中维护，本表是语言中立的
 // 英文基线——调用方因此无需在每个埋点处手写句子（避免与 params 重复书写同一份值）。
 var auditContentTemplates = map[string]string{
-	"finance.manual_credit":     "Manually credited user ${target_user_id}: paid ${paid_delta}, bonus ${bonus_delta}",
+	"finance.manual_credit":     "Manually credited user ${target_user_id}: paid ${paid_delta}, bonus ${bonus_delta}; reason: ${reason}",
+	"finance.penalty":           "Applied wallet penalty ${quota} to user ${target_user_id}; reason: ${reason}",
+	"finance.penalty_reverse":   "Reversed wallet penalty ${quota} for user ${target_user_id}; reason: ${reason}",
 	"user.create":               "Created user ${username} (role ${role})",
 	"user.update":               "Updated user ${username} (ID: ${id})",
 	"user.delete":               "Deleted user ${username} (ID: ${id})",

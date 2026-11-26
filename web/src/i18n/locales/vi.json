@@ -9158,6 +9158,8 @@
     "Wallet Management": "Quản lý ví",
     "Wallet management and personal preferences.": "Quản lý ví và sở thích cá nhân.",
     "Wallet Only": "Chỉ dùng ví",
+    "Wallet penalty reversed: {{quota}}": "Hoàn tiền phạt ví: {{quota}}",
+    "Wallet penalty: {{quota}}": "Phạt ví: {{quota}}",
     "Wallet pre-consume bypass threshold (USD)": "Ngưỡng ví được miễn khấu trừ trước (USD)",
     "Wallet quota limit exceeded": "Vượt phạm vi hạn mức ví",
     "Wallet Usage": "Sử dụng ví",

@@ -104,11 +104,11 @@ import { USAGE_BILLING_PATH, type LogOtherData } from '../../types'
 import { CacheHitProgress } from '../cache-hit-progress'
 import { ResponseModelDetails } from '../model-badge'
 import { PluginAuthorLink } from '../plugin-author-link'
-import { UsageSourceNotice } from '../usage-source-notice'
 import {
   RequestPluginAdminSteps,
   RequestPluginRecord,
 } from '../request-plugin-record'
+import { UsageSourceNotice } from '../usage-source-notice'
 import { DetailRow, DetailSection } from './log-detail-layout'
 
 // Maps a channel-update changed-field token (as recorded by the backend audit)
@@ -692,7 +692,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
     : null
   const operationText = renderAuditContent(other, t)
   const details =
-    (isTopup ? operationText : null) ??
+    (!isConsume ? operationText : null) ??
     renderLogContent(other, t) ??
     props.log.content ??
     ''

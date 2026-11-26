@@ -9158,6 +9158,8 @@
     "Wallet Management": "Управление кошельком",
     "Wallet management and personal preferences.": "Управление кошельком и личные предпочтения.",
     "Wallet Only": "Только кошелёк",
+    "Wallet penalty reversed: {{quota}}": "Отмена штрафа: {{quota}}",
+    "Wallet penalty: {{quota}}": "Штраф с баланса: {{quota}}",
     "Wallet pre-consume bypass threshold (USD)": "Порог кошелька без предсписания (USD)",
     "Wallet quota limit exceeded": "Превышены границы квоты кошелька",
     "Wallet Usage": "Использование кошелька",

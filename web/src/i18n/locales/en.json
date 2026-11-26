@@ -9158,6 +9158,8 @@
     "Wallet Management": "Wallet Management",
     "Wallet management and personal preferences.": "Wallet management and personal preferences.",
     "Wallet Only": "Wallet Only",
+    "Wallet penalty reversed: {{quota}}": "Wallet penalty reversed: {{quota}}",
+    "Wallet penalty: {{quota}}": "Wallet penalty: {{quota}}",
     "Wallet pre-consume bypass threshold (USD)": "Wallet pre-consume bypass threshold (USD)",
     "Wallet quota limit exceeded": "Wallet quota limit exceeded",
     "Wallet Usage": "Wallet Usage",

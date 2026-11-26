@@ -146,6 +146,7 @@ func GetLogByTokenId(tokenId int) (logs []*Log, err error) {
 		order = clickHouseLogOrder("")
 	}
 	err = LOG_DB.Model(&Log{}).Where("token_id = ?", tokenId).Order(order).Limit(common.MaxRecentItems).Find(&logs).Error
+	RestoreManualCreditLogReasons(logs)
 	formatUserLogs(logs, 0)
 	return logs, err
 }
@@ -573,6 +574,7 @@ func GetAllLogs(filter LogFilter, startIdx int, num int) (logs []*Log, total int
 	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
 		assignDisplayLogIds(logs, startIdx)
 	}
+	RestoreManualCreditLogReasons(logs)
 
 	channelIds := types.NewSet[int]()
 	for _, log := range logs {
@@ -639,6 +641,7 @@ func GetUserLogs(userId int, filter LogFilter, startIdx int, num int) (logs []*L
 		return nil, 0, common.NewMessage("Failed to query logs")
 	}
 
+	RestoreManualCreditLogReasons(logs)
 	formatUserLogs(logs, startIdx)
 	return logs, total, err
 }

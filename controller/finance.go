@@ -281,9 +281,6 @@ func CreateFinanceCredit(c *gin.Context) {
 	}
 	common.ApiSuccess(c, gin.H{"operation": operation, "already_applied": already})
 	recordFinancialAudit(c, "finance.manual_credit", operation, already)
-	if !already {
-		model.RecordLogWithAdminInfo(operation.TargetUserId, model.LogTypeTopup, auditContentEN("finance.manual_credit", map[string]any{"target_user_id": operation.TargetUserId, "paid_delta": operation.TargetPaidDelta, "bonus_delta": operation.TargetBonusDelta}), auditOperatorInfo(c), &model.AuditOperation{Action: "finance.manual_credit", Params: model.AuditFields{"paid_delta": operation.TargetPaidDelta, "bonus_delta": operation.TargetBonusDelta, "financial_operation_id": operation.Id}}, c)
-	}
 }
 
 func ApplyFinancePenalty(c *gin.Context) {
@@ -328,6 +325,32 @@ func recordFinancialAudit(c *gin.Context, action string, operation model.Financi
 		"related_affiliate_delta": operation.RelatedAffiliateDelta, "rebate_quota": operation.RebateQuota,
 		"target_main_delta": operation.TargetMainDelta,
 	})
+	if already {
+		return
+	}
+	var logType int
+	switch action {
+	case "finance.manual_credit":
+		logType = model.LogTypeTopup
+	case "finance.penalty":
+		logType = model.LogTypeSystem
+	case "finance.penalty_reverse":
+		logType = model.LogTypeRefund
+	default:
+		return
+	}
+	params := model.AuditFields{
+		"financial_operation_id": operation.Id,
+		"target_user_id":         operation.TargetUserId,
+		"quota":                  operation.PrincipalQuota,
+		"paid_delta":             operation.TargetPaidDelta,
+		"bonus_delta":            operation.TargetBonusDelta,
+		"from":                   operation.TargetMainBefore,
+		"to":                     operation.TargetMainAfter,
+		"reason":                 operation.Reason,
+		"payment_channel":        operation.PaymentChannel,
+	}
+	model.RecordLogWithAdminInfo(operation.TargetUserId, logType, auditContentEN(action, params), auditOperatorInfo(c), &model.AuditOperation{Action: action, Params: params}, c)
 }
 
 func recordFinancialAuditForKey(c *gin.Context, action, key string, already bool) {

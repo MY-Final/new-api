@@ -62,10 +62,11 @@ vi.hoisted(() => {
 
 afterAll(() => vi.unstubAllGlobals())
 
-function QuotaLogPreview(props: { log: UsageLog }) {
+function QuotaLogPreview(props: { log: UsageLog; isAdmin?: boolean }) {
+  const isAdmin = props.isAdmin ?? false
   const table = useReactTable({
     data: [props.log],
-    columns: useCommonLogsColumns(false, false),
+    columns: useCommonLogsColumns(isAdmin, false),
     getCoreRowModel: getCoreRowModel(),
   })
   const cell = table
@@ -79,7 +80,7 @@ function QuotaLogPreview(props: { log: UsageLog }) {
       {flexRender(cell.column.columnDef.cell, cell.getContext())}
       <DetailsDialog
         log={props.log}
-        isAdmin={false}
+        isAdmin={isAdmin}
         isRoot={false}
         open
         onOpenChange={() => undefined}
@@ -89,6 +90,54 @@ function QuotaLogPreview(props: { log: UsageLog }) {
 }
 
 const cases = [
+  ...[false, true].flatMap((isAdmin) => [
+    {
+      action: 'finance.penalty',
+      type: 4,
+      isAdmin,
+      params: { quota: 500000, reason: '违规处理 <reason> {{quota}}' },
+      english: 'Wallet penalty: 🥚 1 · Reason: 违规处理 <reason> {{quota}}',
+      chinese: '钱包罚款：🥚 1 · 原因: 违规处理 <reason> {{quota}}',
+    },
+    {
+      action: 'finance.penalty_reverse',
+      type: 6,
+      isAdmin,
+      params: { quota: 500000, reason: 'Appeal accepted' },
+      english: 'Wallet penalty reversed: 🥚 1 · Reason: Appeal accepted',
+      chinese: '撤销钱包罚款：🥚 1 · 原因: Appeal accepted',
+    },
+  ]),
+  ...[
+    {
+      params: {
+        paid_delta: 500000,
+        bonus_delta: 250000,
+        reason: 'Offline payment and promotional credit',
+      },
+      english:
+        'Manually credited wallet: paid 🥚 1, promotional 🥚 0.5 · Reason: Offline payment and promotional credit',
+      chinese:
+        '人工充值：实充 🥚 1，赠送 🥚 0.5 · 原因: Offline payment and promotional credit',
+    },
+    {
+      params: {
+        paid_delta: 0,
+        bonus_delta: 250000,
+        reason: '维护补偿 <credit> {{bonus}}',
+      },
+      english:
+        'Manually credited wallet: paid 🥚 0, promotional 🥚 0.5 · Reason: 维护补偿 <credit> {{bonus}}',
+      chinese:
+        '人工充值：实充 🥚 0，赠送 🥚 0.5 · 原因: 维护补偿 <credit> {{bonus}}',
+    },
+  ].flatMap((scenario) =>
+    [false, true].map((isAdmin) => ({
+      ...scenario,
+      action: 'finance.manual_credit',
+      isAdmin,
+    }))
+  ),
   {
     action: 'finance.manual_credit',
     params: { paid_delta: 500000, bonus_delta: 250000 },
@@ -154,7 +203,7 @@ describe('quota adjustment log localization', () => {
   })
 
   test.each(cases)(
-    '$action switches language in the preview and details',
+    '$action switches language in the preview and details (admin: $isAdmin)',
     async (scenario) => {
       const i18n = createInstance()
       await i18n.init({
@@ -167,7 +216,7 @@ describe('quota adjustment log localization', () => {
         id: 1,
         user_id: 1,
         created_at: 1,
-        type: 1,
+        type: 'type' in scenario ? scenario.type : 1,
         content: 'English export fallback',
         username: 'quota-user',
         token_name: '',
@@ -191,7 +240,10 @@ describe('quota adjustment log localization', () => {
       render(
         <I18nextProvider i18n={i18n}>
           <QueryClientProvider client={queryClient}>
-            <QuotaLogPreview log={log} />
+            <QuotaLogPreview
+              log={log}
+              isAdmin={'isAdmin' in scenario && scenario.isAdmin}
+            />
           </QueryClientProvider>
         </I18nextProvider>
       )
@@ -201,7 +253,9 @@ describe('quota adjustment log localization', () => {
       expect(
         within(screen.getByRole('dialog')).getByText(scenario.english)
       ).toBeInTheDocument()
-      await act(() => i18n.changeLanguage('zh'))
+      act(() => {
+        void i18n.changeLanguage('zh')
+      })
       expect(screen.getAllByText(scenario.chinese)).toHaveLength(2)
       expect(
         within(screen.getByRole('dialog')).getByText(scenario.chinese)
@@ -233,4 +287,27 @@ describe('quota adjustment log localization', () => {
     ).toBeNull()
     expect(renderAuditContent({}, i18n.t)).toBeNull()
   })
+
+  test.each(['', ' \n ', 123, false])(
+    'omits the reason when a legacy credit has an empty or invalid reason: %j',
+    async (reason) => {
+      const i18n = createInstance()
+      await i18n.init({ lng: 'en', resources: { en } })
+      expect(
+        renderAuditContent(
+          {
+            op: {
+              action: 'finance.manual_credit',
+              params: {
+                paid_delta: 500000,
+                bonus_delta: 250000,
+                reason,
+              },
+            },
+          },
+          i18n.t
+        )
+      ).toBe('Manually credited wallet: paid 🥚 1, promotional 🥚 0.5')
+    }
+  )
 })

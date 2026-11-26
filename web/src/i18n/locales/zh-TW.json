@@ -9158,6 +9158,8 @@
     "Wallet Management": "錢包管理",
     "Wallet management and personal preferences.": "錢包管理和個人偏好設定。",
     "Wallet Only": "僅用錢包",
+    "Wallet penalty reversed: {{quota}}": "撤銷錢包罰款：{{quota}}",
+    "Wallet penalty: {{quota}}": "錢包罰款：{{quota}}",
     "Wallet pre-consume bypass threshold (USD)": "錢包免預扣門檻（美元）",
     "Wallet quota limit exceeded": "超出錢包額度範圍",
     "Wallet Usage": "錢包用量",

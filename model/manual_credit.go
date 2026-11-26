@@ -12,6 +12,73 @@ import (
 
 const FinancialOperationManualCredit = "manual_credit"
 
+// RestoreManualCreditLogReasons projects reasons omitted by older log writers.
+// The ledger remains authoritative; neither logs nor wallet balances are rewritten.
+func RestoreManualCreditLogReasons(logs []*Log) {
+	type pendingCredit struct {
+		log   *Log
+		other map[string]common.RawMessage
+		op    struct {
+			Action string                       `json:"action"`
+			Params map[string]common.RawMessage `json:"params"`
+		}
+		operationID int
+	}
+	var pending []pendingCredit
+	var ids []int
+	for _, log := range logs {
+		if log == nil || log.Type != LogTypeTopup {
+			continue
+		}
+		item := pendingCredit{log: log}
+		if common.UnmarshalJsonStr(log.Other, &item.other) != nil || common.Unmarshal(item.other["op"], &item.op) != nil || item.op.Action != "finance.manual_credit" {
+			continue
+		}
+		if reason := item.op.Params["reason"]; len(reason) > 0 && string(reason) != "null" && string(reason) != `""` {
+			continue
+		}
+		if common.Unmarshal(item.op.Params["financial_operation_id"], &item.operationID) != nil || item.operationID <= 0 {
+			continue
+		}
+		pending = append(pending, item)
+		ids = append(ids, item.operationID)
+	}
+	if len(pending) == 0 {
+		return
+	}
+	var operations []FinancialOperation
+	if err := DB.Select("id, target_user_id, reason").Where("id IN ? AND operation_type = ?", ids, FinancialOperationManualCredit).Find(&operations).Error; err != nil {
+		common.SysError(common.LogText("financial audit detail unavailable: %v", err))
+		return
+	}
+	byID := make(map[int]FinancialOperation, len(operations))
+	for _, operation := range operations {
+		byID[operation.Id] = operation
+	}
+	for _, item := range pending {
+		operation, ok := byID[item.operationID]
+		if !ok || operation.TargetUserId != item.log.UserId || operation.Reason == "" {
+			continue
+		}
+		reason, err := common.Marshal(operation.Reason)
+		if err != nil {
+			continue
+		}
+		item.op.Params["reason"] = reason
+		op, err := common.Marshal(item.op)
+		if err != nil {
+			continue
+		}
+		item.other["op"] = op
+		other, err := common.Marshal(item.other)
+		if err != nil {
+			continue
+		}
+		item.log.Other = string(other)
+		item.log.Content += "; reason: " + operation.Reason
+	}
+}
+
 // CreditUserByAdmin records offline paid credit and promotional credit together,
 // granting a top-up referral rebate on the paid portion without initiating a payment.
 func CreditUserByAdmin(userID, paid, bonus int, reason, reference, paymentChannel, clientID string, operatorID, operatorRole int) (FinancialOperation, bool, error) {
