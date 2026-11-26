@@ -22,6 +22,11 @@ func SetWebRouter(router *gin.Engine, assets WebAssets, pluginDispatcher gin.Han
 	frontendFS := common.EmbedFolder(assets.BuildFS, "web/dist")
 	compress := gzip.Gzip(gzip.DefaultCompression)
 
+	router.GET("/robots.txt", serveRobotsTxt)
+	router.HEAD("/robots.txt", serveRobotsTxt)
+	router.GET("/sitemap.xml", serveSitemapXML)
+	router.HEAD("/sitemap.xml", serveSitemapXML)
+
 	router.NoRoute(
 		pluginDispatcher,
 		middleware.RouteTag("web"),
@@ -41,7 +46,7 @@ func SetWebRouter(router *gin.Engine, assets WebAssets, pluginDispatcher gin.Han
 				return
 			}
 			c.Header("Cache-Control", "no-cache")
-			c.Data(http.StatusOK, "text/html; charset=utf-8", assets.IndexPage)
+			c.Data(http.StatusOK, "text/html; charset=utf-8", renderSEOIndexPage(c, assets.IndexPage))
 		},
 	)
 }
