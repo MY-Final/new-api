@@ -41,6 +41,7 @@ export const STATIC_I18N_KEYS = [
   'The adjusted price is outside the supported range.',
   'This expression cannot be adjusted automatically. Keep the source price or edit it manually.',
   'WeChat Pay',
+  'QQ Pay',
   'Alipay',
   'Bank transfer',
   'USDT',

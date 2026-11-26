@@ -159,6 +159,35 @@ test('paid credit requires a payment reference and receipt confirmation before s
   )
 })
 
+test('QQ payments remain selected through confirmation and submission', async () => {
+  show()
+  const user = await selectAlice(false)
+  await user.click(screen.getByRole('combobox', { name: /Payment channel/ }))
+  await user.click(await screen.findByRole('option', { name: 'QQ Pay' }))
+  await user.type(screen.getByRole('spinbutton', { name: /Paid credit/ }), '1')
+  await user.type(
+    screen.getByRole('textbox', { name: /Payment reference/ }),
+    'qq-001'
+  )
+  await user.type(screen.getByRole('textbox', { name: /Reason/ }), 'QQ payment')
+  await user.click(screen.getByRole('button', { name: 'Review credit' }))
+  const dialog = within(await screen.findByRole('alertdialog'))
+  expect(dialog.getByText('Payment channel: QQ Pay')).toBeVisible()
+  await user.click(
+    dialog.getByRole('checkbox', {
+      name: 'I confirm the offline payment has been received',
+    })
+  )
+  await user.click(dialog.getByRole('button', { name: 'Confirm credit' }))
+  await waitFor(() =>
+    expect(api.createManualCredit.mock.calls[0]?.[0]).toMatchObject({
+      paymentChannel: 'qq',
+      reference: 'qq-001',
+      payment_received: true,
+    })
+  )
+})
+
 test('gift-only credit needs no payment receipt and retries the same operation after a network failure', async () => {
   api.createManualCredit.mockRejectedValueOnce(new Error('Network unavailable'))
   show()

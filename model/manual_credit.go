@@ -28,7 +28,7 @@ func CreditUserByAdmin(userID, paid, bonus int, reason, reference, paymentChanne
 		return operation, false, common.NewMessage("Payment reference is required for paid credit")
 	}
 	switch paymentChannel {
-	case "wechat", "alipay", "bank_transfer", "usdt", "other":
+	case "wechat", "alipay", "qq", "bank_transfer", "usdt", "other":
 	default:
 		return operation, false, common.NewMessage("Select a valid payment channel")
 	}

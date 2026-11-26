@@ -37,6 +37,7 @@ export const paymentChannels = [
     variant: 'purple',
     className: 'bg-chart-4/10',
   },
+  { value: 'qq', label: 'QQ Pay', variant: 'blue', className: 'bg-chart-1/10' },
   { value: 'usdt', label: 'USDT', variant: 'cyan', className: 'bg-chart-2/10' },
   { value: 'other', label: 'Other', variant: 'neutral', className: 'bg-muted' },
 ] as const
