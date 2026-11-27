@@ -19,6 +19,9 @@ type SubscriptionPlanRouteGroup struct {
 	PlanId    int     `json:"plan_id" gorm:"index;not null;uniqueIndex:idx_subscription_plan_route_group,priority:1"`
 	GroupName string  `json:"group_name" gorm:"type:varchar(64);not null;uniqueIndex:idx_subscription_plan_route_group,priority:2"`
 	Ratio     float64 `json:"ratio" gorm:"type:decimal(20,10);not null;default:0"`
+	// CostRatio is the upstream cost multiplier for this route group. Zero
+	// means the cost is unknown and is excluded from cost attribution.
+	CostRatio float64 `json:"cost_ratio" gorm:"type:decimal(20,10);not null;default:0"`
 	SortOrder int     `json:"sort_order" gorm:"not null;default:0"`
 	CreatedAt int64   `json:"created_at" gorm:"bigint"`
 	UpdatedAt int64   `json:"updated_at" gorm:"bigint"`
@@ -41,6 +44,7 @@ type UserSubscriptionRouteGroup struct {
 	UserSubscriptionId int     `json:"user_subscription_id" gorm:"index;not null;uniqueIndex:idx_user_subscription_route_group,priority:1"`
 	GroupName          string  `json:"group_name" gorm:"type:varchar(64);not null;uniqueIndex:idx_user_subscription_route_group,priority:2"`
 	Ratio              float64 `json:"ratio" gorm:"type:decimal(20,10);not null;default:0"`
+	CostRatio          float64 `json:"cost_ratio" gorm:"type:decimal(20,10);not null;default:0"`
 	SortOrder          int     `json:"sort_order" gorm:"not null;default:0"`
 	CreatedAt          int64   `json:"created_at" gorm:"bigint"`
 	UpdatedAt          int64   `json:"updated_at" gorm:"bigint"`
@@ -110,11 +114,42 @@ func NormalizeSubscriptionRouteGroupRatios(groups []string, ratios map[string]fl
 	return result, nil
 }
 
+// NormalizeSubscriptionRouteGroupCostRatios keeps upstream cost multipliers for
+// selected groups only. Zero means the cost is unknown, and cost ratios never
+// influence subscription billing.
+func NormalizeSubscriptionRouteGroupCostRatios(groups []string, costRatios map[string]float64) (map[string]float64, error) {
+	normalizedGroups, err := NormalizeSubscriptionRouteGroups(groups)
+	if err != nil {
+		return nil, err
+	}
+	selected := make(map[string]struct{}, len(normalizedGroups))
+	for _, group := range normalizedGroups {
+		selected[group] = struct{}{}
+	}
+	for group, ratio := range costRatios {
+		if _, ok := selected[group]; !ok && ratio != 0 {
+			return nil, fmt.Errorf("subscription route group cost ratio references unknown group %q", group)
+		}
+		if math.IsNaN(ratio) || math.IsInf(ratio, 0) || ratio < 0 {
+			return nil, fmt.Errorf("subscription route group cost ratio for %q must be zero or positive", group)
+		}
+	}
+	result := make(map[string]float64, len(normalizedGroups))
+	for _, group := range normalizedGroups {
+		result[group] = costRatios[group]
+	}
+	return result, nil
+}
+
 func ReplaceSubscriptionPlanRouteGroupsTx(tx *gorm.DB, planId int, groups []string) error {
 	return ReplaceSubscriptionPlanRouteGroupsWithRatiosTx(tx, planId, groups, nil)
 }
 
 func ReplaceSubscriptionPlanRouteGroupsWithRatiosTx(tx *gorm.DB, planId int, groups []string, ratios map[string]float64) error {
+	return ReplaceSubscriptionPlanRouteGroupsWithCostRatiosTx(tx, planId, groups, ratios, nil)
+}
+
+func ReplaceSubscriptionPlanRouteGroupsWithCostRatiosTx(tx *gorm.DB, planId int, groups []string, ratios map[string]float64, costRatios map[string]float64) error {
 	if tx == nil || planId <= 0 {
 		return errors.New("invalid plan route groups args")
 	}
@@ -123,6 +158,10 @@ func ReplaceSubscriptionPlanRouteGroupsWithRatiosTx(tx *gorm.DB, planId int, gro
 		return err
 	}
 	normalizedRatios, err := NormalizeSubscriptionRouteGroupRatios(normalized, ratios)
+	if err != nil {
+		return err
+	}
+	normalizedCostRatios, err := NormalizeSubscriptionRouteGroupCostRatios(normalized, costRatios)
 	if err != nil {
 		return err
 	}
@@ -138,6 +177,7 @@ func ReplaceSubscriptionPlanRouteGroupsWithRatiosTx(tx *gorm.DB, planId int, gro
 			PlanId:    planId,
 			GroupName: group,
 			Ratio:     normalizedRatios[group],
+			CostRatio: normalizedCostRatios[group],
 			SortOrder: index,
 		})
 	}
@@ -159,9 +199,11 @@ func LoadSubscriptionPlanRouteGroupsTx(tx *gorm.DB, plan *SubscriptionPlan) erro
 	}
 	plan.RouteGroups = make([]string, 0, len(rows))
 	plan.RouteGroupRatios = make(map[string]float64, len(rows))
+	plan.RouteGroupCostRatios = make(map[string]float64, len(rows))
 	for _, row := range rows {
 		plan.RouteGroups = append(plan.RouteGroups, row.GroupName)
 		plan.RouteGroupRatios[row.GroupName] = row.Ratio
+		plan.RouteGroupCostRatios[row.GroupName] = row.CostRatio
 	}
 	plan.NormalizeDefaults()
 	return nil
@@ -181,6 +223,10 @@ func SnapshotPlanRouteGroupsTx(tx *gorm.DB, subscriptionId int, groups []string)
 }
 
 func SnapshotPlanRouteGroupsWithRatiosTx(tx *gorm.DB, subscriptionId int, groups []string, ratios map[string]float64) error {
+	return SnapshotPlanRouteGroupsWithCostRatiosTx(tx, subscriptionId, groups, ratios, nil)
+}
+
+func SnapshotPlanRouteGroupsWithCostRatiosTx(tx *gorm.DB, subscriptionId int, groups []string, ratios map[string]float64, costRatios map[string]float64) error {
 	if tx == nil || subscriptionId <= 0 {
 		return errors.New("invalid subscription route group snapshot args")
 	}
@@ -189,6 +235,10 @@ func SnapshotPlanRouteGroupsWithRatiosTx(tx *gorm.DB, subscriptionId int, groups
 		return err
 	}
 	normalizedRatios, err := NormalizeSubscriptionRouteGroupRatios(normalized, ratios)
+	if err != nil {
+		return err
+	}
+	normalizedCostRatios, err := NormalizeSubscriptionRouteGroupCostRatios(normalized, costRatios)
 	if err != nil {
 		return err
 	}
@@ -201,6 +251,7 @@ func SnapshotPlanRouteGroupsWithRatiosTx(tx *gorm.DB, subscriptionId int, groups
 			UserSubscriptionId: subscriptionId,
 			GroupName:          group,
 			Ratio:              normalizedRatios[group],
+			CostRatio:          normalizedCostRatios[group],
 			SortOrder:          index,
 		})
 	}
@@ -231,6 +282,46 @@ func LoadUserSubscriptionRouteGroupRatiosTx(tx *gorm.DB, subscriptionId int) (ma
 	return ratios, nil
 }
 
+func LoadUserSubscriptionRouteGroupCostRatiosTx(tx *gorm.DB, subscriptionId int) (map[string]float64, error) {
+	rows, err := loadUserSubscriptionRouteGroupRowsTx(tx, subscriptionId)
+	if err != nil {
+		return nil, err
+	}
+	costRatios := make(map[string]float64, len(rows))
+	for _, row := range rows {
+		costRatios[row.GroupName] = row.CostRatio
+	}
+	return costRatios, nil
+}
+
+// SyncPlanRouteGroupCostRatiosTx updates existing subscription snapshots after
+// an administrator changes a plan's upstream cost multipliers. Only future
+// requests are affected: settled RequestBilling rows keep their own snapshot.
+func SyncPlanRouteGroupCostRatiosTx(tx *gorm.DB, planId int, costRatios map[string]float64) error {
+	if tx == nil || planId <= 0 {
+		return errors.New("invalid plan route group cost ratio sync args")
+	}
+	groups := make([]string, 0, len(costRatios))
+	for group := range costRatios {
+		groups = append(groups, group)
+	}
+	normalizedCostRatios, err := NormalizeSubscriptionRouteGroupCostRatios(groups, costRatios)
+	if err != nil {
+		return err
+	}
+	subscriptionIds := tx.Model(&UserSubscription{}).
+		Select("id").
+		Where("plan_id = ?", planId)
+	for group, ratio := range normalizedCostRatios {
+		if err := tx.Model(&UserSubscriptionRouteGroup{}).
+			Where("user_subscription_id IN (?) AND group_name = ?", subscriptionIds, group).
+			Update("cost_ratio", ratio).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func loadUserSubscriptionRouteGroupRowsTx(tx *gorm.DB, subscriptionId int) ([]UserSubscriptionRouteGroup, error) {
 	if subscriptionId <= 0 {
 		return nil, errors.New("invalid user subscription id")
@@ -257,12 +348,15 @@ func HydrateUserSubscriptionRouteGroups(subscription *UserSubscription) error {
 	}
 	groups := make([]string, 0, len(rows))
 	ratios := make(map[string]float64, len(rows))
+	costRatios := make(map[string]float64, len(rows))
 	for _, row := range rows {
 		groups = append(groups, row.GroupName)
 		ratios[row.GroupName] = row.Ratio
+		costRatios[row.GroupName] = row.CostRatio
 	}
 	subscription.RouteGroups = groups
 	subscription.RouteGroupRatios = ratios
+	subscription.RouteGroupCostRatios = costRatios
 	return nil
 }
 
@@ -333,6 +427,7 @@ func GetActiveSubscriptionForRoute(userId int, groupName string) (*UserSubscript
 		return nil, err
 	}
 	subscription.RouteGroupRatios = map[string]float64{routeGroup.GroupName: routeGroup.Ratio}
+	subscription.RouteGroupCostRatios = map[string]float64{routeGroup.GroupName: routeGroup.CostRatio}
 	return &subscription, nil
 }
 

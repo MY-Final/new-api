@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -597,16 +598,24 @@ func (s *BillingSession) recordRequestBilling(c *gin.Context, quota int) error {
 	if requestId == "" {
 		requestId = common.NewRequestId()
 	}
+	costRatio := 0.0
+	if s.funding.Source() == BillingSourceSubscription {
+		costRatio = s.relayInfo.SubscriptionCostRatio
+		if math.IsNaN(costRatio) || math.IsInf(costRatio, 0) || costRatio < 0 {
+			costRatio = 0
+		}
+	}
 	record := &model.RequestBilling{
 		Id: id, RequestId: requestId, UserId: s.relayInfo.UserId, Username: c.GetString("username"),
 		ModelName: s.relayInfo.OriginModelName, TokenId: s.relayInfo.TokenId, TokenName: c.GetString("token_name"), ChannelId: s.relayInfo.ChannelId,
-		Group: s.relayInfo.UsingGroup, FundingSource: s.funding.Source(), Quota: quota,
+		Group: s.relayInfo.UsingGroup, CostRatio: costRatio, FundingSource: s.funding.Source(), Quota: quota,
 		SubscriptionId: s.relayInfo.SubscriptionId, TaskId: c.GetString(model.RequestBillingTaskContextKey),
 	}
 	if !s.relayInfo.IsPlayground {
 		record.TokenQuota = s.tokenConsumed
 	}
 	if sub, ok := s.funding.(*SubscriptionFunding); ok {
+		record.PlanId = sub.PlanId
 		record.SubscriptionResetAt = sub.ResetAt
 	}
 	if wallet, ok := s.funding.(*WalletFunding); ok {

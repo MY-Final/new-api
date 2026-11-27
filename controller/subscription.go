@@ -56,6 +56,9 @@ func GetSubscriptionPlans(c *gin.Context) {
 		if len(p.RouteGroups) == 0 {
 			continue
 		}
+		// Route-group cost multipliers are internal pricing data and must not
+		// reach regular subscription clients.
+		p.RouteGroupCostRatios = nil
 		result = append(result, SubscriptionPlanDTO{
 			Plan: p,
 		})
@@ -318,6 +321,12 @@ func normalizeSubscriptionPlanInput(c *gin.Context, plan *model.SubscriptionPlan
 		return false
 	}
 	plan.RouteGroupRatios = routeGroupRatios
+	routeGroupCostRatios, err := model.NormalizeSubscriptionRouteGroupCostRatios(routeGroups, plan.RouteGroupCostRatios)
+	if err != nil {
+		common.ApiErrorT(c, err.Error())
+		return false
+	}
+	plan.RouteGroupCostRatios = routeGroupCostRatios
 	windows, err := model.NormalizeSubscriptionQuotaWindows(plan.QuotaWindows)
 	if err != nil {
 		common.ApiErrorT(c, err.Error())
@@ -359,7 +368,7 @@ func AdminCreateSubscriptionPlan(c *gin.Context) {
 		if err := model.ReplaceSubscriptionPlanQuotaWindowsTx(tx, req.Plan.Id, req.Plan.QuotaWindows); err != nil {
 			return err
 		}
-		return model.ReplaceSubscriptionPlanRouteGroupsWithRatiosTx(tx, req.Plan.Id, req.Plan.RouteGroups, req.Plan.RouteGroupRatios)
+		return model.ReplaceSubscriptionPlanRouteGroupsWithCostRatiosTx(tx, req.Plan.Id, req.Plan.RouteGroups, req.Plan.RouteGroupRatios, req.Plan.RouteGroupCostRatios)
 	})
 	if err != nil {
 		common.ApiError(c, err)
@@ -426,7 +435,10 @@ func AdminUpdateSubscriptionPlan(c *gin.Context) {
 		if err := model.ReplaceSubscriptionPlanQuotaWindowsTx(tx, id, req.Plan.QuotaWindows); err != nil {
 			return err
 		}
-		return model.ReplaceSubscriptionPlanRouteGroupsWithRatiosTx(tx, id, req.Plan.RouteGroups, req.Plan.RouteGroupRatios)
+		if err := model.ReplaceSubscriptionPlanRouteGroupsWithCostRatiosTx(tx, id, req.Plan.RouteGroups, req.Plan.RouteGroupRatios, req.Plan.RouteGroupCostRatios); err != nil {
+			return err
+		}
+		return model.SyncPlanRouteGroupCostRatiosTx(tx, id, req.Plan.RouteGroupCostRatios)
 	})
 	if err != nil {
 		common.ApiError(c, err)

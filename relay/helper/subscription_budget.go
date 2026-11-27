@@ -45,6 +45,7 @@ func PrepareSubscriptionRequest(c *gin.Context, info *relaycommon.RelayInfo) err
 	info.SubscriptionId = 0
 	info.SubscriptionOutputLimit = 0
 	info.SubscriptionGroupRatio = 0
+	info.SubscriptionCostRatio = 0
 	info.SubscriptionAllowWalletOverflow = false
 	info.SubscriptionRouteCovered = false
 	if group == "" {
@@ -77,6 +78,7 @@ func PrepareSubscriptionRequest(c *gin.Context, info *relaycommon.RelayInfo) err
 	info.SubscriptionId = subscription.Id
 	info.SubscriptionOutputLimit = outputLimit
 	info.SubscriptionGroupRatio = subscription.RouteGroupRatios[group]
+	info.SubscriptionCostRatio = subscription.RouteGroupCostRatios[group]
 	info.SubscriptionAllowWalletOverflow = subscription.AllowWalletOverflow
 	return nil
 }

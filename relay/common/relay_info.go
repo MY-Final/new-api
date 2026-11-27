@@ -175,6 +175,9 @@ type RelayInfo struct {
 	// SubscriptionGroupRatio is the route-group multiplier snapshotted on
 	// the user subscription. Zero inherits the route group's normal ratio.
 	SubscriptionGroupRatio float64
+	// SubscriptionCostRatio is the upstream cost multiplier snapshotted on the
+	// user subscription for business analytics. It never affects billing.
+	SubscriptionCostRatio float64
 	// SubscriptionAllowWalletOverflow controls automatic wallet fallback
 	// for Subscription First. Explicit Wallet Only remains available.
 	SubscriptionAllowWalletOverflow bool

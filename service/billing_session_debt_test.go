@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 package service
 
 import (
+	"fmt"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -31,6 +32,79 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestRecordRequestBillingSnapshotsCostRatioOnlyForSubscriptionFunding(t *testing.T) {
+	truncate(t)
+	const userID = 951
+	seedUser(t, userID, 1000)
+	now := time.Now().Unix()
+	subscription := model.UserSubscription{
+		UserId:    userID,
+		PlanId:    951,
+		Status:    "active",
+		StartTime: now,
+		EndTime:   now + 3600,
+	}
+	require.NoError(t, model.DB.Create(&subscription).Error)
+
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	cases := []struct {
+		name           string
+		funding        FundingSource
+		subscriptionId int
+		wantPlanId     int
+		wantSource     string
+		wantCostRatio  float64
+	}{
+		{
+			name: "subscription keeps the cost ratio snapshot",
+			funding: &SubscriptionFunding{
+				subscriptionId: subscription.Id,
+				ResetAt:        subscription.LastResetTime,
+				PlanId:         subscription.PlanId,
+			},
+			subscriptionId: subscription.Id,
+			wantPlanId:     subscription.PlanId,
+			wantSource:     BillingSourceSubscription,
+			wantCostRatio:  0.25,
+		},
+		{
+			name:           "wallet does not record a cost ratio",
+			funding:        &WalletFunding{reserved: model.QuotaAllocation{Paid: 1000}},
+			subscriptionId: 0,
+			wantPlanId:     0,
+			wantSource:     BillingSourceWallet,
+			wantCostRatio:  0,
+		},
+	}
+	for index, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			info := &relaycommon.RelayInfo{
+				UserId:                userID,
+				RequestId:             fmt.Sprintf("cost-ratio-request-%d", index),
+				UsingGroup:            "vip",
+				OriginModelName:       "gpt-test",
+				SubscriptionId:        tc.subscriptionId,
+				SubscriptionPlanId:    tc.wantPlanId,
+				SubscriptionCostRatio: 0.25,
+				ChannelMeta:           &relaycommon.ChannelMeta{ChannelId: 1},
+			}
+			session := &BillingSession{
+				billingID: fmt.Sprintf("billing-cost-ratio-%d", index),
+				relayInfo: info,
+				funding:   tc.funding,
+			}
+			require.NoError(t, session.recordRequestBilling(ctx, 1000))
+
+			var record model.RequestBilling
+			require.NoError(t, model.DB.Where("id = ?", session.billingID).First(&record).Error)
+			assert.Equal(t, tc.wantSource, record.FundingSource)
+			assert.Equal(t, tc.wantPlanId, record.PlanId)
+			assert.InDelta(t, tc.wantCostRatio, record.CostRatio, 0.000001)
+		})
+	}
+}
 
 func TestNewBillingSessionRejectsNegativeWalletBalance(t *testing.T) {
 	truncate(t)

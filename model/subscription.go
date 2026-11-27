@@ -280,6 +280,9 @@ type SubscriptionPlan struct {
 	// Optional per-route-group multipliers used only for subscription quota.
 	// Zero inherits the route group's normal multiplier.
 	RouteGroupRatios map[string]float64 `json:"route_group_ratios" gorm:"-:all"`
+	// Optional per-route-group upstream cost multipliers used by the business
+	// overview. Zero means the cost is unknown and is excluded from estimates.
+	RouteGroupCostRatios map[string]float64 `json:"route_group_cost_ratios" gorm:"-:all"`
 
 	CreatedAt int64 `json:"created_at" gorm:"bigint"`
 	UpdatedAt int64 `json:"updated_at" gorm:"bigint"`
@@ -409,6 +412,9 @@ type UserSubscription struct {
 	RouteGroups []string `json:"route_groups" gorm:"-:all"`
 	// Subscription-only route multipliers are snapshotted with RouteGroups.
 	RouteGroupRatios map[string]float64 `json:"route_group_ratios" gorm:"-:all"`
+	// Upstream cost multipliers snapshotted with RouteGroups. Internal only:
+	// these must never be exposed through user-facing subscription APIs.
+	RouteGroupCostRatios map[string]float64 `json:"-" gorm:"-:all"`
 
 	// Computed rolling quota state returned by subscription APIs.
 	QuotaWindows []SubscriptionQuotaWindowUsage `json:"quota_windows" gorm:"-:all"`
@@ -704,8 +710,13 @@ func UpsertUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *Subscriptio
 		if err != nil {
 			return nil, err
 		}
+		routeGroupCostRatios, err := LoadUserSubscriptionRouteGroupCostRatiosTx(tx, current.Id)
+		if err != nil {
+			return nil, err
+		}
 		current.RouteGroups = routeGroups
 		current.RouteGroupRatios = routeGroupRatios
+		current.RouteGroupCostRatios = routeGroupCostRatios
 		return &UserSubscriptionMutation{Subscription: current, Renewed: true, GroupChanged: expiredGroup != ""}, nil
 	}
 
@@ -792,7 +803,7 @@ func UpsertUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *Subscriptio
 	if err := SnapshotPlanQuotaWindowsTx(tx, sub.Id, plan.QuotaWindows); err != nil {
 		return nil, err
 	}
-	if err := SnapshotPlanRouteGroupsWithRatiosTx(tx, sub.Id, plan.RouteGroups, plan.RouteGroupRatios); err != nil {
+	if err := SnapshotPlanRouteGroupsWithCostRatiosTx(tx, sub.Id, plan.RouteGroups, plan.RouteGroupRatios, plan.RouteGroupCostRatios); err != nil {
 		return nil, err
 	}
 	routeGroups, err := LoadUserSubscriptionRouteGroupsTx(tx, sub.Id)
@@ -803,8 +814,13 @@ func UpsertUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *Subscriptio
 	if err != nil {
 		return nil, err
 	}
+	routeGroupCostRatios, err := LoadUserSubscriptionRouteGroupCostRatiosTx(tx, sub.Id)
+	if err != nil {
+		return nil, err
+	}
 	sub.RouteGroups = routeGroups
 	sub.RouteGroupRatios = routeGroupRatios
+	sub.RouteGroupCostRatios = routeGroupCostRatios
 	return &UserSubscriptionMutation{Subscription: sub, GroupChanged: expiredGroup != "" || prevGroup != ""}, nil
 }
 

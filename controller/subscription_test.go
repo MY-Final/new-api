@@ -70,3 +70,62 @@ func TestAdminCreateSubscriptionPlanPreservesExplicitDisabled(t *testing.T) {
 	require.NoError(t, db.First(&stored, response.Data.Id).Error)
 	assert.False(t, stored.Enabled)
 }
+
+func TestGetSubscriptionPlansHidesRouteGroupCostRatios(t *testing.T) {
+	previousDB := model.DB
+	previousPaymentSetting := *operation_setting.GetPaymentSetting()
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Discard})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
+	require.NoError(t, db.AutoMigrate(
+		&model.SubscriptionPlan{},
+		&model.SubscriptionPlanQuotaWindow{},
+		&model.SubscriptionPlanRouteGroup{},
+	))
+	model.DB = db
+	paymentSetting := operation_setting.GetPaymentSetting()
+	paymentSetting.ComplianceConfirmed = true
+	paymentSetting.ComplianceTermsVersion = operation_setting.CurrentComplianceTermsVersion
+	t.Cleanup(func() {
+		model.DB = previousDB
+		*operation_setting.GetPaymentSetting() = previousPaymentSetting
+		_ = sqlDB.Close()
+	})
+
+	plan := model.SubscriptionPlan{
+		Title:       "Public plan",
+		PriceAmount: 10,
+		Currency:    "USD",
+		Enabled:     true,
+	}
+	require.NoError(t, db.Create(&plan).Error)
+	require.NoError(t, model.ReplaceSubscriptionPlanRouteGroupsWithCostRatiosTx(
+		db,
+		plan.Id,
+		[]string{"default"},
+		map[string]float64{"default": 1},
+		map[string]float64{"default": 0.12},
+	))
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/subscription/plans", nil)
+
+	GetSubscriptionPlans(c)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response struct {
+		Success bool                  `json:"success"`
+		Message string                `json:"message"`
+		Data    []SubscriptionPlanDTO `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	require.True(t, response.Success, response.Message)
+	require.Len(t, response.Data, 1)
+	assert.Equal(t, []string{"default"}, response.Data[0].Plan.RouteGroups)
+	assert.Equal(t, map[string]float64{"default": 1}, response.Data[0].Plan.RouteGroupRatios)
+	assert.Nil(t, response.Data[0].Plan.RouteGroupCostRatios)
+}

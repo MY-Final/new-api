@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"math"
 	"strings"
 	"time"
 
@@ -28,18 +29,24 @@ var (
 // RequestBilling survives usage-log retention. Each settlement has its own ID:
 // a WebSocket request can contain several separately billed responses.
 type RequestBilling struct {
-	Id                  string `json:"billing_id" gorm:"type:varchar(64);primaryKey"`
-	RequestId           string `json:"request_id" gorm:"type:varchar(64);index"`
-	UserId              int    `json:"user_id" gorm:"index"`
-	Username            string `json:"username" gorm:"type:varchar(64)"`
-	ModelName           string `json:"model_name" gorm:"type:varchar(255)"`
-	TokenId             int    `json:"token_id"`
-	TokenName           string `json:"token_name" gorm:"type:varchar(255)"`
-	TokenQuota          int    `json:"-" gorm:"type:bigint"`
-	ChannelId           int    `json:"channel_id"`
-	Group               string `json:"group" gorm:"type:varchar(64)"`
-	FundingSource       string `json:"funding_source" gorm:"type:varchar(16)"`
-	SubscriptionId      int    `json:"subscription_id"`
+	Id         string `json:"billing_id" gorm:"type:varchar(64);primaryKey"`
+	RequestId  string `json:"request_id" gorm:"type:varchar(64);index"`
+	UserId     int    `json:"user_id" gorm:"index"`
+	Username   string `json:"username" gorm:"type:varchar(64)"`
+	ModelName  string `json:"model_name" gorm:"type:varchar(255)"`
+	TokenId    int    `json:"token_id"`
+	TokenName  string `json:"token_name" gorm:"type:varchar(255)"`
+	TokenQuota int    `json:"-" gorm:"type:bigint"`
+	ChannelId  int    `json:"channel_id"`
+	Group      string `json:"group" gorm:"type:varchar(64)"`
+	// CostRatio is the route group's upstream cost multiplier snapshotted when
+	// the request settled. Zero means the cost is unknown and the request is
+	// excluded from attributed upstream cost.
+	CostRatio      float64 `json:"cost_ratio" gorm:"type:decimal(20,10);not null;default:0"`
+	FundingSource  string  `json:"funding_source" gorm:"type:varchar(16)"`
+	SubscriptionId int     `json:"subscription_id"`
+	// PlanId preserves the subscription plan after the subscription is deleted.
+	PlanId              int    `json:"plan_id" gorm:"index"`
 	SubscriptionResetAt int64  `json:"-" gorm:"type:bigint"`
 	TaskId              string `json:"task_id,omitempty" gorm:"type:varchar(191);index"`
 	Quota               int    `json:"quota" gorm:"type:bigint"`
@@ -58,6 +65,9 @@ type RequestBilling struct {
 
 func RecordRequestBilling(record *RequestBilling) error {
 	if (record.Quota < 0 || record.Quota == 0 && record.TaskId == "") || common.ValidateWalletQuota(record.Quota) != nil || record.UserId <= 0 || record.Id == "" || len(record.Id) > 57 || record.RequestId == "" || len(record.RequestId) > 64 || record.TokenQuota < 0 || record.TokenQuota > record.Quota {
+		return ErrRequestBillingInvalid
+	}
+	if math.IsNaN(record.CostRatio) || math.IsInf(record.CostRatio, 0) || record.CostRatio < 0 {
 		return ErrRequestBillingInvalid
 	}
 	if record.FundingSource == "wallet" {
