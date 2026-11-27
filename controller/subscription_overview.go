@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"math"
 	"strconv"
 
 	"github.com/QuantumNous/new-api/common"
@@ -30,17 +29,7 @@ func AdminGetSubscriptionOverview(c *gin.Context) {
 		return
 	}
 
-	upstreamRatio := model.DefaultSubscriptionUpstreamRatio
-	if raw := c.Query("upstream_ratio"); raw != "" {
-		value, err := strconv.ParseFloat(raw, 64)
-		if err != nil || math.IsNaN(value) || math.IsInf(value, 0) || value < 0 || value > 100 {
-			common.ApiErrorT(c, "Invalid parameters")
-			return
-		}
-		upstreamRatio = value
-	}
-
-	overview, err := model.GetSubscriptionOverview(start, end, upstreamRatio)
+	overview, err := model.GetSubscriptionOverview(start, end)
 	if err != nil {
 		common.ApiError(c, err)
 		return
