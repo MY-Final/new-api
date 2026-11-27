@@ -32,6 +32,7 @@ import { toIntlLocale } from '@/i18n/languages'
 import { formatNumber, formatQuota, parseQuotaFromDollars } from '@/lib/format'
 import { handleServerError } from '@/lib/handle-server-error'
 import { getServerErrorStatus } from '@/lib/server-error-message'
+import { cn } from '@/lib/utils'
 
 import {
   paySubscriptionStripe,
@@ -41,7 +42,9 @@ import {
   paySubscriptionBalance,
 } from '../../api'
 import {
+  estimatePlanEndTime,
   formatDuration,
+  formatMultiplier,
   formatPlanPrice,
   formatResetPeriod,
   formatWindowDuration,
@@ -65,6 +68,7 @@ interface Props {
   purchaseLimit?: number
   purchaseCount?: number
   userQuota?: number
+  groupRatioMap?: Record<string, number>
   onPurchaseSuccess?: () => void | Promise<void>
 }
 
@@ -116,6 +120,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
   const limitReached =
     (props.purchaseLimit || 0) > 0 &&
     (props.purchaseCount || 0) >= (props.purchaseLimit || 0)
+  const estimatedExpiry = estimatePlanEndTime(plan)
 
   const handlePayStripe = async () => {
     setPaying(true)
@@ -265,30 +270,44 @@ export function SubscriptionPurchaseDialog(props: Props) {
           {t('Purchase Subscription')}
         </>
       }
-      contentClassName='max-sm:w-[calc(100vw-1.5rem)] sm:max-w-md'
+      contentClassName='max-sm:w-[calc(100vw-1.5rem)] sm:max-w-lg'
       titleClassName='flex items-center gap-2'
       contentHeight='auto'
       bodyClassName='space-y-4'
     >
-      <div className='space-y-3 sm:space-y-4'>
-        <div className='bg-muted/50 space-y-2.5 rounded-lg border p-3 sm:space-y-3 sm:p-4'>
-          <div className='flex justify-between'>
+      <div className='space-y-4'>
+        <div className='bg-muted/40 space-y-3 rounded-xl border p-4'>
+          <div className='flex justify-between gap-4'>
             <span className='text-muted-foreground text-sm'>
               {t('Plan Name')}
             </span>
-            <span className='max-w-[200px] truncate text-sm font-medium'>
+            <span className='max-w-[260px] truncate text-sm font-medium'>
               {plan.title}
             </span>
           </div>
-          <div className='flex items-center justify-between'>
+          <div className='flex items-center justify-between gap-4'>
             <span className='text-muted-foreground text-sm'>
               {t('Validity Period')}
             </span>
-            <span className='flex items-center gap-1 text-sm'>
+            <span className='flex items-center gap-1.5 text-sm'>
               <CalendarClock className='h-3.5 w-3.5' />
               {formatDuration(plan, t)}
             </span>
           </div>
+          <div className='flex items-center justify-between gap-4'>
+            <span className='text-muted-foreground text-sm'>
+              {t('Effective Time')}
+            </span>
+            <span className='text-sm'>{t('Immediately upon payment')}</span>
+          </div>
+          {estimatedExpiry && (
+            <div className='flex items-center justify-between gap-4'>
+              <span className='text-muted-foreground text-sm'>
+                {t('Estimated Expiry')}
+              </span>
+              <span className='text-sm tabular-nums'>{estimatedExpiry}</span>
+            </div>
+          )}
           {formatResetPeriod(plan, t) !== t('No Reset') && (
             <div className='flex justify-between'>
               <span className='text-muted-foreground text-sm'>
@@ -351,14 +370,63 @@ export function SubscriptionPurchaseDialog(props: Props) {
             </div>
           )}
           {routeGroups.length > 0 && (
-            <div className='space-y-1.5'>
-              <span className='text-muted-foreground text-sm'>
+            <div className='space-y-2 pt-0.5'>
+              <span className='text-muted-foreground block text-sm'>
                 {t('Allowed Route Groups')}
               </span>
-              <div className='flex flex-wrap justify-end gap-1.5'>
-                {routeGroups.map((group) => (
-                  <GroupBadge key={group} group={group} />
-                ))}
+              <div className='bg-background rounded-lg border px-3 py-2'>
+                <div className='text-muted-foreground mb-1.5 grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 text-[11px] font-medium'>
+                  <span>{t('Group')}</span>
+                  <span className='text-right'>{t('Wallet Multiplier')}</span>
+                  <span className='text-right'>{t('Plan Multiplier')}</span>
+                </div>
+                <div className='divide-border/60 divide-y'>
+                  {routeGroups.map((group) => {
+                    const walletRatio = props.groupRatioMap?.[group]
+                    const configuredRatio = Number(
+                      plan.route_group_ratios?.[group] || 0
+                    )
+                    const effectivePlanRatio =
+                      configuredRatio > 0 ? configuredRatio : walletRatio
+                    const hasDiscount =
+                      typeof walletRatio === 'number' &&
+                      typeof effectivePlanRatio === 'number' &&
+                      effectivePlanRatio < walletRatio
+
+                    return (
+                      <div
+                        key={group}
+                        className='grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 py-1.5 text-xs first:pt-0 last:pb-0'
+                      >
+                        <span className='text-foreground truncate font-medium'>
+                          {group}
+                        </span>
+                        <span
+                          className={cn(
+                            'text-muted-foreground text-right tabular-nums',
+                            hasDiscount && 'line-through opacity-75'
+                          )}
+                        >
+                          {typeof walletRatio === 'number'
+                            ? formatMultiplier(walletRatio, locale)
+                            : '—'}
+                        </span>
+                        <span
+                          className={cn(
+                            'text-right font-semibold tabular-nums',
+                            hasDiscount
+                              ? 'text-emerald-600 dark:text-emerald-400'
+                              : 'text-foreground'
+                          )}
+                        >
+                          {typeof effectivePlanRatio === 'number'
+                            ? formatMultiplier(effectivePlanRatio, locale)
+                            : '—'}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             </div>
           )}
@@ -370,24 +438,26 @@ export function SubscriptionPurchaseDialog(props: Props) {
         </div>
 
         {routeGroups.length > 0 && (
-          <Alert>
-            <AlertDescription className='space-y-2'>
+          <Alert className='px-4 py-3'>
+            <AlertDescription className='flex flex-col gap-2.5 text-xs leading-relaxed'>
               <p>
                 {t(
                   'Use an API key set to one of these route groups, or use Auto with one of them included. The qualification group only controls your account group and multiplier; it does not route requests by itself.'
                 )}
               </p>
-              <Button
-                type='button'
-                variant='outline'
-                size='sm'
-                onClick={() => {
-                  props.onOpenChange(false)
-                  void navigate({ to: '/keys' })
-                }}
-              >
-                {t('Create an Auto group API Key')}
-              </Button>
+              <div>
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  onClick={() => {
+                    props.onOpenChange(false)
+                    void navigate({ to: '/keys' })
+                  }}
+                >
+                  {t('Create an Auto group API Key')}
+                </Button>
+              </div>
             </AlertDescription>
           </Alert>
         )}

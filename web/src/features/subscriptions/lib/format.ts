@@ -99,3 +99,38 @@ export function formatWindowDuration(
   }
   return `${seconds} ${t('seconds')}`
 }
+
+export function formatMultiplier(
+  ratio: number,
+  locale?: Intl.LocalesArgument
+): string {
+  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 4 }).format(ratio)}×`
+}
+
+export function estimatePlanEndTime(
+  plan: Partial<SubscriptionPlan>,
+  start: dayjs.ConfigType = Date.now()
+): string | null {
+  const base = dayjs(start)
+  if (!base.isValid()) return null
+
+  const unit = plan?.duration_unit || 'month'
+  const value = Number(plan?.duration_value || 1)
+  switch (unit) {
+    case 'year':
+      return base.add(value, 'year').format('YYYY-MM-DD HH:mm')
+    case 'month':
+      return base.add(value, 'month').format('YYYY-MM-DD HH:mm')
+    case 'day':
+      return base.add(value * 24, 'hour').format('YYYY-MM-DD HH:mm')
+    case 'hour':
+      return base.add(value, 'hour').format('YYYY-MM-DD HH:mm')
+    case 'custom': {
+      const seconds = Number(plan?.custom_seconds || 0)
+      if (seconds <= 0) return null
+      return base.add(seconds, 'second').format('YYYY-MM-DD HH:mm')
+    }
+    default:
+      return null
+  }
+}

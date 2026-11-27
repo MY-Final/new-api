@@ -254,4 +254,25 @@ describe('SubscriptionPurchaseDialog', () => {
       screen.getByRole('button', { name: 'Pay with Balance' })
     ).toBeDisabled()
   })
+
+  test('shows effective time, estimated expiry, and multiplier comparison', () => {
+    renderDialog({
+      plan: {
+        plan: {
+          ...planRecord.plan,
+          route_groups: ['kunrouter'],
+          route_group_ratios: { kunrouter: 0.18 },
+        },
+      },
+      groupRatioMap: { kunrouter: 0.2 },
+    })
+
+    expect(screen.getByText('Effective Time')).toBeVisible()
+    expect(screen.getByText('Immediately upon payment')).toBeVisible()
+    expect(screen.getByText('Estimated Expiry')).toBeVisible()
+    expect(screen.getByText('Wallet Multiplier')).toBeVisible()
+    expect(screen.getByText('Plan Multiplier')).toBeVisible()
+    expect(screen.getByText('0.2×')).toBeVisible()
+    expect(screen.getByText('0.18×')).toBeVisible()
+  })
 })

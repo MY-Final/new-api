@@ -17,6 +17,7 @@ import type {
   UserSubscriptionRecord,
 } from '@/features/subscriptions/types'
 import en from '@/i18n/locales/en.json'
+import { formatQuota } from '@/lib/format'
 import { api } from '@/lib/api'
 
 import { SubscriptionPlansCard } from '../subscription-plans-card'
@@ -77,6 +78,7 @@ async function renderPlans(
   options: {
     plans?: PlanRecord[]
     responses?: SelfSubscriptionData[]
+    groups?: Record<string, { desc: string; ratio: number | string }>
   } = {}
 ) {
   const responses = [...(options.responses ?? [empty])]
@@ -87,6 +89,9 @@ async function renderPlans(
     if (url === '/api/subscription/self') {
       const data = responses.length > 1 ? responses.shift() : responses[0]
       return { data: { success: true, data } }
+    }
+    if (url === '/api/user/self/groups') {
+      return { data: { success: true, data: options.groups ?? {} } }
     }
     if (url === '/api/subscription/self/usage/stats') {
       return { data: { success: false, message: 'Unavailable' } }
@@ -293,4 +298,42 @@ test('refreshes subscription details and opens usage records', async () => {
   expect(
     await screen.findByRole('dialog', { name: 'Subscription Usage' })
   ).toBeVisible()
+})
+
+test('shows current wallet balance alongside subscription plans', async () => {
+  await renderPlans()
+
+  const plansSection = await screen.findByRole('region', {
+    name: 'Subscription Plans',
+  })
+  expect(within(plansSection).getByText('Current Balance:')).toBeVisible()
+  expect(
+    within(plansSection).getByText(formatQuota(10_000_000))
+  ).toBeVisible()
+})
+
+test('shows wallet vs plan multiplier comparison for route groups', async () => {
+  await renderPlans({
+    plans: [
+      {
+        plan: {
+          ...plan.plan,
+          route_groups: ['kunrouter'],
+          route_group_ratios: { kunrouter: 0.18 },
+        },
+      },
+    ],
+    groups: {
+      kunrouter: { desc: 'kunrouter', ratio: 0.2 },
+    },
+  })
+
+  const plansSection = await screen.findByRole('region', {
+    name: 'Subscription Plans',
+  })
+  expect(within(plansSection).getByText('Wallet Multiplier')).toBeVisible()
+  expect(within(plansSection).getByText('Plan Multiplier')).toBeVisible()
+  expect(within(plansSection).getByText('kunrouter')).toBeVisible()
+  expect(within(plansSection).getByText('0.2×')).toBeVisible()
+  expect(within(plansSection).getByText('0.18×')).toBeVisible()
 })

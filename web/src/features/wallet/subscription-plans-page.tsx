@@ -60,7 +60,7 @@ export function SubscriptionPlansPage() {
         </Button>
       </SectionPageLayout.Actions>
       <SectionPageLayout.Content>
-        <div className='mx-auto w-full max-w-7xl'>
+        <div className='mx-auto w-full max-w-6xl'>
           <SubscriptionPlansCard
             topupInfo={topupInfo}
             userQuota={userQuotaQuery.data}

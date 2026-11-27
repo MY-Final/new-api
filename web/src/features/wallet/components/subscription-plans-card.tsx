@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Crown, ReceiptText, RefreshCw, Sparkles, Check } from 'lucide-react'
+import { Crown, ReceiptText, RefreshCw, Sparkles, Check, Wallet } from 'lucide-react'
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -29,7 +29,7 @@ import {
   textColorMap,
 } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import {
   Select,
@@ -56,6 +56,7 @@ import { SubscriptionPurchaseDialog } from '@/features/subscriptions/components/
 import { SubscriptionUsageDialog } from '@/features/subscriptions/components/dialogs/subscription-usage-dialog'
 import {
   formatDuration,
+  formatMultiplier,
   formatPlanPrice,
   formatResetPeriod,
   formatWindowDuration,
@@ -65,6 +66,7 @@ import type {
   UserSubscriptionRecord,
 } from '@/features/subscriptions/types'
 import { toIntlLocale } from '@/i18n/languages'
+import { getUserGroups } from '@/lib/api'
 import { formatNumber, formatQuota } from '@/lib/format'
 import { handleServerError } from '@/lib/handle-server-error'
 import { requireServerSuccess } from '@/lib/server-error-message'
@@ -143,6 +145,9 @@ export function SubscriptionPlansCard({
   const [allSubscriptions, setAllSubscriptions] = useState<
     UserSubscriptionRecord[]
   >([])
+  const [groupRatioMap, setGroupRatioMap] = useState<Record<string, number>>(
+    {}
+  )
   const [billingPreference, setBillingPreference] =
     useState('subscription_first')
   const [loading, setLoading] = useState(true)
@@ -188,14 +193,36 @@ export function SubscriptionPlansCard({
     }
   }, [])
 
+  const fetchUserGroups = useCallback(async () => {
+    try {
+      const res = await getUserGroups()
+      if (res.success && res.data) {
+        const nextMap: Record<string, number> = {}
+        for (const [groupName, info] of Object.entries(res.data)) {
+          const ratio = Number(info?.ratio)
+          if (Number.isFinite(ratio) && ratio > 0) {
+            nextMap[groupName] = ratio
+          }
+        }
+        setGroupRatioMap(nextMap)
+      }
+    } catch {
+      // Optional enrichment: keep plan cards functional if group ratios fail to load.
+    }
+  }, [])
+
   useEffect(() => {
     const init = async () => {
       setLoading(true)
-      await Promise.all([fetchPlans(), fetchSelfSubscription()])
+      await Promise.all([
+        fetchPlans(),
+        fetchSelfSubscription(),
+        fetchUserGroups(),
+      ])
       setLoading(false)
     }
     init()
-  }, [fetchPlans, fetchSelfSubscription])
+  }, [fetchPlans, fetchSelfSubscription, fetchUserGroups])
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -268,28 +295,33 @@ export function SubscriptionPlansCard({
 
   if (loading) {
     return (
-      <Card data-card-hover='false' className='gap-0 overflow-hidden py-0'>
-        <CardHeader className='border-b p-3 !pb-3 sm:p-5 sm:!pb-5'>
-          <Skeleton className='h-6 w-32' />
-        </CardHeader>
-        <CardContent className='space-y-4 p-3 sm:p-5'>
-          <Skeleton className='h-20 w-full' />
-          <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3'>
-            {['first', 'second', 'third'].map((key) => (
-              <Skeleton key={key} className='h-48 w-full' />
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      <div className='space-y-6'>
+        <Skeleton className='h-14 w-full rounded-xl' />
+        <div className='grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3'>
+          {['first', 'second', 'third'].map((key) => (
+            <Skeleton key={key} className='h-80 w-full rounded-xl' />
+          ))}
+        </div>
+      </div>
     )
   }
 
   const subscriptionOverview = (
-    <div className={cn(!hasAny && 'rounded-xl border p-3 sm:p-4')}>
+    <div
+      className={cn(
+        !hasAny &&
+          'bg-card rounded-xl border px-4 py-3 shadow-xs sm:px-5 sm:py-3.5'
+      )}
+    >
       <div className='flex flex-wrap items-center justify-between gap-2.5 sm:gap-3'>
         <div className='flex min-w-0 flex-wrap items-center gap-2'>
           {!hasAny && (
-            <span className='text-sm font-medium'>{t('My Subscriptions')}</span>
+            <div className='flex items-center gap-2'>
+              <Crown className='text-amber-500 h-4 w-4 shrink-0' />
+              <span className='text-sm font-medium'>
+                {t('My Subscriptions')}
+              </span>
+            </div>
           )}
           <span className='flex items-center gap-1.5 text-xs font-medium'>
             <span
@@ -316,6 +348,11 @@ export function SubscriptionPlansCard({
               </>
             )}
           </span>
+          {!hasAny && (
+            <span className='text-muted-foreground hidden text-xs md:inline'>
+              · {getBillingPreferenceDescription(billingPreference, t)}
+            </span>
+          )}
         </div>
         <div className='flex w-full items-center gap-2 sm:w-auto'>
           <Select
@@ -417,9 +454,16 @@ export function SubscriptionPlansCard({
               )}
         </p>
       )}
-      <p className='text-muted-foreground mt-2 text-xs leading-5'>
-        {getBillingPreferenceDescription(billingPreference, t)}
-      </p>
+      {hasAny && (
+        <p className='text-muted-foreground mt-2 text-xs leading-5'>
+          {getBillingPreferenceDescription(billingPreference, t)}
+        </p>
+      )}
+      {!hasAny && (
+        <p className='text-muted-foreground mt-1.5 text-xs leading-5 md:hidden'>
+          {getBillingPreferenceDescription(billingPreference, t)}
+        </p>
+      )}
       {hasActive && (
         <p className='text-muted-foreground mt-2 text-xs leading-5'>
           {t(
@@ -488,11 +532,11 @@ export function SubscriptionPlansCard({
               return (
                 <article
                   key={subscription?.id}
-                  className='bg-background rounded-lg border p-4 text-sm'
+                  className='bg-background space-y-4 rounded-xl border p-4 text-sm shadow-xs sm:p-5'
                 >
-                  <div className='flex flex-wrap items-start justify-between gap-2'>
+                  <div className='flex flex-wrap items-start justify-between gap-3'>
                     <div className='flex min-w-0 flex-1 flex-wrap items-center gap-2'>
-                      <span className='min-w-0 font-medium break-words'>
+                      <span className='min-w-0 text-base font-semibold break-words'>
                         {planTitle
                           ? `${planTitle} · ${t('Subscription')} #${subscription?.id}`
                           : `${t('Subscription')} #${subscription?.id}`}
@@ -500,65 +544,16 @@ export function SubscriptionPlansCard({
                       {statusBadge}
                     </div>
                     {isActive && (
-                      <span className='text-muted-foreground'>
+                      <span className='bg-primary/10 text-primary shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium tabular-nums'>
                         {t('{{count}} days remaining', {
                           count: remainDays,
                         })}
                       </span>
                     )}
                   </div>
-                  <div className='text-muted-foreground mt-1.5'>
-                    {endTimeLabel}{' '}
-                    {new Date(
-                      (subscription?.end_time || 0) * 1000
-                    ).toLocaleString(locale)}
-                  </div>
-                  {isActive && !hasQuotaWindows && nextResetTime > 0 && (
-                    <div className='text-muted-foreground mt-1'>
-                      {t('Next reset')}:{' '}
-                      {new Date(nextResetTime * 1000).toLocaleString(locale)}
-                    </div>
-                  )}
-                  {(subscription?.max_concurrency || 0) > 0 && (
-                    <div className='text-muted-foreground mt-1'>
-                      {t('Account Concurrency')}:{' '}
-                      {subscription?.max_concurrency}
-                    </div>
-                  )}
-                  <div className='text-muted-foreground mt-1'>
-                    {t('Max Output Tokens per Request')}:{' '}
-                    {formatNumber(
-                      subscription?.max_output_tokens || 4096,
-                      locale
-                    )}
-                  </div>
-                  {(subscription?.route_groups || []).length > 0 && (
-                    <div className='mt-1 flex flex-wrap items-center gap-1.5'>
-                      <span className='text-muted-foreground'>
-                        {t('Allowed Route Groups')}:
-                      </span>
-                      {(subscription?.route_groups || []).map((group) => (
-                        <span
-                          key={group}
-                          className='inline-flex items-center gap-1'
-                        >
-                          <GroupBadge group={group} />
-                          {(subscription?.route_group_ratios?.[group] || 0) >
-                            0 && (
-                            <span className='text-muted-foreground'>
-                              ×{' '}
-                              {formatNumber(
-                                subscription?.route_group_ratios?.[group] || 0,
-                                locale
-                              )}
-                            </span>
-                          )}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+
                   {hasQuotaWindows ? (
-                    <div className='mt-2 space-y-2'>
+                    <div className='space-y-2'>
                       {quotaWindows.map((window) => {
                         const windowPercent =
                           window.quota_limit > 0
@@ -572,13 +567,13 @@ export function SubscriptionPlansCard({
                         return (
                           <div
                             key={`${window.window_seconds}-${window.sort_order}`}
-                            className='bg-muted/40 rounded-md p-2'
+                            className='bg-muted/40 rounded-lg border p-3'
                           >
                             <div className='flex flex-wrap items-center justify-between gap-1'>
                               <span className='font-medium'>
                                 {formatWindowDuration(window.window_seconds, t)}
                               </span>
-                              <span className='text-muted-foreground tabular-nums'>
+                              <span className='text-muted-foreground text-xs tabular-nums'>
                                 {formatQuota(window.used)}/
                                 {formatQuota(window.quota_limit)} ·{' '}
                                 {t('Remaining')} {formatQuota(window.remaining)}
@@ -586,10 +581,10 @@ export function SubscriptionPlansCard({
                             </div>
                             <Progress
                               value={windowPercent}
-                              className='mt-1.5 h-1'
+                              className='mt-2 h-1.5'
                             />
                             {isActive && window.next_release_at > 0 && (
-                              <div className='text-muted-foreground mt-1'>
+                              <div className='text-muted-foreground mt-1.5 text-xs'>
                                 {t('Next release')}:{' '}
                                 {new Date(
                                   window.next_release_at * 1000
@@ -601,36 +596,114 @@ export function SubscriptionPlansCard({
                       })}
                     </div>
                   ) : (
-                    <>
-                      <div className='text-muted-foreground mt-1'>
-                        {t('Total Quota')}:{' '}
-                        {totalAmount > 0 ? (
-                          <Tooltip>
-                            <TooltipTrigger
-                              render={<span className='cursor-help' />}
-                            >
-                              {formatQuota(usedAmount)}/
-                              {formatQuota(totalAmount)} · {t('Remaining')}{' '}
-                              {formatQuota(remainAmount)}
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              {t('Raw Quota')}: {usedAmount}/{totalAmount} ·{' '}
-                              {t('Remaining')} {remainAmount}
-                            </TooltipContent>
-                          </Tooltip>
-                        ) : (
-                          t('Unlimited')
-                        )}
-                        {totalAmount > 0 && (
-                          <span className='ml-2'>
-                            {t('Used')} {usagePercent}%
-                          </span>
-                        )}
+                    <div className='bg-muted/40 space-y-2 rounded-lg border p-3.5'>
+                      <div className='flex flex-wrap items-baseline justify-between gap-2'>
+                        <span className='text-muted-foreground text-xs font-medium'>
+                          {t('Total Quota')}
+                        </span>
+                        <div className='text-xs tabular-nums'>
+                          {totalAmount > 0 ? (
+                            <Tooltip>
+                              <TooltipTrigger
+                                render={<span className='cursor-help' />}
+                              >
+                                <span className='text-foreground font-semibold'>
+                                  {t('Remaining')} {formatQuota(remainAmount)}
+                                </span>
+                                <span className='text-muted-foreground ml-2'>
+                                  ({formatQuota(usedAmount)}/
+                                  {formatQuota(totalAmount)} · {t('Used')}{' '}
+                                  {usagePercent}%)
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {t('Raw Quota')}: {usedAmount}/{totalAmount} ·{' '}
+                                {t('Remaining')} {remainAmount}
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <span className='text-foreground font-semibold'>
+                              {t('Unlimited')}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       {totalAmount > 0 && isActive && (
-                        <Progress value={usagePercent} className='mt-2 h-1.5' />
+                        <Progress value={usagePercent} className='h-2' />
                       )}
-                    </>
+                    </div>
+                  )}
+
+                  <div className='grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3'>
+                    <div className='bg-muted/25 rounded-lg border px-3 py-2'>
+                      <div className='text-muted-foreground text-[11px]'>
+                        {endTimeLabel}
+                      </div>
+                      <div className='mt-0.5 text-xs font-medium tabular-nums'>
+                        {new Date(
+                          (subscription?.end_time || 0) * 1000
+                        ).toLocaleString(locale)}
+                      </div>
+                    </div>
+                    {isActive && !hasQuotaWindows && nextResetTime > 0 && (
+                      <div className='bg-muted/25 rounded-lg border px-3 py-2'>
+                        <div className='text-muted-foreground text-[11px]'>
+                          {t('Next reset')}
+                        </div>
+                        <div className='mt-0.5 text-xs font-medium tabular-nums'>
+                          {new Date(nextResetTime * 1000).toLocaleString(
+                            locale
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {(subscription?.max_concurrency || 0) > 0 && (
+                      <div className='bg-muted/25 rounded-lg border px-3 py-2'>
+                        <div className='text-muted-foreground text-[11px]'>
+                          {t('Account Concurrency')}
+                        </div>
+                        <div className='mt-0.5 text-xs font-medium tabular-nums'>
+                          {subscription?.max_concurrency}
+                        </div>
+                      </div>
+                    )}
+                    <div className='bg-muted/25 rounded-lg border px-3 py-2'>
+                      <div className='text-muted-foreground text-[11px]'>
+                        {t('Max Output Tokens per Request')}
+                      </div>
+                      <div className='mt-0.5 text-xs font-medium tabular-nums'>
+                        {formatNumber(
+                          subscription?.max_output_tokens || 4096,
+                          locale
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {(subscription?.route_groups || []).length > 0 && (
+                    <div className='flex flex-wrap items-center gap-2 pt-0.5'>
+                      <span className='text-muted-foreground text-xs'>
+                        {t('Allowed Route Groups')}:
+                      </span>
+                      {(subscription?.route_groups || []).map((group) => {
+                        const planRatio = Number(
+                          subscription?.route_group_ratios?.[group] || 0
+                        )
+                        return (
+                          <span
+                            key={group}
+                            className='bg-muted/30 inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs'
+                          >
+                            <GroupBadge group={group} />
+                            {planRatio > 0 && (
+                              <span className='font-medium text-emerald-600 tabular-nums dark:text-emerald-400'>
+                                {formatMultiplier(planRatio, locale)}
+                              </span>
+                            )}
+                          </span>
+                        )
+                      })}
+                    </div>
                   )}
                 </article>
               )
@@ -639,18 +712,14 @@ export function SubscriptionPlansCard({
         </>
       )}
 
-      {!hasAny && (
-        <p className='text-muted-foreground mt-2 text-xs'>
-          {t('Subscribe to a plan for model access')}
-        </p>
-      )}
+      {!hasAny && null}
     </div>
   )
 
   return (
     <>
-      <div className='space-y-4 sm:space-y-5'>
-        {hasAny && (
+      <div className='space-y-6'>
+        {hasAny ? (
           <section aria-label={t('My Subscriptions')}>
             <TitledCard
               title={t('My Subscriptions')}
@@ -661,18 +730,35 @@ export function SubscriptionPlansCard({
               {subscriptionOverview}
             </TitledCard>
           </section>
+        ) : (
+          subscriptionOverview
         )}
-        <TitledCard
-          title={t('Subscription Plans')}
-          description={t('Subscribe to a plan for model access')}
-          icon={<Crown className='h-4 w-4' />}
-          iconTone='warning'
-          disableHoverEffect
-          contentClassName='space-y-4 sm:space-y-5'
-        >
-          {!hasAny && subscriptionOverview}
+
+        <section aria-label={t('Subscription Plans')} className='space-y-4'>
+          <div className='flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between'>
+            <div>
+              <h2 className='text-lg font-semibold tracking-tight'>
+                {t('Subscription Plans')}
+              </h2>
+              <p className='text-muted-foreground text-sm'>
+                {t('Subscribe to a plan for model access')}
+              </p>
+            </div>
+            {typeof userQuota === 'number' && (
+              <div className='bg-muted/50 inline-flex items-center gap-2 self-start rounded-lg border px-3 py-1.5 text-xs sm:self-auto'>
+                <Wallet className='text-muted-foreground h-3.5 w-3.5 shrink-0' />
+                <span className='text-muted-foreground'>
+                  {t('Current Balance')}:
+                </span>
+                <span className='text-foreground font-semibold tabular-nums'>
+                  {formatQuota(userQuota)}
+                </span>
+              </div>
+            )}
+          </div>
+
           {plans.length > 0 && (
-            <div className='grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3'>
+            <div className='grid grid-cols-1 items-stretch gap-5 md:grid-cols-2 xl:grid-cols-3'>
               {plans.map((p, index) => {
                 const plan = p?.plan
                 if (!plan) return null
@@ -683,24 +769,22 @@ export function SubscriptionPlansCard({
                   plan.currency,
                   locale
                 )
+                const durationLabel = formatDuration(plan, t)
                 const isPopular = index === 0 && plans.length > 1
                 const limit = Number(plan.max_purchase_per_user || 0)
                 const count = planPurchaseCountMap.get(plan.id) || 0
                 const reached = limit > 0 && count >= limit
 
-                let totalQuotaBenefit: string | null = null
+                let primaryQuotaLabel: string | null = null
                 if (quotaWindows.length === 0) {
-                  const quotaLabel =
+                  primaryQuotaLabel =
                     totalAmount > 0 ? formatQuota(totalAmount) : t('Unlimited')
-                  totalQuotaBenefit = `${t('Total Quota')}: ${quotaLabel}`
                 }
 
                 const benefits = [
-                  `${t('Validity Period')}: ${formatDuration(plan, t)}`,
                   formatResetPeriod(plan, t) !== t('No Reset')
                     ? `${t('Quota Reset')}: ${formatResetPeriod(plan, t)}`
                     : null,
-                  totalQuotaBenefit,
                   ...quotaWindows.map(
                     (window) =>
                       `${formatWindowDuration(window.window_seconds, t)}: ${formatQuota(window.quota_limit)}`
@@ -713,34 +797,28 @@ export function SubscriptionPlansCard({
                   plan.upgrade_group
                     ? `${t('Upgrade Group')}: ${plan.upgrade_group}`
                     : null,
-                  (plan.route_groups || []).length > 0
-                    ? `${t('Route Groups')}: ${(plan.route_groups || [])
-                        .map((group) => {
-                          const ratio = Number(
-                            plan.route_group_ratios?.[group] || 0
-                          )
-                          return ratio > 0
-                            ? `${group} × ${formatNumber(ratio, locale)}`
-                            : group
-                        })
-                        .join(' · ')}`
-                    : null,
                 ].filter(Boolean) as string[]
+                const routeGroups = plan.route_groups || []
 
                 return (
                   <Card
                     key={plan.id}
                     data-card-hover='false'
-                    className={cn(isPopular && 'border-primary/70 shadow-sm')}
+                    className={cn(
+                      'relative flex flex-col overflow-hidden transition-shadow',
+                      isPopular
+                        ? 'border-primary/60 ring-primary/15 shadow-md ring-1'
+                        : 'hover:border-border/80 shadow-xs'
+                    )}
                   >
-                    <CardContent className='flex h-full flex-col p-3.5 sm:p-4'>
-                      <div className='mb-2 flex items-start justify-between gap-3'>
-                        <div className='min-w-0'>
-                          <h4 className='truncate font-semibold'>
+                    <CardContent className='flex h-full flex-col p-5 sm:p-6'>
+                      <div className='mb-4 flex items-start justify-between gap-3'>
+                        <div className='min-w-0 space-y-1'>
+                          <h3 className='text-base font-semibold tracking-tight'>
                             {plan.title || t('Subscription Plans')}
-                          </h4>
+                          </h3>
                           {plan.subtitle && (
-                            <p className='text-muted-foreground truncate text-xs'>
+                            <p className='text-muted-foreground line-clamp-2 text-xs leading-relaxed'>
                               {plan.subtitle}
                             </p>
                           )}
@@ -757,25 +835,111 @@ export function SubscriptionPlansCard({
                         )}
                       </div>
 
-                      <div className='py-2'>
-                        <span className='text-primary text-2xl font-bold'>
+                      <div className='mb-4 flex items-baseline gap-1.5'>
+                        <span className='text-foreground text-3xl font-bold tracking-tight tabular-nums'>
                           {price}
+                        </span>
+                        <span className='text-muted-foreground text-xs'>
+                          / {durationLabel}
                         </span>
                       </div>
 
-                      <div className='flex-1 space-y-1.5 pb-3'>
+                      {primaryQuotaLabel && (
+                        <div className='bg-muted/50 mb-4 flex items-center justify-between rounded-lg border px-3.5 py-2.5'>
+                          <span className='text-muted-foreground text-xs font-medium'>
+                            {t('Total Quota')}
+                          </span>
+                          <span className='text-foreground text-sm font-semibold tabular-nums'>
+                            {primaryQuotaLabel}
+                          </span>
+                        </div>
+                      )}
+
+                      <Separator className='mb-4' />
+
+                      <div className='flex-1 space-y-2.5 pb-4'>
+                        <div className='text-muted-foreground flex items-start gap-2 text-xs leading-5'>
+                          <Check className='text-primary mt-0.5 h-3.5 w-3.5 shrink-0' />
+                          <span>
+                            {t('Validity Period')}: {durationLabel}
+                          </span>
+                        </div>
                         {benefits.map((label) => (
                           <div
                             key={label}
-                            className='text-muted-foreground flex items-center gap-2 text-xs'
+                            className='text-muted-foreground flex items-start gap-2 text-xs leading-5'
                           >
-                            <Check className='text-primary h-3 w-3 shrink-0' />
-                            <span>{label}</span>
+                            <Check className='text-primary mt-0.5 h-3.5 w-3.5 shrink-0' />
+                            <span className='break-words'>{label}</span>
                           </div>
                         ))}
                       </div>
 
-                      <Separator className='mb-3' />
+                      {routeGroups.length > 0 && (
+                        <div className='bg-muted/30 mb-4 rounded-lg border p-3'>
+                          <div className='text-muted-foreground mb-2 grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 text-[11px] font-medium'>
+                            <span>{t('Group')}</span>
+                            <span className='text-right'>
+                              {t('Wallet Multiplier')}
+                            </span>
+                            <span className='text-right'>
+                              {t('Plan Multiplier')}
+                            </span>
+                          </div>
+                          <div className='divide-border/60 divide-y'>
+                            {routeGroups.map((group) => {
+                              const walletRatio = groupRatioMap[group]
+                              const configuredRatio = Number(
+                                plan.route_group_ratios?.[group] || 0
+                              )
+                              const effectivePlanRatio =
+                                configuredRatio > 0
+                                  ? configuredRatio
+                                  : walletRatio
+                              const hasDiscount =
+                                typeof walletRatio === 'number' &&
+                                typeof effectivePlanRatio === 'number' &&
+                                effectivePlanRatio < walletRatio
+
+                              return (
+                                <div
+                                  key={group}
+                                  className='grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 py-1.5 text-xs first:pt-0 last:pb-0'
+                                >
+                                  <span className='text-foreground truncate font-medium'>
+                                    {group}
+                                  </span>
+                                  <span
+                                    className={cn(
+                                      'text-muted-foreground text-right tabular-nums',
+                                      hasDiscount && 'line-through opacity-75'
+                                    )}
+                                  >
+                                    {typeof walletRatio === 'number'
+                                      ? formatMultiplier(walletRatio, locale)
+                                      : '—'}
+                                  </span>
+                                  <span
+                                    className={cn(
+                                      'text-right font-semibold tabular-nums',
+                                      hasDiscount
+                                        ? 'text-emerald-600 dark:text-emerald-400'
+                                        : 'text-foreground'
+                                    )}
+                                  >
+                                    {typeof effectivePlanRatio === 'number'
+                                      ? formatMultiplier(
+                                          effectivePlanRatio,
+                                          locale
+                                        )
+                                      : '—'}
+                                  </span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
 
                       {reached ? (
                         <Tooltip>
@@ -794,7 +958,7 @@ export function SubscriptionPlansCard({
                         </Tooltip>
                       ) : (
                         <Button
-                          variant='outline'
+                          variant={isPopular ? 'default' : 'outline'}
                           className='w-full'
                           onClick={() => {
                             setSelectedPlan(p)
@@ -822,7 +986,7 @@ export function SubscriptionPlansCard({
               {t('No plans available')}
             </p>
           )}
-        </TitledCard>
+        </section>
       </div>
 
       <SubscriptionPurchaseDialog
@@ -840,6 +1004,7 @@ export function SubscriptionPlansCard({
         enableOnlineTopUp={enableOnlineTopUp}
         epayMethods={epayMethods}
         userQuota={userQuota}
+        groupRatioMap={groupRatioMap}
         onPurchaseSuccess={onPurchaseSuccess}
         purchaseLimit={
           selectedPlan?.plan?.max_purchase_per_user
