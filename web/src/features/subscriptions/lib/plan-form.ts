@@ -77,6 +77,10 @@ export function getPlanFormSchema(t: TFunction) {
         z.string(),
         z.coerce.number().min(0, t('Route multiplier cannot be negative'))
       ),
+      route_group_cost_ratios: z.record(
+        z.string(),
+        z.coerce.number().min(0, t('Cost ratio cannot be negative'))
+      ),
       downgrade_group: z.string().optional(),
       stripe_price_id: z.string().optional(),
       creem_product_id: z.string().optional(),
@@ -121,6 +125,7 @@ export const PLAN_FORM_DEFAULTS: PlanFormValues = {
   upgrade_group: '',
   route_groups: [],
   route_group_ratios: {},
+  route_group_cost_ratios: {},
   downgrade_group: '',
   stripe_price_id: '',
   creem_product_id: '',
@@ -161,6 +166,12 @@ export function planToFormValues(plan: SubscriptionPlan): PlanFormValues {
       (plan.route_groups || []).map((group) => [
         group,
         Number(plan.route_group_ratios?.[group] || 0),
+      ])
+    ),
+    route_group_cost_ratios: Object.fromEntries(
+      (plan.route_groups || []).map((group) => [
+        group,
+        Number(plan.route_group_cost_ratios?.[group] || 0),
       ])
     ),
     downgrade_group: plan.downgrade_group || '',
@@ -204,6 +215,12 @@ export function formValuesToPlanPayload(values: PlanFormValues): PlanPayload {
         values.route_groups.map((group) => [
           group.trim(),
           Number(values.route_group_ratios[group] || 0),
+        ])
+      ),
+      route_group_cost_ratios: Object.fromEntries(
+        values.route_groups.map((group) => [
+          group.trim(),
+          Number(values.route_group_cost_ratios[group] || 0),
         ])
       ),
       downgrade_group: values.downgrade_group || '',

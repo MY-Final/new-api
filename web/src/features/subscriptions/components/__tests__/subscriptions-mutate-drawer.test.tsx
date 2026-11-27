@@ -81,6 +81,7 @@ function planRecord(ratio: number): PlanRecord {
       downgrade_group: '',
       route_groups: ['codex-pro'],
       route_group_ratios: { 'codex-pro': ratio },
+      route_group_cost_ratios: { 'codex-pro': 0 },
     },
   }
 }
@@ -175,6 +176,32 @@ test('saves zero when the normal group multiplier is inherited', async () => {
     expect.objectContaining({
       plan: expect.objectContaining({
         route_group_ratios: { 'codex-pro': 0 },
+      }),
+    })
+  )
+})
+
+test('saves a plan-specific upstream cost ratio', async () => {
+  const user = userEvent.setup()
+  renderDrawer(0.154)
+
+  const costRatioInput = await screen.findByRole('spinbutton', {
+    name: 'Upstream cost ratio for codex-pro',
+  })
+
+  expect(costRatioInput).toHaveValue(0)
+
+  await user.clear(costRatioInput)
+  await user.type(costRatioInput, '0.0735')
+  expect(costRatioInput).toHaveValue(0.0735)
+  await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+  await waitFor(() => expect(mocks.updatePlan).toHaveBeenCalledOnce())
+  expect(mocks.updatePlan).toHaveBeenCalledWith(
+    7,
+    expect.objectContaining({
+      plan: expect.objectContaining({
+        route_group_cost_ratios: { 'codex-pro': 0.0735 },
       }),
     })
   )

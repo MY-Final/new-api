@@ -111,6 +111,10 @@ describe('subscription plan form', () => {
         'deepseek-a': 1,
         'deepseek-b': 0.2,
       },
+      route_group_cost_ratios: {
+        'deepseek-a': 0.12,
+        'deepseek-b': 0,
+      },
       max_concurrency: 2,
       max_output_tokens: 8192,
       allow_wallet_overflow: true,
@@ -122,6 +126,10 @@ describe('subscription plan form', () => {
     expect(payload.plan.route_group_ratios).toEqual({
       'deepseek-a': 1,
       'deepseek-b': 0.2,
+    })
+    expect(payload.plan.route_group_cost_ratios).toEqual({
+      'deepseek-a': 0.12,
+      'deepseek-b': 0,
     })
     expect(payload.plan.allow_wallet_overflow).toBe(true)
     expect(payload.plan.quota_windows).toEqual([
@@ -138,6 +146,15 @@ describe('subscription plan form', () => {
       schema.safeParse({
         ...validPlanValues(),
         route_group_ratios: { 'deepseek-a': -0.1 },
+      }).success
+    ).toBe(false)
+  })
+
+  test('rejects a negative upstream cost ratio', () => {
+    expect(
+      schema.safeParse({
+        ...validPlanValues(),
+        route_group_cost_ratios: { 'deepseek-a': -0.01 },
       }).success
     ).toBe(false)
   })

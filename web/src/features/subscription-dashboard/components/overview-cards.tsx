@@ -27,12 +27,16 @@ export function SubscriptionOverviewCards(
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const summary = props.summary
   const margin = (summary?.gross_margin ?? 0) * 100
+  const attributedQuota = Math.max(
+    (summary?.consumed_quota ?? 0) - (summary?.unattributed_quota ?? 0),
+    0
+  )
 
   return (
     <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-3'>
       <StatCard
         title={t('Order revenue')}
-        value={formatOverviewMoney(summary?.revenue, locale)}
+        value={formatOverviewMoney(summary?.revenue_usd, locale)}
         description={t('Successful subscription orders in this range')}
         icon={ReceiptText}
         tone='accent-1'
@@ -42,12 +46,22 @@ export function SubscriptionOverviewCards(
             label: t('Orders'),
             value: formatNumber(summary?.order_count ?? 0, locale),
           },
+          {
+            label: t('Cash revenue'),
+            value: formatOverviewMoney(summary?.cash_revenue_usd, locale),
+          },
+          {
+            label: t('Balance offset'),
+            value: formatOverviewMoney(summary?.balance_revenue_usd, locale),
+          },
         ]}
       />
       <StatCard
-        title={t('Upstream cost')}
-        value={formatOverviewMoney(summary?.consumed_cost, locale)}
-        description={t('Consumed quota × upstream ratio')}
+        title={t('Estimated upstream cost')}
+        value={formatOverviewMoney(summary?.consumed_cost_usd, locale)}
+        description={t(
+          'Settled charges priced with each route group’s cost ratio'
+        )}
         icon={Coins}
         tone='accent-3'
         loading={props.loading}
@@ -56,12 +70,24 @@ export function SubscriptionOverviewCards(
             label: t('Consumed quota'),
             value: formatQuota(summary?.consumed_quota ?? 0),
           },
+          {
+            label: t('Attributed quota'),
+            value: formatQuota(attributedQuota),
+          },
+          ...((summary?.unattributed_quota ?? 0) > 0
+            ? [
+                {
+                  label: t('Unattributed quota'),
+                  value: formatQuota(summary?.unattributed_quota ?? 0),
+                },
+              ]
+            : []),
         ]}
       />
       <StatCard
-        title={t('Gross profit')}
-        value={formatOverviewMoney(summary?.gross_profit, locale)}
-        description={t('Cash basis: revenue minus consumed cost')}
+        title={t('Estimated gross profit')}
+        value={formatOverviewMoney(summary?.gross_profit_usd, locale)}
+        description={t('Revenue minus attributed consumed cost')}
         icon={TrendingUp}
         tone='accent-2'
         loading={props.loading}
@@ -110,11 +136,22 @@ export function SubscriptionOverviewCards(
             label: t('Remaining quota'),
             value: formatQuota(summary?.remaining_quota ?? 0),
           },
+          ...((summary?.unlimited_subscriptions ?? 0) > 0
+            ? [
+                {
+                  label: t('Unlimited subscriptions'),
+                  value: formatNumber(
+                    summary?.unlimited_subscriptions ?? 0,
+                    locale
+                  ),
+                },
+              ]
+            : []),
         ]}
       />
       <StatCard
-        title={t('Remaining cost exposure')}
-        value={formatOverviewMoney(summary?.remaining_cost, locale)}
+        title={t('Estimated remaining cost')}
+        value={formatOverviewMoney(summary?.remaining_cost_usd, locale)}
         description={t('If every active subscriber uses the rest of quota')}
         icon={AlertTriangle}
         tone='accent-2'

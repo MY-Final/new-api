@@ -68,6 +68,7 @@ export const subscriptionPlanSchema = z.object({
   upgrade_group: z.string().optional(),
   route_groups: z.array(z.string()).optional(),
   route_group_ratios: z.record(z.string(), z.number()).optional(),
+  route_group_cost_ratios: z.record(z.string(), z.number()).optional(),
   downgrade_group: z.string().optional(),
   stripe_price_id: z.string().optional(),
   creem_product_id: z.string().optional(),

@@ -178,6 +178,7 @@ export function SubscriptionsMutateDrawer({
   const planCurrency = form.watch('currency')
   const quotaWindows = form.watch('quota_windows')
   const routeGroupRatios = form.watch('route_group_ratios')
+  const routeGroupCostRatios = form.watch('route_group_cost_ratios')
   const hasQuotaWindows = quotaWindows.length > 0
   // Gate "+ Create on Pancake" on the same checks the mint handler runs.
   const watchedTitle = form.watch('title')
@@ -218,6 +219,7 @@ export function SubscriptionsMutateDrawer({
 
   const updateRouteGroups = (groups: string[]) => {
     const currentRatios = form.getValues('route_group_ratios')
+    const currentCostRatios = form.getValues('route_group_cost_ratios')
     const nextInherit = Object.fromEntries(
       groups.map((group) => [group, inheritNormalMultiplier[group] ?? true])
     )
@@ -230,6 +232,16 @@ export function SubscriptionsMutateDrawer({
           const fallbackRatio = currentRatio > 0 ? currentRatio : 1
           return [group, nextInherit[group] ? 0 : fallbackRatio]
         })
+      ),
+      { shouldDirty: true, shouldValidate: true }
+    )
+    form.setValue(
+      'route_group_cost_ratios',
+      Object.fromEntries(
+        groups.map((group) => [
+          group,
+          Math.max(0, Number(currentCostRatios[group] ?? 0)),
+        ])
       ),
       { shouldDirty: true, shouldValidate: true }
     )
@@ -687,7 +699,7 @@ export function SubscriptionsMutateDrawer({
                                     className='w-28'
                                     type='number'
                                     min={0}
-                                    step={0.01}
+                                    step='any'
                                     disabled={inherits}
                                     value={
                                       inherits
@@ -715,6 +727,49 @@ export function SubscriptionsMutateDrawer({
                                     }
                                   />
                                 </div>
+                              </div>
+                              <div className='flex flex-wrap items-end justify-between gap-3 border-t pt-2'>
+                                <div className='min-w-0'>
+                                  <p className='text-xs font-medium'>
+                                    {t('Upstream cost ratio')}
+                                  </p>
+                                  <p className='text-muted-foreground text-xs'>
+                                    {t(
+                                      'Used for cost analytics only. Leave empty if the upstream cost is unknown; those requests are excluded from cost.'
+                                    )}
+                                  </p>
+                                </div>
+                                <Input
+                                  id={`route-cost-ratio-${index}`}
+                                  aria-label={t(
+                                    'Upstream cost ratio for {{group}}',
+                                    { group }
+                                  )}
+                                  className='w-28'
+                                  type='number'
+                                  min={0}
+                                  step='any'
+                                  value={routeGroupCostRatios[group] ?? ''}
+                                  placeholder='—'
+                                  onChange={(event) =>
+                                    form.setValue(
+                                      'route_group_cost_ratios',
+                                      {
+                                        ...form.getValues(
+                                          'route_group_cost_ratios'
+                                        ),
+                                        [group]:
+                                          Number.parseFloat(
+                                            event.target.value
+                                          ) || 0,
+                                      },
+                                      {
+                                        shouldDirty: true,
+                                        shouldValidate: true,
+                                      }
+                                    )
+                                  }
+                                />
                               </div>
                             </div>
                           )

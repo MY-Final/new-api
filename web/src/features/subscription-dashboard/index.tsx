@@ -1,13 +1,15 @@
 import { useQuery } from '@tanstack/react-query'
 import dayjs from 'dayjs'
+import { AlertTriangle } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { ErrorState } from '@/components/error-state'
 import { SectionPageLayout } from '@/components/layout'
-import { Input } from '@/components/ui/input'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
+import { formatQuota } from '@/lib/format'
 import { dateToUnixTimestamp } from '@/lib/time'
 
 import { getSubscriptionOverview } from './api'
@@ -16,7 +18,6 @@ import { PlanBreakdown } from './components/plan-breakdown'
 import type { SubscriptionOverviewParams } from './types'
 
 const MAX_RANGE_DAYS = 366
-const DEFAULT_UPSTREAM_RATIO = 0.15
 
 export function SubscriptionDashboard() {
   const { t } = useTranslation()
@@ -24,16 +25,12 @@ export function SubscriptionDashboard() {
     start: dayjs().subtract(29, 'day').startOf('day').toDate(),
     end: new Date(),
   }))
-  const [ratioText, setRatioText] = useState(String(DEFAULT_UPSTREAM_RATIO))
-  const [upstreamRatio, setUpstreamRatio] = useState(DEFAULT_UPSTREAM_RATIO)
-
   const params = useMemo<SubscriptionOverviewParams>(
     () => ({
       start_timestamp: dateToUnixTimestamp(range.start),
       end_timestamp: dateToUnixTimestamp(range.end),
-      upstream_ratio: upstreamRatio,
     }),
-    [range, upstreamRatio]
+    [range]
   )
 
   const overviewQuery = useQuery({
@@ -63,17 +60,10 @@ export function SubscriptionDashboard() {
     setRange({ start: nextRange.start, end: nextRange.end })
   }
 
-  const commitUpstreamRatio = () => {
-    const next = Number.parseFloat(ratioText)
-    if (!Number.isFinite(next) || next < 0 || next > 100) {
-      toast.error(t('Invalid upstream ratio'))
-      setRatioText(String(upstreamRatio))
-      return
-    }
-    setUpstreamRatio(next)
-  }
-
   const overview = overviewQuery.data
+  const belowPricePlans =
+    overview?.plans.filter((plan) => plan.quota_below_price) ?? []
+  const unattributedQuota = overview?.summary.unattributed_quota ?? 0
 
   return (
     <SectionPageLayout>
@@ -81,31 +71,13 @@ export function SubscriptionDashboard() {
         {t('Subscription Business')}
       </SectionPageLayout.Title>
       <SectionPageLayout.Actions>
-        <div className='flex flex-wrap items-center gap-2'>
-          <div className='flex items-center gap-2'>
-            <span className='text-muted-foreground text-xs whitespace-nowrap'>
-              {t('Upstream ratio')}
-            </span>
-            <Input
-              aria-label={t('Upstream ratio')}
-              inputMode='decimal'
-              value={ratioText}
-              onChange={(event) => setRatioText(event.target.value)}
-              onBlur={commitUpstreamRatio}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') event.currentTarget.blur()
-              }}
-              className='h-8 w-20'
-            />
-          </div>
-          <CompactDateTimeRangePicker
-            start={range.start}
-            end={range.end}
-            onChange={handleRangeChange}
-            maxRangeDays={MAX_RANGE_DAYS}
-            className='w-full sm:w-80'
-          />
-        </div>
+        <CompactDateTimeRangePicker
+          start={range.start}
+          end={range.end}
+          onChange={handleRangeChange}
+          maxRangeDays={MAX_RANGE_DAYS}
+          className='w-full sm:w-80'
+        />
       </SectionPageLayout.Actions>
       <SectionPageLayout.Content>
         <div className='mx-auto w-full max-w-7xl space-y-4'>
@@ -121,6 +93,49 @@ export function SubscriptionDashboard() {
             />
           ) : (
             <>
+              {overview?.has_unsupported_currency && (
+                <Alert variant='destructive'>
+                  <AlertTriangle />
+                  <AlertTitle>
+                    {t('Unsupported currency in subscription orders')}
+                  </AlertTitle>
+                  <AlertDescription>
+                    {t(
+                      'Some subscription orders use a currency that cannot be converted to USD. Their revenue is excluded from totals.'
+                    )}
+                  </AlertDescription>
+                </Alert>
+              )}
+              {unattributedQuota > 0 && (
+                <Alert className='border-warning/40 text-warning [&_[data-slot=alert-description]]:text-warning/80'>
+                  <AlertTriangle />
+                  <AlertTitle>{t('Unattributed subscription cost')}</AlertTitle>
+                  <AlertDescription>
+                    {t(
+                      'Some settled subscription usage has no snapshotted upstream cost ratio. {{quota}} of consumed quota is excluded from cost and profit.',
+                      { quota: formatQuota(unattributedQuota) }
+                    )}
+                  </AlertDescription>
+                </Alert>
+              )}
+              {belowPricePlans.length > 0 && (
+                <Alert className='border-warning/40 text-warning [&_[data-slot=alert-description]]:text-warning/80'>
+                  <AlertTriangle />
+                  <AlertTitle>
+                    {t('Quota value is below plan price')}
+                  </AlertTitle>
+                  <AlertDescription>
+                    {t(
+                      'At the current exchange rate, the configured quota is worth less than the plan price for: {{plans}}.',
+                      {
+                        plans: belowPricePlans
+                          .map((plan) => plan.title)
+                          .join(', '),
+                      }
+                    )}
+                  </AlertDescription>
+                </Alert>
+              )}
               <SubscriptionOverviewCards
                 summary={overview?.summary}
                 loading={overviewQuery.isLoading}
@@ -132,12 +147,32 @@ export function SubscriptionDashboard() {
               <div className='text-muted-foreground space-y-1 text-xs'>
                 <p>
                   {t(
-                    'Amounts follow the current custom currency display. Subscription orders are prepaid, so cash profit looks high early because unused quota has no upstream cost.'
+                    'Amounts are calculated in USD and displayed in the site display currency.'
                   )}
                 </p>
                 <p>
                   {t(
-                    'Remaining cost exposure = remaining quota × upstream ratio.'
+                    'Total revenue includes balance purchases; cash revenue only counts external payments.'
+                  )}
+                </p>
+                <p>
+                  {t(
+                    'Consumed cost uses each settled request’s route group and the cost ratio snapshotted with the subscription.'
+                  )}
+                </p>
+                <p>
+                  {t(
+                    'Costs use only snapshotted upstream cost ratios. Usage without a snapshot is shown as unattributed and excluded.'
+                  )}
+                </p>
+                <p>
+                  {t(
+                    'Remaining cost exposure = remaining quota × remaining cost ratio.'
+                  )}
+                </p>
+                <p>
+                  {t(
+                    'The date range filters order revenue and consumed quota. Active subscriptions and remaining quota are a current snapshot.'
                   )}
                 </p>
               </div>
