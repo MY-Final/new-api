@@ -220,6 +220,9 @@ func normalizeSubscriptionPlanInput(c *gin.Context, plan *model.SubscriptionPlan
 		common.ApiErrorT(c, "Invalid parameters")
 		return false
 	}
+	if !plan.EnabledExplicit {
+		plan.Enabled = true
+	}
 	plan.Title = strings.TrimSpace(plan.Title)
 	if plan.Title == "" {
 		common.ApiErrorT(c, "Subscription plan title cannot be empty")

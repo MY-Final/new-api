@@ -234,8 +234,11 @@ type SubscriptionPlan struct {
 	DurationValue int    `json:"duration_value" gorm:"type:int;not null;default:1"`
 	CustomSeconds int64  `json:"custom_seconds" gorm:"type:bigint;not null;default:0"`
 
-	Enabled   bool `json:"enabled" gorm:"default:true"`
-	SortOrder int  `json:"sort_order" gorm:"type:int;default:0"`
+	Enabled bool `json:"enabled" gorm:"not null"`
+	// EnabledExplicit distinguishes an explicit false from a missing value.
+	// It is request-only state and is never persisted.
+	EnabledExplicit bool `json:"-" gorm:"-:all"`
+	SortOrder       int  `json:"sort_order" gorm:"type:int;default:0"`
 
 	AllowBalancePay *bool `json:"allow_balance_pay"`
 
@@ -282,7 +285,29 @@ type SubscriptionPlan struct {
 	UpdatedAt int64 `json:"updated_at" gorm:"bigint"`
 }
 
+func (p *SubscriptionPlan) UnmarshalJSON(data []byte) error {
+	type planAlias SubscriptionPlan
+	*p = SubscriptionPlan{}
+	aux := struct {
+		*planAlias
+		Enabled *bool `json:"enabled"`
+	}{
+		planAlias: (*planAlias)(p),
+	}
+	if err := common.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	if aux.Enabled != nil {
+		p.Enabled = *aux.Enabled
+		p.EnabledExplicit = true
+	}
+	return nil
+}
+
 func (p *SubscriptionPlan) BeforeCreate(tx *gorm.DB) error {
+	if !p.EnabledExplicit {
+		p.Enabled = true
+	}
 	now := common.GetTimestamp()
 	p.CreatedAt = now
 	p.UpdatedAt = now

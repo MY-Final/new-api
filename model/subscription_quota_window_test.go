@@ -224,6 +224,26 @@ func TestNormalizeSubscriptionRouteGroupsTrimsDeduplicatesAndRejectsAuto(t *test
 	require.Error(t, err)
 }
 
+func TestSubscriptionPlanEnabledDefaultsAndPreservesExplicitFalse(t *testing.T) {
+	truncateTables(t)
+
+	var defaulted SubscriptionPlan
+	require.NoError(t, common.UnmarshalJsonStr(`{"title":"Default enabled"}`, &defaulted))
+	require.NoError(t, DB.Create(&defaulted).Error)
+
+	var storedDefault SubscriptionPlan
+	require.NoError(t, DB.First(&storedDefault, defaulted.Id).Error)
+	assert.True(t, storedDefault.Enabled)
+
+	var disabled SubscriptionPlan
+	require.NoError(t, common.UnmarshalJsonStr(`{"title":"Explicitly disabled","enabled":false}`, &disabled))
+	require.NoError(t, DB.Create(&disabled).Error)
+
+	var storedDisabled SubscriptionPlan
+	require.NoError(t, DB.First(&storedDisabled, disabled.Id).Error)
+	assert.False(t, storedDisabled.Enabled)
+}
+
 func TestSubscriptionPurchaseRejectsPlanWithoutRouteGroups(t *testing.T) {
 	truncateTables(t)
 	user := User{
