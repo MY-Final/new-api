@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import {
   DEFAULT_CURRENCY_CONFIG,
@@ -147,5 +147,25 @@ describe('subscription plan breakdown', () => {
       screen.getByText(/Upstream cost ratio is not configured for: kiro-cc/)
     ).toBeInTheDocument()
     expect(screen.getByText(/Unconfigured/)).toBeInTheDocument()
+  })
+
+  test('calls onViewSubscribers when clicking the subscribers button', () => {
+    const onViewSubscribers = vi.fn()
+    render(
+      <PlanBreakdown
+        plans={[BASE_PLAN]}
+        loading={false}
+        onViewSubscribers={onViewSubscribers}
+      />
+    )
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'View subscribers for Coding monthly',
+      })
+    )
+
+    expect(onViewSubscribers).toHaveBeenCalledTimes(1)
+    expect(onViewSubscribers).toHaveBeenCalledWith(BASE_PLAN)
   })
 })

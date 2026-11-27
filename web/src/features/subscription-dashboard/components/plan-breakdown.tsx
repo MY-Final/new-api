@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronDown } from 'lucide-react'
+import { AlertTriangle, ChevronDown, Users } from 'lucide-react'
 import { Fragment, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -26,6 +26,7 @@ import type {
 interface PlanBreakdownProps {
   plans?: SubscriptionOverviewPlan[]
   loading: boolean
+  onViewSubscribers?: (plan: SubscriptionOverviewPlan) => void
 }
 
 function groupCostSourceLabel(
@@ -226,10 +227,25 @@ export function PlanBreakdown(props: PlanBreakdownProps) {
                     {formatOverviewMoney(plan.gross_profit_usd, locale)}
                   </TableCell>
                   <TableCell className='text-right tabular-nums'>
-                    <div className='flex flex-col items-end gap-0.5'>
-                      <span>
-                        {formatNumber(plan.active_subscriptions, locale)}
-                      </span>
+                    <div className='flex flex-col items-end gap-1'>
+                      <div className='flex items-center gap-1.5'>
+                        <span>
+                          {formatNumber(plan.active_subscriptions, locale)}
+                        </span>
+                        {props.onViewSubscribers ? (
+                          <Button
+                            variant='outline'
+                            size='xs'
+                            aria-label={t('View subscribers for {{plan}}', {
+                              plan: plan.title,
+                            })}
+                            onClick={() => props.onViewSubscribers?.(plan)}
+                          >
+                            <Users className='size-3' />
+                            {t('Subscribers')}
+                          </Button>
+                        ) : null}
+                      </div>
                       {plan.unlimited_subscriptions > 0 && (
                         <span className='text-muted-foreground text-[11px]'>
                           {t('Unlimited')}{' '}

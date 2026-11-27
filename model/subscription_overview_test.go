@@ -352,3 +352,55 @@ func TestGetSubscriptionOverviewKeepsDeletedSubscriptionUsageByPlanSnapshot(t *t
 	assert.Equal(t, "vip", planOverview.Groups[0].GroupName)
 	assert.Equal(t, "snapshot", planOverview.Groups[0].CostRatioSource)
 }
+
+func TestGetSubscriptionPlanSubscribersFiltersAndComputesUsage(t *testing.T) {
+	truncateTables(t)
+	now := common.GetTimestamp()
+
+	alice := &User{
+		Username: "sub-alice", DisplayName: "Alice Lin", Email: "alice@example.com", AffCode: "aff-alice",
+		Password: "unused-password-hash", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default",
+	}
+	bob := &User{
+		Username: "sub-bob", DisplayName: "Bob Chen", Email: "bob@example.com", AffCode: "aff-bob",
+		Password: "unused-password-hash", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default",
+	}
+	require.NoError(t, DB.Create(alice).Error)
+	require.NoError(t, DB.Create(bob).Error)
+
+	plan := SubscriptionPlan{Id: 1201, Title: "Coding Pro", Currency: "CNY", Enabled: true, TotalAmount: 1000000}
+	require.NoError(t, DB.Create(&plan).Error)
+
+	require.NoError(t, DB.Create(&[]UserSubscription{
+		{Id: 1301, UserId: alice.Id, PlanId: plan.Id, AmountTotal: 1000000, AmountUsed: 300000, Status: "active", Source: "order", StartTime: now - 3600, EndTime: now + 86400},
+		{Id: 1302, UserId: bob.Id, PlanId: plan.Id, AmountTotal: 1000000, AmountUsed: 500000, Status: "active", Source: "admin", StartTime: now - 7200, EndTime: now - 60},
+		{Id: 1303, UserId: bob.Id, PlanId: plan.Id, AmountTotal: 1000000, AmountUsed: 0, Status: "cancelled", Source: "order", StartTime: now - 7200, EndTime: now + 86400},
+	}).Error)
+	require.NoError(t, DB.Create(&SubscriptionPreConsumeRecord{
+		RequestId: "billing-sub-reserved", UserId: alice.Id,
+		UserSubscriptionId: 1301, UsageQuota: 50000, Status: "consumed", FinalizedAt: 0,
+	}).Error)
+
+	allResult, err := GetSubscriptionPlanSubscribers(plan.Id, 1, 20, "", "")
+	require.NoError(t, err)
+	assert.Equal(t, "Coding Pro", allResult.PlanTitle)
+	assert.Equal(t, int64(3), allResult.Total)
+	assert.Equal(t, int64(1), allResult.ActiveCount)
+	require.Len(t, allResult.Items, 3)
+	assert.Equal(t, 1301, allResult.Items[0].Id)
+	assert.Equal(t, "active", allResult.Items[0].EffectiveStatus)
+	assert.Equal(t, int64(250000), allResult.Items[0].AmountUsed)
+	assert.Equal(t, int64(50000), allResult.Items[0].AmountReserved)
+
+	expiredResult, err := GetSubscriptionPlanSubscribers(plan.Id, 1, 20, "expired", "bob")
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), expiredResult.Total)
+	require.Len(t, expiredResult.Items, 1)
+	assert.Equal(t, 1302, expiredResult.Items[0].Id)
+	assert.Equal(t, "expired", expiredResult.Items[0].EffectiveStatus)
+
+	activeResult, err := GetSubscriptionPlanSubscribers(plan.Id, 1, 20, "active", "")
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), activeResult.Total)
+	assert.Equal(t, "sub-alice", activeResult.Items[0].Username)
+}

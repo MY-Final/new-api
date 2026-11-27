@@ -60,3 +60,40 @@ export interface SubscriptionOverviewParams {
   start_timestamp: number
   end_timestamp: number
 }
+
+export type SubscriberStatusFilter = 'all' | 'active' | 'expired' | 'cancelled'
+
+export interface SubscriptionPlanSubscriber {
+  id: number
+  user_id: number
+  username: string
+  display_name: string
+  email: string
+  status: string
+  effective_status: 'active' | 'expired' | 'cancelled' | string
+  source: string
+  amount_total: number
+  amount_used: number
+  amount_reserved: number
+  start_time: number
+  end_time: number
+  last_reset_time: number
+  next_reset_time: number
+}
+
+export interface SubscriptionPlanSubscribersData {
+  plan_id: number
+  plan_title: string
+  total: number
+  page: number
+  page_size: number
+  active_count: number
+  items: SubscriptionPlanSubscriber[]
+}
+
+export interface SubscriptionPlanSubscribersParams {
+  page: number
+  page_size: number
+  status?: Exclude<SubscriberStatusFilter, 'all'>
+  keyword?: string
+}

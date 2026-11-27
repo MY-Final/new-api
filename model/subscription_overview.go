@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"gorm.io/gorm"
 )
 
 type SubscriptionOverview struct {
@@ -500,4 +502,164 @@ func GetSubscriptionOverview(start, end int64) (*SubscriptionOverview, error) {
 		overview.Summary.GrossMargin = overview.Summary.GrossProfitUSD / overview.Summary.RevenueUSD
 	}
 	return overview, nil
+}
+
+type SubscriptionPlanSubscriberItem struct {
+	Id              int    `json:"id"`
+	UserId          int    `json:"user_id"`
+	Username        string `json:"username"`
+	DisplayName     string `json:"display_name"`
+	Email           string `json:"email"`
+	Status          string `json:"status"`
+	EffectiveStatus string `json:"effective_status"`
+	Source          string `json:"source"`
+	AmountTotal     int64  `json:"amount_total"`
+	AmountUsed      int64  `json:"amount_used"`
+	AmountReserved  int64  `json:"amount_reserved"`
+	StartTime       int64  `json:"start_time"`
+	EndTime         int64  `json:"end_time"`
+	LastResetTime   int64  `json:"last_reset_time"`
+	NextResetTime   int64  `json:"next_reset_time"`
+}
+
+type SubscriptionPlanSubscribersResult struct {
+	PlanId      int                              `json:"plan_id"`
+	PlanTitle   string                           `json:"plan_title"`
+	Total       int64                            `json:"total"`
+	Page        int                              `json:"page"`
+	PageSize    int                              `json:"page_size"`
+	ActiveCount int64                            `json:"active_count"`
+	Items       []SubscriptionPlanSubscriberItem `json:"items"`
+}
+
+func GetSubscriptionPlanSubscribers(planId int, page int, pageSize int, statusFilter string, keyword string) (*SubscriptionPlanSubscribersResult, error) {
+	if planId <= 0 {
+		return nil, errors.New("invalid plan id")
+	}
+	if page < 1 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+
+	var plan SubscriptionPlan
+	if err := DB.Select("id", "title").Where("id = ?", planId).First(&plan).Error; err != nil {
+		return nil, err
+	}
+
+	now := common.GetTimestamp()
+	var activeCount int64
+	if err := DB.Model(&UserSubscription{}).
+		Where("plan_id = ? AND status = ? AND end_time > ?", planId, "active", now).
+		Count(&activeCount).Error; err != nil {
+		return nil, err
+	}
+
+	query := DB.Model(&UserSubscription{}).
+		Joins("LEFT JOIN users ON users.id = user_subscriptions.user_id").
+		Where("user_subscriptions.plan_id = ?", planId)
+
+	switch strings.TrimSpace(statusFilter) {
+	case "active":
+		query = query.Where("user_subscriptions.status = ? AND user_subscriptions.end_time > ?", "active", now)
+	case "expired":
+		query = query.Where("(user_subscriptions.status = ? OR (user_subscriptions.status = ? AND user_subscriptions.end_time <= ?))", "expired", "active", now)
+	case "cancelled":
+		query = query.Where("user_subscriptions.status = ?", "cancelled")
+	}
+
+	trimmedKeyword := strings.TrimSpace(keyword)
+	if trimmedKeyword != "" {
+		likePattern := "%" + strings.ToLower(trimmedKeyword) + "%"
+		if parsedUserId, err := strconv.Atoi(trimmedKeyword); err == nil && parsedUserId > 0 {
+			query = query.Where(
+				"(LOWER(COALESCE(users.username, '')) LIKE ? OR LOWER(COALESCE(users.display_name, '')) LIKE ? OR LOWER(COALESCE(users.email, '')) LIKE ? OR user_subscriptions.user_id = ?)",
+				likePattern, likePattern, likePattern, parsedUserId,
+			)
+		} else {
+			query = query.Where(
+				"(LOWER(COALESCE(users.username, '')) LIKE ? OR LOWER(COALESCE(users.display_name, '')) LIKE ? OR LOWER(COALESCE(users.email, '')) LIKE ?)",
+				likePattern, likePattern, likePattern,
+			)
+		}
+	}
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, err
+	}
+
+	items := make([]SubscriptionPlanSubscriberItem, 0)
+	offset := (page - 1) * pageSize
+	if total > 0 && int64(offset) < total {
+		if err := query.
+			Select(
+				"user_subscriptions.id",
+				"user_subscriptions.user_id",
+				"COALESCE(users.username, '') AS username",
+				"COALESCE(users.display_name, '') AS display_name",
+				"COALESCE(users.email, '') AS email",
+				"user_subscriptions.status",
+				"user_subscriptions.source",
+				"user_subscriptions.amount_total",
+				"user_subscriptions.amount_used",
+				"user_subscriptions.start_time",
+				"user_subscriptions.end_time",
+				"user_subscriptions.last_reset_time",
+				"user_subscriptions.next_reset_time",
+			).
+			Order(gorm.Expr("CASE WHEN user_subscriptions.status = ? AND user_subscriptions.end_time > ? THEN 0 ELSE 1 END ASC, user_subscriptions.id DESC", "active", now)).
+			Limit(pageSize).
+			Offset(offset).
+			Scan(&items).Error; err != nil {
+			return nil, err
+		}
+	}
+
+	if len(items) > 0 {
+		subIds := make([]int, 0, len(items))
+		for _, item := range items {
+			subIds = append(subIds, item.Id)
+		}
+		type subReservedRow struct {
+			UserSubscriptionId int   `gorm:"column:user_subscription_id"`
+			ReservedQuota      int64 `gorm:"column:reserved_quota"`
+		}
+		reservedRows := make([]subReservedRow, 0)
+		if err := DB.Model(&SubscriptionPreConsumeRecord{}).
+			Select("user_subscription_id, COALESCE(SUM(usage_quota), 0) AS reserved_quota").
+			Where("user_subscription_id IN ? AND status <> ? AND finalized_at = 0", subIds, SubscriptionUsageStatusRefunded).
+			Group("user_subscription_id").
+			Scan(&reservedRows).Error; err != nil {
+			return nil, err
+		}
+		reservedById := make(map[int]int64, len(reservedRows))
+		for _, row := range reservedRows {
+			reservedById[row.UserSubscriptionId] = max(row.ReservedQuota, 0)
+		}
+		for i := range items {
+			reserved := reservedById[items[i].Id]
+			items[i].AmountReserved = reserved
+			items[i].AmountUsed = max(items[i].AmountUsed-reserved, 0)
+			if items[i].Status == "active" && items[i].EndTime <= now {
+				items[i].EffectiveStatus = "expired"
+			} else {
+				items[i].EffectiveStatus = items[i].Status
+			}
+		}
+	}
+
+	return &SubscriptionPlanSubscribersResult{
+		PlanId:      plan.Id,
+		PlanTitle:   plan.Title,
+		Total:       total,
+		Page:        page,
+		PageSize:    pageSize,
+		ActiveCount: activeCount,
+		Items:       items,
+	}, nil
 }

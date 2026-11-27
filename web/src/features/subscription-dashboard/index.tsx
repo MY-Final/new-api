@@ -15,7 +15,11 @@ import { dateToUnixTimestamp } from '@/lib/time'
 import { getSubscriptionOverview } from './api'
 import { SubscriptionOverviewCards } from './components/overview-cards'
 import { PlanBreakdown } from './components/plan-breakdown'
-import type { SubscriptionOverviewParams } from './types'
+import { PlanSubscribersDialog } from './components/plan-subscribers-dialog'
+import type {
+  SubscriptionOverviewParams,
+  SubscriptionOverviewPlan,
+} from './types'
 
 const MAX_RANGE_DAYS = 366
 
@@ -25,6 +29,8 @@ export function SubscriptionDashboard() {
     start: dayjs().subtract(29, 'day').startOf('day').toDate(),
     end: new Date(),
   }))
+  const [selectedPlanForSubscribers, setSelectedPlanForSubscribers] =
+    useState<SubscriptionOverviewPlan | null>(null)
   const params = useMemo<SubscriptionOverviewParams>(
     () => ({
       start_timestamp: dateToUnixTimestamp(range.start),
@@ -80,7 +86,7 @@ export function SubscriptionDashboard() {
         />
       </SectionPageLayout.Actions>
       <SectionPageLayout.Content>
-        <div className='mx-auto w-full max-w-7xl space-y-4'>
+        <div className='mx-auto w-full max-w-7xl space-y-5'>
           {overviewQuery.isError ? (
             <ErrorState
               title={t('Failed to load subscription business overview')}
@@ -143,8 +149,18 @@ export function SubscriptionDashboard() {
               <PlanBreakdown
                 plans={overview?.plans}
                 loading={overviewQuery.isLoading}
+                onViewSubscribers={setSelectedPlanForSubscribers}
               />
-              <div className='text-muted-foreground space-y-1 text-xs'>
+              <PlanSubscribersDialog
+                plan={selectedPlanForSubscribers}
+                open={selectedPlanForSubscribers !== null}
+                onOpenChange={(open) => {
+                  if (!open) {
+                    setSelectedPlanForSubscribers(null)
+                  }
+                }}
+              />
+              <div className='bg-muted/30 text-muted-foreground space-y-1 rounded-2xl border px-4 py-3.5 text-xs'>
                 <p>
                   {t(
                     'Amounts are calculated in USD and displayed in the site display currency.'
