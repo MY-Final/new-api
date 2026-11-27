@@ -81,7 +81,7 @@ func SeedShopCustomPage() error {
 
 	// Retire the legacy option: drop the persisted row and the in-memory value
 	// so nothing can read it again.
-	if err := DB.Where("key = ?", LegacyShopOptionKey).Delete(&Option{}).Error; err != nil {
+	if err := DB.Where(commonKeyCol+" = ?", LegacyShopOptionKey).Delete(&Option{}).Error; err != nil {
 		return err
 	}
 	common.OptionMapRWMutex.Lock()
