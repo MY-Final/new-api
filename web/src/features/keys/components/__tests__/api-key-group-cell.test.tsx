@@ -56,6 +56,7 @@ const groupOptions = [
 
 function renderCell(props: {
   group: string
+  originalRatio?: number | null
   ratio?: number | string
   crossGroupRetry?: boolean
   shouldReduceMotion?: boolean
@@ -70,6 +71,7 @@ function renderCell(props: {
           apiKeyId={7}
           options={groupOptions}
           group={props.group}
+          originalRatio={props.originalRatio}
           ratio={props.ratio}
           crossGroupRetry={props.crossGroupRetry ?? false}
           shouldReduceMotion={props.shouldReduceMotion ?? false}
@@ -236,5 +238,19 @@ describe('API key group table cell', () => {
     )
     expect(put).not.toHaveBeenCalled()
     put.mockRestore()
+  })
+
+  test('shows strikethrough original ratio alongside discounted subscription ratio', () => {
+    renderCell({
+      group: 'kiro-cc',
+      originalRatio: 0.154,
+      ratio: 0.077,
+    })
+
+    const original = screen.getByText('0.154x')
+    const discounted = screen.getByText('0.077x')
+    expect(original).toBeVisible()
+    expect(original).toHaveClass('line-through')
+    expect(discounted).toBeVisible()
   })
 })

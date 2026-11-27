@@ -28,11 +28,21 @@ export function GroupMultiplierBadge(props: {
   children?: ReactNode
   className?: string
   label?: string
+  originalRatio?: number | null
   ratio?: number | null
 }) {
+  const hasDiscount =
+    !props.label &&
+    props.originalRatio != null &&
+    props.ratio != null &&
+    props.ratio < props.originalRatio
+
   let colorClassName =
     'border-muted-foreground/30 bg-muted text-muted-foreground'
-  if (props.ratio != null && props.ratio > 1) {
+  if (hasDiscount) {
+    colorClassName =
+      'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+  } else if (props.ratio != null && props.ratio > 1) {
     colorClassName = 'border-warning/30 bg-warning/10 text-warning'
   } else if (props.ratio != null && props.ratio < 1) {
     colorClassName = 'border-info/30 bg-info/10 text-info'
@@ -44,12 +54,20 @@ export function GroupMultiplierBadge(props: {
       className={cn(
         'relative h-5 min-w-12 rounded-full px-1.5 py-0 text-sm leading-none font-medium shadow-none',
         !props.label && 'tabular-nums',
+        hasDiscount && 'gap-1 px-2',
         colorClassName,
         props.className
       )}
     >
       {props.children}
-      <span>{props.label ?? `${props.ratio}x`}</span>
+      {hasDiscount ? (
+        <>
+          <span className='line-through opacity-60'>{`${props.originalRatio}x`}</span>
+          <span className='font-semibold'>{`${props.ratio}x`}</span>
+        </>
+      ) : (
+        <span>{props.label ?? `${props.ratio}x`}</span>
+      )}
     </Badge>
   )
 }
@@ -60,6 +78,7 @@ type GroupBadgeProps = Omit<
 > & {
   group?: string | null
   label?: string
+  originalRatio?: number | null
   ratio?: number | null
   ratioLabel?: string
   containerClassName?: string
@@ -84,6 +103,7 @@ export function GroupBadge(props: GroupBadgeProps) {
   const {
     group,
     label: labelOverride,
+    originalRatio,
     ratio,
     ratioLabel,
     containerClassName,
@@ -141,7 +161,11 @@ export function GroupBadge(props: GroupBadgeProps) {
       )}
     >
       <span className='max-w-full min-w-0 overflow-hidden'>{badge}</span>
-      <GroupMultiplierBadge ratio={ratio} label={ratioLabel} />
+      <GroupMultiplierBadge
+        ratio={ratio}
+        originalRatio={originalRatio}
+        label={ratioLabel}
+      />
     </span>
   )
 }

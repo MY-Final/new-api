@@ -73,6 +73,7 @@ export function AutoGroupFrame(props: AutoGroupFrameProps) {
 
 type GroupRatioBadgeProps = {
   isAuto?: boolean
+  originalRatio?: number | null
   ratio: GroupRatio
   shouldReduceMotion?: boolean
 }
@@ -87,6 +88,7 @@ export function GroupRatioBadge(props: GroupRatioBadgeProps) {
   return (
     <GroupMultiplierBadge
       ratio={typeof props.ratio === 'number' ? props.ratio : undefined}
+      originalRatio={props.originalRatio}
       label={typeof props.ratio === 'number' ? undefined : t('Auto')}
       className={cn(
         props.isAuto &&

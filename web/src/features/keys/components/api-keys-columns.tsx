@@ -23,6 +23,7 @@ import { useTranslation } from 'react-i18next'
 
 import { StatusBadge } from '@/components/status-badge'
 import { Checkbox } from '@/components/ui/checkbox'
+import { getSelfSubscriptionFull } from '@/features/subscriptions/api'
 import { useMediaQuery } from '@/hooks'
 import { toIntlLocale } from '@/i18n/languages'
 import { getUserGroups } from '@/lib/api'
@@ -80,12 +81,72 @@ function useApiKeyGroupData(): ApiKeyGroupData {
   return data ?? EMPTY_GROUP_DATA
 }
 
+const EMPTY_SUBSCRIPTION_RATIOS: Record<string, number> = {}
+
+function useActiveSubscriptionRatios(): Record<string, number> {
+  const { data } = useQuery({
+    queryKey: ['self', 'subscription', 'ratios'],
+    queryFn: async () => {
+      try {
+        const res = await getSelfSubscriptionFull()
+        if (!res.success || !res.data) return EMPTY_SUBSCRIPTION_RATIOS
+        if (res.data.billing_preference === 'wallet_only') {
+          return EMPTY_SUBSCRIPTION_RATIOS
+        }
+        const nowSeconds = Date.now() / 1000
+        const ratioMap: Record<string, number> = {}
+        for (const record of res.data.subscriptions || []) {
+          const sub = record?.subscription
+          if (!sub || sub.status !== 'active') continue
+          if ((sub.end_time || 0) > 0 && sub.end_time < nowSeconds) continue
+          const ratios = sub.route_group_ratios || {}
+          for (const group of sub.route_groups || []) {
+            const r = Number(ratios[group] || 0)
+            if (r > 0 && (ratioMap[group] == null || r < ratioMap[group])) {
+              ratioMap[group] = r
+            }
+          }
+        }
+        return ratioMap
+      } catch {
+        return EMPTY_SUBSCRIPTION_RATIOS
+      }
+    },
+    staleTime: 30_000,
+    retry: false,
+  })
+
+  return data ?? EMPTY_SUBSCRIPTION_RATIOS
+}
+
 export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
   const { t, i18n } = useTranslation()
   useSystemConfigStore((state) => state.config.currency)
   const { meta: currency } = getCurrencyDisplay()
   const quotaUnit = currency.kind === 'tokens' ? t('Tokens') : currency.symbol
   const { options: groupOptions, ratios: groupRatios } = useApiKeyGroupData()
+  const subscriptionRatios = useActiveSubscriptionRatios()
+  const mergedGroupOptions = useMemo(
+    () =>
+      groupOptions.map((option) => {
+        const walletRatio =
+          typeof option.ratio === 'number' ? option.ratio : undefined
+        const subRatio = subscriptionRatios[option.value]
+        if (
+          walletRatio !== undefined &&
+          subRatio !== undefined &&
+          subRatio < walletRatio
+        ) {
+          return {
+            ...option,
+            ratio: subRatio,
+            originalRatio: walletRatio,
+          }
+        }
+        return option
+      }),
+    [groupOptions, subscriptionRatios]
+  )
   const shouldReduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const justNowLabel = t('Just now')
@@ -167,12 +228,19 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
         cell: ({ row }) => {
           const apiKey = row.original
           const group = row.getValue('group') as string
+          const baseRatio = groupRatios[group]
+          const subRatio = subscriptionRatios[group]
+          const hasSubDiscount =
+            typeof baseRatio === 'number' &&
+            typeof subRatio === 'number' &&
+            subRatio < baseRatio
           return (
             <ApiKeyGroupCell
               apiKeyId={apiKey.id}
               group={group}
-              options={groupOptions}
-              ratio={groupRatios[group]}
+              options={mergedGroupOptions}
+              ratio={hasSubDiscount ? subRatio : baseRatio}
+              originalRatio={hasSubDiscount ? baseRatio : undefined}
               crossGroupRetry={apiKey.cross_group_retry}
               shouldReduceMotion={shouldReduceMotion}
             />
@@ -266,8 +334,9 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
       t,
       quotaUnit,
       now,
-      groupOptions,
+      mergedGroupOptions,
       groupRatios,
+      subscriptionRatios,
       shouldReduceMotion,
       locale,
       justNowLabel,

@@ -47,6 +47,7 @@ export type ApiKeyGroupOption = {
   value: string
   label: string
   desc?: string
+  originalRatio?: number | null
   ratio?: number | string
 }
 
@@ -142,6 +143,7 @@ export function ApiKeyGroupOptions(props: ApiKeyGroupOptionsProps) {
                 </span>
                 <GroupRatioBadge
                   ratio={option.ratio}
+                  originalRatio={option.originalRatio}
                   isAuto={isAutoOption}
                   shouldReduceMotion={shouldReduceMotion}
                 />

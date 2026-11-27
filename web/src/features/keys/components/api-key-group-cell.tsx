@@ -44,6 +44,7 @@ type ApiKeyGroupCellProps = {
   crossGroupRetry: boolean
   group: string
   options: ApiKeyGroupOption[]
+  originalRatio?: number | null
   ratio?: GroupRatio
   shouldReduceMotion: boolean
 }
@@ -132,6 +133,7 @@ export function ApiKeyGroupCell(props: ApiKeyGroupCellProps) {
           <span data-api-key-group-cell='group' className='min-w-0'>
             <GroupBadge
               group={group}
+              originalRatio={props.originalRatio}
               ratio={ratio}
               ratioLabel={group ? undefined : t('Inherited')}
               type='text'
