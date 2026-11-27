@@ -71,7 +71,7 @@ export function getPlanFormSchema(t: TFunction) {
       upgrade_group: z.string().optional(),
       route_groups: z
         .array(z.string().trim().min(1))
-        .min(1, t('Select at least one allowed route group'))
+        .min(1, t('Select at least one plan coverage group'))
         .max(32),
       route_group_ratios: z.record(
         z.string(),

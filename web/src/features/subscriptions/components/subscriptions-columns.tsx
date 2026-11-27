@@ -231,7 +231,7 @@ export function useSubscriptionsColumns(): ColumnDef<PlanRecord>[] {
       },
       {
         id: 'route_groups',
-        header: t('Route Groups'),
+        header: t('Plan Coverage Groups'),
         meta: { mobileHidden: true },
         cell: ({ row }) => {
           const groups = row.original.plan.route_groups || []

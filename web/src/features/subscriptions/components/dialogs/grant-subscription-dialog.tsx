@@ -23,8 +23,8 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { GroupBadge } from '@/components/group-badge'
 import { Dialog } from '@/components/dialog'
+import { GroupBadge } from '@/components/group-badge'
 import { Button } from '@/components/ui/button'
 import { Combobox } from '@/components/ui/combobox'
 import { Label } from '@/components/ui/label'
@@ -294,7 +294,7 @@ export function GrantSubscriptionDialog() {
           {(plan?.route_groups || []).length > 0 && (
             <div className='flex items-start justify-between gap-3'>
               <span className='text-muted-foreground'>
-                {t('Allowed Route Groups')}
+                {t('Plan Coverage Groups')}
               </span>
               <span className='flex flex-wrap justify-end gap-1'>
                 {(plan?.route_groups || []).map((group) => (

@@ -113,6 +113,9 @@ export function SubscriptionsMutateDrawer({
   const currencyLabel = getCurrencyLabel()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [groupOptions, setGroupOptions] = useState<string[]>([])
+  const [inheritNormalMultiplier, setInheritNormalMultiplier] = useState<
+    Record<string, boolean>
+  >({})
   const [creatingPancakeProduct, setCreatingPancakeProduct] = useState(false)
   const [pancakeProducts, setPancakeProducts] = useState<
     { id: string; name: string; status: string }[]
@@ -127,9 +130,19 @@ export function SubscriptionsMutateDrawer({
   useEffect(() => {
     if (open) {
       if (currentRow?.plan) {
-        form.reset(planToFormValues(currentRow.plan))
+        const nextValues = planToFormValues(currentRow.plan)
+        form.reset(nextValues)
+        setInheritNormalMultiplier(
+          Object.fromEntries(
+            nextValues.route_groups.map((group) => [
+              group,
+              Number(nextValues.route_group_ratios[group] ?? 0) <= 0,
+            ])
+          )
+        )
       } else {
         form.reset(PLAN_FORM_DEFAULTS)
+        setInheritNormalMultiplier({})
       }
       getGroups()
         .then((res) => {
@@ -205,10 +218,18 @@ export function SubscriptionsMutateDrawer({
 
   const updateRouteGroups = (groups: string[]) => {
     const currentRatios = form.getValues('route_group_ratios')
+    const nextInherit = Object.fromEntries(
+      groups.map((group) => [group, inheritNormalMultiplier[group] ?? true])
+    )
+    setInheritNormalMultiplier(nextInherit)
     form.setValue(
       'route_group_ratios',
       Object.fromEntries(
-        groups.map((group) => [group, Number(currentRatios[group] ?? 0)])
+        groups.map((group) => {
+          const currentRatio = Number(currentRatios[group] ?? 0)
+          const fallbackRatio = currentRatio > 0 ? currentRatio : 1
+          return [group, nextInherit[group] ? 0 : fallbackRatio]
+        })
       ),
       { shouldDirty: true, shouldValidate: true }
     )
@@ -217,6 +238,24 @@ export function SubscriptionsMutateDrawer({
       shouldValidate: true,
     })
   }
+
+  const updateRouteGroupInherit = (group: string, inherit: boolean) => {
+    setInheritNormalMultiplier((current) => ({ ...current, [group]: inherit }))
+    const currentRatios = form.getValues('route_group_ratios')
+    const currentRatio = Number(currentRatios[group] ?? 0)
+    const fallbackRatio = currentRatio > 0 ? currentRatio : 1
+    form.setValue(
+      'route_group_ratios',
+      {
+        ...currentRatios,
+        [group]: inherit ? 0 : fallbackRatio,
+      },
+      { shouldDirty: true, shouldValidate: true }
+    )
+  }
+
+  const routeGroupInheritsNormalMultiplier = (group: string) =>
+    inheritNormalMultiplier[group] ?? Number(routeGroupRatios[group] ?? 0) <= 0
 
   const onSubmit = async (values: PlanFormValues) => {
     setIsSubmitting(true)
@@ -577,7 +616,7 @@ export function SubscriptionsMutateDrawer({
                 name='route_groups'
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t('Allowed Route Groups')}</FormLabel>
+                    <FormLabel>{t('Plan Coverage Groups')}</FormLabel>
                     <FormControl>
                       <MultiSelect
                         options={groupOptions
@@ -589,59 +628,100 @@ export function SubscriptionsMutateDrawer({
                         selected={field.value || []}
                         onChange={updateRouteGroups}
                         placeholder={t(
-                          'Select groups whose channels can consume this subscription'
+                          'Select the groups included in this plan'
                         )}
-                        emptyText={t('No matching route groups')}
+                        emptyText={t('No matching groups')}
                       />
                     </FormControl>
                     <FormDescription>
                       {t(
-                        'These groups provide the actual channels. Each route can use its normal wallet multiplier or a separate multiplier while the subscription funds the request.'
+                        'These groups decide which API key groups are available, which channels can serve requests, and which multiplier applies when subscription quota pays.'
                       )}
                     </FormDescription>
                     <FormMessage />
                     {(field.value || []).length > 0 && (
                       <div className='space-y-2'>
-                        {(field.value || []).map((group, index) => (
-                          <div
-                            key={group}
-                            className='bg-muted/25 grid grid-cols-[minmax(0,1fr)_8rem] items-center gap-3 rounded-lg border p-2.5'
-                          >
-                            <label
-                              htmlFor={`route-ratio-${index}`}
-                              className='truncate text-sm font-medium'
+                        {(field.value || []).map((group, index) => {
+                          const inherits =
+                            routeGroupInheritsNormalMultiplier(group)
+
+                          return (
+                            <div
+                              key={group}
+                              className='bg-muted/25 space-y-2 rounded-lg border p-3'
                             >
-                              {t('Subscription Ratio for {{group}}', {
-                                group,
-                              })}
-                            </label>
-                            <Input
-                              id={`route-ratio-${index}`}
-                              type='number'
-                              min={0}
-                              step={0.01}
-                              value={routeGroupRatios[group] ?? 0}
-                              onChange={(event) =>
-                                form.setValue(
-                                  'route_group_ratios',
-                                  {
-                                    ...form.getValues('route_group_ratios'),
-                                    [group]:
-                                      Number.parseFloat(event.target.value) ||
-                                      0,
-                                  },
-                                  {
-                                    shouldDirty: true,
-                                    shouldValidate: true,
-                                  }
-                                )
-                              }
-                            />
-                          </div>
-                        ))}
+                              <div className='flex flex-wrap items-center justify-between gap-3'>
+                                <div className='min-w-0'>
+                                  <div className='truncate text-sm font-medium'>
+                                    {group}
+                                  </div>
+                                  <p className='text-muted-foreground text-xs'>
+                                    {inherits
+                                      ? t('Uses the normal group multiplier')
+                                      : t('Uses a plan-specific multiplier')}
+                                  </p>
+                                </div>
+                                <div className='flex items-center gap-3'>
+                                  <div className='flex items-center gap-2'>
+                                    <Switch
+                                      id={`route-ratio-inherit-${index}`}
+                                      size='sm'
+                                      checked={inherits}
+                                      onCheckedChange={(checked) =>
+                                        updateRouteGroupInherit(group, checked)
+                                      }
+                                    />
+                                    <label
+                                      htmlFor={`route-ratio-inherit-${index}`}
+                                      className='text-xs font-medium'
+                                    >
+                                      {t('Inherit normal multiplier')}
+                                    </label>
+                                  </div>
+                                  <Input
+                                    id={`route-ratio-${index}`}
+                                    aria-label={t(
+                                      'Plan multiplier for {{group}}',
+                                      { group }
+                                    )}
+                                    className='w-28'
+                                    type='number'
+                                    min={0}
+                                    step={0.01}
+                                    disabled={inherits}
+                                    value={
+                                      inherits
+                                        ? ''
+                                        : (routeGroupRatios[group] ?? '')
+                                    }
+                                    placeholder={inherits ? '—' : '1.00'}
+                                    onChange={(event) =>
+                                      form.setValue(
+                                        'route_group_ratios',
+                                        {
+                                          ...form.getValues(
+                                            'route_group_ratios'
+                                          ),
+                                          [group]:
+                                            Number.parseFloat(
+                                              event.target.value
+                                            ) || 0,
+                                        },
+                                        {
+                                          shouldDirty: true,
+                                          shouldValidate: true,
+                                        }
+                                      )
+                                    }
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
                         <p className='text-muted-foreground text-xs'>
                           {t(
-                            '0 inherits the route group normal multiplier. Wallet payments always use the normal route multiplier.'
+                            'An inherited group uses its normal multiplier for subscription payments. Wallet payments always use the normal multiplier.'
                           )}
                         </p>
                       </div>

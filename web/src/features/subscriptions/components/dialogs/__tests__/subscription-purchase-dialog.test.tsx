@@ -135,7 +135,7 @@ describe('SubscriptionPurchaseDialog', () => {
     expect(screen.queryByText('$6.00')).not.toBeInTheDocument()
   })
 
-  test('shows allowed route groups and opens the key creation page', async () => {
+  test('shows plan coverage groups and opens the key creation page', async () => {
     const onOpenChange = vi.fn()
     const user = userEvent.setup()
     renderDialog({
@@ -152,7 +152,12 @@ describe('SubscriptionPurchaseDialog', () => {
     expect(screen.getByText('deepseek-a')).toBeVisible()
     expect(screen.getByText('deepseek-b')).toBeVisible()
     expect(
-      screen.getByText(/Use an API key set to one of these route groups/)
+      screen.getAllByText('Inherits the normal group multiplier')
+    ).toHaveLength(2)
+    expect(
+      screen.getByText(
+        /Use an API key set to one of these plan coverage groups/
+      )
     ).toBeVisible()
     await user.click(
       screen.getByRole('button', { name: 'Create an Auto group API Key' })

@@ -372,7 +372,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
           {routeGroups.length > 0 && (
             <div className='space-y-2 pt-0.5'>
               <span className='text-muted-foreground block text-sm'>
-                {t('Allowed Route Groups')}
+                {t('Plan Coverage Groups')}
               </span>
               <div className='bg-background rounded-lg border px-3 py-2'>
                 <div className='text-muted-foreground mb-1.5 grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 text-[11px] font-medium'>
@@ -398,9 +398,16 @@ export function SubscriptionPurchaseDialog(props: Props) {
                         key={group}
                         className='grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 py-1.5 text-xs first:pt-0 last:pb-0'
                       >
-                        <span className='text-foreground truncate font-medium'>
-                          {group}
-                        </span>
+                        <div className='min-w-0'>
+                          <div className='text-foreground truncate font-medium'>
+                            {group}
+                          </div>
+                          {configuredRatio <= 0 && (
+                            <div className='text-muted-foreground text-[11px]'>
+                              {t('Inherits the normal group multiplier')}
+                            </div>
+                          )}
+                        </div>
                         <span
                           className={cn(
                             'text-muted-foreground text-right tabular-nums',
@@ -442,7 +449,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
             <AlertDescription className='flex flex-col gap-2.5 text-xs leading-relaxed'>
               <p>
                 {t(
-                  'Use an API key set to one of these route groups, or use Auto with one of them included. The qualification group only controls your account group and multiplier; it does not route requests by itself.'
+                  'Use an API key set to one of these plan coverage groups, or use Auto with one of them included. The qualification group only controls your account group and multiplier; it does not route requests by itself.'
                 )}
               </p>
               <div>
