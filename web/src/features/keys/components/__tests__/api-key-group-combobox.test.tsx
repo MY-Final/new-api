@@ -56,7 +56,15 @@ await i18n.use(initReactI18next).init({
   },
 })
 
-const options = [
+type GroupOption = {
+  value: string
+  label: string
+  desc: string
+  ratio: number | string
+  originalRatio?: number | null
+}
+
+const options: GroupOption[] = [
   {
     value: 'auto',
     label: 'auto',
@@ -67,7 +75,7 @@ const options = [
   { value: 'vip', label: 'vip', desc: 'Priority group', ratio: 3 },
 ]
 
-function Harness(props: { initialValue: string; options?: typeof options }) {
+function Harness(props: { initialValue: string; options?: GroupOption[] }) {
   const [value, setValue] = useState(props.initialValue)
 
   return (
@@ -205,6 +213,27 @@ describe('API key group combobox Auto effect', () => {
     expect(
       defaultOption.querySelector('[data-auto-group-effect="ratio"]')
     ).toBe(null)
+  })
+
+  test('shows the original ratio struck through in the selected group when a subscription discount applies', () => {
+    render(
+      <Harness
+        initialValue='kiro-cc'
+        options={[
+          {
+            value: 'kiro-cc',
+            label: 'kiro-cc',
+            desc: 'Claude Code',
+            ratio: 0.154,
+            originalRatio: 0.308,
+          },
+        ]}
+      />
+    )
+
+    const trigger = getTrigger()
+    expect(within(trigger).getByText('0.308x')).toHaveClass('line-through')
+    expect(within(trigger).getByText('0.154x')).toHaveClass('font-semibold')
   })
 
   test('keeps search and selection behavior while leaving normal groups unstyled', async () => {

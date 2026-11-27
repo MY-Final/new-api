@@ -219,6 +219,7 @@ export function ApiKeyGroupCombobox({
           <span className='hidden shrink-0 sm:block'>
             <GroupRatioBadge
               ratio={selectedOption?.ratio}
+              originalRatio={selectedOption?.originalRatio}
               isAuto={isAutoSelected}
               shouldReduceMotion={shouldReduceMotion}
             />

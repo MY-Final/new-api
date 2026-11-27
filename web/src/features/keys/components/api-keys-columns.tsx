@@ -16,25 +16,21 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { StatusBadge } from '@/components/status-badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { getSelfSubscriptionFull } from '@/features/subscriptions/api'
 import { useMediaQuery } from '@/hooks'
 import { toIntlLocale } from '@/i18n/languages'
-import { getUserGroups } from '@/lib/api'
 import { getCurrencyDisplay } from '@/lib/currency'
-import { requireServerSuccess } from '@/lib/server-error-message'
 import { useSystemConfigStore } from '@/stores/system-config-store'
 
 import { API_KEY_STATUSES } from '../constants'
+import { useApiKeyGroupOptions } from '../hooks/use-api-key-group-options'
 import type { ApiKey } from '../types'
 import { ApiKeyGroupCell } from './api-key-group-cell'
-import type { ApiKeyGroupOption } from './api-key-group-combobox'
 import { ApiKeyQuotaCell } from './api-key-quota-cell'
 import {
   ApiKeyActivityCell,
@@ -47,106 +43,12 @@ import {
 } from './api-keys-cells'
 import { DataTableRowActions } from './data-table-row-actions'
 
-type ApiKeyGroupData = {
-  options: ApiKeyGroupOption[]
-  ratios: Record<string, number | string>
-}
-
-const EMPTY_GROUP_DATA: ApiKeyGroupData = { options: [], ratios: {} }
-
-function useApiKeyGroupData(): ApiKeyGroupData {
-  const { data } = useQuery({
-    queryKey: ['user-groups'],
-    queryFn: async () => requireServerSuccess(await getUserGroups()),
-    staleTime: 0,
-    select: (res) => {
-      if (!res.success || !res.data) return EMPTY_GROUP_DATA
-      const options: ApiKeyGroupOption[] = []
-      const ratios: Record<string, number | string> = {}
-      for (const [group, info] of Object.entries(res.data)) {
-        if (typeof info.ratio === 'number' || typeof info.ratio === 'string') {
-          ratios[group] = info.ratio
-        }
-        options.push({
-          value: group,
-          label: group,
-          desc: info.desc || group,
-          ratio: info.ratio,
-        })
-      }
-      return { options, ratios }
-    },
-  })
-
-  return data ?? EMPTY_GROUP_DATA
-}
-
-const EMPTY_SUBSCRIPTION_RATIOS: Record<string, number> = {}
-
-function useActiveSubscriptionRatios(): Record<string, number> {
-  const { data } = useQuery({
-    queryKey: ['self', 'subscription', 'ratios'],
-    queryFn: async () => {
-      try {
-        const res = await getSelfSubscriptionFull()
-        if (!res.success || !res.data) return EMPTY_SUBSCRIPTION_RATIOS
-        if (res.data.billing_preference === 'wallet_only') {
-          return EMPTY_SUBSCRIPTION_RATIOS
-        }
-        const nowSeconds = Date.now() / 1000
-        const ratioMap: Record<string, number> = {}
-        for (const record of res.data.subscriptions || []) {
-          const sub = record?.subscription
-          if (!sub || sub.status !== 'active') continue
-          if ((sub.end_time || 0) > 0 && sub.end_time < nowSeconds) continue
-          const ratios = sub.route_group_ratios || {}
-          for (const group of sub.route_groups || []) {
-            const r = Number(ratios[group] || 0)
-            if (r > 0 && (ratioMap[group] == null || r < ratioMap[group])) {
-              ratioMap[group] = r
-            }
-          }
-        }
-        return ratioMap
-      } catch {
-        return EMPTY_SUBSCRIPTION_RATIOS
-      }
-    },
-    staleTime: 30_000,
-    retry: false,
-  })
-
-  return data ?? EMPTY_SUBSCRIPTION_RATIOS
-}
-
 export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
   const { t, i18n } = useTranslation()
   useSystemConfigStore((state) => state.config.currency)
   const { meta: currency } = getCurrencyDisplay()
   const quotaUnit = currency.kind === 'tokens' ? t('Tokens') : currency.symbol
-  const { options: groupOptions, ratios: groupRatios } = useApiKeyGroupData()
-  const subscriptionRatios = useActiveSubscriptionRatios()
-  const mergedGroupOptions = useMemo(
-    () =>
-      groupOptions.map((option) => {
-        const walletRatio =
-          typeof option.ratio === 'number' ? option.ratio : undefined
-        const subRatio = subscriptionRatios[option.value]
-        if (
-          walletRatio !== undefined &&
-          subRatio !== undefined &&
-          subRatio < walletRatio
-        ) {
-          return {
-            ...option,
-            ratio: subRatio,
-            originalRatio: walletRatio,
-          }
-        }
-        return option
-      }),
-    [groupOptions, subscriptionRatios]
-  )
+  const { options: mergedGroupOptions } = useApiKeyGroupOptions()
   const shouldReduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const justNowLabel = t('Just now')
@@ -228,19 +130,16 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
         cell: ({ row }) => {
           const apiKey = row.original
           const group = row.getValue('group') as string
-          const baseRatio = groupRatios[group]
-          const subRatio = subscriptionRatios[group]
-          const hasSubDiscount =
-            typeof baseRatio === 'number' &&
-            typeof subRatio === 'number' &&
-            subRatio < baseRatio
+          const option = mergedGroupOptions.find(
+            (candidate) => candidate.value === group
+          )
           return (
             <ApiKeyGroupCell
               apiKeyId={apiKey.id}
               group={group}
               options={mergedGroupOptions}
-              ratio={hasSubDiscount ? subRatio : baseRatio}
-              originalRatio={hasSubDiscount ? baseRatio : undefined}
+              ratio={option?.ratio}
+              originalRatio={option?.originalRatio}
               crossGroupRetry={apiKey.cross_group_retry}
               shouldReduceMotion={shouldReduceMotion}
             />
@@ -335,8 +234,6 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
       quotaUnit,
       now,
       mergedGroupOptions,
-      groupRatios,
-      subscriptionRatios,
       shouldReduceMotion,
       locale,
       justNowLabel,

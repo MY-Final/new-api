@@ -16,7 +16,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import type { ApiKey } from '../../types'
@@ -49,7 +56,14 @@ const originalGet = apiClient.get
 const originalPost = apiClient.post
 let renderedDrawer: RenderedDrawer | null = null
 
-function installApiFixtures(createdPayloads: Array<Record<string, unknown>>) {
+function installApiFixtures(
+  createdPayloads: Array<Record<string, unknown>>,
+  subscriptionData: Record<string, unknown> = {
+    billing_preference: 'wallet_only',
+    subscriptions: [],
+    all_subscriptions: [],
+  }
+) {
   apiClient.get = async (url) => {
     switch (url) {
       case '/api/status':
@@ -73,6 +87,10 @@ function installApiFixtures(createdPayloads: Array<Record<string, unknown>>) {
             success: true,
             data: { groups: ['vip', 'default'], max_count: 3 },
           },
+        }
+      case '/api/subscription/self':
+        return {
+          data: { success: true, data: subscriptionData },
         }
       default:
         throw new Error(`Unexpected GET ${url}`)
@@ -212,6 +230,50 @@ afterEach(() => {
 })
 
 describe('API keys mutate drawer Auto group integration', () => {
+  test('shows subscription discounts beside the original ratio in the create drawer', async () => {
+    installApiFixtures([], {
+      billing_preference: 'subscription_first',
+      subscriptions: [
+        {
+          subscription: {
+            status: 'active',
+            end_time: Date.now() / 1000 + 3600,
+            route_groups: ['vip'],
+            route_group_ratios: { vip: 1 },
+          },
+        },
+      ],
+      all_subscriptions: [],
+    })
+    await renderCreateDrawer()
+
+    const groupTrigger = getControlByLabel('Group')
+    fireEvent.click(groupTrigger)
+    const popupId = groupTrigger.getAttribute('aria-controls')
+    const popup = popupId
+      ? document.querySelector<HTMLElement>(`[id="${popupId}"]`)
+      : null
+    const vipOption = [
+      ...(popup ?? document).querySelectorAll<HTMLElement>(
+        '[data-slot="command-item"]'
+      ),
+    ].find((candidate) => candidate.textContent?.includes('Priority access'))
+    if (!vipOption) {
+      throw new Error('Expected the Priority access group option')
+    }
+
+    await waitFor(() =>
+      expect(within(vipOption).getByText('2x')).toHaveClass('line-through')
+    )
+    expect(within(vipOption).getByText('1x')).toBeVisible()
+
+    fireEvent.click(vipOption)
+    await waitFor(() =>
+      expect(within(groupTrigger).getByText('2x')).toHaveClass('line-through')
+    )
+    expect(within(groupTrigger).getByText('1x')).toBeVisible()
+  })
+
   test('inherits the root Auto order and sends an empty override for every batch-created key', async () => {
     const createdPayloads: Array<Record<string, unknown>> = []
     installApiFixtures(createdPayloads)
